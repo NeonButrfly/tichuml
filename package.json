@@ -1,0 +1,49 @@
+{
+  "name": "tichuml",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "clean": "rimraf apps/web/dist apps/server/dist apps/sim-runner/dist packages/shared/dist packages/engine/dist packages/telemetry/dist packages/ai-heuristics/dist packages/ui-kit/dist coverage",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "build": "npm run clean && npm run build:shared && npm run build:engine && npm run build:telemetry && npm run build:ai && npm run build:ui-kit && npm run build:server && npm run build:sim-runner && npm run build:web",
+    "build:shared": "npm run build -w @tichuml/shared",
+    "build:engine": "npm run build -w @tichuml/engine",
+    "build:telemetry": "npm run build -w @tichuml/telemetry",
+    "build:ai": "npm run build -w @tichuml/ai-heuristics",
+    "build:ui-kit": "npm run build -w @tichuml/ui-kit",
+    "build:server": "npm run build -w @tichuml/server",
+    "build:sim-runner": "npm run build -w @tichuml/sim-runner",
+    "build:web": "npm run build -w @tichuml/web",
+    "db:up": "docker compose -f infra/docker/docker-compose.yml up -d postgres",
+    "db:down": "docker compose -f infra/docker/docker-compose.yml down",
+    "db:migrate": "tsx infra/db/scripts/migrate.ts",
+    "db:migrate:status": "tsx infra/db/scripts/migrate.ts status"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.24.0",
+    "@types/node": "^24.5.2",
+    "@types/react": "^19.1.13",
+    "@types/react-dom": "^19.1.9",
+    "@vitejs/plugin-react": "^5.0.2",
+    "eslint": "^9.24.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.21",
+    "globals": "^16.0.0",
+    "postgres": "^3.4.7",
+    "prettier": "^3.5.3",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "rimraf": "^6.0.1",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.29.1",
+    "vite": "^7.1.5",
+    "vitest": "^3.2.4"
+  }
+}
