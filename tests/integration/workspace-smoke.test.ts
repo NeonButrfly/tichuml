@@ -7,7 +7,8 @@ import { FOUNDATION_MILESTONE, workspaceManifests } from "@tichuml/shared";
 describe("milestone 0 workspace scaffold", () => {
   it("keeps foundational packages aligned to the same milestone", () => {
     expect(FOUNDATION_MILESTONE).toBe("milestone-0");
-    expect(engineFoundation.milestone).toBe(FOUNDATION_MILESTONE);
+    expect(engineFoundation.milestone).toBe("milestone-1");
+    expect(engineFoundation.deterministicCoreReady).toBe(true);
     expect(telemetryFoundation.milestone).toBe(FOUNDATION_MILESTONE);
   });
 
@@ -16,4 +17,3 @@ describe("milestone 0 workspace scaffold", () => {
     expect(heuristicFoundation.dependsOn).toBe("authoritative-engine");
   });
 });
-
