@@ -519,31 +519,30 @@ export function App() {
 
   const controlHint =
     state.phase === "finished"
-      ? "Round complete. Start the next seed or inspect the result summary."
+      ? "Round complete"
       : localPassSelection
-        ? "Assign one card to left, partner, and right. The UI only accepts cards surfaced by the engine."
+        ? "Pick left, partner, right"
         : localIsPrimaryActor
-          ? "Your seat has priority. All available controls come directly from engine legality."
+          ? "Your turn"
           : localHasOptionalAction
-            ? `${formatActorLabel(primaryActor ?? SYSTEM_ACTOR)} has priority, but you can still use any local interrupt the engine exposes.`
+            ? "Interrupt available"
             : thinkingActor
-              ? `${formatActorLabel(thinkingActor)} is thinking.`
-              : "The table will continue automatically until your seat or an optional local response is available.";
+              ? `${formatActorLabel(thinkingActor)} thinking`
+              : "Auto-advancing";
 
   const localSummaryText =
     localActionSummary.length > 0
       ? localActionSummary.join(" • ")
-      : "No local action is available from the engine right now.";
+      : "No local actions.";
 
   return (
     <main className="tabletop-app">
       <header className="topbar">
         <div className="topbar__intro">
-          <p className="topbar__eyebrow">TichuML Milestone 4</p>
-          <h1>Authoritative Table Preview</h1>
+          <p className="topbar__eyebrow">Milestone 4.5</p>
+          <h1>Tichu Table</h1>
           <p className="topbar__summary">
-            The browser client renders seats, hand interaction, trick progression, and phase-aware
-            controls on top of the deterministic engine core.
+            A refined local table preview driven entirely by engine legality.
           </p>
         </div>
 
@@ -563,7 +562,7 @@ export function App() {
             <strong>
               Team 0 {derived.matchScore["team-0"]} : {derived.matchScore["team-1"]} Team 1
             </strong>
-            <small>Single-round preview, ready for server orchestration next.</small>
+            <small>Local round preview</small>
           </section>
         </div>
 
@@ -762,13 +761,13 @@ export function App() {
           </div>
 
           <section className="action-dock">
-            <div className="action-dock__header">
-              <div>
-                <p className="action-dock__eyebrow">Action Rail</p>
-                <h2>Local Controls</h2>
+              <div className="action-dock__header">
+                <div>
+                  <p className="action-dock__eyebrow">Action Rail</p>
+                  <strong className="action-dock__title">Available Actions</strong>
+                </div>
+                <span className="action-dock__phase">{derived.phase}</span>
               </div>
-              <span className="action-dock__phase">{derived.phase}</span>
-            </div>
 
             {localPassSelection && (
               <div className="pass-lanes">
@@ -843,7 +842,11 @@ export function App() {
                 </button>
               )}
               {localDeclineGrandTichuAction && (
-                <button type="button" className="action-button" onClick={() => applyClientAction(localDeclineGrandTichuAction)}>
+                <button
+                  type="button"
+                  className="action-button action-button--secondary"
+                  onClick={() => applyClientAction(localDeclineGrandTichuAction)}
+                >
                   Continue
                 </button>
               )}
@@ -887,7 +890,7 @@ export function App() {
                     </button>
                   ))}
               {primaryActor && primaryActor !== LOCAL_SEAT && (
-                <button type="button" className="action-button" onClick={continueWithAi}>
+                <button type="button" className="action-button action-button--secondary" onClick={continueWithAi}>
                   Continue AI
                 </button>
               )}
@@ -898,12 +901,12 @@ export function App() {
         </section>
 
         {debugOpen && (
-          <aside className="debug-drawer">
-            <section className="debug-panel">
-              <p className="debug-panel__eyebrow">Latest AI Rationale</p>
+          <aside className="debug-sidebar">
+            <section className="debug-sidebar__section">
+              <p className="debug-panel__eyebrow">AI Read</p>
               {lastAiDecision ? (
                 <>
-                  <h2>{formatActorLabel(lastAiDecision.actor)}</h2>
+                  <strong className="debug-sidebar__title">{formatActorLabel(lastAiDecision.actor)}</strong>
                   <p className="debug-panel__copy">{lastAiDecision.explanation.selectedReasonSummary.join(" ")}</p>
                   <ol className="candidate-list">
                     {lastAiDecision.explanation.candidateScores.slice(0, 5).map((candidate, index) => (
@@ -920,9 +923,9 @@ export function App() {
               )}
             </section>
 
-            <section className="debug-panel">
-              <p className="debug-panel__eyebrow">Local Legality</p>
-              <h2>Action Surface</h2>
+            <section className="debug-sidebar__section">
+              <p className="debug-panel__eyebrow">Local Surface</p>
+              <strong className="debug-sidebar__title">Current legal actions</strong>
               <ul className="debug-list">
                 {localActionSummary.length > 0 ? (
                   localActionSummary.map((summary) => <li key={summary}>{summary}</li>)
@@ -932,9 +935,9 @@ export function App() {
               </ul>
             </section>
 
-            <section className="debug-panel">
-              <p className="debug-panel__eyebrow">Recent Engine Events</p>
-              <h2>Event Feed</h2>
+            <section className="debug-sidebar__section">
+              <p className="debug-panel__eyebrow">Recent Flow</p>
+              <strong className="debug-sidebar__title">Event feed</strong>
               <ul className="debug-list">
                 {recentEvents.slice(-8).reverse().map((eventText, index) => (
                   <li key={`${eventText}-${index}`}>{eventText}</li>
