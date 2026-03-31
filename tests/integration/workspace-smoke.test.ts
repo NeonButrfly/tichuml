@@ -17,5 +17,6 @@ describe("milestone 0 workspace scaffold", () => {
     expect(workspaceManifests).toHaveLength(5);
     expect(heuristicFoundation.dependsOn).toBe("authoritative-engine");
     expect(heuristicFoundation.readyForHeadlessFlow).toBe(true);
+    expect(heuristicFoundation.baselinePolicy).toBe("heuristics-v1");
   });
 });
