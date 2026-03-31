@@ -7,10 +7,11 @@
     "build": "vite build"
   },
   "dependencies": {
+    "@tichuml/ai-heuristics": "0.1.0",
+    "@tichuml/engine": "0.1.0",
     "@tichuml/shared": "0.1.0",
     "@tichuml/ui-kit": "0.1.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   }
 }
-
