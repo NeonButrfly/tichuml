@@ -9,11 +9,13 @@ describe("milestone 0 workspace scaffold", () => {
     expect(FOUNDATION_MILESTONE).toBe("milestone-0");
     expect(engineFoundation.milestone).toBe("milestone-1");
     expect(engineFoundation.deterministicCoreReady).toBe(true);
-    expect(telemetryFoundation.milestone).toBe(FOUNDATION_MILESTONE);
+    expect(telemetryFoundation.milestone).toBe("milestone-2");
+    expect(telemetryFoundation.eventTelemetryReady).toBe(true);
   });
 
   it("declares the expected workspace manifests", () => {
     expect(workspaceManifests).toHaveLength(5);
     expect(heuristicFoundation.dependsOn).toBe("authoritative-engine");
+    expect(heuristicFoundation.readyForHeadlessFlow).toBe(true);
   });
 });

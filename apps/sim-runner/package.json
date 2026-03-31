@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@tichuml/ai-heuristics": "0.1.0",
+    "@tichuml/engine": "0.1.0",
     "@tichuml/telemetry": "0.1.0"
   }
 }
-

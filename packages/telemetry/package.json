@@ -15,7 +15,7 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@tichuml/engine": "0.1.0",
     "@tichuml/shared": "0.1.0"
   }
 }
-
