@@ -18,6 +18,7 @@ import {
 import {
   LOCAL_SEAT,
   PASS_TARGETS,
+  buildPlayVariantKey,
   collectLocalLegalCardIds,
   createRoundSeed,
   findMatchingPlayActions,
@@ -40,9 +41,11 @@ import {
   describeAction,
   formatActorLabel,
   formatEvent,
+  parseNormalTableLayoutText,
   type NormalTableLayout,
   type SeatVisualPosition
 } from "./game-table-views";
+import defaultLayoutXml from "./layout.xml?raw";
 
 const AI_STEP_DELAY_MS = 420;
 const SYSTEM_STEP_DELAY_MS = 180;
@@ -103,7 +106,9 @@ export function App() {
   const [selectedPassTarget, setSelectedPassTarget] = useState<PassTarget>("left");
   const [passDraft, setPassDraft] = useState<Partial<Record<PassTarget, string>>>({});
   const [stagedTrick, setStagedTrick] = useState<EngineResult["derivedView"]["currentTrick"] | null>(null);
-  const [normalTableLayout, setNormalTableLayout] = useState<NormalTableLayout>(DEFAULT_NORMAL_TABLE_LAYOUT);
+  const [normalTableLayout, setNormalTableLayout] = useState<NormalTableLayout>(
+    () => parseNormalTableLayoutText(defaultLayoutXml) ?? DEFAULT_NORMAL_TABLE_LAYOUT
+  );
 
   const state = round.nextState;
   const derived = round.derivedView;
@@ -147,9 +152,12 @@ export function App() {
     Boolean(passDraft.partner) &&
     Boolean(passDraft.right) &&
     new Set(Object.values(passDraft)).size === 3;
+  const pickupPending = state.phase === "exchange_complete" && Boolean(systemAdvanceAction);
   const controlHint =
     state.phase === "finished"
       ? "Round complete"
+      : pickupPending && !autoplayLocal
+        ? "Pickup ready"
       : localPassSelection
         ? "Pick left, partner, right"
         : localDragonActions.length > 0
@@ -328,6 +336,11 @@ export function App() {
       return;
     }
 
+    if (!autoplayLocal && pickupPending) {
+      setThinkingActor(null);
+      return;
+    }
+
     const delay = primaryActor === SYSTEM_ACTOR ? SYSTEM_STEP_DELAY_MS : AI_STEP_DELAY_MS;
     setThinkingActor(primaryActor);
 
@@ -362,7 +375,7 @@ export function App() {
     }, delay);
 
     return () => window.clearTimeout(timeout);
-  }, [autoplayLocal, localHasOptionalAction, localIsPrimaryActor, primaryActor, round, state.phase]);
+  }, [autoplayLocal, localHasOptionalAction, localIsPrimaryActor, pickupPending, primaryActor, round, state.phase]);
 
   useEffect(() => {
     if (derived.currentTrick) {

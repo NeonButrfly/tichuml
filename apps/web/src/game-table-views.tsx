@@ -220,7 +220,7 @@ export const NORMAL_LAYOUT_ELEMENT_SPECS: Record<NormalLayoutElementId, NormalLa
   westToEastLane: { label: "West -> East", width: 84, height: 62 },
   westToSouthLane: { label: "West -> South", width: 84, height: 62 },
   playSurface: { label: "Play Surface", width: 920, height: 360 },
-  actionRow: { label: "Action Row", width: 700, height: 112 },
+  actionRow: { label: "Action Row", width: 340, height: 88 },
   northLabel: { label: "North Label", width: 120, height: 28 },
   eastLabel: { label: "East Label", width: 32, height: 160 },
   southLabel: { label: "South Label", width: 120, height: 28 },
@@ -719,7 +719,7 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
-function normalizeLoadedLayout(payload: unknown): NormalTableLayout | null {
+export function normalizeLoadedLayout(payload: unknown): NormalTableLayout | null {
   if (!payload || typeof payload !== "object") {
     return null;
   }
@@ -765,6 +765,41 @@ function normalizeLoadedLayout(payload: unknown): NormalTableLayout | null {
   }
 
   return hasElement ? nextLayout : null;
+}
+
+export function parseNormalTableLayoutText(text: string): NormalTableLayout | null {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  if (trimmed.startsWith("<")) {
+    const elements: Record<string, { x: number; y: number; rotation: number }> = {};
+
+    for (const match of trimmed.matchAll(/<element\b([^>]*)\/?>/g)) {
+      const attributes = Object.fromEntries(
+        Array.from(match[1].matchAll(/(\w+)="([^"]*)"/g), ([, key, value]) => [key, value])
+      );
+      const id = attributes.id;
+      const x = Number(attributes.x);
+      const y = Number(attributes.y);
+      const rotation = Number(attributes.rotation ?? "0");
+
+      if (!id || !isFiniteNumber(x) || !isFiniteNumber(y) || !isFiniteNumber(rotation)) {
+        continue;
+      }
+
+      elements[id] = { x, y, rotation };
+    }
+
+    return Object.keys(elements).length > 0 ? normalizeLoadedLayout({ elements }) : null;
+  }
+
+  try {
+    return normalizeLoadedLayout(JSON.parse(trimmed));
+  } catch {
+    return null;
+  }
 }
 
 function CardFace({
@@ -1582,6 +1617,17 @@ function NormalLayoutEditor({
   const selectedElement = normalTableLayout[selectedElementId];
   const opposingElementId = NORMAL_LAYOUT_OPPOSING_ELEMENT_IDS[selectedElementId] ?? null;
   const opposingElement = opposingElementId ? normalTableLayout[opposingElementId] : null;
+  const surfaceRect = surfaceRef.current?.getBoundingClientRect() ?? null;
+  const xAlignmentThreshold = surfaceRect ? 5 / surfaceRect.width : 0.0005;
+  const yAlignmentThreshold = surfaceRect ? 5 / surfaceRect.height : 0.0005;
+  const hasVerticalAlignment = Boolean(
+    opposingElement && Math.abs(selectedElement.x - opposingElement.x) <= xAlignmentThreshold
+  );
+  const hasHorizontalAlignment = Boolean(
+    opposingElement && Math.abs(selectedElement.y - opposingElement.y) <= yAlignmentThreshold
+  );
+  const verticalGuideState = hasVerticalAlignment ? (hasHorizontalAlignment ? "both" : "vertical") : "idle";
+  const horizontalGuideState = hasHorizontalAlignment ? (hasVerticalAlignment ? "both" : "horizontal") : "idle";
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
@@ -1692,7 +1738,7 @@ function NormalLayoutEditor({
     }
 
     try {
-      const nextLayout = normalizeLoadedLayout(JSON.parse(await file.text()));
+      const nextLayout = parseNormalTableLayoutText(await file.text());
       if (!nextLayout) {
         throw new Error("Invalid layout payload");
       }
@@ -1710,21 +1756,37 @@ function NormalLayoutEditor({
       {guidesVisible && (
         <>
           <div
-            className="normal-layout-editor__guideline normal-layout-editor__guideline--vertical is-selected"
+            className={[
+              "normal-layout-editor__guideline",
+              "normal-layout-editor__guideline--vertical",
+              `normal-layout-editor__guideline-state--${verticalGuideState}`
+            ].join(" ")}
             style={{ left: `${selectedElement.x * 100}%` }}
           />
           <div
-            className="normal-layout-editor__guideline normal-layout-editor__guideline--horizontal is-selected"
+            className={[
+              "normal-layout-editor__guideline",
+              "normal-layout-editor__guideline--horizontal",
+              `normal-layout-editor__guideline-state--${horizontalGuideState}`
+            ].join(" ")}
             style={{ top: `${selectedElement.y * 100}%` }}
           />
           {opposingElement && opposingElementId && (
             <>
               <div
-                className="normal-layout-editor__guideline normal-layout-editor__guideline--vertical"
+                className={[
+                  "normal-layout-editor__guideline",
+                  "normal-layout-editor__guideline--vertical",
+                  `normal-layout-editor__guideline-state--${verticalGuideState}`
+                ].join(" ")}
                 style={{ left: `${opposingElement.x * 100}%` }}
               />
               <div
-                className="normal-layout-editor__guideline normal-layout-editor__guideline--horizontal"
+                className={[
+                  "normal-layout-editor__guideline",
+                  "normal-layout-editor__guideline--horizontal",
+                  `normal-layout-editor__guideline-state--${horizontalGuideState}`
+                ].join(" ")}
                 style={{ top: `${opposingElement.y * 100}%` }}
               />
               <div
@@ -1771,7 +1833,7 @@ function NormalLayoutEditor({
         ref={fileInputRef}
         className="normal-layout-editor__file-input"
         type="file"
-        accept=".json,application/json"
+        accept=".json,.xml,application/json,text/xml,application/xml"
         onChange={handleLayoutFileSelection}
       />
 
@@ -1799,7 +1861,7 @@ function NormalLayoutEditor({
               {guidesVisible ? "Hide Guides" : "Show Guides"}
             </button>
             <button type="button" onClick={() => fileInputRef.current?.click()}>
-              Load JSON
+              Load Layout
             </button>
             <button
               type="button"
@@ -1814,6 +1876,20 @@ function NormalLayoutEditor({
             <button type="button" onClick={() => onNormalTableLayoutChange(DEFAULT_NORMAL_TABLE_LAYOUT)}>
               Reset All
             </button>
+          </div>
+          <div className="normal-layout-editor__legend" aria-label="Alignment guide legend">
+            <span className="normal-layout-editor__legend-item">
+              <span className="normal-layout-editor__legend-swatch normal-layout-editor__legend-swatch--vertical" />
+              Red = vertical
+            </span>
+            <span className="normal-layout-editor__legend-item">
+              <span className="normal-layout-editor__legend-swatch normal-layout-editor__legend-swatch--horizontal" />
+              Yellow = horizontal
+            </span>
+            <span className="normal-layout-editor__legend-item">
+              <span className="normal-layout-editor__legend-swatch normal-layout-editor__legend-swatch--both" />
+              Green = both
+            </span>
           </div>
           <p>Drag to move. Arrow keys nudge by 10px, Shift+Arrow by 50px, [ and ] rotate. Ctrl+G toggles guides, Ctrl+D hides this box, Ctrl+S exports JSON.</p>
         </aside>
