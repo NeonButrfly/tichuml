@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "surface": {
+    "widthMode": "relative",
+    "heightMode": "relative",
+    "gridSize": 10
+  },
+  "elements": {
+    "scoreBadge": {
+      "x": 0.522508038585209,
+      "y": 0.041666666666666664,
+      "rotation": 15
+    },
+    "northHand": {
+      "x": 0.5,
+      "y": 0.135,
+      "rotation": 0
+    },
+    "eastHand": {
+      "x": 0.945,
+      "y": 0.5,
+      "rotation": 0
+    },
+    "southHand": {
+      "x": 0.5,
+      "y": 0.82,
+      "rotation": 0
+    },
+    "westHand": {
+      "x": 0.055,
+      "y": 0.5,
+      "rotation": 0
+    },
+    "northStage": {
+      "x": 0.5,
+      "y": 0.285,
+      "rotation": 0
+    },
+    "eastStage": {
+      "x": 0.87,
+      "y": 0.5,
+      "rotation": 0
+    },
+    "southStage": {
+      "x": 0.5,
+      "y": 0.705,
+      "rotation": 0
+    },
+    "westStage": {
+      "x": 0.13,
+      "y": 0.5,
+      "rotation": 0
+    },
+    "playSurface": {
+      "x": 0.5,
+      "y": 0.46,
+      "rotation": 0
+    },
+    "actionRow": {
+      "x": 0.5,
+      "y": 0.948,
+      "rotation": 0
+    },
+    "northLabel": {
+      "x": 0.5,
+      "y": 0.065,
+      "rotation": 0
+    },
+    "eastLabel": {
+      "x": 0.935,
+      "y": 0.5,
+      "rotation": 0
+    },
+    "southLabel": {
+      "x": 0.5,
+      "y": 0.735,
+      "rotation": 0
+    },
+    "westLabel": {
+      "x": 0.065,
+      "y": 0.5,
+      "rotation": 0
+    }
+  }
+}

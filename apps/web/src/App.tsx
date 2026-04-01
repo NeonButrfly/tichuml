@@ -34,11 +34,13 @@ import {
   type UiMode
 } from "./game-table-view-model";
 import {
+  DEFAULT_NORMAL_TABLE_LAYOUT,
   DebugGameTableView,
   NormalGameTableView,
   describeAction,
   formatActorLabel,
   formatEvent,
+  type NormalTableLayout,
   type SeatVisualPosition
 } from "./game-table-views";
 
@@ -87,6 +89,7 @@ export function App() {
   const [round, setRound] = useState<EngineResult>(() => createInitialGameState(createRoundSeed(INITIAL_SEED_INDEX)));
   const [decisionCount, setDecisionCount] = useState(0);
   const [uiMode, setUiMode] = useState<UiMode>("normal");
+  const [layoutEditorActive, setLayoutEditorActive] = useState(false);
   const [autoplayLocal, setAutoplayLocal] = useState(false);
   const [thinkingActor, setThinkingActor] = useState<ActorId | null>(null);
   const [lastAiDecision, setLastAiDecision] = useState<ChosenDecision | null>(null);
@@ -100,6 +103,7 @@ export function App() {
   const [selectedPassTarget, setSelectedPassTarget] = useState<PassTarget>("left");
   const [passDraft, setPassDraft] = useState<Partial<Record<PassTarget, string>>>({});
   const [stagedTrick, setStagedTrick] = useState<EngineResult["derivedView"]["currentTrick"] | null>(null);
+  const [normalTableLayout, setNormalTableLayout] = useState<NormalTableLayout>(DEFAULT_NORMAL_TABLE_LAYOUT);
 
   const state = round.nextState;
   const derived = round.derivedView;
@@ -251,18 +255,62 @@ export function App() {
   });
 
   useEffect(() => {
+    function exportNormalTableLayout(layout: NormalTableLayout) {
+      const payload = {
+        version: 1,
+        surface: {
+          widthMode: "relative",
+          heightMode: "relative",
+          gridSize: 10
+        },
+        elements: layout
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `tichu-table-layout-${Date.now()}.json`;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    }
+
     const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.key === "s" || event.key === "S") && event.ctrlKey && layoutEditorActive) {
+        event.preventDefault();
+        exportNormalTableLayout(normalTableLayout);
+        return;
+      }
+
+      if ((event.key === "e" || event.key === "E") && event.ctrlKey && !isEditableTarget(event.target)) {
+        event.preventDefault();
+        if (uiMode === "debug") {
+          setUiMode("normal");
+          setLayoutEditorActive(true);
+          return;
+        }
+
+        setLayoutEditorActive((current) => !current);
+        return;
+      }
+
+      if (layoutEditorActive && isDebugToggleShortcut(event) && !isEditableTarget(event.target)) {
+        return;
+      }
+
       if (!isDebugToggleShortcut(event) || isEditableTarget(event.target)) {
         return;
       }
 
       event.preventDefault();
+      setLayoutEditorActive(false);
       setUiMode((current) => (current === "normal" ? "debug" : "normal"));
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [layoutEditorActive, normalTableLayout, uiMode]);
 
   useEffect(() => {
     if (state.phase === "finished") {
@@ -546,8 +594,13 @@ export function App() {
     localSummaryText,
     canContinueAi: Boolean(primaryActor && primaryActor !== LOCAL_SEAT),
     localDragonRecipients: localDragonActions.map((action) => action.recipient),
+    normalTableLayout,
+    layoutEditorActive,
     cardLookup,
-    onToggleMode: () => setUiMode((current) => (current === "normal" ? "debug" : "normal")),
+    onToggleMode: () => {
+      setLayoutEditorActive(false);
+      setUiMode((current) => (current === "normal" ? "debug" : "normal"));
+    },
     onAutoplayChange: setAutoplayLocal,
     onNewRound: startNextRound,
     onContinueAi: continueWithAi,
@@ -558,7 +611,8 @@ export function App() {
     onVariantSelect: setSelectedVariantKey,
     onWishRankSelect: setSelectedWishRank,
     onDragonRecipientSelect: handleDragonRecipientSelect,
-    onNormalAction: handleNormalAction
+    onNormalAction: handleNormalAction,
+    onNormalTableLayoutChange: setNormalTableLayout
   };
 
   return uiMode === "normal" ? <NormalGameTableView {...viewProps} /> : <DebugGameTableView {...viewProps} />;
