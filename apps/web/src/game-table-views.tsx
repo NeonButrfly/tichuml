@@ -1439,18 +1439,15 @@ function DebugSeat({
 
 function NormalActionStrip({
   normalActionRail,
-  controlHint,
   localDragonRecipients,
   onDragonRecipientSelect,
   onNormalAction
 }: Pick<
   GameTableViewProps,
-  "normalActionRail" | "controlHint" | "localDragonRecipients" | "onDragonRecipientSelect" | "onNormalAction"
+  "normalActionRail" | "localDragonRecipients" | "onDragonRecipientSelect" | "onNormalAction"
 >) {
   return (
     <section className="normal-action-area">
-      <p className="normal-action-area__hint">{controlHint}</p>
-
       {localDragonRecipients.length > 0 ? (
         <div className="normal-action-strip">
           {localDragonRecipients.map((recipient) => (
@@ -1999,7 +1996,6 @@ export function NormalGameTableView(props: GameTableViewProps) {
 
             <NormalActionStrip
               normalActionRail={props.normalActionRail}
-              controlHint={props.controlHint}
               localDragonRecipients={props.localDragonRecipients}
               onDragonRecipientSelect={props.onDragonRecipientSelect}
               onNormalAction={props.onNormalAction}
