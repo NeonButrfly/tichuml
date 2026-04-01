@@ -1,4 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
+import type { CSSProperties, DragEvent as ReactDragEvent } from "react";
 import type { ChosenDecision } from "@tichuml/ai-heuristics";
 import {
   SYSTEM_ACTOR,
@@ -82,6 +83,7 @@ export type GameTableViewProps = {
   passLaneViews: PassLaneView[];
   sortedLocalHand: Card[];
   localCanInteract: boolean;
+  localPassInteractionEnabled: boolean;
   localLegalCardIds: Set<string>;
   selectedCardIds: string[];
   selectedPassTarget: PassTarget;
@@ -106,6 +108,7 @@ export type GameTableViewProps = {
   onSortModeChange: (mode: HandSortMode) => void;
   onLocalCardClick: (cardId: string) => void;
   onPassTargetSelect: (target: PassTarget) => void;
+  onPassLaneDrop: (target: PassTarget, cardId: string) => void;
   onVariantSelect: (key: string) => void;
   onWishRankSelect: (rank: StandardRank) => void;
   onDragonRecipientSelect: (recipient: SeatId) => void;
@@ -304,6 +307,137 @@ function formatPassTarget(target: PassTarget): string {
   }
 }
 
+type NormalStageLaneAnchor = {
+  targetPosition: SeatVisualPosition;
+  laneStyle: CSSProperties;
+  slotStyle: CSSProperties;
+  orientation: "upright" | "east" | "west";
+};
+
+type NormalStageRegionAnchor = {
+  regionStyle: CSSProperties;
+  lanes: NormalStageLaneAnchor[];
+};
+
+const NORMAL_STAGE_ANCHORS: Record<SeatVisualPosition, NormalStageRegionAnchor> = {
+  top: {
+    regionStyle: {
+      top: "154px",
+      left: "50%",
+      width: "260px",
+      height: "112px",
+      transform: "translateX(-50%)"
+    },
+    lanes: [
+      {
+        targetPosition: "right",
+        laneStyle: { left: "0px", top: "22px", width: "60px", height: "84px" },
+        slotStyle: { left: "0px", top: "0px" },
+        orientation: "upright"
+      },
+      {
+        targetPosition: "bottom",
+        laneStyle: { left: "100px", top: "0px", width: "60px", height: "84px" },
+        slotStyle: { left: "0px", top: "0px" },
+        orientation: "upright"
+      },
+      {
+        targetPosition: "left",
+        laneStyle: { left: "200px", top: "22px", width: "60px", height: "84px" },
+        slotStyle: { left: "0px", top: "0px" },
+        orientation: "upright"
+      }
+    ]
+  },
+  right: {
+    regionStyle: {
+      top: "50%",
+      right: "122px",
+      width: "96px",
+      height: "260px",
+      transform: "translateY(-50%)"
+    },
+    lanes: [
+      {
+        targetPosition: "top",
+        laneStyle: { left: "6px", bottom: "136px", width: "84px", height: "124px" },
+        slotStyle: { left: "0px", top: "0px" },
+        orientation: "east"
+      },
+      {
+        targetPosition: "left",
+        laneStyle: { left: "6px", bottom: "136px", width: "84px", height: "62px" },
+        slotStyle: { left: "0px", top: "0px" },
+        orientation: "east"
+      },
+      {
+        targetPosition: "bottom",
+        laneStyle: { left: "6px", bottom: "0px", width: "84px", height: "62px" },
+        slotStyle: { left: "0px", top: "0px" },
+        orientation: "east"
+      }
+    ]
+  },
+  bottom: {
+    regionStyle: {
+      bottom: "188px",
+      left: "50%",
+      width: "260px",
+      height: "112px",
+      transform: "translateX(-50%)"
+    },
+    lanes: [
+      {
+        targetPosition: "left",
+        laneStyle: { left: "0px", top: "28px", width: "60px", height: "84px" },
+        slotStyle: { left: "0px", top: "0px" },
+        orientation: "upright"
+      },
+      {
+        targetPosition: "top",
+        laneStyle: { left: "100px", top: "0px", width: "60px", height: "84px" },
+        slotStyle: { left: "0px", top: "0px" },
+        orientation: "upright"
+      },
+      {
+        targetPosition: "right",
+        laneStyle: { left: "200px", top: "28px", width: "60px", height: "84px" },
+        slotStyle: { left: "0px", top: "0px" },
+        orientation: "upright"
+      }
+    ]
+  },
+  left: {
+    regionStyle: {
+      top: "50%",
+      left: "122px",
+      width: "96px",
+      height: "260px",
+      transform: "translateY(-50%)"
+    },
+    lanes: [
+      {
+        targetPosition: "top",
+        laneStyle: { left: "6px", bottom: "136px", width: "84px", height: "124px" },
+        slotStyle: { left: "0px", top: "0px" },
+        orientation: "west"
+      },
+      {
+        targetPosition: "right",
+        laneStyle: { left: "6px", bottom: "136px", width: "84px", height: "62px" },
+        slotStyle: { left: "0px", top: "0px" },
+        orientation: "west"
+      },
+      {
+        targetPosition: "bottom",
+        laneStyle: { left: "6px", bottom: "0px", width: "84px", height: "62px" },
+        slotStyle: { left: "0px", top: "0px" },
+        orientation: "west"
+      }
+    ]
+  }
+};
+
 function cardContent(card: Card) {
   if (card.kind === "standard") {
     return (
@@ -343,20 +477,39 @@ function surfaceMessage(props: Pick<GameTableViewProps, "controlHint" | "state" 
   };
 }
 
+function getSeatVisualPosition(seat: SeatId): SeatVisualPosition {
+  switch (seat) {
+    case "seat-0":
+      return "bottom";
+    case "seat-1":
+      return "right";
+    case "seat-2":
+      return "top";
+    case "seat-3":
+      return "left";
+  }
+}
+
 function CardFace({
   card,
   interactive = false,
   tone = "normal",
   selected = false,
   className = "",
-  onClick
+  draggable = false,
+  onClick,
+  onDragStart,
+  onDragEnd
 }: {
   card: Card;
   interactive?: boolean;
   tone?: "normal" | "legal" | "muted";
   selected?: boolean;
   className?: string;
+  draggable?: boolean;
   onClick?: () => void;
+  onDragStart?: (event: ReactDragEvent<HTMLButtonElement>) => void;
+  onDragEnd?: () => void;
 }) {
   const classes = [
     "playing-card",
@@ -372,7 +525,14 @@ function CardFace({
 
   if (interactive) {
     return (
-      <button type="button" className={classes} onClick={onClick}>
+      <button
+        type="button"
+        className={classes}
+        onClick={onClick}
+        draggable={draggable}
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+      >
         {cardContent(card)}
       </button>
     );
@@ -393,19 +553,33 @@ function SeatCountPreview({ count }: { count: number }) {
 
 function PassRouteToken({
   route,
-  cardLookup
+  cardLookup,
+  cardClassName = "",
+  tokenClassName = ""
 }: {
   route: PassRouteView;
   cardLookup: ReadonlyMap<string, Card>;
+  cardClassName?: string;
+  tokenClassName?: string;
 }) {
   if (route.visibleCardId) {
-    return <CardFace card={resolveCard(route.visibleCardId, cardLookup)} className="normal-card normal-card--route" />;
+    return (
+      <CardFace
+        card={resolveCard(route.visibleCardId, cardLookup)}
+        className={["normal-card", "normal-card--route", cardClassName].filter(Boolean).join(" ")}
+      />
+    );
   }
 
   return (
     <div
       className={
-        route.occupied ? "normal-pass-token normal-pass-token--back" : "normal-pass-token normal-pass-token--empty"
+        [
+          route.occupied ? "normal-pass-token normal-pass-token--back" : "normal-pass-token normal-pass-token--empty",
+          tokenClassName
+        ]
+          .filter(Boolean)
+          .join(" ")
       }
     />
   );
@@ -459,7 +633,6 @@ function TableSurface({
   trickIsResolving,
   seatRelativePlays,
   tablePassGroups,
-  passRouteViews,
   cardLookup
 }: Pick<
   GameTableViewProps,
@@ -470,7 +643,6 @@ function TableSurface({
   | "trickIsResolving"
   | "seatRelativePlays"
   | "tablePassGroups"
-  | "passRouteViews"
   | "cardLookup"
 > & {
   variant: "normal" | "debug";
@@ -555,26 +727,7 @@ function TableSurface({
             );
           })}
         </>
-      ) : variant === "normal" && passRouteViews.length > 0 ? (
-        <>
-          <div className="normal-play-surface__core">
-            <span className="normal-play-surface__badge">
-              {state.phase === "pass_select" ? "Pass lanes" : "Exchange staging"}
-            </span>
-          </div>
-
-          <div className="normal-pass-network">
-            {passRouteViews.map((route) => (
-              <div
-                key={route.key}
-                className={`normal-pass-route normal-pass-route--${route.sourcePosition}-${route.target}`}
-              >
-                <PassRouteToken route={route} cardLookup={cardLookup} />
-              </div>
-            ))}
-          </div>
-        </>
-      ) : tablePassGroups.length > 0 ? (
+      ) : variant === "debug" && tablePassGroups.length > 0 ? (
         <>
           <div className={variant === "normal" ? "normal-play-surface__core" : "table-trick__core"}>
             <span className={variant === "normal" ? "normal-play-surface__badge" : "table-trick__lead"}>
@@ -624,32 +777,180 @@ function TableSurface({
   );
 }
 
+function NormalPassStagingRegions({
+  passRouteViews,
+  selectedPassTarget,
+  cardLookup,
+  onPassTargetSelect,
+  onPassLaneDrop
+}: Pick<
+  GameTableViewProps,
+  "passRouteViews" | "selectedPassTarget" | "cardLookup" | "onPassTargetSelect" | "onPassLaneDrop"
+>) {
+  if (passRouteViews.length === 0) {
+    return null;
+  }
+
+  const seatOrder: Array<{ seat: SeatId; position: SeatVisualPosition }> = [
+    { seat: "seat-2", position: "top" },
+    { seat: "seat-1", position: "right" },
+    { seat: "seat-0", position: "bottom" },
+    { seat: "seat-3", position: "left" }
+  ];
+
+  return (
+    <div className="normal-pass-staging" aria-label="Pass staging regions">
+      {seatOrder.map(({ seat, position }) => {
+        const regionAnchor = NORMAL_STAGE_ANCHORS[position];
+        const routeByTargetPosition = new Map(
+          passRouteViews
+            .filter((route) => route.sourceSeat === seat)
+            .map((route) => [getSeatVisualPosition(route.targetSeat), route])
+        );
+
+        if (routeByTargetPosition.size === 0) {
+          return null;
+        }
+
+        return (
+          <div
+            key={seat}
+            className={`normal-pass-staging__region normal-pass-staging__region--${position}`}
+            style={regionAnchor.regionStyle}
+            aria-label={`${formatSeatShort(seat)} staging region`}
+          >
+            {regionAnchor.lanes.map((lane) => {
+              const route = routeByTargetPosition.get(lane.targetPosition);
+
+              if (!route) {
+                return null;
+              }
+
+              const isInteractive = route.interactive;
+              const slotClassName = [
+                "normal-pass-stage-slot",
+                `normal-pass-stage-slot--${lane.orientation}`,
+                route.faceDown ? "normal-pass-stage-slot--back" : "",
+                route.occupied ? "normal-pass-stage-slot--occupied" : "",
+                route.target === selectedPassTarget && isInteractive ? "normal-pass-stage-slot--selected" : "",
+                isInteractive ? "normal-pass-stage-slot--interactive" : ""
+              ]
+                .filter(Boolean)
+                .join(" ");
+
+              const slotContents = (
+                <PassRouteToken
+                  route={route}
+                  cardLookup={cardLookup}
+                  cardClassName={
+                    lane.orientation === "east"
+                      ? "normal-card--route-east"
+                      : lane.orientation === "west"
+                        ? "normal-card--route-west"
+                        : ""
+                  }
+                  tokenClassName={
+                    lane.orientation === "east"
+                      ? "normal-pass-token--east"
+                      : lane.orientation === "west"
+                        ? "normal-pass-token--west"
+                        : ""
+                  }
+                />
+              );
+
+              if (!isInteractive) {
+                return (
+                  <div
+                    key={route.key}
+                    className="normal-pass-stage-lane"
+                    style={lane.laneStyle}
+                    aria-label={`${formatSeatShort(route.sourceSeat)} ${formatPassTarget(route.target)} lane`}
+                  >
+                    <div
+                      className={slotClassName}
+                      style={lane.slotStyle}
+                      aria-label={`${formatSeatShort(route.sourceSeat)} ${formatPassTarget(route.target)} staged card`}
+                    >
+                      {slotContents}
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <div
+                  key={route.key}
+                  className="normal-pass-stage-lane"
+                  style={lane.laneStyle}
+                >
+                  <button
+                    type="button"
+                    className={slotClassName}
+                    style={lane.slotStyle}
+                    aria-label={`${formatPassTarget(route.target)} to ${formatSeatShort(route.targetSeat)}`}
+                    onClick={() => onPassTargetSelect(route.target)}
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      event.dataTransfer.dropEffect = "move";
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      const cardId = event.dataTransfer.getData("application/x-tichu-pass-card");
+                      if (cardId) {
+                        onPassLaneDrop(route.target, cardId);
+                      }
+                    }}
+                  >
+                    {slotContents}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function NormalSeat({
   seatView,
   sortedLocalHand,
   localCanInteract,
+  localPassInteractionEnabled,
   localLegalCardIds,
   selectedCardIds,
   onLocalCardClick
 }: Pick<
   GameTableViewProps,
-  "sortedLocalHand" | "localCanInteract" | "localLegalCardIds" | "selectedCardIds" | "onLocalCardClick"
+  | "sortedLocalHand"
+  | "localCanInteract"
+  | "localPassInteractionEnabled"
+  | "localLegalCardIds"
+  | "selectedCardIds"
+  | "onLocalCardClick"
 > & {
   seatView: SeatView;
 }) {
+  const isSideSeat = seatView.position === "left" || seatView.position === "right";
+
   return (
     <section
       className={[
         "normal-seat",
         `normal-seat--${seatView.position}`,
+        isSideSeat ? "normal-seat--side" : "",
         seatView.isLocalSeat ? "normal-seat--local" : "",
         seatView.isPrimarySeat ? "normal-seat--active" : ""
       ]
         .filter(Boolean)
         .join(" ")}
     >
-      <div className="normal-seat__meta">
-        <span className="normal-seat__label">{seatView.title}</span>
+      {isSideSeat && <span className="normal-seat__back-label">{seatView.title}</span>}
+
+      <div className={isSideSeat ? "normal-seat__meta normal-seat__meta--side" : "normal-seat__meta"}>
+        {!isSideSeat && <span className="normal-seat__label">{seatView.title}</span>}
         <div className="normal-seat__flags">
           <SeatFlagChips
             callState={seatView.callState}
@@ -674,15 +975,29 @@ function NormalSeat({
                 selected={selectedCardIds.includes(card.id)}
                 className="normal-card normal-card--local"
                 onClick={() => onLocalCardClick(card.id)}
+                draggable={localPassInteractionEnabled}
+                onDragStart={(event) => {
+                  event.dataTransfer.effectAllowed = "move";
+                  event.dataTransfer.setData("application/x-tichu-pass-card", card.id);
+                }}
               />
             ))}
           </div>
         </div>
       ) : (
         <div className={`normal-seat__hand normal-seat__hand--${seatView.position}`}>
-          {seatView.cards.map((card) => (
-            <CardFace key={card.id} card={card} className="normal-card normal-card--seat" />
-          ))}
+          {seatView.cards.map((card) =>
+            isSideSeat ? (
+              <div key={card.id} className={`normal-side-card-shell normal-side-card-shell--${seatView.position}`}>
+                <CardFace
+                  card={card}
+                  className={`normal-card normal-card--seat normal-card--seat-${seatView.position}`}
+                />
+              </div>
+            ) : (
+              <CardFace key={card.id} card={card} className="normal-card normal-card--seat" />
+            )
+          )}
         </div>
       )}
     </section>
@@ -837,41 +1152,6 @@ function NormalActionStrip({
   );
 }
 
-function NormalSouthPassControls({
-  passRouteViews,
-  selectedPassTarget,
-  cardLookup,
-  onPassTargetSelect
-}: Pick<GameTableViewProps, "passRouteViews" | "selectedPassTarget" | "cardLookup" | "onPassTargetSelect">) {
-  const southRoutes = passRouteViews.filter((route) => route.sourceSeat === "seat-0");
-
-  if (southRoutes.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="normal-south-pass-controls">
-      {southRoutes.map((route) => (
-        <button
-          key={route.key}
-          type="button"
-          className={
-            route.target === selectedPassTarget
-              ? "normal-south-pass-control normal-south-pass-control--selected"
-              : "normal-south-pass-control"
-          }
-          onClick={() => onPassTargetSelect(route.target)}
-        >
-          <span className="normal-south-pass-control__title">
-            {formatPassTarget(route.target)} to {formatSeatShort(route.targetSeat)}
-          </span>
-          <PassRouteToken route={route} cardLookup={cardLookup} />
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function DebugActionStrip({
   normalActionRail,
   localDragonRecipients,
@@ -952,6 +1232,7 @@ export function NormalGameTableView(props: GameTableViewProps) {
               seatView={seatView}
               sortedLocalHand={props.sortedLocalHand}
               localCanInteract={props.localCanInteract}
+              localPassInteractionEnabled={props.localPassInteractionEnabled}
               localLegalCardIds={props.localLegalCardIds}
               selectedCardIds={props.selectedCardIds}
               onLocalCardClick={props.onLocalCardClick}
@@ -967,17 +1248,16 @@ export function NormalGameTableView(props: GameTableViewProps) {
             trickIsResolving={props.trickIsResolving}
             seatRelativePlays={props.seatRelativePlays}
             tablePassGroups={props.tablePassGroups}
-            passRouteViews={props.passRouteViews}
             cardLookup={props.cardLookup}
           />
-          <section className="normal-south-edge">
-            <NormalSouthPassControls
-              passRouteViews={props.passRouteViews}
-              selectedPassTarget={props.selectedPassTarget}
-              cardLookup={props.cardLookup}
-              onPassTargetSelect={props.onPassTargetSelect}
-            />
-
+          <NormalPassStagingRegions
+            passRouteViews={props.passRouteViews}
+            selectedPassTarget={props.selectedPassTarget}
+            cardLookup={props.cardLookup}
+            onPassTargetSelect={props.onPassTargetSelect}
+            onPassLaneDrop={props.onPassLaneDrop}
+          />
+          <section className="normal-bottom-controls">
             {props.matchingPlayActions.length > 1 && (
               <div className="normal-inline-controls">
                 <div className="variant-row variant-row--normal">
@@ -1114,7 +1394,6 @@ export function DebugGameTableView(props: GameTableViewProps) {
               trickIsResolving={props.trickIsResolving}
               seatRelativePlays={props.seatRelativePlays}
               tablePassGroups={props.tablePassGroups}
-              passRouteViews={props.passRouteViews}
               cardLookup={props.cardLookup}
             />
           </div>

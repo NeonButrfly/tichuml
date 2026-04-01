@@ -78,6 +78,10 @@ function isEditableTarget(target: EventTarget | null): boolean {
   );
 }
 
+function collectStagedPassCardIds(selection?: Partial<Record<PassTarget, string>>) {
+  return new Set(PASS_TARGETS.map((target) => selection?.[target]).filter((value): value is string => Boolean(value)));
+}
+
 export function App() {
   const [seedIndex, setSeedIndex] = useState(INITIAL_SEED_INDEX);
   const [round, setRound] = useState<EngineResult>(() => createInitialGameState(createRoundSeed(INITIAL_SEED_INDEX)));
@@ -127,7 +131,6 @@ export function App() {
     activePlayVariant?.availableWishRanks?.includes(selectedWishRank ?? -1)
       ? selectedWishRank
       : activePlayVariant?.availableWishRanks?.at(-1) ?? null;
-  const sortedLocalHand = sortCardsForHand(state.hands[LOCAL_SEAT], sortMode, localPlayActions);
   const localIsPrimaryActor = primaryActor === LOCAL_SEAT;
   const localHasOptionalAction = primaryActor !== LOCAL_SEAT && localActions.length > 0;
   const localCanInteract = localIsPrimaryActor || localHasOptionalAction || autoplayLocal;
@@ -156,13 +159,30 @@ export function App() {
                 : "Auto-advancing";
 
   const cardLookup = new Map(state.shuffledDeck.map((card) => [card.id, card]));
+  const stagedSelectionBySeat = Object.fromEntries(
+    SEAT_LAYOUT.map(({ seat }) => [
+      seat,
+      state.revealedPasses[seat] ?? state.passSelections[seat] ?? (seat === LOCAL_SEAT ? passDraft : undefined)
+    ])
+  ) as Record<SeatId, Partial<Record<PassTarget, string>> | undefined>;
+  const visibleHandsBySeat = Object.fromEntries(
+    SEAT_LAYOUT.map(({ seat }) => {
+      const stagedCardIds =
+        state.phase === "pass_select" || state.phase === "pass_reveal" || state.phase === "exchange_complete"
+          ? collectStagedPassCardIds(stagedSelectionBySeat[seat])
+          : new Set<string>();
+
+      return [seat, state.hands[seat].filter((card) => !stagedCardIds.has(card.id))];
+    })
+  ) as Record<SeatId, (typeof state.hands)[SeatId]>;
+  const sortedLocalHand = sortCardsForHand(visibleHandsBySeat[LOCAL_SEAT], sortMode, localPlayActions);
   const seatViews = SEAT_LAYOUT.map(({ seat, position, title, relation }) => ({
     seat,
     position,
     title,
     relation,
-    handCount: derived.handCounts[seat],
-    cards: state.hands[seat],
+    handCount: visibleHandsBySeat[seat].length,
+    cards: visibleHandsBySeat[seat],
     callState: derived.calls[seat],
     passReady: Boolean(state.passSelections[seat] || state.revealedPasses[seat]),
     finishIndex: state.finishedOrder.indexOf(seat),
@@ -179,10 +199,7 @@ export function App() {
     )
   }));
   const tablePassGroups = SEAT_LAYOUT.map(({ seat, position, title }) => {
-    const selection =
-      state.revealedPasses[seat] ??
-      state.passSelections[seat] ??
-      (seat === LOCAL_SEAT ? passDraft : undefined);
+    const selection = stagedSelectionBySeat[seat];
     const cardIds = PASS_TARGETS.map((target) => selection?.[target]).filter((value): value is string => Boolean(value));
 
     return { seat, position, label: title, cardIds };
@@ -194,7 +211,7 @@ export function App() {
             const targetSeat =
               target === "left" ? getLeftSeat(seat) : target === "partner" ? getPartnerSeat(seat) : getRightSeat(seat);
             const revealedSelection = state.revealedPasses[seat];
-            const stagedSelection = revealedSelection ?? state.passSelections[seat] ?? (seat === LOCAL_SEAT ? passDraft : undefined);
+            const stagedSelection = stagedSelectionBySeat[seat];
             const stagedCardId = stagedSelection?.[target] ?? null;
             const visibleCardId = revealedSelection?.[target] ?? (seat === LOCAL_SEAT ? stagedCardId : null);
 
@@ -393,33 +410,42 @@ export function App() {
     });
   }
 
+  function assignPassCard(target: PassTarget, cardId: string) {
+    if (!localPassSelection) {
+      return;
+    }
+
+    setPassDraft((current) => {
+      if (current[target] === cardId) {
+        setSelectedPassTarget(target);
+        return current;
+      }
+
+      const nextDraft: Partial<Record<PassTarget, string>> = {};
+
+      for (const draftTarget of PASS_TARGETS) {
+        const existingCardId = current[draftTarget];
+        if (!existingCardId || existingCardId === cardId || draftTarget === target) {
+          continue;
+        }
+
+        nextDraft[draftTarget] = existingCardId;
+      }
+
+      nextDraft[target] = cardId;
+      const nextEmptyTarget = findNextEmptyPassTarget(nextDraft);
+      setSelectedPassTarget(nextEmptyTarget ?? target);
+      return nextDraft;
+    });
+  }
+
   function handleLocalCardClick(cardId: string) {
     if (!localCanInteract) {
       return;
     }
 
     if (localPassSelection) {
-      setPassDraft((current) => {
-        const nextDraft: Partial<Record<PassTarget, string>> = {};
-
-        for (const target of PASS_TARGETS) {
-          const existingCardId = current[target];
-          if (existingCardId && existingCardId !== cardId) {
-            nextDraft[target] = existingCardId;
-          }
-        }
-
-        if (current[selectedPassTarget] === cardId) {
-          return nextDraft;
-        }
-
-        nextDraft[selectedPassTarget] = cardId;
-        const nextEmptyTarget = findNextEmptyPassTarget(nextDraft);
-        if (nextEmptyTarget) {
-          setSelectedPassTarget(nextEmptyTarget);
-        }
-        return nextDraft;
-      });
+      assignPassCard(selectedPassTarget, cardId);
       return;
     }
 
@@ -474,7 +500,11 @@ export function App() {
       case "new_round":
         startNextRound();
         break;
-    }
+      }
+  }
+
+  function handlePassLaneDrop(target: PassTarget, cardId: string) {
+    assignPassCard(target, cardId);
   }
 
   function handleDragonRecipientSelect(recipient: SeatId) {
@@ -499,6 +529,7 @@ export function App() {
     passLaneViews,
     sortedLocalHand,
     localCanInteract,
+    localPassInteractionEnabled: Boolean(localPassSelection),
     localLegalCardIds,
     selectedCardIds,
     selectedPassTarget,
@@ -523,6 +554,7 @@ export function App() {
     onSortModeChange: setSortMode,
     onLocalCardClick: handleLocalCardClick,
     onPassTargetSelect: setSelectedPassTarget,
+    onPassLaneDrop: handlePassLaneDrop,
     onVariantSelect: setSelectedVariantKey,
     onWishRankSelect: setSelectedWishRank,
     onDragonRecipientSelect: handleDragonRecipientSelect,
