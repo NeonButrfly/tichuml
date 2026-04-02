@@ -1,8 +1,15 @@
 import { describe, expect, it } from "vitest";
+import defaultLayoutText from "../../apps/web/src/layout.xml?raw";
 import {
   createNormalActionRail,
   isDebugToggleShortcut
 } from "../../apps/web/src/game-table-view-model";
+import {
+  DEFAULT_NORMAL_TABLE_LAYOUT,
+  DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS,
+  formatEvent,
+  parseNormalTableLayoutConfigText
+} from "../../apps/web/src/game-table-views";
 
 describe("milestone 4.5.2 view-model helpers", () => {
   it("toggles debug mode only for ctrl+d", () => {
@@ -80,5 +87,16 @@ describe("milestone 4.5.2 view-model helpers", () => {
         playEnabled: true
       }).map((slot) => slot.label)
     ).toEqual(["Pass", "Tichu", "Play"]);
+  });
+
+  it("describes single-card plays explicitly in the event feed", () => {
+    expect(formatEvent({ type: "cards_played", detail: "seat-1:single" })).toBe("East played Single.");
+  });
+
+  it("keeps the shipped layout config aligned with the normalized defaults", () => {
+    const parsed = parseNormalTableLayoutConfigText(defaultLayoutText);
+
+    expect(parsed?.elements).toEqual(DEFAULT_NORMAL_TABLE_LAYOUT);
+    expect(parsed?.tokens).toEqual(DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS);
   });
 });

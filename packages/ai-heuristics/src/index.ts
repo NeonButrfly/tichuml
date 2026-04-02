@@ -1,6 +1,7 @@
 import {
   SEAT_IDS,
   SYSTEM_ACTOR,
+  getLegalActions,
   getOpponentSeats,
   getPartnerSeat,
   getTeamForSeat,
@@ -14,6 +15,33 @@ import {
 } from "@tichuml/engine";
 import { engineFoundation } from "@tichuml/engine";
 
+export type PolicyTag =
+  | "partner_called_tichu"
+  | "partner_still_live_for_tichu"
+  | "partner_tichu_interference_candidate"
+  | "unjustified_partner_bomb"
+  | "justified_partner_bomb"
+  | "partner_tempo_preserved"
+  | "partner_control_preserved"
+  | "opponent_immediate_win_risk"
+  | "partner_cannot_retain_lead"
+  | "team_control_would_be_lost_without_intervention"
+  | "team_salvage_intervention";
+
+export type TeamplaySnapshot = {
+  partnerCalledTichu: boolean;
+  partnerStillLiveForTichu: boolean;
+  partnerCardCount: number;
+  partnerCurrentControl: boolean;
+  opponentImmediateWinRisk: boolean;
+  partnerCannotRetainLead: boolean;
+  teamControlWouldBeLostWithoutIntervention: boolean;
+  teamSalvageIntervention: boolean;
+  partnerInterferenceCandidate: boolean;
+  justifiedPartnerBomb: boolean;
+  unjustifiedPartnerBomb: boolean;
+};
+
 export type PolicyExplanation = {
   policy: string;
   actor: SeatId | typeof SYSTEM_ACTOR;
@@ -21,8 +49,12 @@ export type PolicyExplanation = {
     action: EngineAction;
     score: number;
     reasons: string[];
+    tags: PolicyTag[];
+    teamplay?: TeamplaySnapshot;
   }>;
   selectedReasonSummary: string[];
+  selectedTags: PolicyTag[];
+  selectedTeamplay?: TeamplaySnapshot;
 };
 
 export type HeadlessDecisionContext = {
@@ -46,6 +78,8 @@ type CandidateDecision = {
   action: EngineAction;
   score: number;
   reasons: string[];
+  tags: PolicyTag[];
+  teamplay?: TeamplaySnapshot;
 };
 
 type PlayLegalAction = Extract<LegalAction, { type: "play_cards" }>;
@@ -232,6 +266,107 @@ function currentWinnerIsPartner(state: GameState, seat: SeatId): boolean {
   return winner !== undefined && winner !== null && winner !== seat && getPartnerSeat(seat) === winner;
 }
 
+function partnerHasCalledTichu(state: GameState, seat: SeatId): boolean {
+  const partner = getPartnerSeat(seat);
+  return state.calls[partner].smallTichu || state.calls[partner].grandTichu;
+}
+
+function partnerStillLiveForTichu(state: GameState, seat: SeatId): boolean {
+  const partner = getPartnerSeat(seat);
+  if (!partnerHasCalledTichu(state, seat)) {
+    return false;
+  }
+
+  const firstFinished = state.finishedOrder[0];
+  if (firstFinished && firstFinished !== partner) {
+    return false;
+  }
+
+  return state.hands[partner].length > 0;
+}
+
+function hasOpponentImmediateWinRisk(state: GameState, seat: SeatId): boolean {
+  return getOpponentSeats(seat).some((opponent) => state.hands[opponent].length <= 1);
+}
+
+function activeOpponentHasLiveBeat(ctx: HeadlessDecisionContext, seat: SeatId): boolean {
+  const activeSeat = ctx.state.activeSeat;
+  if (!activeSeat || getTeamForSeat(activeSeat) === getTeamForSeat(seat)) {
+    return false;
+  }
+
+  return (ctx.legalActions[activeSeat] ?? []).some(isPlayLegalAction);
+}
+
+function canOpponentBeatCombination(state: GameState, opponent: SeatId, currentWinner: SeatId): boolean {
+  if (!state.currentTrick || state.hands[opponent].length === 0 || opponent === currentWinner) {
+    return false;
+  }
+
+  const shadowState: GameState = {
+    ...state,
+    hands: {
+      "seat-0": [...state.hands["seat-0"]],
+      "seat-1": [...state.hands["seat-1"]],
+      "seat-2": [...state.hands["seat-2"]],
+      "seat-3": [...state.hands["seat-3"]]
+    },
+    calls: {
+      "seat-0": { ...state.calls["seat-0"] },
+      "seat-1": { ...state.calls["seat-1"] },
+      "seat-2": { ...state.calls["seat-2"] },
+      "seat-3": { ...state.calls["seat-3"] }
+    },
+    grandTichuQueue: [...state.grandTichuQueue],
+    passSelections: { ...state.passSelections },
+    revealedPasses: { ...state.revealedPasses },
+    collectedCards: {
+      "seat-0": [...state.collectedCards["seat-0"]],
+      "seat-1": [...state.collectedCards["seat-1"]],
+      "seat-2": [...state.collectedCards["seat-2"]],
+      "seat-3": [...state.collectedCards["seat-3"]]
+    },
+    finishedOrder: [...state.finishedOrder],
+    currentTrick: {
+      ...state.currentTrick,
+      currentWinner
+    },
+    activeSeat: opponent
+  };
+
+  return (getLegalActions(shadowState)[opponent] ?? []).some(isPlayLegalAction);
+}
+
+function appendUniqueTags(target: PolicyTag[], ...tags: PolicyTag[]): void {
+  for (const tag of tags) {
+    if (!target.includes(tag)) {
+      target.push(tag);
+    }
+  }
+}
+
+function buildTeamplaySnapshot(
+  state: GameState,
+  seat: SeatId,
+  overrides: Partial<TeamplaySnapshot> = {}
+): TeamplaySnapshot {
+  const partner = getPartnerSeat(seat);
+  return {
+    partnerCalledTichu: partnerHasCalledTichu(state, seat),
+    partnerStillLiveForTichu: partnerStillLiveForTichu(state, seat),
+    partnerCardCount: state.hands[partner].length,
+    partnerCurrentControl: currentWinnerIsPartner(state, seat),
+    opponentImmediateWinRisk: hasOpponentImmediateWinRisk(state, seat),
+    partnerCannotRetainLead: false,
+    teamControlWouldBeLostWithoutIntervention: false,
+    teamSalvageIntervention: false,
+    partnerInterferenceCandidate: false,
+    justifiedPartnerBomb: false,
+    unjustifiedPartnerBomb: false,
+    ...overrides
+  };
+}
+
 function minOpponentCards(state: GameState, seat: SeatId): number {
   return Math.min(...getOpponentSeats(seat).map((opponent) => state.hands[opponent].length));
 }
@@ -269,6 +404,7 @@ function scoreGrandTichu(state: GameState, seat: SeatId, action: EngineAction): 
       actor: seat,
       action,
       score: shouldCall ? 820 + strength : -120,
+      tags: [],
       reasons: shouldCall
         ? ["strong opening eight-card hand", "high-card density supports a Grand Tichu call"]
         : ["hand strength is too volatile for Grand Tichu"]
@@ -279,6 +415,7 @@ function scoreGrandTichu(state: GameState, seat: SeatId, action: EngineAction): 
     actor: seat,
     action,
     score: shouldCall ? 120 : 700,
+    tags: [],
     reasons: shouldCall
       ? ["declining leaves value on the table despite a strong hand"]
       : ["declining Grand Tichu avoids a high-variance overcall"]
@@ -295,6 +432,7 @@ function scoreTichu(state: GameState, seat: SeatId, action: EngineAction): Candi
     actor: seat,
     action,
     score: shouldCall ? 760 + strength / 10 : -60,
+    tags: [],
     reasons: shouldCall
       ? ["compact, high-quality hand supports a Tichu call", "calling now preserves value before the first play"]
       : ["hand quality is not strong enough to justify a Tichu call"]
@@ -310,6 +448,7 @@ function scoreDragonGift(state: GameState, seat: SeatId, action: EngineAction): 
     actor: seat,
     action,
     score: 500 + recipientCards * 40 - (calledTichu ? 80 : 0),
+    tags: [],
     reasons: [
       recipientCards >= 3
         ? "prefer giving Dragon points to the slower opponent"
@@ -325,6 +464,7 @@ function scorePassSelection(state: GameState, seat: SeatId, action: EngineAction
       actor: seat,
       action,
       score: 0,
+      tags: [],
       reasons: ["not a pass-selection action"]
     };
   }
@@ -346,6 +486,7 @@ function scorePassSelection(state: GameState, seat: SeatId, action: EngineAction
     actor: seat,
     action,
     score,
+    tags: [],
     reasons: [
       "sends the strongest spare card to partner support",
       "bleeds the lowest-value cards to the opponents"
@@ -353,13 +494,20 @@ function scorePassSelection(state: GameState, seat: SeatId, action: EngineAction
   };
 }
 
-function scorePlayAction(state: GameState, actor: SeatId, legalAction: PlayLegalAction, action: EngineAction): CandidateDecision {
+function scorePlayAction(
+  ctx: HeadlessDecisionContext,
+  actor: SeatId,
+  legalAction: PlayLegalAction,
+  action: EngineAction
+): CandidateDecision {
+  const state = ctx.state;
   const handCountAfter = state.hands[actor].length - legalAction.cardIds.length;
   const opponentThreat = minOpponentCards(state, actor);
   const partnerWinning = currentWinnerIsPartner(state, actor);
   const opponentWinning =
     state.currentTrick !== null && getTeamForSeat(state.currentTrick.currentWinner) !== getTeamForSeat(actor);
   const reasons: string[] = [];
+  const tags: PolicyTag[] = [];
   let score = 260;
 
   score += legalAction.cardIds.length * 36;
@@ -419,6 +567,88 @@ function scorePlayAction(state: GameState, actor: SeatId, legalAction: PlayLegal
     reasons.push("prefers efficient beats over unnecessarily expensive overtakes");
   }
 
+  const partnerTichuActive = partnerHasCalledTichu(state, actor);
+  const partnerTichuStillLive = partnerStillLiveForTichu(state, actor);
+  const partnerCardCount = state.hands[getPartnerSeat(actor)].length;
+  const opponentImmediateWinRisk = hasOpponentImmediateWinRisk(state, actor);
+  const partnerCurrentControl = partnerWinning;
+  const partnerCannotRetainLead =
+    partnerCurrentControl &&
+    (activeOpponentHasLiveBeat(ctx, actor) ||
+      (state.activeSeat === actor &&
+        getOpponentSeats(actor).some((opponent) => canOpponentBeatCombination(state, opponent, getPartnerSeat(actor)))));
+  const teamControlWouldBeLostWithoutIntervention = partnerCannotRetainLead;
+  const partnerInterferenceCandidate = partnerCurrentControl && partnerTichuActive && partnerTichuStillLive;
+  const bombsPartner = partnerInterferenceCandidate && legalAction.combination.isBomb;
+  const teamSalvageIntervention =
+    partnerInterferenceCandidate &&
+    legalAction.combination.isBomb &&
+    (opponentImmediateWinRisk || teamControlWouldBeLostWithoutIntervention);
+
+  if (partnerTichuActive) {
+    appendUniqueTags(tags, "partner_called_tichu");
+  }
+
+  if (partnerTichuStillLive) {
+    appendUniqueTags(tags, "partner_still_live_for_tichu");
+  }
+
+  if (opponentImmediateWinRisk) {
+    appendUniqueTags(tags, "opponent_immediate_win_risk");
+  }
+
+  if (partnerInterferenceCandidate) {
+    appendUniqueTags(tags, "partner_tichu_interference_candidate");
+    score -= 1480;
+    reasons.push("partner has an active Tichu line, so tempo theft is heavily penalized");
+
+    if (partnerCardCount > 1) {
+      score -= 180;
+      reasons.push("partner still has a plausible path to finish first without team interference");
+    }
+
+    if (bombsPartner) {
+      score -= 1320;
+      reasons.push("bombing a Tichu-calling partner is an extreme last resort");
+    } else {
+      score -= 220;
+      reasons.push("overtaking a Tichu-calling partner is disfavored unless it saves the team");
+    }
+
+    if (teamControlWouldBeLostWithoutIntervention) {
+      appendUniqueTags(tags, "partner_cannot_retain_lead", "team_control_would_be_lost_without_intervention");
+      reasons.push("partner is under live opponent pressure and may lose the trick without help");
+    }
+
+    if (teamSalvageIntervention) {
+      appendUniqueTags(tags, "team_salvage_intervention");
+      score += 3380;
+      reasons.push("allowed intervention: bomb preserves team survival against an immediate collapse risk");
+    } else if (bombsPartner) {
+      appendUniqueTags(tags, "unjustified_partner_bomb");
+      reasons.push("rejected bomb: partner has active Tichu and remains live");
+    }
+
+    if (bombsPartner && teamSalvageIntervention) {
+      appendUniqueTags(tags, "justified_partner_bomb");
+      reasons.push("allowed bomb: opponent pressure made partner support secondary to team survival");
+    }
+  }
+
+  const teamplay =
+    partnerTichuActive || partnerInterferenceCandidate
+      ? buildTeamplaySnapshot(state, actor, {
+          partnerCurrentControl,
+          opponentImmediateWinRisk,
+          partnerCannotRetainLead,
+          teamControlWouldBeLostWithoutIntervention,
+          teamSalvageIntervention,
+          partnerInterferenceCandidate,
+          justifiedPartnerBomb: bombsPartner && teamSalvageIntervention,
+          unjustifiedPartnerBomb: bombsPartner && !teamSalvageIntervention
+        })
+      : undefined;
+
   if (legalAction.cardIds.includes("dragon") && handCountAfter > 0) {
     score -= 130;
     reasons.push("holding Dragon back keeps a premium single-card stopper available");
@@ -437,15 +667,19 @@ function scorePlayAction(state: GameState, actor: SeatId, legalAction: PlayLegal
     actor,
     action,
     score,
-    reasons
+    reasons,
+    tags,
+    ...(teamplay ? { teamplay } : {})
   };
 }
 
-function scorePassTurn(state: GameState, seat: SeatId, action: EngineAction): CandidateDecision {
+function scorePassTurn(ctx: HeadlessDecisionContext, seat: SeatId, action: EngineAction): CandidateDecision {
+  const state = ctx.state;
   const partnerWinning = currentWinnerIsPartner(state, seat);
   const opponentThreat = minOpponentCards(state, seat);
   let score = 120;
   const reasons: string[] = ["passing keeps stronger cards available for later decisions"];
+  const tags: PolicyTag[] = [];
 
   if (partnerWinning) {
     score += 340;
@@ -467,26 +701,67 @@ function scorePassTurn(state: GameState, seat: SeatId, action: EngineAction): Ca
     reasons.push("low opponent card counts make passive play riskier");
   }
 
+  const partnerTichuActive = partnerHasCalledTichu(state, seat);
+  const partnerTichuStillLive = partnerStillLiveForTichu(state, seat);
+  const opponentImmediateWinRisk = hasOpponentImmediateWinRisk(state, seat);
+  const teamplay =
+    partnerTichuActive || partnerWinning
+      ? buildTeamplaySnapshot(state, seat, {
+          partnerCurrentControl: partnerWinning,
+          opponentImmediateWinRisk,
+          partnerInterferenceCandidate: false,
+          teamSalvageIntervention: false
+        })
+      : undefined;
+
+  if (partnerTichuActive) {
+    appendUniqueTags(tags, "partner_called_tichu");
+  }
+
+  if (partnerTichuStillLive) {
+    appendUniqueTags(tags, "partner_still_live_for_tichu");
+  }
+
+  if (opponentImmediateWinRisk) {
+    appendUniqueTags(tags, "opponent_immediate_win_risk");
+  }
+
+  if (partnerWinning && partnerTichuStillLive) {
+    appendUniqueTags(tags, "partner_tempo_preserved", "partner_control_preserved");
+
+    if (opponentImmediateWinRisk) {
+      score += 180;
+      reasons.push("partner control is valuable, but immediate opponent pressure limits passive support value");
+    } else {
+      score += 860;
+      reasons.push("preserved partner control because the active Tichu line is still alive");
+    }
+  }
+
   return {
     actor: seat,
     action,
     score,
-    reasons
+    reasons,
+    tags,
+    ...(teamplay ? { teamplay } : {})
   };
 }
 
 function scoreConcreteAction(
-  state: GameState,
+  ctx: HeadlessDecisionContext,
   actor: SeatId | typeof SYSTEM_ACTOR,
   legalAction: LegalAction,
   action: EngineAction
 ): CandidateDecision {
+  const state = ctx.state;
   if (actor === SYSTEM_ACTOR || action.type === "advance_phase") {
     return {
       actor,
       action,
       score: 5000,
-      reasons: ["required system phase advancement"]
+      reasons: ["required system phase advancement"],
+      tags: []
     };
   }
 
@@ -507,18 +782,19 @@ function scoreConcreteAction(
   }
 
   if (action.type === "pass_turn") {
-    return scorePassTurn(state, actor, action);
+    return scorePassTurn(ctx, actor, action);
   }
 
   if (isPlayLegalAction(legalAction) && action.type === "play_cards") {
-    return scorePlayAction(state, actor, legalAction, action);
+    return scorePlayAction(ctx, actor, legalAction, action);
   }
 
   return {
     actor,
     action,
     score: 0,
-    reasons: ["fallback candidate"]
+    reasons: ["fallback candidate"],
+    tags: []
   };
 }
 
@@ -530,7 +806,7 @@ function collectCandidates(ctx: HeadlessDecisionContext): CandidateDecision[] {
     const legalActions = ctx.legalActions[actor] ?? [];
     for (const legalAction of legalActions) {
       const action = toConcreteAction(ctx.state, actor, legalAction);
-      candidates.push(scoreConcreteAction(ctx.state, actor, legalAction, action));
+      candidates.push(scoreConcreteAction(ctx, actor, legalAction, action));
     }
   }
 
@@ -562,9 +838,13 @@ export const heuristicsV1Policy: HeuristicPolicy = {
         candidateScores: candidates.map((candidate) => ({
           action: candidate.action,
           score: candidate.score,
-          reasons: candidate.reasons
+          reasons: candidate.reasons,
+          tags: candidate.tags,
+          ...(candidate.teamplay ? { teamplay: candidate.teamplay } : {})
         })),
-        selectedReasonSummary: selected.reasons
+        selectedReasonSummary: selected.reasons,
+        selectedTags: selected.tags,
+        ...(selected.teamplay ? { selectedTeamplay: selected.teamplay } : {})
       }
     };
   }

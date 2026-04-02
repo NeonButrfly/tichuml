@@ -1,32 +1,156 @@
-<layout version="1">
-  <surface widthMode="relative" heightMode="relative" gridSize="10" />
-  <elements>
-    <element id="scoreBadge" x="0.5" y="0.024" rotation="0" />
-    <element id="northHand" x="0.5" y="0.135" rotation="0" />
-    <element id="eastHand" x="0.9163987138263665" y="0.4909560723514212" rotation="0" />
-    <element id="southHand" x="0.4997268918613775" y="0.7777777777777778" rotation="0" />
-    <element id="westHand" x="0.07234726688102894" y="0.4909560723514212" rotation="0" />
-    <element id="northStage" x="0.4997268918613775" y="0.3055555555555556" rotation="0" />
-    <element id="eastStage" x="0.819935691318328" y="0.4909560723514212" rotation="0" />
-    <element id="southStage" x="0.4997268918613775" y="0.6388888888888888" rotation="0" />
-    <element id="westStage" x="0.17684887459807075" y="0.4909560723514212" rotation="0" />
-    <element id="northToEastLane" x="0.4341889388303771" y="0.2638888888888889" rotation="90" />
-    <element id="northToSouthLane" x="0.4983922829581994" y="0.2971576227390181" rotation="0" />
-    <element id="northToWestLane" x="0.5652648448923778" y="0.2638888888888889" rotation="-90" />
-    <element id="eastToNorthLane" x="0.8438011452741292" y="0.375" rotation="-90" />
-    <element id="eastToWestLane" x="0.8356089011452541" y="0.4861111111111111" rotation="0" />
-    <element id="eastToSouthLane" x="0.8438011452741292" y="0.5972222222222222" rotation="90" />
-    <element id="southToWestLane" x="0.4341889388303771" y="0.6666666666666666" rotation="90" />
-    <element id="southToNorthLane" x="0.4997268918613775" y="0.6527777777777778" rotation="0" />
-    <element id="southToEastLane" x="0.5652648448923778" y="0.6666666666666666" rotation="-90" />
-    <element id="westToNorthLane" x="0.14746039431975072" y="0.375" rotation="-90" />
-    <element id="westToEastLane" x="0.15565263844862576" y="0.4861111111111111" rotation="0" />
-    <element id="westToSouthLane" x="0.14746039431975072" y="0.5972222222222222" rotation="90" />
-    <element id="playSurface" x="0.5" y="0.46" rotation="0" />
-    <element id="actionRow" x="0.5243036242480026" y="0.9166666666666666" rotation="0" />
-    <element id="northLabel" x="0.5" y="0.065" rotation="0" />
-    <element id="eastLabel" x="0.9807073954983923" y="0.4909560723514212" rotation="0" />
-    <element id="southLabel" x="0.4997268918613775" y="0.8888888888888888" rotation="0" />
-    <element id="westLabel" x="0.01607717041800643" y="0.5038759689922481" rotation="0" />
-  </elements>
-</layout>
+{
+  "version": 1,
+  "surface": {
+    "widthMode": "relative",
+    "heightMode": "relative",
+    "gridSize": 10
+  },
+  "elements": {
+    "scoreBadge": {
+      "x": 0.5,
+      "y": 0.024,
+      "rotation": 0
+    },
+    "northHand": {
+      "x": 0.5,
+      "y": 0.148,
+      "rotation": 0
+    },
+    "eastHand": {
+      "x": 0.918,
+      "y": 0.494,
+      "rotation": 0
+    },
+    "southHand": {
+      "x": 0.5,
+      "y": 0.778,
+      "rotation": 0
+    },
+    "westHand": {
+      "x": 0.082,
+      "y": 0.494,
+      "rotation": 0
+    },
+    "northStage": {
+      "x": 0.5,
+      "y": 0.29,
+      "rotation": 0
+    },
+    "eastStage": {
+      "x": 0.82,
+      "y": 0.494,
+      "rotation": 0
+    },
+    "southStage": {
+      "x": 0.5,
+      "y": 0.614,
+      "rotation": 0
+    },
+    "westStage": {
+      "x": 0.18,
+      "y": 0.494,
+      "rotation": 0
+    },
+    "northToEastLane": {
+      "x": 0.4341889388303771,
+      "y": 0.3055555555555556,
+      "rotation": 90
+    },
+    "northToSouthLane": {
+      "x": 0.4997268918613775,
+      "y": 0.3472222222222222,
+      "rotation": 0
+    },
+    "northToWestLane": {
+      "x": 0.5652648448923778,
+      "y": 0.3055555555555556,
+      "rotation": -90
+    },
+    "eastToNorthLane": {
+      "x": 0.8356089011452541,
+      "y": 0.3888888888888889,
+      "rotation": 270
+    },
+    "eastToWestLane": {
+      "x": 0.811032168758629,
+      "y": 0.5,
+      "rotation": 0
+    },
+    "eastToSouthLane": {
+      "x": 0.8356089011452541,
+      "y": 0.6111111111111112,
+      "rotation": 90
+    },
+    "southToWestLane": {
+      "x": 0.4341889388303771,
+      "y": 0.6527777777777778,
+      "rotation": -90
+    },
+    "southToNorthLane": {
+      "x": 0.5,
+      "y": 0.616,
+      "rotation": 0
+    },
+    "southToEastLane": {
+      "x": 0.5652648448923778,
+      "y": 0.6527777777777778,
+      "rotation": 90
+    },
+    "westToNorthLane": {
+      "x": 0.156,
+      "y": 0.386,
+      "rotation": -90
+    },
+    "westToEastLane": {
+      "x": 0.1802293708352509,
+      "y": 0.5,
+      "rotation": 0
+    },
+    "westToSouthLane": {
+      "x": 0.15565263844862576,
+      "y": 0.6111111111111112,
+      "rotation": 90
+    },
+    "playSurface": {
+      "x": 0.5,
+      "y": 0.458,
+      "rotation": 0
+    },
+    "actionRow": {
+      "x": 0.5,
+      "y": 0.934,
+      "rotation": 0
+    },
+    "northLabel": {
+      "x": 0.5,
+      "y": 0.055,
+      "rotation": 0
+    },
+    "eastLabel": {
+      "x": 0.9830692954650049,
+      "y": 0.5,
+      "rotation": 0
+    },
+    "southLabel": {
+      "x": 0.5,
+      "y": 0.852,
+      "rotation": 0
+    },
+    "westLabel": {
+      "x": 0.01638448825775008,
+      "y": 0.5,
+      "rotation": 0
+    }
+  },
+  "tokens": {
+    "topHandOverlap": 34,
+    "bottomHandOverlap": 16,
+    "sideHandOverlap": 34,
+    "trickLaneGap": 10,
+    "playCardOverlap": 22,
+    "passCardOverlap": 22,
+    "actionAreaGap": 8,
+    "actionButtonGap": 8,
+    "stageCardScale": 0.86
+  }
+}

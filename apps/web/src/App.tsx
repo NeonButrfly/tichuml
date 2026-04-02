@@ -23,6 +23,7 @@ import {
   createRoundSeed,
   findMatchingPlayActions,
   getPrimaryActorFromResult,
+  shouldAllowAiEndgameContinuation,
   sortCardsForHand,
   type HandSortMode,
   type PassTarget,
@@ -35,14 +36,16 @@ import {
   type UiMode
 } from "./game-table-view-model";
 import {
-  DEFAULT_NORMAL_TABLE_LAYOUT,
+  DEFAULT_NORMAL_TABLE_LAYOUT_CONFIG,
   DebugGameTableView,
   NormalGameTableView,
   describeAction,
   formatActorLabel,
   formatEvent,
-  parseNormalTableLayoutText,
+  parseNormalTableLayoutConfigText,
+  type NormalTableLayoutConfig,
   type NormalTableLayout,
+  type NormalTableLayoutTokens,
   type SeatVisualPosition
 } from "./game-table-views";
 import defaultLayoutXml from "./layout.xml?raw";
@@ -87,6 +90,9 @@ function collectStagedPassCardIds(selection?: Partial<Record<PassTarget, string>
   return new Set(PASS_TARGETS.map((target) => selection?.[target]).filter((value): value is string => Boolean(value)));
 }
 
+const INITIAL_NORMAL_TABLE_LAYOUT_CONFIG =
+  parseNormalTableLayoutConfigText(defaultLayoutXml) ?? DEFAULT_NORMAL_TABLE_LAYOUT_CONFIG;
+
 export function App() {
   const [seedIndex, setSeedIndex] = useState(INITIAL_SEED_INDEX);
   const [round, setRound] = useState<EngineResult>(() => createInitialGameState(createRoundSeed(INITIAL_SEED_INDEX)));
@@ -107,7 +113,10 @@ export function App() {
   const [passDraft, setPassDraft] = useState<Partial<Record<PassTarget, string>>>({});
   const [stagedTrick, setStagedTrick] = useState<EngineResult["derivedView"]["currentTrick"] | null>(null);
   const [normalTableLayout, setNormalTableLayout] = useState<NormalTableLayout>(
-    () => parseNormalTableLayoutText(defaultLayoutXml) ?? DEFAULT_NORMAL_TABLE_LAYOUT
+    () => INITIAL_NORMAL_TABLE_LAYOUT_CONFIG.elements
+  );
+  const [normalTableLayoutTokens, setNormalTableLayoutTokens] = useState<NormalTableLayoutTokens>(
+    () => INITIAL_NORMAL_TABLE_LAYOUT_CONFIG.tokens
   );
 
   const state = round.nextState;
@@ -142,6 +151,7 @@ export function App() {
       : activePlayVariant?.availableWishRanks?.at(-1) ?? null;
   const localIsPrimaryActor = primaryActor === LOCAL_SEAT;
   const localHasOptionalAction = primaryActor !== LOCAL_SEAT && localActions.length > 0;
+  const forceAiEndgameContinuation = shouldAllowAiEndgameContinuation(state, primaryActor);
   const localCanInteract = localIsPrimaryActor || localHasOptionalAction || autoplayLocal;
   const localActionSummary = localActions.map(describeAction);
   const localSummaryText = localActionSummary.length > 0 ? localActionSummary.join(" • ") : "No local actions.";
@@ -164,9 +174,9 @@ export function App() {
           ? "Choose who gets the Dragon"
           : localIsPrimaryActor
             ? "Your turn"
-            : localHasOptionalAction
+            : localHasOptionalAction && !forceAiEndgameContinuation
               ? "Interrupt available"
-              : thinkingActor
+            : thinkingActor
                 ? `${formatActorLabel(thinkingActor)} thinking`
                 : "Auto-advancing";
 
@@ -263,15 +273,12 @@ export function App() {
   });
 
   useEffect(() => {
-    function exportNormalTableLayout(layout: NormalTableLayout) {
+    function exportNormalTableLayout(config: NormalTableLayoutConfig) {
       const payload = {
-        version: 1,
-        surface: {
-          widthMode: "relative",
-          heightMode: "relative",
-          gridSize: 10
-        },
-        elements: layout
+        version: config.version,
+        surface: config.surface,
+        elements: config.elements,
+        tokens: config.tokens
       };
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
@@ -287,7 +294,11 @@ export function App() {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.key === "s" || event.key === "S") && event.ctrlKey && layoutEditorActive) {
         event.preventDefault();
-        exportNormalTableLayout(normalTableLayout);
+        exportNormalTableLayout({
+          ...DEFAULT_NORMAL_TABLE_LAYOUT_CONFIG,
+          elements: normalTableLayout,
+          tokens: normalTableLayoutTokens
+        });
         return;
       }
 
@@ -318,7 +329,7 @@ export function App() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [layoutEditorActive, normalTableLayout, uiMode]);
+  }, [layoutEditorActive, normalTableLayout, normalTableLayoutTokens, uiMode]);
 
   useEffect(() => {
     if (state.phase === "finished") {
@@ -331,7 +342,12 @@ export function App() {
       return;
     }
 
-    if (!autoplayLocal && (localIsPrimaryActor || localHasOptionalAction)) {
+    if (!autoplayLocal && localIsPrimaryActor) {
+      setThinkingActor(null);
+      return;
+    }
+
+    if (!autoplayLocal && localHasOptionalAction && !forceAiEndgameContinuation) {
       setThinkingActor(null);
       return;
     }
@@ -375,7 +391,16 @@ export function App() {
     }, delay);
 
     return () => window.clearTimeout(timeout);
-  }, [autoplayLocal, localHasOptionalAction, localIsPrimaryActor, pickupPending, primaryActor, round, state.phase]);
+  }, [
+    autoplayLocal,
+    forceAiEndgameContinuation,
+    localHasOptionalAction,
+    localIsPrimaryActor,
+    pickupPending,
+    primaryActor,
+    round,
+    state.phase
+  ]);
 
   useEffect(() => {
     if (derived.currentTrick) {
@@ -428,6 +453,11 @@ export function App() {
       setStagedTrick(null);
       resetInteractionState();
     });
+  }
+
+  function handleNormalTableLayoutImport(config: NormalTableLayoutConfig) {
+    setNormalTableLayout(config.elements);
+    setNormalTableLayoutTokens(config.tokens);
   }
 
   function continueWithAi() {
@@ -608,6 +638,7 @@ export function App() {
     canContinueAi: Boolean(primaryActor && primaryActor !== LOCAL_SEAT),
     localDragonRecipients: localDragonActions.map((action) => action.recipient),
     normalTableLayout,
+    normalTableLayoutTokens,
     layoutEditorActive,
     cardLookup,
     onToggleMode: () => {
@@ -625,7 +656,8 @@ export function App() {
     onWishRankSelect: setSelectedWishRank,
     onDragonRecipientSelect: handleDragonRecipientSelect,
     onNormalAction: handleNormalAction,
-    onNormalTableLayoutChange: setNormalTableLayout
+    onNormalTableLayoutChange: setNormalTableLayout,
+    onNormalTableLayoutImport: handleNormalTableLayoutImport
   };
 
   return uiMode === "normal" ? <NormalGameTableView {...viewProps} /> : <DebugGameTableView {...viewProps} />;

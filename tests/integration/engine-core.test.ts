@@ -215,6 +215,49 @@ describe("milestone 1 engine core", () => {
     ]);
   });
 
+  it("continues the round after a player goes out on a final single", () => {
+    const openingSingle = combo(["jade-3"]);
+    const state = scenario({
+      activeSeat: "seat-1",
+      currentTrick: {
+        leader: "seat-0",
+        currentWinner: "seat-0",
+        currentCombination: openingSingle,
+        entries: [{ type: "play", seat: "seat-0", combination: openingSingle }],
+        passingSeats: []
+      },
+      hands: {
+        "seat-0": cardsFromIds(["jade-9"]),
+        "seat-1": cardsFromIds(["jade-4"]),
+        "seat-2": cardsFromIds(["jade-5"]),
+        "seat-3": cardsFromIds(["jade-6"])
+      }
+    });
+
+    const afterWinningSingle = applyEngineAction(state, {
+      type: "play_cards",
+      seat: "seat-1",
+      cardIds: ["jade-4"]
+    });
+
+    expect(afterWinningSingle.nextState.finishedOrder).toEqual(["seat-1"]);
+    expect(afterWinningSingle.nextState.currentTrick?.currentCombination.kind).toBe("single");
+    expect(afterWinningSingle.nextState.currentTrick?.currentWinner).toBe("seat-1");
+    expect(afterWinningSingle.nextState.activeSeat).toBe("seat-2");
+
+    const seat2Actions = getLegalActions(afterWinningSingle.nextState)["seat-2"] ?? [];
+    expect(seat2Actions.some((action) => action.type === "play_cards" && action.cardIds[0] === "jade-5")).toBe(true);
+
+    const afterPass1 = applyEngineAction(afterWinningSingle.nextState, { type: "pass_turn", seat: "seat-2" });
+    const afterPass2 = applyEngineAction(afterPass1.nextState, { type: "pass_turn", seat: "seat-3" });
+    const afterPass3 = applyEngineAction(afterPass2.nextState, { type: "pass_turn", seat: "seat-0" });
+
+    expect(afterPass3.nextState.phase).toBe("trick_play");
+    expect(afterPass3.nextState.currentTrick).toBeNull();
+    expect(afterPass3.nextState.activeSeat).toBe("seat-2");
+    expect(afterPass3.events.some((event) => event.type === "trick_resolved")).toBe(true);
+  });
+
   it("scores double victories and tailender transfers correctly", () => {
     const doubleVictory = scenario({
       phase: "round_scoring",

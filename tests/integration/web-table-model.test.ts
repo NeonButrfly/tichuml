@@ -9,6 +9,7 @@ import {
 import {
   findMatchingPlayActions,
   getPrimaryActor,
+  shouldAllowAiEndgameContinuation,
   sortCardsForHand,
   type PlayLegalAction
 } from "../../apps/web/src/table-model";
@@ -107,5 +108,39 @@ describe("milestone 4 table model helpers", () => {
     const sorted = sortCardsForHand(state.hands["seat-0"], "combo", playActions);
 
     expect(sorted.slice(0, 2).map((card) => card.id).sort()).toEqual(["jade-7", "sword-7"]);
+  });
+
+  it("keeps AI continuation live when a non-local seat reaches one card", () => {
+    const currentCombination = listCombinationInterpretations(cardsFromIds(["jade-9"]), null)[0]!;
+    const state = createScenarioState({
+      phase: "trick_play",
+      activeSeat: "seat-1",
+      hands: {
+        "seat-0": cardsFromIds(["jade-11", "sword-11", "pagoda-11", "star-11"]),
+        "seat-1": cardsFromIds(["jade-10"]),
+        "seat-2": cardsFromIds(["jade-6", "sword-6"]),
+        "seat-3": cardsFromIds(["jade-4", "sword-4"])
+      },
+      currentTrick: {
+        leader: "seat-3",
+        currentWinner: "seat-3",
+        currentCombination,
+        entries: [
+          {
+            type: "play",
+            seat: "seat-3",
+            combination: currentCombination
+          }
+        ],
+        passingSeats: []
+      }
+    });
+
+    const legalActions = getLegalActions(state);
+    const primaryActor = getPrimaryActor(state, legalActions);
+
+    expect(primaryActor).toBe("seat-1");
+    expect((legalActions["seat-0"] ?? []).some((action) => action.type === "play_cards")).toBe(true);
+    expect(shouldAllowAiEndgameContinuation(state, primaryActor)).toBe(true);
   });
 });

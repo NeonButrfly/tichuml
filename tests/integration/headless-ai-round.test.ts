@@ -58,7 +58,9 @@ describe("milestone 2 headless AI flow", () => {
         (record) =>
           record.policy_explanation.policy === "heuristics-v1" &&
           record.policy_explanation.candidateScores.length > 0 &&
-          record.policy_explanation.selectedReasonSummary.length > 0
+          record.policy_explanation.selectedReasonSummary.length > 0 &&
+          Array.isArray(record.policy_explanation.selectedTags) &&
+          record.policy_explanation.candidateScores.every((candidate) => Array.isArray(candidate.tags))
       )
     ).toBe(true);
     expect(result.telemetry.decisions.every((record) => record.actor_type === "ai" || record.actor_type === "system")).toBe(

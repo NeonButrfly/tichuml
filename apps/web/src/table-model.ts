@@ -109,6 +109,18 @@ export function getPrimaryActorFromResult(result: EngineResult): ActorId | null 
   return getPrimaryActor(result.nextState, result.legalActions);
 }
 
+export function shouldAllowAiEndgameContinuation(
+  state: GameState,
+  primaryActor: ActorId | null,
+  localSeat: SeatId = LOCAL_SEAT
+): boolean {
+  if (!primaryActor || primaryActor === SYSTEM_ACTOR || primaryActor === localSeat) {
+    return false;
+  }
+
+  return SEAT_IDS.some((seat) => seat !== localSeat && state.hands[seat].length === 1);
+}
+
 export function buildPlayVariantKey(action: PlayLegalAction): string {
   return [
     action.cardIds.join(","),

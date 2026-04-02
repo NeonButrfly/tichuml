@@ -4,7 +4,8 @@ import type {
   CSSProperties,
   ChangeEvent as ReactChangeEvent,
   DragEvent as ReactDragEvent,
-  PointerEvent as ReactPointerEvent
+  PointerEvent as ReactPointerEvent,
+  ReactNode
 } from "react";
 import type { ChosenDecision } from "@tichuml/ai-heuristics";
 import {
@@ -107,6 +108,7 @@ export type GameTableViewProps = {
   canContinueAi: boolean;
   localDragonRecipients: SeatId[];
   normalTableLayout: NormalTableLayout;
+  normalTableLayoutTokens: NormalTableLayoutTokens;
   layoutEditorActive: boolean;
   cardLookup: ReadonlyMap<string, Card>;
   onToggleMode: () => void;
@@ -122,6 +124,7 @@ export type GameTableViewProps = {
   onDragonRecipientSelect: (recipient: SeatId) => void;
   onNormalAction: (slotId: NormalActionSlotId) => void;
   onNormalTableLayoutChange: (nextLayout: NormalTableLayout) => void;
+  onNormalTableLayoutImport: (nextConfig: NormalTableLayoutConfig) => void;
 };
 
 export type NormalLayoutElementId =
@@ -161,40 +164,90 @@ export type NormalLayoutElement = {
 
 export type NormalTableLayout = Record<NormalLayoutElementId, NormalLayoutElement>;
 
+export type NormalTableSurfaceConfig = {
+  widthMode: "relative";
+  heightMode: "relative";
+  gridSize: number;
+};
+
+export type NormalTableLayoutTokens = {
+  topHandOverlap: number;
+  bottomHandOverlap: number;
+  sideHandOverlap: number;
+  trickLaneGap: number;
+  playCardOverlap: number;
+  passCardOverlap: number;
+  actionAreaGap: number;
+  actionButtonGap: number;
+  stageCardScale: number;
+};
+
+export type NormalTableLayoutConfig = {
+  version: number;
+  surface: NormalTableSurfaceConfig;
+  elements: NormalTableLayout;
+  tokens: NormalTableLayoutTokens;
+};
+
 type NormalLayoutElementSpec = {
   label: string;
   width: number;
   height: number;
 };
 
+export const DEFAULT_NORMAL_TABLE_SURFACE: NormalTableSurfaceConfig = {
+  widthMode: "relative",
+  heightMode: "relative",
+  gridSize: 10
+};
+
 export const DEFAULT_NORMAL_TABLE_LAYOUT: NormalTableLayout = {
   scoreBadge: { x: 0.5, y: 0.024, rotation: 0 },
-  northHand: { x: 0.5, y: 0.135, rotation: 0 },
-  eastHand: { x: 0.945, y: 0.5, rotation: 0 },
-  southHand: { x: 0.5, y: 0.82, rotation: 0 },
-  westHand: { x: 0.055, y: 0.5, rotation: 0 },
-  northStage: { x: 0.5, y: 0.285, rotation: 0 },
-  eastStage: { x: 0.87, y: 0.5, rotation: 0 },
-  southStage: { x: 0.5, y: 0.705, rotation: 0 },
-  westStage: { x: 0.13, y: 0.5, rotation: 0 },
-  northToEastLane: { x: 0.42, y: 0.315, rotation: 0 },
-  northToSouthLane: { x: 0.5, y: 0.285, rotation: 0 },
-  northToWestLane: { x: 0.58, y: 0.315, rotation: 0 },
-  eastToNorthLane: { x: 0.87, y: 0.405, rotation: 0 },
-  eastToWestLane: { x: 0.87, y: 0.447, rotation: 0 },
-  eastToSouthLane: { x: 0.87, y: 0.637, rotation: 0 },
-  southToWestLane: { x: 0.42, y: 0.733, rotation: 0 },
-  southToNorthLane: { x: 0.5, y: 0.705, rotation: 0 },
-  southToEastLane: { x: 0.58, y: 0.733, rotation: 0 },
-  westToNorthLane: { x: 0.13, y: 0.405, rotation: 0 },
-  westToEastLane: { x: 0.13, y: 0.447, rotation: 0 },
-  westToSouthLane: { x: 0.13, y: 0.637, rotation: 0 },
-  playSurface: { x: 0.5, y: 0.46, rotation: 0 },
-  actionRow: { x: 0.5, y: 0.948, rotation: 0 },
-  northLabel: { x: 0.5, y: 0.065, rotation: 0 },
-  eastLabel: { x: 0.935, y: 0.5, rotation: 0 },
-  southLabel: { x: 0.5, y: 0.735, rotation: 0 },
-  westLabel: { x: 0.065, y: 0.5, rotation: 0 }
+  northHand: { x: 0.5, y: 0.148, rotation: 0 },
+  eastHand: { x: 0.918, y: 0.494, rotation: 0 },
+  southHand: { x: 0.5, y: 0.778, rotation: 0 },
+  westHand: { x: 0.082, y: 0.494, rotation: 0 },
+  northStage: { x: 0.5, y: 0.29, rotation: 0 },
+  eastStage: { x: 0.82, y: 0.494, rotation: 0 },
+  southStage: { x: 0.5, y: 0.614, rotation: 0 },
+  westStage: { x: 0.18, y: 0.494, rotation: 0 },
+  northToEastLane: { x: 0.434, y: 0.278, rotation: 0 },
+  northToSouthLane: { x: 0.5, y: 0.288, rotation: 0 },
+  northToWestLane: { x: 0.566, y: 0.278, rotation: 0 },
+  eastToNorthLane: { x: 0.844, y: 0.386, rotation: 0 },
+  eastToWestLane: { x: 0.836, y: 0.494, rotation: 0 },
+  eastToSouthLane: { x: 0.844, y: 0.602, rotation: 0 },
+  southToWestLane: { x: 0.434, y: 0.626, rotation: 0 },
+  southToNorthLane: { x: 0.5, y: 0.616, rotation: 0 },
+  southToEastLane: { x: 0.566, y: 0.626, rotation: 0 },
+  westToNorthLane: { x: 0.156, y: 0.386, rotation: 0 },
+  westToEastLane: { x: 0.164, y: 0.494, rotation: 0 },
+  westToSouthLane: { x: 0.156, y: 0.602, rotation: 0 },
+  playSurface: { x: 0.5, y: 0.458, rotation: 0 },
+  actionRow: { x: 0.5, y: 0.934, rotation: 0 },
+  northLabel: { x: 0.5, y: 0.055, rotation: 0 },
+  eastLabel: { x: 0.972, y: 0.494, rotation: 0 },
+  southLabel: { x: 0.5, y: 0.852, rotation: 0 },
+  westLabel: { x: 0.028, y: 0.494, rotation: 0 }
+};
+
+export const DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS: NormalTableLayoutTokens = {
+  topHandOverlap: 34,
+  bottomHandOverlap: 16,
+  sideHandOverlap: 34,
+  trickLaneGap: 10,
+  playCardOverlap: 22,
+  passCardOverlap: 22,
+  actionAreaGap: 8,
+  actionButtonGap: 8,
+  stageCardScale: 0.86
+};
+
+export const DEFAULT_NORMAL_TABLE_LAYOUT_CONFIG: NormalTableLayoutConfig = {
+  version: 1,
+  surface: DEFAULT_NORMAL_TABLE_SURFACE,
+  elements: DEFAULT_NORMAL_TABLE_LAYOUT,
+  tokens: DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS
 };
 
 export const NORMAL_LAYOUT_ELEMENT_SPECS: Record<NormalLayoutElementId, NormalLayoutElementSpec> = {
@@ -354,6 +407,30 @@ export function formatSuitName(card: Extract<Card, { kind: "standard" }>): strin
   }
 }
 
+type StandardSuit = Extract<Card, { kind: "standard" }>["suit"];
+type SpecialCardName = Extract<Card, { kind: "special" }>["special"];
+
+const SPECIAL_CARD_NAMES: Record<SpecialCardName, string> = {
+  dragon: "Dragon",
+  phoenix: "Phoenix",
+  dog: "Dog",
+  mahjong: "Mahjong"
+};
+
+const SPECIAL_CARD_CORNER_LABELS: Record<SpecialCardName, string> = {
+  dragon: "DRG",
+  phoenix: "PHX",
+  dog: "DOG",
+  mahjong: "1"
+};
+
+const SPECIAL_CARD_SUBTITLES: Record<SpecialCardName, string> = {
+  dragon: "Imperial",
+  phoenix: "Luminous",
+  dog: "Guardian",
+  mahjong: "Ancient Tile"
+};
+
 export function formatSeatShort(seat: SeatId): string {
   switch (seat) {
     case "seat-0":
@@ -404,6 +481,20 @@ export function formatPlacement(index: number): string {
   }
 }
 
+function parseCardsPlayedEventDetail(detail?: string): { seat: SeatId; kind: string } | null {
+  if (!detail) {
+    return null;
+  }
+
+  const [seatToken, kind] = detail.split(":");
+
+  if (!seatToken || !kind || !seatToken.startsWith("seat-")) {
+    return null;
+  }
+
+  return { seat: seatToken as SeatId, kind };
+}
+
 export function formatEvent(event: EngineEvent): string {
   switch (event.type) {
     case "shuffle_completed":
@@ -422,8 +513,12 @@ export function formatEvent(event: EngineEvent): string {
       return "Pass selections revealed across the table.";
     case "exchange_completed":
       return "Exchange complete. Trick play is live.";
-    case "cards_played":
-      return `${formatSeatShort((event.detail ?? "").split(":")[0] as SeatId)} played a combination.`;
+    case "cards_played": {
+      const playDetail = parseCardsPlayedEventDetail(event.detail);
+      return playDetail
+        ? `${formatSeatShort(playDetail.seat)} played ${formatCombinationKind(playDetail.kind)}.`
+        : "A seat played cards.";
+    }
     case "seat_passed":
       return `${formatSeatShort(event.detail as SeatId)} passed.`;
     case "dog_led":
@@ -516,6 +611,13 @@ function formatPassTarget(target: PassTarget): string {
     case "right":
       return "Right";
   }
+}
+
+function formatPolicyTag(tag: string): string {
+  return tag
+    .split("_")
+    .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
+    .join(" ");
 }
 
 type NormalStageLaneAnchor = {
@@ -637,22 +739,187 @@ const NORMAL_STAGE_ANCHORS: Record<SeatVisualPosition, NormalStageRegionAnchor> 
   }
 };
 
-function cardContent(card: Card) {
-  if (card.kind === "standard") {
-    return (
-      <>
-        <span className="playing-card__rank">{formatRank(card.rank)}</span>
-        <span className="playing-card__suit">{formatSuitName(card)}</span>
-      </>
-    );
+function SuitGlyph({ suit, className = "" }: { suit: StandardSuit; className?: string }) {
+  const classes = ["playing-card__glyph", className].filter(Boolean).join(" ");
+
+  switch (suit) {
+    case "jade":
+      return (
+        <svg viewBox="0 0 64 64" className={classes} aria-hidden="true">
+          <path d="M26 8h12l3 7H23z" fill="currentColor" opacity="0.86" />
+          <circle cx="32" cy="33" r="18" fill="none" stroke="currentColor" strokeWidth="5" />
+          <circle cx="32" cy="33" r="7" fill="none" stroke="currentColor" strokeWidth="3" opacity="0.8" />
+          <path d="M32 51v7" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+        </svg>
+      );
+    case "sword":
+      return (
+        <svg viewBox="0 0 64 64" className={classes} aria-hidden="true">
+          <path d="M31 10h2l5 7-1 2-6 24-4 0-1-2 5-24z" fill="currentColor" />
+          <path d="M21 26h22" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
+          <path d="M28 31h8v8h-8z" fill="currentColor" opacity="0.9" />
+          <path d="M30 39h4v12h-4z" fill="currentColor" />
+          <path d="M27 52h10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
+        </svg>
+      );
+    case "pagoda":
+      return (
+        <svg viewBox="0 0 64 64" className={classes} aria-hidden="true">
+          <path d="M32 9l4 5h-8z" fill="currentColor" />
+          <path d="M18 20h28l-4-6H22z" fill="currentColor" opacity="0.9" />
+          <path d="M22 30h20l-3-5H25z" fill="currentColor" opacity="0.82" />
+          <path d="M25 39h14l-2.5-4H27.5z" fill="currentColor" opacity="0.74" />
+          <path d="M29 19h6v24h-6z" fill="currentColor" opacity="0.88" />
+          <path d="M24 45h16v4H24z" fill="currentColor" />
+        </svg>
+      );
+    case "star":
+      return (
+        <svg viewBox="0 0 64 64" className={classes} aria-hidden="true">
+          <path
+            d="M32 8l5 13 13-5-5 13 11 3-11 3 5 13-13-5-5 13-5-13-13 5 5-13-11-3 11-3-5-13 13 5z"
+            fill="currentColor"
+          />
+          <circle cx="32" cy="32" r="7" fill="rgba(255,255,255,0.32)" />
+        </svg>
+      );
   }
+}
+
+function SpecialGlyph({ special, className = "" }: { special: SpecialCardName; className?: string }) {
+  const classes = ["playing-card__glyph", className].filter(Boolean).join(" ");
+
+  switch (special) {
+    case "dragon":
+      return (
+        <svg viewBox="0 0 64 64" className={classes} aria-hidden="true">
+          <path
+            d="M45 14c-6 0-11 3-14 8-2 4-1 8 2 10 3 2 8 1 11-3-2 7-7 11-14 11-6 0-10-3-12-8 0 8 6 14 15 14 12 0 22-11 22-24 0-4-4-8-10-8z"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <path d="M42 14l7 2-4 4" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
+          <path d="M21 42l-5 8 10-3" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" />
+          <circle cx="35" cy="24" r="2.5" fill="currentColor" />
+        </svg>
+      );
+    case "phoenix":
+      return (
+        <svg viewBox="0 0 64 64" className={classes} aria-hidden="true">
+          <path
+            d="M18 40c8-2 14-9 16-20 3 8 9 14 16 16-8 1-14 5-18 12-2-5-7-8-14-8z"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <path d="M28 20l4-8 4 8" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" />
+          <path d="M31 35l-7 13M35 35l9 11M31 35l-2 15" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+        </svg>
+      );
+    case "dog":
+      return (
+        <svg viewBox="0 0 64 64" className={classes} aria-hidden="true">
+          <path
+            d="M24 20l-7 8v16c0 6 6 10 15 10s15-4 15-10V28l-7-8-8 4z"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="4"
+            strokeLinejoin="round"
+          />
+          <path d="M25 36h0M39 36h0" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
+          <path d="M28 45c2 2 6 2 8 0" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" />
+        </svg>
+      );
+    case "mahjong":
+      return (
+        <svg viewBox="0 0 64 64" className={classes} aria-hidden="true">
+          <rect x="15" y="10" width="34" height="44" rx="6" fill="none" stroke="currentColor" strokeWidth="4" />
+          <circle cx="32" cy="24" r="7" fill="none" stroke="currentColor" strokeWidth="3.5" />
+          <path d="M24 41c4-1 8-5 9-11 1 4 4 7 8 9-4 1-7 3-10 7-1-2-3-4-7-5z" fill="currentColor" opacity="0.88" />
+          <path d="M23 16l4 3M41 16l-4 3" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+        </svg>
+      );
+  }
+}
+
+function CardCorner({
+  label,
+  symbol,
+  mirrored = false,
+  special = false
+}: {
+  label: string;
+  symbol: ReactNode;
+  mirrored?: boolean;
+  special?: boolean;
+}) {
+  return (
+    <div
+      className={[
+        "playing-card__corner",
+        mirrored ? "playing-card__corner--bottom" : "playing-card__corner--top",
+        special ? "playing-card__corner--special" : ""
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      <span className={special ? "playing-card__rank playing-card__rank--special" : "playing-card__rank"}>
+        {label}
+      </span>
+      <span className="playing-card__corner-symbol">{symbol}</span>
+    </div>
+  );
+}
+
+function StandardCardArt({ card }: { card: Extract<Card, { kind: "standard" }> }) {
+  const rank = formatRank(card.rank);
 
   return (
-    <>
-      <span className="playing-card__rank playing-card__rank--special">{card.special}</span>
-      <span className="playing-card__suit">special</span>
-    </>
+    <div className="playing-card__face">
+      <CardCorner label={rank} symbol={<SuitGlyph suit={card.suit} />} />
+
+      <div className="playing-card__center">
+        <div className="playing-card__seal">
+          <SuitGlyph suit={card.suit} className="playing-card__center-glyph" />
+        </div>
+        <span className="playing-card__title">{formatSuitName(card)}</span>
+      </div>
+
+      <CardCorner label={rank} symbol={<SuitGlyph suit={card.suit} />} mirrored />
+    </div>
   );
+}
+
+function SpecialCardArt({ card }: { card: Extract<Card, { kind: "special" }> }) {
+  const label = SPECIAL_CARD_CORNER_LABELS[card.special];
+
+  return (
+    <div className="playing-card__face playing-card__face--special">
+      <CardCorner label={label} symbol={<SpecialGlyph special={card.special} />} special />
+
+      <div className="playing-card__center playing-card__center--special">
+        <div className="playing-card__seal playing-card__seal--special">
+          <SpecialGlyph
+            special={card.special}
+            className="playing-card__center-glyph playing-card__center-glyph--special"
+          />
+        </div>
+        <span className="playing-card__title">{SPECIAL_CARD_NAMES[card.special]}</span>
+        <span className="playing-card__subtitle">{SPECIAL_CARD_SUBTITLES[card.special]}</span>
+      </div>
+
+      <CardCorner label={label} symbol={<SpecialGlyph special={card.special} />} mirrored special />
+    </div>
+  );
+}
+
+function cardContent(card: Card) {
+  return card.kind === "standard" ? <StandardCardArt card={card} /> : <SpecialCardArt card={card} />;
 }
 
 function surfaceMessage(props: Pick<GameTableViewProps, "controlHint" | "state" | "derived">) {
@@ -719,6 +986,48 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
+function clampStageCardScale(value: number): number {
+  return Math.min(1, Math.max(0.7, value));
+}
+
+function normalizeLoadedLayoutTokens(payload: unknown): NormalTableLayoutTokens {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS;
+  }
+
+  const payloadRecord = payload as Record<string, unknown>;
+
+  return {
+    topHandOverlap: isFiniteNumber(payloadRecord.topHandOverlap)
+      ? Math.max(0, payloadRecord.topHandOverlap)
+      : DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS.topHandOverlap,
+    bottomHandOverlap: isFiniteNumber(payloadRecord.bottomHandOverlap)
+      ? Math.max(0, payloadRecord.bottomHandOverlap)
+      : DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS.bottomHandOverlap,
+    sideHandOverlap: isFiniteNumber(payloadRecord.sideHandOverlap)
+      ? Math.max(0, payloadRecord.sideHandOverlap)
+      : DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS.sideHandOverlap,
+    trickLaneGap: isFiniteNumber(payloadRecord.trickLaneGap)
+      ? Math.max(0, payloadRecord.trickLaneGap)
+      : DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS.trickLaneGap,
+    playCardOverlap: isFiniteNumber(payloadRecord.playCardOverlap)
+      ? Math.max(0, payloadRecord.playCardOverlap)
+      : DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS.playCardOverlap,
+    passCardOverlap: isFiniteNumber(payloadRecord.passCardOverlap)
+      ? Math.max(0, payloadRecord.passCardOverlap)
+      : DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS.passCardOverlap,
+    actionAreaGap: isFiniteNumber(payloadRecord.actionAreaGap)
+      ? Math.max(0, payloadRecord.actionAreaGap)
+      : DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS.actionAreaGap,
+    actionButtonGap: isFiniteNumber(payloadRecord.actionButtonGap)
+      ? Math.max(0, payloadRecord.actionButtonGap)
+      : DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS.actionButtonGap,
+    stageCardScale: isFiniteNumber(payloadRecord.stageCardScale)
+      ? clampStageCardScale(payloadRecord.stageCardScale)
+      : DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS.stageCardScale
+  };
+}
+
 export function normalizeLoadedLayout(payload: unknown): NormalTableLayout | null {
   if (!payload || typeof payload !== "object") {
     return null;
@@ -767,7 +1076,41 @@ export function normalizeLoadedLayout(payload: unknown): NormalTableLayout | nul
   return hasElement ? nextLayout : null;
 }
 
-export function parseNormalTableLayoutText(text: string): NormalTableLayout | null {
+export function normalizeLoadedLayoutConfig(payload: unknown): NormalTableLayoutConfig | null {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return null;
+  }
+
+  const payloadRecord = payload as Record<string, unknown>;
+  const elements = normalizeLoadedLayout(payloadRecord);
+
+  if (!elements) {
+    return null;
+  }
+
+  return {
+    version: isFiniteNumber(payloadRecord.version) ? payloadRecord.version : DEFAULT_NORMAL_TABLE_LAYOUT_CONFIG.version,
+    surface: DEFAULT_NORMAL_TABLE_SURFACE,
+    elements,
+    tokens: normalizeLoadedLayoutTokens(payloadRecord.tokens)
+  };
+}
+
+export function normalTableLayoutTokenStyle(tokens: NormalTableLayoutTokens): CSSProperties {
+  return {
+    "--normal-top-hand-overlap": `-${tokens.topHandOverlap}px`,
+    "--normal-bottom-hand-overlap": `-${tokens.bottomHandOverlap}px`,
+    "--normal-side-hand-overlap": `-${tokens.sideHandOverlap}px`,
+    "--normal-trick-lane-gap": `${tokens.trickLaneGap}px`,
+    "--normal-play-card-overlap": `-${tokens.playCardOverlap}px`,
+    "--normal-pass-card-overlap": `-${tokens.passCardOverlap}px`,
+    "--normal-action-area-gap": `${tokens.actionAreaGap}px`,
+    "--normal-action-button-gap": `${tokens.actionButtonGap}px`,
+    "--normal-stage-card-scale": String(tokens.stageCardScale)
+  } as CSSProperties;
+}
+
+export function parseNormalTableLayoutConfigText(text: string): NormalTableLayoutConfig | null {
   const trimmed = text.trim();
   if (!trimmed) {
     return null;
@@ -792,14 +1135,18 @@ export function parseNormalTableLayoutText(text: string): NormalTableLayout | nu
       elements[id] = { x, y, rotation };
     }
 
-    return Object.keys(elements).length > 0 ? normalizeLoadedLayout({ elements }) : null;
+    return Object.keys(elements).length > 0 ? normalizeLoadedLayoutConfig({ elements }) : null;
   }
 
   try {
-    return normalizeLoadedLayout(JSON.parse(trimmed));
+    return normalizeLoadedLayoutConfig(JSON.parse(trimmed));
   } catch {
     return null;
   }
+}
+
+export function parseNormalTableLayoutText(text: string): NormalTableLayout | null {
+  return parseNormalTableLayoutConfigText(text)?.elements ?? null;
 }
 
 function CardFace({
@@ -823,12 +1170,14 @@ function CardFace({
   onDragStart?: (event: ReactDragEvent<HTMLButtonElement>) => void;
   onDragEnd?: () => void;
 }) {
+  const [isDragging, setIsDragging] = useState(false);
   const classes = [
     "playing-card",
     getCardClassName(card),
     tone === "legal" ? "playing-card--legal" : "",
     tone === "muted" ? "playing-card--muted" : "",
     selected ? "playing-card--selected" : "",
+    isDragging ? "playing-card--dragging" : "",
     interactive ? "" : "playing-card--static",
     className
   ]
@@ -842,8 +1191,14 @@ function CardFace({
         className={classes}
         onClick={onClick}
         draggable={draggable}
-        onDragStart={onDragStart}
-        onDragEnd={onDragEnd}
+        onDragStart={(event) => {
+          setIsDragging(true);
+          onDragStart?.(event);
+        }}
+        onDragEnd={() => {
+          setIsDragging(false);
+          onDragEnd?.();
+        }}
       >
         {cardContent(card)}
       </button>
@@ -1025,6 +1380,11 @@ function TableSurface({
                             : `table-trick__play${isWinningPlay ? " table-trick__play--winning" : ""}`
                         }
                       >
+                        {entry.combination.kind === "single" && (
+                          <span className={variant === "normal" ? "normal-play-group__kind" : "table-trick__play-kind"}>
+                            {formatCombinationKind(entry.combination.kind)}
+                          </span>
+                        )}
                         <div className={variant === "normal" ? "normal-play-group__cards" : "table-trick__combo"}>
                           {entry.combination.cardIds.map((cardId) => (
                             <CardFace
@@ -1556,8 +1916,9 @@ type EditorDragState = {
 
 function NormalLayoutEditor({
   normalTableLayout,
-  onNormalTableLayoutChange
-}: Pick<GameTableViewProps, "normalTableLayout" | "onNormalTableLayoutChange">) {
+  onNormalTableLayoutChange,
+  onNormalTableLayoutImport
+}: Pick<GameTableViewProps, "normalTableLayout" | "onNormalTableLayoutChange" | "onNormalTableLayoutImport">) {
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const dragStateRef = useRef<EditorDragState | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -1735,12 +2096,12 @@ function NormalLayoutEditor({
     }
 
     try {
-      const nextLayout = parseNormalTableLayoutText(await file.text());
-      if (!nextLayout) {
+      const nextConfig = parseNormalTableLayoutConfigText(await file.text());
+      if (!nextConfig) {
         throw new Error("Invalid layout payload");
       }
 
-      onNormalTableLayoutChange(nextLayout);
+      onNormalTableLayoutImport(nextConfig);
     } catch {
       window.alert("Could not load that layout JSON.");
     } finally {
@@ -1870,7 +2231,7 @@ function NormalLayoutEditor({
             >
               Reset Selected
             </button>
-            <button type="button" onClick={() => onNormalTableLayoutChange(DEFAULT_NORMAL_TABLE_LAYOUT)}>
+            <button type="button" onClick={() => onNormalTableLayoutImport(DEFAULT_NORMAL_TABLE_LAYOUT_CONFIG)}>
               Reset All
             </button>
           </div>
@@ -1903,7 +2264,10 @@ export function NormalGameTableView(props: GameTableViewProps) {
           Ctrl+D Debug
         </button>
 
-        <div className={props.layoutEditorActive ? "normal-table normal-table--editing" : "normal-table"}>
+        <div
+          className={props.layoutEditorActive ? "normal-table normal-table--editing" : "normal-table"}
+          style={normalTableLayoutTokenStyle(props.normalTableLayoutTokens)}
+        >
           <div className="normal-scoreboard" style={anchorStyle(props.normalTableLayout.scoreBadge)}>
             <strong>
               NS {props.derived.matchScore["team-0"]} : {props.derived.matchScore["team-1"]} EW
@@ -2006,6 +2370,7 @@ export function NormalGameTableView(props: GameTableViewProps) {
             <NormalLayoutEditor
               normalTableLayout={props.normalTableLayout}
               onNormalTableLayoutChange={props.onNormalTableLayoutChange}
+              onNormalTableLayoutImport={props.onNormalTableLayoutImport}
             />
           )}
         </div>
@@ -2184,12 +2549,39 @@ export function DebugGameTableView(props: GameTableViewProps) {
               <>
                 <strong className="debug-sidebar__title">{formatActorLabel(props.lastAiDecision.actor)}</strong>
                 <p className="debug-panel__copy">{props.lastAiDecision.explanation.selectedReasonSummary.join(" ")}</p>
+                {props.lastAiDecision.explanation.selectedTags.length > 0 && (
+                  <div className="debug-tag-list">
+                    {props.lastAiDecision.explanation.selectedTags.map((tag) => (
+                      <span key={tag} className="debug-tag">
+                        {formatPolicyTag(tag)}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {props.lastAiDecision.explanation.selectedTeamplay?.partnerCalledTichu && (
+                  <p className="debug-panel__copy debug-panel__copy--compact">
+                    Partner Tichu active • cards {props.lastAiDecision.explanation.selectedTeamplay.partnerCardCount} •
+                    immediate threat{" "}
+                    {props.lastAiDecision.explanation.selectedTeamplay.opponentImmediateWinRisk ? "yes" : "no"} •
+                    salvage{" "}
+                    {props.lastAiDecision.explanation.selectedTeamplay.teamSalvageIntervention ? "yes" : "no"}
+                  </p>
+                )}
                 <ol className="candidate-list">
                   {props.lastAiDecision.explanation.candidateScores.slice(0, 5).map((candidate, index) => (
                     <li key={`${candidate.score}-${index}`}>
                       <strong>{describeAction(candidate.action)}</strong>
                       <span>{candidate.score.toFixed(0)}</span>
                       <small>{candidate.reasons.join(" ")}</small>
+                      {candidate.tags.length > 0 && (
+                        <div className="debug-tag-list">
+                          {candidate.tags.map((tag) => (
+                            <span key={`${candidate.score}-${tag}`} className="debug-tag debug-tag--muted">
+                              {formatPolicyTag(tag)}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </li>
                   ))}
                 </ol>

@@ -8,7 +8,7 @@ import type {
   SeatId
 } from "@tichuml/engine";
 
-export const TELEMETRY_SCHEMA_VERSION = 1;
+export const TELEMETRY_SCHEMA_VERSION = 2;
 export const TELEMETRY_ENGINE_VERSION = "milestone-1";
 export const TELEMETRY_SIM_VERSION = "milestone-2";
 
@@ -54,8 +54,36 @@ export type DecisionRecord = {
       action: EngineAction;
       score: number;
       reasons: string[];
+      tags: string[];
+      teamplay?: {
+        partnerCalledTichu: boolean;
+        partnerStillLiveForTichu: boolean;
+        partnerCardCount: number;
+        partnerCurrentControl: boolean;
+        opponentImmediateWinRisk: boolean;
+        partnerCannotRetainLead: boolean;
+        teamControlWouldBeLostWithoutIntervention: boolean;
+        teamSalvageIntervention: boolean;
+        partnerInterferenceCandidate: boolean;
+        justifiedPartnerBomb: boolean;
+        unjustifiedPartnerBomb: boolean;
+      };
     }>;
     selectedReasonSummary: string[];
+    selectedTags: string[];
+    selectedTeamplay?: {
+      partnerCalledTichu: boolean;
+      partnerStillLiveForTichu: boolean;
+      partnerCardCount: number;
+      partnerCurrentControl: boolean;
+      opponentImmediateWinRisk: boolean;
+      partnerCannotRetainLead: boolean;
+      teamControlWouldBeLostWithoutIntervention: boolean;
+      teamSalvageIntervention: boolean;
+      partnerInterferenceCandidate: boolean;
+      justifiedPartnerBomb: boolean;
+      unjustifiedPartnerBomb: boolean;
+    };
   };
   latency_ms: number;
   created_at: string;
