@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import defaultLayoutText from "../../apps/web/src/layout.xml?raw";
 import {
   createNormalActionRail,
+  findMatchingHotkey,
+  GAME_MENU_ITEMS,
+  getHotkeysForContext,
   isDebugToggleShortcut
 } from "../../apps/web/src/game-table-view-model";
 import {
@@ -42,6 +45,48 @@ describe("milestone 4.5.2 view-model helpers", () => {
         key: "d"
       })
     ).toBe(false);
+  });
+
+  it("keeps the documented menu contract fixed", () => {
+    expect(GAME_MENU_ITEMS.map((item) => item.label)).toEqual([
+      "New Game",
+      "Table Editor",
+      "Debug Mode",
+      "Hot Keys",
+      "How To Play Tichu"
+    ]);
+  });
+
+  it("matches hotkeys by context from the centralized registry", () => {
+    expect(
+      findMatchingHotkey(
+        {
+          ctrlKey: true,
+          metaKey: false,
+          altKey: false,
+          shiftKey: false,
+          key: "e"
+        },
+        ["global"]
+      )?.commandId
+    ).toBe("toggle_table_editor");
+
+    expect(
+      findMatchingHotkey(
+        {
+          ctrlKey: true,
+          metaKey: false,
+          altKey: false,
+          shiftKey: false,
+          key: "d"
+        },
+        ["table_editor"]
+      )?.id
+    ).toBe("toggle_layout_inspector");
+
+    expect(getHotkeysForContext("dialogs").map((hotkey) => hotkey.comboLabel)).toEqual([
+      "Escape"
+    ]);
   });
 
   it("keeps the grand tichu action strip in screenshot order", () => {
@@ -89,8 +134,35 @@ describe("milestone 4.5.2 view-model helpers", () => {
     ).toEqual(["Pass", "Tichu", "Play"]);
   });
 
+  it("keeps Tichu live in the pickup rail when the seat has not played yet", () => {
+    const slots = createNormalActionRail({
+      phase: "exchange_complete",
+      nextEnabled: false,
+      grandTichuEnabled: false,
+      tichuEnabled: true,
+      passEnabled: false,
+      exchangeEnabled: false,
+      pickupEnabled: true,
+      playEnabled: false
+    });
+
+    expect(slots.map((slot) => slot.label)).toEqual([
+      "Tichu",
+      "Pass",
+      "Pickup"
+    ]);
+    expect(slots[0]).toEqual({
+      id: "tichu",
+      label: "Tichu",
+      enabled: true,
+      tone: "secondary"
+    });
+  });
+
   it("describes single-card plays explicitly in the event feed", () => {
-    expect(formatEvent({ type: "cards_played", detail: "seat-1:single" })).toBe("East played Single.");
+    expect(formatEvent({ type: "cards_played", detail: "seat-1:single" })).toBe(
+      "East played Single."
+    );
   });
 
   it("keeps the shipped layout config aligned with the normalized defaults", () => {

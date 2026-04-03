@@ -4,6 +4,7 @@ import type {
   CSSProperties,
   ChangeEvent as ReactChangeEvent,
   DragEvent as ReactDragEvent,
+  KeyboardEvent as ReactKeyboardEvent,
   PointerEvent as ReactPointerEvent,
   ReactNode
 } from "react";
@@ -19,9 +20,29 @@ import {
   type StandardRank,
   type TrickEntry
 } from "@tichuml/engine";
-import type { NormalActionSlot, NormalActionSlotId } from "./game-table-view-model";
-import type { HandSortMode, PassTarget, PlayLegalAction } from "./table-model";
-
+import type {
+  HotkeyDefinition,
+  NormalActionSlot,
+  NormalActionSlotId,
+  UiCommandId,
+  UiDialogId,
+  UiMode
+} from "./game-table-view-model";
+import {
+  findMatchingHotkey,
+  GAME_MENU_ITEMS,
+  getHotkeysForContext,
+  HOTKEY_CONTEXT_LABELS,
+  HOTKEY_CONTEXT_ORDER
+} from "./game-table-view-model";
+import {
+  getExchangeFlowState,
+  isExchangePhase,
+  type HandSortMode,
+  type PassTarget,
+  type PlayLegalAction
+} from "./table-model";
+ 
 export type SeatVisualPosition = "top" | "right" | "bottom" | "left";
 
 export type SeatView = {
@@ -107,13 +128,15 @@ export type GameTableViewProps = {
   localSummaryText: string;
   canContinueAi: boolean;
   localDragonRecipients: SeatId[];
+  uiMode: UiMode;
   normalTableLayout: NormalTableLayout;
   normalTableLayoutTokens: NormalTableLayoutTokens;
   layoutEditorActive: boolean;
+  mainMenuOpen: boolean;
+  activeDialog: UiDialogId | null;
+  hotkeyDefinitions: readonly HotkeyDefinition[];
   cardLookup: ReadonlyMap<string, Card>;
-  onToggleMode: () => void;
   onAutoplayChange: (checked: boolean) => void;
-  onNewRound: () => void;
   onContinueAi: () => void;
   onSortModeChange: (mode: HandSortMode) => void;
   onLocalCardClick: (cardId: string) => void;
@@ -125,6 +148,9 @@ export type GameTableViewProps = {
   onNormalAction: (slotId: NormalActionSlotId) => void;
   onNormalTableLayoutChange: (nextLayout: NormalTableLayout) => void;
   onNormalTableLayoutImport: (nextConfig: NormalTableLayoutConfig) => void;
+  onExportNormalTableLayout: () => void;
+  onUiCommand: (commandId: UiCommandId) => void;
+  onMainMenuOpenChange: (open: boolean) => void;
 };
 
 export type NormalLayoutElementId =
@@ -162,7 +188,10 @@ export type NormalLayoutElement = {
   rotation: number;
 };
 
-export type NormalTableLayout = Record<NormalLayoutElementId, NormalLayoutElement>;
+export type NormalTableLayout = Record<
+  NormalLayoutElementId,
+  NormalLayoutElement
+>;
 
 export type NormalTableSurfaceConfig = {
   widthMode: "relative";
@@ -195,6 +224,22 @@ type NormalLayoutElementSpec = {
   height: number;
 };
 
+const CARD_CANONICAL_WIDTH = 5;
+const CARD_CANONICAL_HEIGHT = 7;
+export const CARD_ASPECT = CARD_CANONICAL_WIDTH / CARD_CANONICAL_HEIGHT;
+const CARD_HEIGHT_PER_WIDTH =
+  CARD_CANONICAL_HEIGHT / CARD_CANONICAL_WIDTH;
+export const NORMAL_PASS_LANE_SCALE = 0.68;
+const NORMAL_ROUTE_CARD_WIDTH = 60;
+const NORMAL_ROUTE_CARD_HEIGHT = Math.round(
+  NORMAL_ROUTE_CARD_WIDTH * CARD_HEIGHT_PER_WIDTH
+);
+const NORMAL_MIN_CARD_WIDTH = 44;
+const NORMAL_MAX_CARD_HEIGHT = 132;
+const NORMAL_MAX_CARD_HEIGHT_VIEWPORT_SHARE = 0.145;
+const NORMAL_PASS_LANE_MIN_WIDTH = 32;
+const NORMAL_PASS_LANE_MAX_WIDTH = 72;
+
 export const DEFAULT_NORMAL_TABLE_SURFACE: NormalTableSurfaceConfig = {
   widthMode: "relative",
   heightMode: "relative",
@@ -211,24 +256,56 @@ export const DEFAULT_NORMAL_TABLE_LAYOUT: NormalTableLayout = {
   eastStage: { x: 0.82, y: 0.494, rotation: 0 },
   southStage: { x: 0.5, y: 0.614, rotation: 0 },
   westStage: { x: 0.18, y: 0.494, rotation: 0 },
-  northToEastLane: { x: 0.434, y: 0.278, rotation: 0 },
-  northToSouthLane: { x: 0.5, y: 0.288, rotation: 0 },
-  northToWestLane: { x: 0.566, y: 0.278, rotation: 0 },
-  eastToNorthLane: { x: 0.844, y: 0.386, rotation: 0 },
-  eastToWestLane: { x: 0.836, y: 0.494, rotation: 0 },
-  eastToSouthLane: { x: 0.844, y: 0.602, rotation: 0 },
-  southToWestLane: { x: 0.434, y: 0.626, rotation: 0 },
+  northToEastLane: {
+    x: 0.4341889388303771,
+    y: 0.3055555555555556,
+    rotation: 90
+  },
+  northToSouthLane: {
+    x: 0.4997268918613775,
+    y: 0.3472222222222222,
+    rotation: 0
+  },
+  northToWestLane: {
+    x: 0.5652648448923778,
+    y: 0.3055555555555556,
+    rotation: -90
+  },
+  eastToNorthLane: {
+    x: 0.8356089011452541,
+    y: 0.3888888888888889,
+    rotation: 270
+  },
+  eastToWestLane: { x: 0.811032168758629, y: 0.5, rotation: 0 },
+  eastToSouthLane: {
+    x: 0.8356089011452541,
+    y: 0.6111111111111112,
+    rotation: 90
+  },
+  southToWestLane: {
+    x: 0.4341889388303771,
+    y: 0.6527777777777778,
+    rotation: -90
+  },
   southToNorthLane: { x: 0.5, y: 0.616, rotation: 0 },
-  southToEastLane: { x: 0.566, y: 0.626, rotation: 0 },
-  westToNorthLane: { x: 0.156, y: 0.386, rotation: 0 },
-  westToEastLane: { x: 0.164, y: 0.494, rotation: 0 },
-  westToSouthLane: { x: 0.156, y: 0.602, rotation: 0 },
+  southToEastLane: {
+    x: 0.5652648448923778,
+    y: 0.6527777777777778,
+    rotation: 90
+  },
+  westToNorthLane: { x: 0.156, y: 0.386, rotation: -90 },
+  westToEastLane: { x: 0.1802293708352509, y: 0.5, rotation: 0 },
+  westToSouthLane: {
+    x: 0.15565263844862576,
+    y: 0.6111111111111112,
+    rotation: 90
+  },
   playSurface: { x: 0.5, y: 0.458, rotation: 0 },
   actionRow: { x: 0.5, y: 0.934, rotation: 0 },
   northLabel: { x: 0.5, y: 0.055, rotation: 0 },
-  eastLabel: { x: 0.972, y: 0.494, rotation: 0 },
+  eastLabel: { x: 0.9830692954650049, y: 0.5, rotation: 0 },
   southLabel: { x: 0.5, y: 0.852, rotation: 0 },
-  westLabel: { x: 0.028, y: 0.494, rotation: 0 }
+  westLabel: { x: 0.01638448825775008, y: 0.5, rotation: 0 }
 };
 
 export const DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS: NormalTableLayoutTokens = {
@@ -250,7 +327,10 @@ export const DEFAULT_NORMAL_TABLE_LAYOUT_CONFIG: NormalTableLayoutConfig = {
   tokens: DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS
 };
 
-export const NORMAL_LAYOUT_ELEMENT_SPECS: Record<NormalLayoutElementId, NormalLayoutElementSpec> = {
+export const NORMAL_LAYOUT_ELEMENT_SPECS: Record<
+  NormalLayoutElementId,
+  NormalLayoutElementSpec
+> = {
   scoreBadge: { label: "Score Badge", width: 136, height: 28 },
   northHand: { label: "North Hand", width: 560, height: 120 },
   eastHand: { label: "East Hand", width: 96, height: 512 },
@@ -260,18 +340,66 @@ export const NORMAL_LAYOUT_ELEMENT_SPECS: Record<NormalLayoutElementId, NormalLa
   eastStage: { label: "East Staging", width: 96, height: 260 },
   southStage: { label: "South Staging", width: 260, height: 112 },
   westStage: { label: "West Staging", width: 96, height: 260 },
-  northToEastLane: { label: "North -> East", width: 60, height: 84 },
-  northToSouthLane: { label: "North -> South", width: 60, height: 84 },
-  northToWestLane: { label: "North -> West", width: 60, height: 84 },
-  eastToNorthLane: { label: "East -> North", width: 84, height: 62 },
-  eastToWestLane: { label: "East -> West", width: 84, height: 62 },
-  eastToSouthLane: { label: "East -> South", width: 84, height: 62 },
-  southToWestLane: { label: "South -> West", width: 60, height: 84 },
-  southToNorthLane: { label: "South -> North", width: 60, height: 84 },
-  southToEastLane: { label: "South -> East", width: 60, height: 84 },
-  westToNorthLane: { label: "West -> North", width: 84, height: 62 },
-  westToEastLane: { label: "West -> East", width: 84, height: 62 },
-  westToSouthLane: { label: "West -> South", width: 84, height: 62 },
+  northToEastLane: {
+    label: "North -> East",
+    width: NORMAL_ROUTE_CARD_WIDTH,
+    height: NORMAL_ROUTE_CARD_HEIGHT
+  },
+  northToSouthLane: {
+    label: "North -> South",
+    width: NORMAL_ROUTE_CARD_WIDTH,
+    height: NORMAL_ROUTE_CARD_HEIGHT
+  },
+  northToWestLane: {
+    label: "North -> West",
+    width: NORMAL_ROUTE_CARD_WIDTH,
+    height: NORMAL_ROUTE_CARD_HEIGHT
+  },
+  eastToNorthLane: {
+    label: "East -> North",
+    width: NORMAL_ROUTE_CARD_HEIGHT,
+    height: NORMAL_ROUTE_CARD_WIDTH
+  },
+  eastToWestLane: {
+    label: "East -> West",
+    width: NORMAL_ROUTE_CARD_HEIGHT,
+    height: NORMAL_ROUTE_CARD_WIDTH
+  },
+  eastToSouthLane: {
+    label: "East -> South",
+    width: NORMAL_ROUTE_CARD_HEIGHT,
+    height: NORMAL_ROUTE_CARD_WIDTH
+  },
+  southToWestLane: {
+    label: "South -> West",
+    width: NORMAL_ROUTE_CARD_WIDTH,
+    height: NORMAL_ROUTE_CARD_HEIGHT
+  },
+  southToNorthLane: {
+    label: "South -> North",
+    width: NORMAL_ROUTE_CARD_WIDTH,
+    height: NORMAL_ROUTE_CARD_HEIGHT
+  },
+  southToEastLane: {
+    label: "South -> East",
+    width: NORMAL_ROUTE_CARD_WIDTH,
+    height: NORMAL_ROUTE_CARD_HEIGHT
+  },
+  westToNorthLane: {
+    label: "West -> North",
+    width: NORMAL_ROUTE_CARD_HEIGHT,
+    height: NORMAL_ROUTE_CARD_WIDTH
+  },
+  westToEastLane: {
+    label: "West -> East",
+    width: NORMAL_ROUTE_CARD_HEIGHT,
+    height: NORMAL_ROUTE_CARD_WIDTH
+  },
+  westToSouthLane: {
+    label: "West -> South",
+    width: NORMAL_ROUTE_CARD_HEIGHT,
+    height: NORMAL_ROUTE_CARD_WIDTH
+  },
   playSurface: { label: "Play Surface", width: 920, height: 360 },
   actionRow: { label: "Action Row", width: 340, height: 88 },
   northLabel: { label: "North Label", width: 120, height: 28 },
@@ -310,7 +438,9 @@ const NORMAL_LAYOUT_EDITOR_ORDER: NormalLayoutElementId[] = [
   "actionRow"
 ];
 
-const NORMAL_LAYOUT_OPPOSING_ELEMENT_IDS: Partial<Record<NormalLayoutElementId, NormalLayoutElementId>> = {
+const NORMAL_LAYOUT_OPPOSING_ELEMENT_IDS: Partial<
+  Record<NormalLayoutElementId, NormalLayoutElementId>
+> = {
   scoreBadge: "actionRow",
   actionRow: "scoreBadge",
   northHand: "southHand",
@@ -339,21 +469,27 @@ const NORMAL_LAYOUT_OPPOSING_ELEMENT_IDS: Partial<Record<NormalLayoutElementId, 
   westLabel: "eastLabel"
 };
 
-const NORMAL_HAND_LAYOUT_IDS: Record<SeatVisualPosition, NormalLayoutElementId> = {
+export const NORMAL_HAND_LAYOUT_IDS: Record<
+  SeatVisualPosition,
+  NormalLayoutElementId
+> = {
   top: "northHand",
   right: "eastHand",
   bottom: "southHand",
   left: "westHand"
 };
 
-const NORMAL_LABEL_LAYOUT_IDS: Record<SeatVisualPosition, NormalLayoutElementId> = {
+export const NORMAL_LABEL_LAYOUT_IDS: Record<
+  SeatVisualPosition,
+  NormalLayoutElementId
+> = {
   top: "northLabel",
   right: "eastLabel",
   bottom: "southLabel",
   left: "westLabel"
 };
 
-const NORMAL_PASS_LANE_LAYOUT_IDS: Record<
+export const NORMAL_PASS_LANE_LAYOUT_IDS: Record<
   SeatVisualPosition,
   Partial<Record<SeatVisualPosition, NormalLayoutElementId>>
 > = {
@@ -379,6 +515,39 @@ const NORMAL_PASS_LANE_LAYOUT_IDS: Record<
   }
 };
 
+type PassLaneDirection = "up" | "right" | "down" | "left";
+
+type NormalPassLaneSpec = {
+  targetPosition: SeatVisualPosition;
+  direction: PassLaneDirection;
+};
+
+export const NORMAL_PASS_STAGE_MAP: Record<
+  SeatVisualPosition,
+  readonly NormalPassLaneSpec[]
+> = {
+  top: [
+    { targetPosition: "left", direction: "left" },
+    { targetPosition: "bottom", direction: "down" },
+    { targetPosition: "right", direction: "right" }
+  ],
+  left: [
+    { targetPosition: "top", direction: "up" },
+    { targetPosition: "bottom", direction: "down" },
+    { targetPosition: "right", direction: "right" }
+  ],
+  right: [
+    { targetPosition: "top", direction: "up" },
+    { targetPosition: "bottom", direction: "down" },
+    { targetPosition: "left", direction: "left" }
+  ],
+  bottom: [
+    { targetPosition: "left", direction: "left" },
+    { targetPosition: "top", direction: "up" },
+    { targetPosition: "right", direction: "right" }
+  ]
+};
+
 export function formatRank(rank: number): string {
   switch (rank) {
     case 11:
@@ -394,7 +563,9 @@ export function formatRank(rank: number): string {
   }
 }
 
-export function formatSuitName(card: Extract<Card, { kind: "standard" }>): string {
+export function formatSuitName(
+  card: Extract<Card, { kind: "standard" }>
+): string {
   switch (card.suit) {
     case "jade":
       return "Jade";
@@ -444,6 +615,45 @@ export function formatSeatShort(seat: SeatId): string {
   }
 }
 
+function formatSeatMarker(seat: SeatId): string {
+  switch (seat) {
+    case "seat-0":
+      return "S";
+    case "seat-1":
+      return "E";
+    case "seat-2":
+      return "N";
+    case "seat-3":
+      return "W";
+  }
+}
+
+function formatPassDirectionGlyph(direction: PassLaneDirection): string {
+  switch (direction) {
+    case "up":
+      return "↑";
+    case "right":
+      return "→";
+    case "down":
+      return "↓";
+    case "left":
+      return "←";
+  }
+}
+
+function formatPassDirectionLabel(direction: PassLaneDirection): string {
+  switch (direction) {
+    case "up":
+      return "up";
+    case "right":
+      return "right";
+    case "down":
+      return "down";
+    case "left":
+      return "left";
+  }
+}
+
 export function formatActorLabel(actor: ActorId): string {
   return actor === SYSTEM_ACTOR ? "System" : formatSeatShort(actor);
 }
@@ -481,7 +691,9 @@ export function formatPlacement(index: number): string {
   }
 }
 
-function parseCardsPlayedEventDetail(detail?: string): { seat: SeatId; kind: string } | null {
+function parseCardsPlayedEventDetail(
+  detail?: string
+): { seat: SeatId; kind: string } | null {
   if (!detail) {
     return null;
   }
@@ -580,7 +792,12 @@ function getCardClassName(card: Card): string {
 }
 
 function handCardFromId(cardId: string): Card {
-  if (cardId === "mahjong" || cardId === "dog" || cardId === "phoenix" || cardId === "dragon") {
+  if (
+    cardId === "mahjong" ||
+    cardId === "dog" ||
+    cardId === "phoenix" ||
+    cardId === "dragon"
+  ) {
     return {
       id: cardId,
       kind: "special",
@@ -598,7 +815,10 @@ function handCardFromId(cardId: string): Card {
   };
 }
 
-function resolveCard(cardId: string, cardLookup: ReadonlyMap<string, Card>): Card {
+function resolveCard(
+  cardId: string,
+  cardLookup: ReadonlyMap<string, Card>
+): Card {
   return cardLookup.get(cardId) ?? handCardFromId(cardId);
 }
 
@@ -632,7 +852,10 @@ type NormalStageRegionAnchor = {
   lanes: NormalStageLaneAnchor[];
 };
 
-const NORMAL_STAGE_ANCHORS: Record<SeatVisualPosition, NormalStageRegionAnchor> = {
+export const NORMAL_STAGE_ANCHORS: Record<
+  SeatVisualPosition,
+  NormalStageRegionAnchor
+> = {
   top: {
     regionStyle: {
       width: "260px",
@@ -653,7 +876,12 @@ const NORMAL_STAGE_ANCHORS: Record<SeatVisualPosition, NormalStageRegionAnchor> 
       },
       {
         targetPosition: "left",
-        laneStyle: { left: "200px", top: "22px", width: "60px", height: "84px" },
+        laneStyle: {
+          left: "200px",
+          top: "22px",
+          width: "60px",
+          height: "84px"
+        },
         slotStyle: { left: "0px", top: "0px" },
         orientation: "upright"
       }
@@ -667,19 +895,34 @@ const NORMAL_STAGE_ANCHORS: Record<SeatVisualPosition, NormalStageRegionAnchor> 
     lanes: [
       {
         targetPosition: "top",
-        laneStyle: { left: "6px", bottom: "136px", width: "84px", height: "124px" },
+        laneStyle: {
+          left: "6px",
+          bottom: "136px",
+          width: "84px",
+          height: "124px"
+        },
         slotStyle: { left: "0px", top: "0px" },
         orientation: "east"
       },
       {
         targetPosition: "left",
-        laneStyle: { left: "6px", bottom: "136px", width: "84px", height: "62px" },
+        laneStyle: {
+          left: "6px",
+          bottom: "136px",
+          width: "84px",
+          height: "62px"
+        },
         slotStyle: { left: "0px", top: "0px" },
         orientation: "east"
       },
       {
         targetPosition: "bottom",
-        laneStyle: { left: "6px", bottom: "0px", width: "84px", height: "62px" },
+        laneStyle: {
+          left: "6px",
+          bottom: "0px",
+          width: "84px",
+          height: "62px"
+        },
         slotStyle: { left: "0px", top: "0px" },
         orientation: "east"
       }
@@ -705,7 +948,12 @@ const NORMAL_STAGE_ANCHORS: Record<SeatVisualPosition, NormalStageRegionAnchor> 
       },
       {
         targetPosition: "right",
-        laneStyle: { left: "200px", top: "28px", width: "60px", height: "84px" },
+        laneStyle: {
+          left: "200px",
+          top: "28px",
+          width: "60px",
+          height: "84px"
+        },
         slotStyle: { left: "0px", top: "0px" },
         orientation: "upright"
       }
@@ -719,19 +967,34 @@ const NORMAL_STAGE_ANCHORS: Record<SeatVisualPosition, NormalStageRegionAnchor> 
     lanes: [
       {
         targetPosition: "top",
-        laneStyle: { left: "6px", bottom: "136px", width: "84px", height: "124px" },
+        laneStyle: {
+          left: "6px",
+          bottom: "136px",
+          width: "84px",
+          height: "124px"
+        },
         slotStyle: { left: "0px", top: "0px" },
         orientation: "west"
       },
       {
         targetPosition: "right",
-        laneStyle: { left: "6px", bottom: "136px", width: "84px", height: "62px" },
+        laneStyle: {
+          left: "6px",
+          bottom: "136px",
+          width: "84px",
+          height: "62px"
+        },
         slotStyle: { left: "0px", top: "0px" },
         orientation: "west"
       },
       {
         targetPosition: "bottom",
-        laneStyle: { left: "6px", bottom: "0px", width: "84px", height: "62px" },
+        laneStyle: {
+          left: "6px",
+          bottom: "0px",
+          width: "84px",
+          height: "62px"
+        },
         slotStyle: { left: "0px", top: "0px" },
         orientation: "west"
       }
@@ -739,7 +1002,13 @@ const NORMAL_STAGE_ANCHORS: Record<SeatVisualPosition, NormalStageRegionAnchor> 
   }
 };
 
-function SuitGlyph({ suit, className = "" }: { suit: StandardSuit; className?: string }) {
+function SuitGlyph({
+  suit,
+  className = ""
+}: {
+  suit: StandardSuit;
+  className?: string;
+}) {
   const classes = ["playing-card__glyph", className].filter(Boolean).join(" ");
 
   switch (suit) {
@@ -747,19 +1016,49 @@ function SuitGlyph({ suit, className = "" }: { suit: StandardSuit; className?: s
       return (
         <svg viewBox="0 0 64 64" className={classes} aria-hidden="true">
           <path d="M26 8h12l3 7H23z" fill="currentColor" opacity="0.86" />
-          <circle cx="32" cy="33" r="18" fill="none" stroke="currentColor" strokeWidth="5" />
-          <circle cx="32" cy="33" r="7" fill="none" stroke="currentColor" strokeWidth="3" opacity="0.8" />
-          <path d="M32 51v7" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+          <circle
+            cx="32"
+            cy="33"
+            r="18"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="5"
+          />
+          <circle
+            cx="32"
+            cy="33"
+            r="7"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3"
+            opacity="0.8"
+          />
+          <path
+            d="M32 51v7"
+            stroke="currentColor"
+            strokeWidth="3"
+            strokeLinecap="round"
+          />
         </svg>
       );
     case "sword":
       return (
         <svg viewBox="0 0 64 64" className={classes} aria-hidden="true">
           <path d="M31 10h2l5 7-1 2-6 24-4 0-1-2 5-24z" fill="currentColor" />
-          <path d="M21 26h22" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
+          <path
+            d="M21 26h22"
+            stroke="currentColor"
+            strokeWidth="4"
+            strokeLinecap="round"
+          />
           <path d="M28 31h8v8h-8z" fill="currentColor" opacity="0.9" />
           <path d="M30 39h4v12h-4z" fill="currentColor" />
-          <path d="M27 52h10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
+          <path
+            d="M27 52h10"
+            stroke="currentColor"
+            strokeWidth="4"
+            strokeLinecap="round"
+          />
         </svg>
       );
     case "pagoda":
@@ -786,7 +1085,13 @@ function SuitGlyph({ suit, className = "" }: { suit: StandardSuit; className?: s
   }
 }
 
-function SpecialGlyph({ special, className = "" }: { special: SpecialCardName; className?: string }) {
+function SpecialGlyph({
+  special,
+  className = ""
+}: {
+  special: SpecialCardName;
+  className?: string;
+}) {
   const classes = ["playing-card__glyph", className].filter(Boolean).join(" ");
 
   switch (special) {
@@ -801,8 +1106,20 @@ function SpecialGlyph({ special, className = "" }: { special: SpecialCardName; c
             strokeLinecap="round"
             strokeLinejoin="round"
           />
-          <path d="M42 14l7 2-4 4" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
-          <path d="M21 42l-5 8 10-3" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" />
+          <path
+            d="M42 14l7 2-4 4"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="4"
+            strokeLinecap="round"
+          />
+          <path
+            d="M21 42l-5 8 10-3"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3.5"
+            strokeLinecap="round"
+          />
           <circle cx="35" cy="24" r="2.5" fill="currentColor" />
         </svg>
       );
@@ -817,8 +1134,19 @@ function SpecialGlyph({ special, className = "" }: { special: SpecialCardName; c
             strokeLinecap="round"
             strokeLinejoin="round"
           />
-          <path d="M28 20l4-8 4 8" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" />
-          <path d="M31 35l-7 13M35 35l9 11M31 35l-2 15" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+          <path
+            d="M28 20l4-8 4 8"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3.5"
+            strokeLinecap="round"
+          />
+          <path
+            d="M31 35l-7 13M35 35l9 11M31 35l-2 15"
+            stroke="currentColor"
+            strokeWidth="3"
+            strokeLinecap="round"
+          />
         </svg>
       );
     case "dog":
@@ -831,17 +1159,53 @@ function SpecialGlyph({ special, className = "" }: { special: SpecialCardName; c
             strokeWidth="4"
             strokeLinejoin="round"
           />
-          <path d="M25 36h0M39 36h0" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
-          <path d="M28 45c2 2 6 2 8 0" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" />
+          <path
+            d="M25 36h0M39 36h0"
+            stroke="currentColor"
+            strokeWidth="5"
+            strokeLinecap="round"
+          />
+          <path
+            d="M28 45c2 2 6 2 8 0"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3.5"
+            strokeLinecap="round"
+          />
         </svg>
       );
     case "mahjong":
       return (
         <svg viewBox="0 0 64 64" className={classes} aria-hidden="true">
-          <rect x="15" y="10" width="34" height="44" rx="6" fill="none" stroke="currentColor" strokeWidth="4" />
-          <circle cx="32" cy="24" r="7" fill="none" stroke="currentColor" strokeWidth="3.5" />
-          <path d="M24 41c4-1 8-5 9-11 1 4 4 7 8 9-4 1-7 3-10 7-1-2-3-4-7-5z" fill="currentColor" opacity="0.88" />
-          <path d="M23 16l4 3M41 16l-4 3" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+          <rect
+            x="15"
+            y="10"
+            width="34"
+            height="44"
+            rx="6"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="4"
+          />
+          <circle
+            cx="32"
+            cy="24"
+            r="7"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3.5"
+          />
+          <path
+            d="M24 41c4-1 8-5 9-11 1 4 4 7 8 9-4 1-7 3-10 7-1-2-3-4-7-5z"
+            fill="currentColor"
+            opacity="0.88"
+          />
+          <path
+            d="M23 16l4 3M41 16l-4 3"
+            stroke="currentColor"
+            strokeWidth="3"
+            strokeLinecap="round"
+          />
         </svg>
       );
   }
@@ -868,7 +1232,13 @@ function CardCorner({
         .filter(Boolean)
         .join(" ")}
     >
-      <span className={special ? "playing-card__rank playing-card__rank--special" : "playing-card__rank"}>
+      <span
+        className={
+          special
+            ? "playing-card__rank playing-card__rank--special"
+            : "playing-card__rank"
+        }
+      >
         {label}
       </span>
       <span className="playing-card__corner-symbol">{symbol}</span>
@@ -876,7 +1246,11 @@ function CardCorner({
   );
 }
 
-function StandardCardArt({ card }: { card: Extract<Card, { kind: "standard" }> }) {
+function StandardCardArt({
+  card
+}: {
+  card: Extract<Card, { kind: "standard" }>;
+}) {
   const rank = formatRank(card.rank);
 
   return (
@@ -890,17 +1264,29 @@ function StandardCardArt({ card }: { card: Extract<Card, { kind: "standard" }> }
         <span className="playing-card__title">{formatSuitName(card)}</span>
       </div>
 
-      <CardCorner label={rank} symbol={<SuitGlyph suit={card.suit} />} mirrored />
+      <CardCorner
+        label={rank}
+        symbol={<SuitGlyph suit={card.suit} />}
+        mirrored
+      />
     </div>
   );
 }
 
-function SpecialCardArt({ card }: { card: Extract<Card, { kind: "special" }> }) {
+function SpecialCardArt({
+  card
+}: {
+  card: Extract<Card, { kind: "special" }>;
+}) {
   const label = SPECIAL_CARD_CORNER_LABELS[card.special];
 
   return (
     <div className="playing-card__face playing-card__face--special">
-      <CardCorner label={label} symbol={<SpecialGlyph special={card.special} />} special />
+      <CardCorner
+        label={label}
+        symbol={<SpecialGlyph special={card.special} />}
+        special
+      />
 
       <div className="playing-card__center playing-card__center--special">
         <div className="playing-card__seal playing-card__seal--special">
@@ -909,20 +1295,35 @@ function SpecialCardArt({ card }: { card: Extract<Card, { kind: "special" }> }) 
             className="playing-card__center-glyph playing-card__center-glyph--special"
           />
         </div>
-        <span className="playing-card__title">{SPECIAL_CARD_NAMES[card.special]}</span>
-        <span className="playing-card__subtitle">{SPECIAL_CARD_SUBTITLES[card.special]}</span>
+        <span className="playing-card__title">
+          {SPECIAL_CARD_NAMES[card.special]}
+        </span>
+        <span className="playing-card__subtitle">
+          {SPECIAL_CARD_SUBTITLES[card.special]}
+        </span>
       </div>
 
-      <CardCorner label={label} symbol={<SpecialGlyph special={card.special} />} mirrored special />
+      <CardCorner
+        label={label}
+        symbol={<SpecialGlyph special={card.special} />}
+        mirrored
+        special
+      />
     </div>
   );
 }
 
 function cardContent(card: Card) {
-  return card.kind === "standard" ? <StandardCardArt card={card} /> : <SpecialCardArt card={card} />;
+  return card.kind === "standard" ? (
+    <StandardCardArt card={card} />
+  ) : (
+    <SpecialCardArt card={card} />
+  );
 }
 
-function surfaceMessage(props: Pick<GameTableViewProps, "controlHint" | "state" | "derived">) {
+function surfaceMessage(
+  props: Pick<GameTableViewProps, "controlHint" | "state" | "derived">
+) {
   if (props.state.pendingDragonGift) {
     return {
       title: "Dragon gift",
@@ -934,6 +1335,23 @@ function surfaceMessage(props: Pick<GameTableViewProps, "controlHint" | "state" 
     return {
       title: "Round complete",
       body: `Finish: ${props.state.roundSummary.finishOrder.map((seat) => formatSeatShort(seat)).join(" -> ")}`
+    };
+  }
+
+  if (isExchangePhase(props.state.phase)) {
+    const flow = getExchangeFlowState(props.state);
+    return {
+      title:
+        flow === "exchange_selecting"
+          ? "Exchange cards"
+          : flow === "exchange_waiting_for_ai"
+            ? "Waiting for exchanges"
+            : flow === "exchange_resolving"
+              ? "Resolving exchange"
+              : flow === "exchange_complete"
+                ? "Exchange complete"
+                : "Exchange cards",
+      body: props.controlHint
     };
   }
 
@@ -968,6 +1386,499 @@ function anchorStyle(element: NormalLayoutElement): CSSProperties {
   };
 }
 
+function scaleNormalLayoutElementSize(
+  elementId: NormalLayoutElementId,
+  scale: number
+) {
+  const spec = NORMAL_LAYOUT_ELEMENT_SPECS[elementId];
+
+  return {
+    width: Math.max(1, Math.round(spec.width * scale)),
+    height: Math.max(1, Math.round(spec.height * scale))
+  };
+}
+
+export function getNormalPassLaneLayoutId(
+  sourcePosition: SeatVisualPosition,
+  targetPosition: SeatVisualPosition
+): NormalLayoutElementId | null {
+  return NORMAL_PASS_LANE_LAYOUT_IDS[sourcePosition][targetPosition] ?? null;
+}
+
+function getPassTokenRotation(direction: PassLaneDirection): number {
+  switch (direction) {
+    case "right":
+      return 90;
+    case "left":
+      return -90;
+    default:
+      return 0;
+  }
+}
+
+export type NormalPassLaneGeometry = {
+  elementId: NormalLayoutElementId;
+  targetPosition: SeatVisualPosition;
+  rotation: number;
+  width: number;
+  height: number;
+  style: CSSProperties;
+};
+
+export function resolveNormalPassLaneGeometry(config: {
+  normalTableLayout: NormalTableLayout;
+  layoutMetrics: NormalViewportLayoutMetrics;
+  sourcePosition: SeatVisualPosition;
+  targetPosition: SeatVisualPosition;
+  direction: PassLaneDirection;
+}): NormalPassLaneGeometry | null {
+  const elementId = getNormalPassLaneLayoutId(
+    config.sourcePosition,
+    config.targetPosition
+  );
+  if (!elementId) {
+    return null;
+  }
+
+  const routeScale =
+    config.layoutMetrics.routeCardWidth / NORMAL_ROUTE_CARD_WIDTH;
+  const layoutElement = config.normalTableLayout[elementId];
+  const size = scaleNormalLayoutElementSize(elementId, routeScale);
+
+  return {
+    elementId,
+    targetPosition: config.targetPosition,
+    rotation: layoutElement.rotation,
+    width: size.width,
+    height: size.height,
+    style: {
+      ...anchorStyle(layoutElement),
+      width: `${size.width}px`,
+      height: `${size.height}px`,
+      "--normal-pass-lane-badge-rotation": `${layoutElement.rotation * -1}deg`,
+      "--normal-pass-token-rotation": `${getPassTokenRotation(config.direction) - layoutElement.rotation}deg`
+    } as CSSProperties
+  };
+}
+
+function clampNumber(value: number, minimum: number, maximum: number) {
+  return Math.min(maximum, Math.max(minimum, value));
+}
+
+function cardHeightFromWidth(width: number) {
+  return Math.round(width * CARD_HEIGHT_PER_WIDTH);
+}
+
+function cardWidthFromHeight(height: number) {
+  return Math.floor(height * CARD_ASPECT);
+}
+
+function requiredFanSpan(
+  count: number,
+  cardPrimarySize: number,
+  spread: number
+) {
+  if (count <= 0) {
+    return 0;
+  }
+
+  return cardPrimarySize + Math.max(0, count - 1) * spread;
+}
+
+function fanDensity(count: number) {
+  return clampNumber((count - 8) / 6, 0, 1);
+}
+
+function resolveFanRevealRange(config: {
+  seat: "top" | "bottom" | "side";
+  count: number;
+  cardWidth: number;
+}) {
+  const density = fanDensity(config.count);
+
+  if (config.seat === "bottom") {
+    const minimumRatio = 0.42 - density * 0.1;
+    const maximumRatio = 0.64 - density * 0.12;
+    const minimum = Math.max(20, Math.round(config.cardWidth * minimumRatio));
+    const maximum = Math.max(
+      minimum,
+      Math.round(config.cardWidth * maximumRatio)
+    );
+
+    return { minimum, maximum };
+  }
+
+  if (config.seat === "side") {
+    const minimumRatio = 0.16 - density * 0.04;
+    const maximumRatio = 0.24 - density * 0.06;
+    const minimum = Math.max(10, Math.round(config.cardWidth * minimumRatio));
+    const maximum = Math.max(
+      minimum,
+      Math.round(config.cardWidth * maximumRatio)
+    );
+
+    return { minimum, maximum };
+  }
+
+  const minimumRatio = 0.18 - density * 0.04;
+  const maximumRatio = 0.3 - density * 0.06;
+  const minimum = Math.max(10, Math.round(config.cardWidth * minimumRatio));
+  const maximum = Math.max(
+    minimum,
+    Math.round(config.cardWidth * maximumRatio)
+  );
+
+  return { minimum, maximum };
+}
+
+function calculateFanStep(config: {
+  count: number;
+  cardPrimarySize: number;
+  availableSpan: number;
+  minimumReveal: number;
+  maximumReveal: number;
+}) {
+  if (config.count <= 1) {
+    return config.cardPrimarySize;
+  }
+
+  const unconstrainedSpread =
+    (config.availableSpan - config.cardPrimarySize) / (config.count - 1);
+
+  return clampNumber(
+    unconstrainedSpread,
+    config.minimumReveal,
+    Math.max(config.minimumReveal, config.maximumReveal)
+  );
+}
+
+export type NormalViewportLayoutMetrics = {
+  viewportWidth: number;
+  viewportHeight: number;
+  shellPaddingX: number;
+  shellPaddingY: number;
+  bandGap: number;
+  seatInsetX: number;
+  centerInset: number;
+  headerHeight: number;
+  northBandHeight: number;
+  centerBandHeight: number;
+  southBandHeight: number;
+  actionBandHeight: number;
+  sideColumnWidth: number;
+  centerColumnWidth: number;
+  cardWidth: number;
+  cardHeight: number;
+  routeCardWidth: number;
+  routeCardHeight: number;
+  topCardStep: number;
+  bottomCardStep: number;
+  sideCardStep: number;
+  selectedLift: number;
+  topMinReveal: number;
+  bottomMinReveal: number;
+  sideMinReveal: number;
+  totalRequiredHeight: number;
+  minimumMiddleWidth: number;
+  minimumMiddleHeight: number;
+};
+
+export function computeNormalViewportLayoutMetrics(config: {
+  viewportWidth: number;
+  viewportHeight: number;
+  topCount: number;
+  bottomCount: number;
+  leftCount: number;
+  rightCount: number;
+  hasVariantPicker: boolean;
+  hasWishPicker: boolean;
+}): NormalViewportLayoutMetrics {
+  const viewportWidth = Math.max(320, Math.round(config.viewportWidth));
+  const viewportHeight = Math.max(320, Math.round(config.viewportHeight));
+  const shellPaddingX = clampNumber(
+    Math.round(viewportWidth * 0.0115),
+    8,
+    18
+  );
+  const shellPaddingY = clampNumber(
+    Math.round(viewportHeight * 0.0125),
+    8,
+    16
+  );
+  const bandGap = clampNumber(Math.round(viewportHeight * 0.009), 6, 10);
+  const seatInsetX = clampNumber(Math.round(viewportWidth * 0.006), 6, 10);
+  const centerInset = clampNumber(Math.round(viewportWidth * 0.008), 8, 14);
+  const headerHeight = clampNumber(Math.round(viewportHeight * 0.046), 38, 48);
+  const actionBandHeight =
+    46 +
+    (config.hasVariantPicker ? 38 : 0) +
+    (config.hasWishPicker ? 36 : 0);
+  const availableShellWidth = viewportWidth - shellPaddingX * 2;
+  const availableShellHeight = viewportHeight - shellPaddingY * 2;
+  const maximumCandidateWidth = Math.max(
+    NORMAL_MIN_CARD_WIDTH,
+    cardWidthFromHeight(
+      Math.min(
+        NORMAL_MAX_CARD_HEIGHT,
+        Math.round(availableShellHeight * NORMAL_MAX_CARD_HEIGHT_VIEWPORT_SHARE)
+      )
+    )
+  );
+  const northMetaHeight = 28;
+  const southMetaHeight = 34;
+  const sideMetaHeight = 20;
+  const sideLabelWidth = 26;
+
+  let resolvedCardWidth = NORMAL_MIN_CARD_WIDTH;
+
+  for (
+    let candidateWidth = maximumCandidateWidth;
+    candidateWidth >= NORMAL_MIN_CARD_WIDTH;
+    candidateWidth -= 1
+  ) {
+    const candidateHeight = cardHeightFromWidth(candidateWidth);
+    const selectedLift = Math.min(14, Math.round(candidateWidth * 0.14));
+    const topReveal = resolveFanRevealRange({
+      seat: "top",
+      count: config.topCount,
+      cardWidth: candidateWidth
+    });
+    const bottomReveal = resolveFanRevealRange({
+      seat: "bottom",
+      count: config.bottomCount,
+      cardWidth: candidateWidth
+    });
+    const sideReveal = resolveFanRevealRange({
+      seat: "side",
+      count: Math.max(config.leftCount, config.rightCount),
+      cardWidth: candidateWidth
+    });
+    const northBandHeight = candidateHeight + northMetaHeight;
+    const southBandHeight = candidateHeight + southMetaHeight + selectedLift;
+    const routeCardWidth = clampNumber(
+      Math.round(candidateWidth * NORMAL_PASS_LANE_SCALE),
+      NORMAL_PASS_LANE_MIN_WIDTH,
+      Math.min(candidateWidth - 12, NORMAL_PASS_LANE_MAX_WIDTH)
+    );
+    const routeCardHeight = cardHeightFromWidth(routeCardWidth);
+    const sideColumnWidth =
+      candidateHeight + sideLabelWidth + seatInsetX * 2 + 6;
+    const minimumMiddleWidth = Math.max(
+      260,
+      Math.round(candidateWidth * 3.4),
+      routeCardWidth * 3 + centerInset * 2
+    );
+    const sideRequiredHeight =
+      Math.max(config.leftCount, config.rightCount) > 0
+        ? requiredFanSpan(
+            Math.max(config.leftCount, config.rightCount),
+            candidateWidth,
+            sideReveal.minimum
+          ) + sideMetaHeight
+        : 0;
+    const minimumMiddleHeight = Math.max(
+      156,
+      Math.round(candidateHeight * 1.14),
+      routeCardHeight * 2 + 28,
+      sideRequiredHeight
+    );
+    const totalRequiredHeight =
+      headerHeight +
+      northBandHeight +
+      southBandHeight +
+      actionBandHeight +
+      minimumMiddleHeight +
+      bandGap * 4;
+    const horizontalHandWidth = availableShellWidth - seatInsetX * 2;
+    const topRequiredWidth = requiredFanSpan(
+      config.topCount,
+      candidateWidth,
+      topReveal.minimum
+    );
+    const bottomRequiredWidth = requiredFanSpan(
+      config.bottomCount,
+      candidateWidth,
+      bottomReveal.minimum
+    );
+    const middleRequiredWidth = sideColumnWidth * 2 + minimumMiddleWidth + bandGap * 2;
+
+    if (
+      topRequiredWidth <= horizontalHandWidth &&
+      bottomRequiredWidth <= horizontalHandWidth &&
+      middleRequiredWidth <= availableShellWidth &&
+      totalRequiredHeight <= availableShellHeight
+    ) {
+      resolvedCardWidth = candidateWidth;
+      break;
+    }
+  }
+
+  const cardWidth = resolvedCardWidth;
+  const cardHeight = cardHeightFromWidth(cardWidth);
+  const selectedLift = Math.min(14, Math.round(cardWidth * 0.14));
+  const topReveal = resolveFanRevealRange({
+    seat: "top",
+    count: config.topCount,
+    cardWidth
+  });
+  const bottomReveal = resolveFanRevealRange({
+    seat: "bottom",
+    count: config.bottomCount,
+    cardWidth
+  });
+  const sideReveal = resolveFanRevealRange({
+    seat: "side",
+    count: Math.max(config.leftCount, config.rightCount),
+    cardWidth
+  });
+  const northBandHeight = cardHeight + northMetaHeight;
+  const southBandHeight = cardHeight + southMetaHeight + selectedLift;
+  const routeCardWidth = clampNumber(
+    Math.round(cardWidth * NORMAL_PASS_LANE_SCALE),
+    NORMAL_PASS_LANE_MIN_WIDTH,
+    Math.min(cardWidth - 12, NORMAL_PASS_LANE_MAX_WIDTH)
+  );
+  const routeCardHeight = cardHeightFromWidth(routeCardWidth);
+  const sideColumnWidth = cardHeight + sideLabelWidth + seatInsetX * 2 + 6;
+  const minimumMiddleWidth = Math.max(
+    260,
+    Math.round(cardWidth * 3.4),
+    routeCardWidth * 3 + centerInset * 2
+  );
+  const minimumMiddleHeight = Math.max(
+    156,
+    Math.round(cardHeight * 1.14),
+    routeCardHeight * 2 + 28,
+    requiredFanSpan(
+      Math.max(config.leftCount, config.rightCount),
+      cardWidth,
+      sideReveal.minimum
+    ) + sideMetaHeight
+  );
+  const centerBandHeight = Math.max(
+    minimumMiddleHeight,
+    availableShellHeight -
+      headerHeight -
+      northBandHeight -
+      southBandHeight -
+      actionBandHeight -
+      bandGap * 4
+  );
+  const centerColumnWidth = Math.max(
+    minimumMiddleWidth,
+    availableShellWidth - sideColumnWidth * 2 - bandGap * 2
+  );
+  const horizontalHandWidth = availableShellWidth - seatInsetX * 2;
+  const topCardStep = calculateFanStep({
+    count: config.topCount,
+    cardPrimarySize: cardWidth,
+    availableSpan: horizontalHandWidth,
+    minimumReveal: topReveal.minimum,
+    maximumReveal: topReveal.maximum
+  });
+  const bottomCardStep = calculateFanStep({
+    count: config.bottomCount,
+    cardPrimarySize: cardWidth,
+    availableSpan: horizontalHandWidth,
+    minimumReveal: bottomReveal.minimum,
+    maximumReveal: bottomReveal.maximum
+  });
+  const sideCardCount = Math.max(config.leftCount, config.rightCount);
+  const sideCardStep = calculateFanStep({
+    count: sideCardCount,
+    cardPrimarySize: cardWidth,
+    availableSpan: Math.max(0, centerBandHeight - 10),
+    minimumReveal: sideReveal.minimum,
+    maximumReveal: sideReveal.maximum
+  });
+  const totalRequiredHeight =
+    headerHeight +
+    northBandHeight +
+    centerBandHeight +
+    southBandHeight +
+    actionBandHeight +
+    bandGap * 4;
+
+  return {
+    viewportWidth,
+    viewportHeight,
+    shellPaddingX,
+    shellPaddingY,
+    bandGap,
+    seatInsetX,
+    centerInset,
+    headerHeight,
+    northBandHeight,
+    centerBandHeight,
+    southBandHeight,
+    actionBandHeight,
+    sideColumnWidth,
+    centerColumnWidth,
+    cardWidth,
+    cardHeight,
+    routeCardWidth,
+    routeCardHeight,
+    topCardStep,
+    bottomCardStep,
+    sideCardStep,
+    selectedLift,
+    topMinReveal: topReveal.minimum,
+    bottomMinReveal: bottomReveal.minimum,
+    sideMinReveal: sideReveal.minimum,
+    totalRequiredHeight,
+    minimumMiddleWidth,
+    minimumMiddleHeight
+  };
+}
+
+function useElementSize<T extends HTMLElement>() {
+  const ref = useRef<T | null>(null);
+  const [size, setSize] = useState(() => ({
+    width: typeof window === "undefined" ? 1366 : window.innerWidth,
+    height: typeof window === "undefined" ? 768 : window.innerHeight
+  }));
+
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) {
+      return;
+    }
+
+    const updateSize = () => {
+      const rect = element.getBoundingClientRect();
+      setSize({
+        width: Math.round(rect.width),
+        height: Math.round(rect.height)
+      });
+    };
+
+    updateSize();
+
+    const observer = new ResizeObserver(() => updateSize());
+    observer.observe(element);
+    window.addEventListener("resize", updateSize);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateSize);
+    };
+  }, []);
+
+  return { ref, size };
+}
+
+function useNormalViewportLock() {
+  useEffect(() => {
+    document.documentElement.classList.add("normal-layout-locked");
+    document.body.classList.add("normal-layout-locked");
+
+    return () => {
+      document.documentElement.classList.remove("normal-layout-locked");
+      document.body.classList.remove("normal-layout-locked");
+    };
+  }, []);
+}
+
 function updateLayoutElement(
   layout: NormalTableLayout,
   elementId: NormalLayoutElementId,
@@ -990,7 +1901,9 @@ function clampStageCardScale(value: number): number {
   return Math.min(1, Math.max(0.7, value));
 }
 
-function normalizeLoadedLayoutTokens(payload: unknown): NormalTableLayoutTokens {
+function normalizeLoadedLayoutTokens(
+  payload: unknown
+): NormalTableLayoutTokens {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS;
   }
@@ -1028,7 +1941,9 @@ function normalizeLoadedLayoutTokens(payload: unknown): NormalTableLayoutTokens 
   };
 }
 
-export function normalizeLoadedLayout(payload: unknown): NormalTableLayout | null {
+export function normalizeLoadedLayout(
+  payload: unknown
+): NormalTableLayout | null {
   if (!payload || typeof payload !== "object") {
     return null;
   }
@@ -1052,7 +1967,11 @@ export function normalizeLoadedLayout(payload: unknown): NormalTableLayout | nul
 
   for (const elementId of NORMAL_LAYOUT_EDITOR_ORDER) {
     const candidate = sourceRecord[elementId];
-    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+    if (
+      !candidate ||
+      typeof candidate !== "object" ||
+      Array.isArray(candidate)
+    ) {
       continue;
     }
 
@@ -1069,14 +1988,18 @@ export function normalizeLoadedLayout(payload: unknown): NormalTableLayout | nul
     nextLayout[elementId] = {
       x: clamp01(x),
       y: clamp01(y),
-      rotation: isFiniteNumber(rotation) ? rotation : DEFAULT_NORMAL_TABLE_LAYOUT[elementId].rotation
+      rotation: isFiniteNumber(rotation)
+        ? rotation
+        : DEFAULT_NORMAL_TABLE_LAYOUT[elementId].rotation
     };
   }
 
   return hasElement ? nextLayout : null;
 }
 
-export function normalizeLoadedLayoutConfig(payload: unknown): NormalTableLayoutConfig | null {
+export function normalizeLoadedLayoutConfig(
+  payload: unknown
+): NormalTableLayoutConfig | null {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return null;
   }
@@ -1089,14 +2012,18 @@ export function normalizeLoadedLayoutConfig(payload: unknown): NormalTableLayout
   }
 
   return {
-    version: isFiniteNumber(payloadRecord.version) ? payloadRecord.version : DEFAULT_NORMAL_TABLE_LAYOUT_CONFIG.version,
+    version: isFiniteNumber(payloadRecord.version)
+      ? payloadRecord.version
+      : DEFAULT_NORMAL_TABLE_LAYOUT_CONFIG.version,
     surface: DEFAULT_NORMAL_TABLE_SURFACE,
     elements,
     tokens: normalizeLoadedLayoutTokens(payloadRecord.tokens)
   };
 }
 
-export function normalTableLayoutTokenStyle(tokens: NormalTableLayoutTokens): CSSProperties {
+export function normalTableLayoutTokenStyle(
+  tokens: NormalTableLayoutTokens
+): CSSProperties {
   return {
     "--normal-top-hand-overlap": `-${tokens.topHandOverlap}px`,
     "--normal-bottom-hand-overlap": `-${tokens.bottomHandOverlap}px`,
@@ -1110,32 +2037,45 @@ export function normalTableLayoutTokenStyle(tokens: NormalTableLayoutTokens): CS
   } as CSSProperties;
 }
 
-export function parseNormalTableLayoutConfigText(text: string): NormalTableLayoutConfig | null {
+export function parseNormalTableLayoutConfigText(
+  text: string
+): NormalTableLayoutConfig | null {
   const trimmed = text.trim();
   if (!trimmed) {
     return null;
   }
 
   if (trimmed.startsWith("<")) {
-    const elements: Record<string, { x: number; y: number; rotation: number }> = {};
+    const elements: Record<string, { x: number; y: number; rotation: number }> =
+      {};
 
     for (const match of trimmed.matchAll(/<element\b([^>]*)\/?>/g)) {
       const attributes = Object.fromEntries(
-        Array.from(match[1].matchAll(/(\w+)="([^"]*)"/g), ([, key, value]) => [key, value])
+        Array.from(match[1].matchAll(/(\w+)="([^"]*)"/g), ([, key, value]) => [
+          key,
+          value
+        ])
       );
       const id = attributes.id;
       const x = Number(attributes.x);
       const y = Number(attributes.y);
       const rotation = Number(attributes.rotation ?? "0");
 
-      if (!id || !isFiniteNumber(x) || !isFiniteNumber(y) || !isFiniteNumber(rotation)) {
+      if (
+        !id ||
+        !isFiniteNumber(x) ||
+        !isFiniteNumber(y) ||
+        !isFiniteNumber(rotation)
+      ) {
         continue;
       }
 
       elements[id] = { x, y, rotation };
     }
 
-    return Object.keys(elements).length > 0 ? normalizeLoadedLayoutConfig({ elements }) : null;
+    return Object.keys(elements).length > 0
+      ? normalizeLoadedLayoutConfig({ elements })
+      : null;
   }
 
   try {
@@ -1145,7 +2085,9 @@ export function parseNormalTableLayoutConfigText(text: string): NormalTableLayou
   }
 }
 
-export function parseNormalTableLayoutText(text: string): NormalTableLayout | null {
+export function parseNormalTableLayoutText(
+  text: string
+): NormalTableLayout | null {
   return parseNormalTableLayoutConfigText(text)?.elements ?? null;
 }
 
@@ -1220,20 +2162,16 @@ function SeatCountPreview({ count }: { count: number }) {
 
 function PassRouteToken({
   route,
-  cardLookup,
-  cardClassName = "",
-  tokenClassName = ""
+  cardLookup
 }: {
   route: PassRouteView;
   cardLookup: ReadonlyMap<string, Card>;
-  cardClassName?: string;
-  tokenClassName?: string;
 }) {
   if (route.visibleCardId) {
     return (
       <CardFace
         card={resolveCard(route.visibleCardId, cardLookup)}
-        className={["normal-card", "normal-card--route", cardClassName].filter(Boolean).join(" ")}
+        className="normal-card normal-card--route"
       />
     );
   }
@@ -1241,12 +2179,9 @@ function PassRouteToken({
   return (
     <div
       className={
-        [
-          route.occupied ? "normal-pass-token normal-pass-token--back" : "normal-pass-token normal-pass-token--empty",
-          tokenClassName
-        ]
-          .filter(Boolean)
-          .join(" ")
+        route.occupied
+          ? "normal-pass-token normal-pass-token--back"
+          : "normal-pass-token normal-pass-token--empty"
       }
     />
   );
@@ -1270,20 +2205,36 @@ function SeatFlagChips({
   return (
     <>
       {callState.grandTichu && (
-        <span className={`${className} ${compact ? "normal-seat__call--grand" : "seat-chip--alert"}`}>
+        <span
+          className={`${className} ${compact ? "normal-seat__call--grand" : "seat-chip--alert"}`}
+        >
           Grand Tichu
         </span>
       )}
       {callState.smallTichu && (
-        <span className={`${className} ${compact ? "normal-seat__call--small" : "seat-chip--accent"}`}>Tichu</span>
+        <span
+          className={`${className} ${compact ? "normal-seat__call--small" : "seat-chip--accent"}`}
+        >
+          Tichu
+        </span>
       )}
       {isPrimarySeat && (
-        <span className={`${className} ${compact ? "normal-seat__call--turn" : "seat-chip--turn"}`}>Turn</span>
+        <span
+          className={`${className} ${compact ? "normal-seat__call--turn" : "seat-chip--turn"}`}
+        >
+          Turn
+        </span>
       )}
-      {isThinkingSeat && !compact && <span className="seat-chip seat-chip--soft">Thinking</span>}
-      {passReady && !compact && <span className="seat-chip seat-chip--soft">Pass Ready</span>}
+      {isThinkingSeat && !compact && (
+        <span className="seat-chip seat-chip--soft">Thinking</span>
+      )}
+      {passReady && !compact && (
+        <span className="seat-chip seat-chip--soft">Pass Ready</span>
+      )}
       {finishIndex >= 0 && (
-        <span className={`${className} ${compact ? "normal-seat__call--finish" : "seat-chip--success"}`}>
+        <span
+          className={`${className} ${compact ? "normal-seat__call--finish" : "seat-chip--success"}`}
+        >
           {formatPlacement(finishIndex)}
         </span>
       )}
@@ -1293,7 +2244,7 @@ function SeatFlagChips({
 
 function TableSurface({
   variant,
-  normalTableLayout,
+  normalTableLayout: _normalTableLayout,
   state,
   derived,
   controlHint,
@@ -1316,29 +2267,58 @@ function TableSurface({
 > & {
   variant: "normal" | "debug";
 }) {
+  void _normalTableLayout;
   const status = surfaceMessage({ controlHint, state, derived });
+  const exchangePhaseActive = isExchangePhase(state.phase);
 
   return (
     <section
       className={[
         variant === "normal" ? "normal-play-surface" : "table-trick",
-        trickIsResolving ? (variant === "normal" ? "normal-play-surface--resolving" : "table-trick--resolving") : ""
+        trickIsResolving
+          ? variant === "normal"
+            ? "normal-play-surface--resolving"
+            : "table-trick--resolving"
+          : ""
       ]
         .filter(Boolean)
         .join(" ")}
-      style={variant === "normal" ? anchorStyle(normalTableLayout.playSurface) : undefined}
     >
-      {displayedTrick ? (
+      {!exchangePhaseActive && displayedTrick ? (
         <>
-          <div className={variant === "normal" ? "normal-play-surface__core" : "table-trick__core"}>
-            <span className={variant === "normal" ? "normal-play-surface__badge" : "table-trick__lead"}>
+          <div
+            className={
+              variant === "normal"
+                ? "normal-play-surface__core"
+                : "table-trick__core"
+            }
+          >
+            <span
+              className={
+                variant === "normal"
+                  ? "normal-play-surface__badge"
+                  : "table-trick__lead"
+              }
+            >
               {formatCombinationKind(displayedTrick.currentCombination.kind)}
             </span>
-            <span className={variant === "normal" ? "normal-play-surface__badge" : "table-trick__lead"}>
+            <span
+              className={
+                variant === "normal"
+                  ? "normal-play-surface__badge"
+                  : "table-trick__lead"
+              }
+            >
               {formatSeatShort(displayedTrick.currentWinner)} ahead
             </span>
             {derived.currentWish !== null && (
-              <span className={variant === "normal" ? "normal-play-surface__badge" : "wish-chip wish-chip--table"}>
+              <span
+                className={
+                  variant === "normal"
+                    ? "normal-play-surface__badge"
+                    : "wish-chip wish-chip--table"
+                }
+              >
                 Wish {formatRank(derived.currentWish)}
               </span>
             )}
@@ -1358,18 +2338,27 @@ function TableSurface({
                     : `table-trick__lane table-trick__lane--${position}`
                 }
               >
-                <span className={variant === "normal" ? "normal-trick-lane__label" : "table-trick__seat-label"}>
+                <span
+                  className={
+                    variant === "normal"
+                      ? "normal-trick-lane__label"
+                      : "table-trick__seat-label"
+                  }
+                >
                   {label}
                 </span>
                 <div
                   className={
-                    variant === "normal" ? "normal-trick-lane__sequence" : "table-trick__sequence"
+                    variant === "normal"
+                      ? "normal-trick-lane__sequence"
+                      : "table-trick__sequence"
                   }
                 >
                   {plays.map((entry, index) => {
                     const isWinningPlay =
                       entry.seat === displayedTrick.currentWinner &&
-                      entry.combination.key === displayedTrick.currentCombination.key;
+                      entry.combination.key ===
+                        displayedTrick.currentCombination.key;
 
                     return (
                       <div
@@ -1381,16 +2370,32 @@ function TableSurface({
                         }
                       >
                         {entry.combination.kind === "single" && (
-                          <span className={variant === "normal" ? "normal-play-group__kind" : "table-trick__play-kind"}>
+                          <span
+                            className={
+                              variant === "normal"
+                                ? "normal-play-group__kind"
+                                : "table-trick__play-kind"
+                            }
+                          >
                             {formatCombinationKind(entry.combination.kind)}
                           </span>
                         )}
-                        <div className={variant === "normal" ? "normal-play-group__cards" : "table-trick__combo"}>
+                        <div
+                          className={
+                            variant === "normal"
+                              ? "normal-play-group__cards"
+                              : "table-trick__combo"
+                          }
+                        >
                           {entry.combination.cardIds.map((cardId) => (
                             <CardFace
                               key={cardId}
                               card={resolveCard(cardId, cardLookup)}
-                              className={variant === "normal" ? "normal-card normal-card--trick" : "table-trick__card"}
+                              className={
+                                variant === "normal"
+                                  ? "normal-card normal-card--trick"
+                                  : "table-trick__card"
+                              }
                             />
                           ))}
                         </div>
@@ -1402,10 +2407,22 @@ function TableSurface({
             );
           })}
         </>
-      ) : variant === "debug" && tablePassGroups.length > 0 ? (
+      ) : variant === "debug" && exchangePhaseActive && tablePassGroups.length > 0 ? (
         <>
-          <div className={variant === "normal" ? "normal-play-surface__core" : "table-trick__core"}>
-            <span className={variant === "normal" ? "normal-play-surface__badge" : "table-trick__lead"}>
+          <div
+            className={
+              variant === "normal"
+                ? "normal-play-surface__core"
+                : "table-trick__core"
+            }
+          >
+            <span
+              className={
+                variant === "normal"
+                  ? "normal-play-surface__badge"
+                  : "table-trick__lead"
+              }
+            >
               {state.phase === "pass_select" ? "Pass lanes" : "Exchange ready"}
             </span>
           </div>
@@ -1419,15 +2436,31 @@ function TableSurface({
                   : `table-trick__lane table-trick__lane--${group.position}`
               }
             >
-              <span className={variant === "normal" ? "normal-trick-lane__label" : "table-trick__seat-label"}>
+              <span
+                className={
+                  variant === "normal"
+                    ? "normal-trick-lane__label"
+                    : "table-trick__seat-label"
+                }
+              >
                 {group.label}
               </span>
-              <div className={variant === "normal" ? "normal-pass-cluster__cards" : "table-trick__combo"}>
+              <div
+                className={
+                  variant === "normal"
+                    ? "normal-pass-cluster__cards"
+                    : "table-trick__combo"
+                }
+              >
                 {group.cardIds.map((cardId) => (
                   <CardFace
                     key={`${group.seat}-${cardId}`}
                     card={resolveCard(cardId, cardLookup)}
-                    className={variant === "normal" ? "normal-card normal-card--pass" : "table-trick__card"}
+                    className={
+                      variant === "normal"
+                        ? "normal-card normal-card--pass"
+                        : "table-trick__card"
+                    }
                   />
                 ))}
               </div>
@@ -1435,12 +2468,19 @@ function TableSurface({
           ))}
         </>
       ) : (
-        <div className={variant === "normal" ? "normal-play-surface__empty" : "table-trick__empty"}>
+        <div
+          className={
+            variant === "normal"
+              ? "normal-play-surface__empty"
+              : "table-trick__empty"
+          }
+        >
           <strong>{status.title}</strong>
           <p>{status.body}</p>
           {state.phase === "finished" && state.roundSummary && (
             <p>
-              Team 0 {state.roundSummary.teamScores["team-0"]} | Team 1 {state.roundSummary.teamScores["team-1"]}
+              Team 0 {state.roundSummary.teamScores["team-0"]} | Team 1{" "}
+              {state.roundSummary.teamScores["team-1"]}
             </p>
           )}
           {state.phase === "finished" && state.roundSummary?.doubleVictory && (
@@ -1454,6 +2494,7 @@ function TableSurface({
 
 function NormalPassStagingRegions({
   normalTableLayout,
+  layoutMetrics,
   passRouteViews,
   selectedPassTarget,
   cardLookup,
@@ -1467,134 +2508,156 @@ function NormalPassStagingRegions({
   | "cardLookup"
   | "onPassTargetSelect"
   | "onPassLaneDrop"
->) {
+> & {
+  layoutMetrics: NormalViewportLayoutMetrics;
+}) {
   if (passRouteViews.length === 0) {
     return null;
   }
 
-  const seatOrder: Array<{ seat: SeatId; position: SeatVisualPosition }> = [
-    { seat: "seat-2", position: "top" },
-    { seat: "seat-1", position: "right" },
-    { seat: "seat-0", position: "bottom" },
-    { seat: "seat-3", position: "left" }
-  ];
-
   return (
-    <div className="normal-pass-staging" aria-label="Pass staging regions">
-      {seatOrder.map(({ seat, position }) => {
-        const routeByTargetPosition = new Map(
-          passRouteViews
-            .filter((route) => route.sourceSeat === seat)
-            .map((route) => [getSeatVisualPosition(route.targetSeat), route])
+    <div
+      className="normal-pass-staging"
+      aria-label="Pass staging regions"
+      data-layout-container="pass-staging"
+    >
+      {(["top", "right", "bottom", "left"] as const).map((sourcePosition) => {
+        const sourceRoutes = passRouteViews.filter(
+          (route) => route.sourcePosition === sourcePosition
         );
-
-        if (routeByTargetPosition.size === 0) {
+        if (sourceRoutes.length === 0) {
           return null;
         }
 
-        return NORMAL_STAGE_ANCHORS[position].lanes.map((lane) => {
-              const route = routeByTargetPosition.get(lane.targetPosition);
-              const laneLayoutId = NORMAL_PASS_LANE_LAYOUT_IDS[position][lane.targetPosition];
+        return NORMAL_PASS_STAGE_MAP[sourcePosition].map((laneSpec) => {
+          const route =
+            sourceRoutes.find(
+              (candidateRoute) =>
+                getSeatVisualPosition(candidateRoute.targetSeat) ===
+                laneSpec.targetPosition
+            ) ?? null;
+          if (!route) {
+            return null;
+          }
 
-              if (!route || !laneLayoutId) {
-                return null;
-              }
+          const laneGeometry = resolveNormalPassLaneGeometry({
+            normalTableLayout,
+            layoutMetrics,
+            sourcePosition,
+            targetPosition: laneSpec.targetPosition,
+            direction: laneSpec.direction
+          });
+          if (!laneGeometry) {
+            return null;
+          }
 
-              const laneSpec = NORMAL_LAYOUT_ELEMENT_SPECS[laneLayoutId];
-              const isInteractive = route.interactive;
-              const slotClassName = [
-                "normal-pass-stage-slot",
-                `normal-pass-stage-slot--${lane.orientation}`,
-                route.faceDown ? "normal-pass-stage-slot--back" : "",
-                route.occupied ? "normal-pass-stage-slot--occupied" : "",
-                route.target === selectedPassTarget && isInteractive ? "normal-pass-stage-slot--selected" : "",
-                isInteractive ? "normal-pass-stage-slot--interactive" : ""
-              ]
-                .filter(Boolean)
-                .join(" ");
+          const isInteractive = route.interactive;
+          const slotContents = (
+            <PassRouteToken route={route} cardLookup={cardLookup} />
+          );
+          const laneClassName = [
+            "normal-pass-lane",
+            `normal-pass-lane--${laneSpec.direction}`,
+            route.occupied ? "normal-pass-lane--occupied" : ""
+          ]
+            .filter(Boolean)
+            .join(" ");
+          const slotClassName = [
+            "normal-pass-lane__slot",
+            `normal-pass-lane__slot--${laneSpec.direction}`,
+            route.faceDown ? "normal-pass-lane__slot--back" : "",
+            route.occupied ? "normal-pass-lane__slot--occupied" : "",
+            route.target === selectedPassTarget && isInteractive
+              ? "normal-pass-lane__slot--selected"
+              : "",
+            isInteractive ? "normal-pass-lane__slot--interactive" : ""
+          ]
+            .filter(Boolean)
+            .join(" ");
 
-              const slotContents = (
-                <PassRouteToken
-                  route={route}
-                  cardLookup={cardLookup}
-                  cardClassName={
-                    lane.orientation === "east"
-                      ? "normal-card--route-east"
-                      : lane.orientation === "west"
-                        ? "normal-card--route-west"
-                        : ""
-                  }
-                  tokenClassName={
-                    lane.orientation === "east"
-                      ? "normal-pass-token--east"
-                      : lane.orientation === "west"
-                        ? "normal-pass-token--west"
-                        : ""
-                  }
-                />
-              );
-
-              if (!isInteractive) {
-                return (
-                  <div
-                    key={laneLayoutId}
-                    className="normal-pass-stage-lane"
-                    style={{
-                      ...anchorStyle(normalTableLayout[laneLayoutId]),
-                      width: `${laneSpec.width}px`,
-                      height: `${laneSpec.height}px`
-                    }}
-                    aria-label={`${formatSeatShort(route.sourceSeat)} ${formatPassTarget(route.target)} lane`}
-                  >
-                    <div
-                      className={slotClassName}
-                      aria-label={`${formatSeatShort(route.sourceSeat)} ${formatPassTarget(route.target)} staged card`}
-                    >
-                      {slotContents}
-                    </div>
-                  </div>
-                );
-              }
-
-              return (
-                <div
-                  key={laneLayoutId}
-                  className="normal-pass-stage-lane"
-                  style={{
-                    ...anchorStyle(normalTableLayout[laneLayoutId]),
-                    width: `${laneSpec.width}px`,
-                    height: `${laneSpec.height}px`
-                  }}
-                >
-                  <button
-                    type="button"
-                    className={slotClassName}
-                    aria-label={`${formatPassTarget(route.target)} to ${formatSeatShort(route.targetSeat)}`}
-                    onClick={() => onPassTargetSelect(route.target)}
-                    onDragOver={(event) => {
-                      event.preventDefault();
-                      event.dataTransfer.dropEffect = "move";
-                    }}
-                    onDrop={(event) => {
-                      event.preventDefault();
-                      const cardId = event.dataTransfer.getData("application/x-tichu-pass-card");
-                      if (cardId) {
-                        onPassLaneDrop(route.target, cardId);
-                      }
-                    }}
-                  >
-                    {slotContents}
-                  </button>
+          if (!isInteractive) {
+            return (
+              <div
+                key={route.key}
+                className={laneClassName}
+                style={laneGeometry.style}
+                data-pass-lane={route.key}
+                data-pass-layout-id={laneGeometry.elementId}
+                data-pass-direction={laneSpec.direction}
+                data-pass-target={laneSpec.targetPosition}
+                aria-label={`${formatSeatShort(route.sourceSeat)} pass ${formatPassDirectionLabel(laneSpec.direction)} to ${formatSeatShort(route.targetSeat)}`}
+              >
+                <div className="normal-pass-lane__frame" aria-hidden="true">
+                  <span className="normal-pass-lane__badge">
+                    <span className="normal-pass-lane__arrow">
+                      {formatPassDirectionGlyph(laneSpec.direction)}
+                    </span>
+                    <span className="normal-pass-lane__marker">
+                      {formatSeatMarker(route.targetSeat)}
+                    </span>
+                  </span>
                 </div>
-              );
-            });
+                <div
+                  className={slotClassName}
+                  aria-label={`${formatSeatShort(route.sourceSeat)} ${formatPassTarget(route.target)} staged card`}
+                >
+                  {slotContents}
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <div
+              key={route.key}
+              className={laneClassName}
+              style={laneGeometry.style}
+              data-pass-lane={route.key}
+              data-pass-layout-id={laneGeometry.elementId}
+              data-pass-direction={laneSpec.direction}
+              data-pass-target={laneSpec.targetPosition}
+            >
+              <div className="normal-pass-lane__frame" aria-hidden="true">
+                <span className="normal-pass-lane__badge">
+                  <span className="normal-pass-lane__arrow">
+                    {formatPassDirectionGlyph(laneSpec.direction)}
+                  </span>
+                  <span className="normal-pass-lane__marker">
+                    {formatSeatMarker(route.targetSeat)}
+                  </span>
+                </span>
+              </div>
+              <button
+                type="button"
+                className={slotClassName}
+                aria-label={`${formatPassDirectionLabel(laneSpec.direction)} pass to ${formatSeatShort(route.targetSeat)}`}
+                onClick={() => onPassTargetSelect(route.target)}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const cardId = event.dataTransfer.getData(
+                    "application/x-tichu-pass-card"
+                  );
+                  if (cardId) {
+                    onPassLaneDrop(route.target, cardId);
+                  }
+                }}
+              >
+                {slotContents}
+              </button>
+            </div>
+          );
+        });
       })}
     </div>
   );
 }
 
 function NormalSeat({
-  normalTableLayout,
+  layoutMetrics,
   seatView,
   sortedLocalHand,
   localCanInteract,
@@ -1604,7 +2667,6 @@ function NormalSeat({
   onLocalCardClick
 }: Pick<
   GameTableViewProps,
-  | "normalTableLayout"
   | "sortedLocalHand"
   | "localCanInteract"
   | "localPassInteractionEnabled"
@@ -1612,10 +2674,104 @@ function NormalSeat({
   | "selectedCardIds"
   | "onLocalCardClick"
 > & {
+  layoutMetrics: NormalViewportLayoutMetrics;
   seatView: SeatView;
 }) {
-  const isSideSeat = seatView.position === "left" || seatView.position === "right";
-  const handLayoutId = NORMAL_HAND_LAYOUT_IDS[seatView.position];
+  const isSideSeat =
+    seatView.position === "left" || seatView.position === "right";
+  const handStep =
+    seatView.position === "bottom"
+      ? layoutMetrics.bottomCardStep
+      : isSideSeat
+        ? layoutMetrics.sideCardStep
+        : layoutMetrics.topCardStep;
+  const handStyle = {
+    "--normal-hand-step": `${handStep}px`
+  } as CSSProperties;
+  const metaBlock = (
+    <div
+      className={
+        isSideSeat ? "normal-seat__meta normal-seat__meta--side" : "normal-seat__meta"
+      }
+    >
+      {!isSideSeat && (
+        <span className="normal-seat__title" aria-hidden="true">
+          {seatView.title}
+        </span>
+      )}
+      <div className="normal-seat__flags">
+        <SeatFlagChips
+          callState={seatView.callState}
+          finishIndex={seatView.finishIndex}
+          passReady={seatView.passReady}
+          isPrimarySeat={seatView.isPrimarySeat}
+          isThinkingSeat={seatView.isThinkingSeat}
+          compact
+        />
+      </div>
+    </div>
+  );
+  const renderSeatCard = (card: Card, cardIndex: number) =>
+    isSideSeat ? (
+      <div
+        key={card.id}
+        className={`normal-side-card-shell normal-side-card-shell--${seatView.position}`}
+        data-seat-region-card={`${seatView.position}-${card.id}-${cardIndex}`}
+      >
+        <CardFace
+          card={card}
+          className={`normal-card normal-card--seat normal-card--seat-${seatView.position}`}
+        />
+      </div>
+    ) : (
+      <div
+        key={card.id}
+        className="normal-seat__card-slot"
+        data-seat-region-card={`${seatView.position}-${card.id}-${cardIndex}`}
+      >
+        <CardFace card={card} className="normal-card normal-card--seat" />
+      </div>
+    );
+  const localHand = (
+    <div className="normal-seat__body normal-seat__body--local">
+      <div className="normal-seat__hand normal-seat__hand--bottom" style={handStyle}>
+        {sortedLocalHand.map((card, cardIndex) => (
+          <div
+            key={card.id}
+            className="normal-seat__card-slot"
+            data-seat-region-card={`bottom-${card.id}-${cardIndex}`}
+          >
+            <CardFace
+              card={card}
+              interactive={localCanInteract}
+              tone={localLegalCardIds.has(card.id) ? "legal" : "muted"}
+              selected={selectedCardIds.includes(card.id)}
+              className="normal-card normal-card--local"
+              onClick={() => onLocalCardClick(card.id)}
+              draggable={localPassInteractionEnabled}
+              onDragStart={(event) => {
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData(
+                  "application/x-tichu-pass-card",
+                  card.id
+                );
+              }}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+  const remoteHand = (
+    <div className="normal-seat__body">
+      <div
+        className={`normal-seat__hand normal-seat__hand--${seatView.position}`}
+        style={handStyle}
+      >
+        {seatView.cards.map(renderSeatCard)}
+      </div>
+    </div>
+  );
 
   return (
     <section
@@ -1628,79 +2784,33 @@ function NormalSeat({
       ]
         .filter(Boolean)
         .join(" ")}
-      style={anchorStyle(normalTableLayout[handLayoutId])}
+      data-seat-region={seatView.position}
+      data-layout-container={`${seatView.position}-seat`}
     >
-      <div className={isSideSeat ? "normal-seat__meta normal-seat__meta--side" : "normal-seat__meta"}>
-        <div className="normal-seat__flags">
-          <SeatFlagChips
-            callState={seatView.callState}
-            finishIndex={seatView.finishIndex}
-            passReady={seatView.passReady}
-            isPrimarySeat={seatView.isPrimarySeat}
-            isThinkingSeat={seatView.isThinkingSeat}
-            compact
-          />
-        </div>
+      {isSideSeat && seatView.position === "left" ? (
+        <span className="normal-seat__side-label" aria-hidden="true">
+          {seatView.title}
+        </span>
+      ) : null}
+      <div className="normal-seat__content">
+        {seatView.position === "bottom" ? (
+          <>
+            {seatView.isLocalSeat ? localHand : remoteHand}
+            {metaBlock}
+          </>
+        ) : (
+          <>
+            {metaBlock}
+            {seatView.isLocalSeat ? localHand : remoteHand}
+          </>
+        )}
       </div>
-
-      {seatView.isLocalSeat ? (
-        <div className="normal-seat__body normal-seat__body--local">
-          <div className="normal-seat__hand normal-seat__hand--bottom">
-            {sortedLocalHand.map((card) => (
-              <CardFace
-                key={card.id}
-                card={card}
-                interactive={localCanInteract}
-                tone={localLegalCardIds.has(card.id) ? "legal" : "muted"}
-                selected={selectedCardIds.includes(card.id)}
-                className="normal-card normal-card--local"
-                onClick={() => onLocalCardClick(card.id)}
-                draggable={localPassInteractionEnabled}
-                onDragStart={(event) => {
-                  event.dataTransfer.effectAllowed = "move";
-                  event.dataTransfer.setData("application/x-tichu-pass-card", card.id);
-                }}
-              />
-            ))}
-          </div>
-        </div>
-      ) : (
-        <div className={`normal-seat__hand normal-seat__hand--${seatView.position}`}>
-          {seatView.cards.map((card) =>
-            isSideSeat ? (
-              <div key={card.id} className={`normal-side-card-shell normal-side-card-shell--${seatView.position}`}>
-                <CardFace
-                  card={card}
-                  className={`normal-card normal-card--seat normal-card--seat-${seatView.position}`}
-                />
-              </div>
-            ) : (
-              <CardFace key={card.id} card={card} className="normal-card normal-card--seat" />
-            )
-          )}
-        </div>
-      )}
+      {isSideSeat && seatView.position === "right" ? (
+        <span className="normal-seat__side-label" aria-hidden="true">
+          {seatView.title}
+        </span>
+      ) : null}
     </section>
-  );
-}
-
-function NormalSeatLabel({
-  normalTableLayout,
-  seatView
-}: Pick<GameTableViewProps, "normalTableLayout"> & {
-  seatView: SeatView;
-}) {
-  const layoutId = NORMAL_LABEL_LAYOUT_IDS[seatView.position];
-  const isSideSeat = seatView.position === "left" || seatView.position === "right";
-
-  return (
-    <div
-      className={isSideSeat ? "normal-seat-label normal-seat-label--side" : "normal-seat-label"}
-      style={anchorStyle(normalTableLayout[layoutId])}
-      aria-hidden="true"
-    >
-      {seatView.title}
-    </div>
   );
 }
 
@@ -1765,10 +2875,16 @@ function DebugSeat({
                 <button
                   key={mode}
                   type="button"
-                  className={mode === sortMode ? "segment-control__button is-active" : "segment-control__button"}
+                  className={
+                    mode === sortMode
+                      ? "segment-control__button is-active"
+                      : "segment-control__button"
+                  }
                   onClick={() => onSortModeChange(mode)}
                 >
-                  {mode === "combo" ? "Combo" : mode.charAt(0).toUpperCase() + mode.slice(1)}
+                  {mode === "combo"
+                    ? "Combo"
+                    : mode.charAt(0).toUpperCase() + mode.slice(1)}
                 </button>
               ))}
             </div>
@@ -1804,7 +2920,10 @@ function NormalActionStrip({
   onNormalAction
 }: Pick<
   GameTableViewProps,
-  "normalActionRail" | "localDragonRecipients" | "onDragonRecipientSelect" | "onNormalAction"
+  | "normalActionRail"
+  | "localDragonRecipients"
+  | "onDragonRecipientSelect"
+  | "onNormalAction"
 >) {
   return (
     <section className="normal-action-area">
@@ -1867,42 +2986,464 @@ function DebugActionStrip({
 >) {
   return (
     <div className="action-buttons">
-      {localDragonRecipients.length > 0 ? (
-        localDragonRecipients.map((recipient) => (
-          <button
-            key={recipient}
-            type="button"
-            className="action-button action-button--primary"
-            onClick={() => onDragonRecipientSelect(recipient)}
-          >
-            Gift Dragon to {formatSeatShort(recipient)}
-          </button>
-        ))
-      ) : (
-        normalActionRail.map((slot) => (
-          <button
-            key={slot.id}
-            type="button"
-            className={[
-              "action-button",
-              slot.tone === "primary" ? "action-button--primary" : "action-button--secondary"
-            ]
-              .filter(Boolean)
-              .join(" ")}
-            onClick={() => onNormalAction(slot.id)}
-            disabled={!slot.enabled}
-          >
-            {slot.label}
-          </button>
-        ))
-      )}
+      {localDragonRecipients.length > 0
+        ? localDragonRecipients.map((recipient) => (
+            <button
+              key={recipient}
+              type="button"
+              className="action-button action-button--primary"
+              onClick={() => onDragonRecipientSelect(recipient)}
+            >
+              Gift Dragon to {formatSeatShort(recipient)}
+            </button>
+          ))
+        : normalActionRail.map((slot) => (
+            <button
+              key={slot.id}
+              type="button"
+              className={[
+                "action-button",
+                slot.tone === "primary"
+                  ? "action-button--primary"
+                  : "action-button--secondary"
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              onClick={() => onNormalAction(slot.id)}
+              disabled={!slot.enabled}
+            >
+              {slot.label}
+            </button>
+          ))}
 
       {canContinueAi && (
-        <button type="button" className="action-button action-button--secondary" onClick={onContinueAi}>
+        <button
+          type="button"
+          className="action-button action-button--secondary"
+          onClick={onContinueAi}
+        >
           Continue AI
         </button>
       )}
     </div>
+  );
+}
+
+const FOCUSABLE_SELECTOR =
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+const HOW_TO_PLAY_SECTIONS: ReadonlyArray<{
+  title: string;
+  bullets: readonly string[];
+}> = [
+  {
+    title: "Goal",
+    bullets: [
+      "Tichu is a four-player partnership game. North and South play together against East and West.",
+      "Win tricks, go out before the other team, and collect scoring cards to build your team total."
+    ]
+  },
+  {
+    title: "Card Ranking",
+    bullets: [
+      "Standard ranks run from 2 up to Ace.",
+      "Mahjong is the lowest single, Phoenix is flexible, Dragon is the highest single, and Dog passes the lead to your partner."
+    ]
+  },
+  {
+    title: "Special Cards",
+    bullets: [
+      "Mahjong starts the lowest trick and can make a wish for a rank that players must follow if they legally can.",
+      "Dog cannot win a trick. It immediately hands the lead to your partner.",
+      "Phoenix can act as a wild card in many combinations or as a half-step single, but it is worth negative points at scoring.",
+      "Dragon is the strongest single and scores points, but the winner must give that trick to an opponent."
+    ]
+  },
+  {
+    title: "Trick Taking",
+    bullets: [
+      "Players must beat the current combination with the same play type: single, pair, triple, full house, straight, or bomb.",
+      "Bombs can interrupt other trick types and beat any non-bomb play. Higher bombs beat lower bombs."
+    ]
+  },
+  {
+    title: "Passing Phase",
+    bullets: [
+      "At the start of a round, each player passes one card left, one to partner, and one right.",
+      "Use the pass lanes to assign those three cards before revealing the exchange."
+    ]
+  },
+  {
+    title: "Tichu Calls And Wishes",
+    bullets: [
+      "Grand Tichu is a big early call before you receive passed cards. Tichu is a later call before your first play.",
+      "If you call successfully you score a bonus; if you fail, your team loses that bonus instead.",
+      "Mahjong wishes force the next legal player who can satisfy the wished rank to include it in a valid play."
+    ]
+  },
+  {
+    title: "Scoring",
+    bullets: [
+      "5s are worth 5 points. 10s and Kings are worth 10. Dragon is worth 25. Phoenix is worth -25.",
+      "Going out first matters, and a one-two finish by partners creates a large swing for the team."
+    ]
+  }
+];
+
+function getFocusableElements(container: HTMLElement | null): HTMLElement[] {
+  if (!container) {
+    return [];
+  }
+
+  return Array.from(
+    container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
+  ).filter((element) => element.offsetParent !== null);
+}
+
+function moveFocusByStep(
+  elements: HTMLElement[],
+  current: HTMLElement | null,
+  direction: 1 | -1
+) {
+  if (elements.length === 0) {
+    return;
+  }
+
+  const currentIndex = current ? elements.indexOf(current) : -1;
+  const nextIndex =
+    currentIndex === -1
+      ? 0
+      : (currentIndex + direction + elements.length) % elements.length;
+  elements[nextIndex]?.focus();
+}
+
+function GameChromeMenu({
+  variant,
+  isOpen,
+  uiMode,
+  layoutEditorActive,
+  onMainMenuOpenChange,
+  onUiCommand
+}: {
+  variant: "normal" | "debug";
+  isOpen: boolean;
+  uiMode: UiMode;
+  layoutEditorActive: boolean;
+  onMainMenuOpenChange: (open: boolean) => void;
+  onUiCommand: (commandId: UiCommandId) => void;
+}) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const focusFirst = window.requestAnimationFrame(() => {
+      itemRefs.current[0]?.focus();
+    });
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (containerRef.current?.contains(event.target as Node)) {
+        return;
+      }
+
+      onMainMenuOpenChange(false);
+    };
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    return () => {
+      window.cancelAnimationFrame(focusFirst);
+      window.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [isOpen, onMainMenuOpenChange]);
+
+  function handleTriggerKeyDown(event: ReactKeyboardEvent<HTMLButtonElement>) {
+    if (
+      event.key === "ArrowDown" ||
+      event.key === "Enter" ||
+      event.key === " "
+    ) {
+      event.preventDefault();
+      onMainMenuOpenChange(true);
+    }
+  }
+
+  function handleMenuKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    const elements = itemRefs.current.filter(
+      (element): element is HTMLButtonElement => Boolean(element)
+    );
+
+    switch (event.key) {
+      case "ArrowDown":
+        event.preventDefault();
+        moveFocusByStep(elements, document.activeElement as HTMLElement | null, 1);
+        break;
+      case "ArrowUp":
+        event.preventDefault();
+        moveFocusByStep(elements, document.activeElement as HTMLElement | null, -1);
+        break;
+      case "Home":
+        event.preventDefault();
+        elements[0]?.focus();
+        break;
+      case "End":
+        event.preventDefault();
+        elements[elements.length - 1]?.focus();
+        break;
+    }
+  }
+
+  return (
+    <div
+      ref={containerRef}
+      className={[
+        "game-menu",
+        `game-menu--${variant}`,
+        isOpen ? "is-open" : ""
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      <button
+        type="button"
+        className="game-menu__trigger"
+        aria-label={isOpen ? "Close game menu" : "Open game menu"}
+        aria-expanded={isOpen}
+        aria-haspopup="menu"
+        onClick={() => onMainMenuOpenChange(!isOpen)}
+        onKeyDown={handleTriggerKeyDown}
+      >
+        <span className="game-menu__trigger-lines" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </span>
+      </button>
+
+      {isOpen && (
+        <div
+          className="game-menu__panel"
+          role="menu"
+          aria-label="Game menu"
+          onKeyDown={handleMenuKeyDown}
+        >
+          {GAME_MENU_ITEMS.map((item, index) => {
+            const isActive =
+              (item.commandId === "toggle_debug_mode" && uiMode === "debug") ||
+              (item.commandId === "toggle_table_editor" && layoutEditorActive);
+
+            return (
+              <button
+                key={item.id}
+                ref={(element) => {
+                  itemRefs.current[index] = element;
+                }}
+                type="button"
+                role="menuitem"
+                className={[
+                  "game-menu__item",
+                  isActive ? "is-active" : ""
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                aria-label={isActive ? `${item.label} on` : item.label}
+                onClick={() => {
+                  onMainMenuOpenChange(false);
+                  onUiCommand(item.commandId);
+                }}
+              >
+                <span className="game-menu__item-copy">
+                  <strong>{item.label}</strong>
+                  <small>{item.description}</small>
+                </span>
+                {isActive && (
+                  <span className="game-menu__item-state" aria-hidden="true">
+                    ON
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ModalDialog({
+  title,
+  onClose,
+  children,
+  className
+}: {
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+  className?: string;
+}) {
+  const panelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const previousFocus =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusFrame = window.requestAnimationFrame(() => {
+      const focusables = getFocusableElements(panelRef.current);
+      (focusables[0] ?? panelRef.current)?.focus();
+    });
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const closeHotkey = findMatchingHotkey(event, ["dialogs"]);
+      if (closeHotkey?.commandId) {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+
+      if (event.key !== "Tab") {
+        return;
+      }
+
+      const focusables = getFocusableElements(panelRef.current);
+      if (focusables.length === 0) {
+        event.preventDefault();
+        panelRef.current?.focus();
+        return;
+      }
+
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const activeElement = document.activeElement as HTMLElement | null;
+
+      if (event.shiftKey && activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      window.removeEventListener("keydown", handleKeyDown);
+      previousFocus?.focus();
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="game-dialog-backdrop"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <div
+        ref={panelRef}
+        className={["game-dialog", className].filter(Boolean).join(" ")}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        tabIndex={-1}
+      >
+        <div className="game-dialog__header">
+          <h2>{title}</h2>
+          <button
+            type="button"
+            className="game-dialog__close"
+            aria-label={`Close ${title}`}
+            onClick={onClose}
+          >
+            Close
+          </button>
+        </div>
+        <div className="game-dialog__body">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function HotKeysDialogContent({
+  hotkeyDefinitions
+}: Pick<GameTableViewProps, "hotkeyDefinitions">) {
+  return (
+    <div className="hotkey-groups">
+      {HOTKEY_CONTEXT_ORDER.map((context) => {
+        const hotkeys = getHotkeysForContext(context, hotkeyDefinitions);
+        if (hotkeys.length === 0) {
+          return null;
+        }
+
+        return (
+          <section key={context} className="hotkey-group">
+            <h3>{HOTKEY_CONTEXT_LABELS[context]}</h3>
+            <div className="hotkey-group__list">
+              {hotkeys.map((hotkey) => (
+                <article key={hotkey.id} className="hotkey-entry">
+                  <kbd>{hotkey.comboLabel}</kbd>
+                  <div className="hotkey-entry__copy">
+                    <strong>{hotkey.actionLabel}</strong>
+                    <p>{hotkey.description}</p>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+function HowToPlayDialogContent() {
+  return (
+    <div className="how-to-play">
+      {HOW_TO_PLAY_SECTIONS.map((section) => (
+        <section key={section.title} className="how-to-play__section">
+          <h3>{section.title}</h3>
+          <ul>
+            {section.bullets.map((bullet) => (
+              <li key={bullet}>{bullet}</li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function GameDialogLayer({
+  activeDialog,
+  hotkeyDefinitions,
+  onUiCommand
+}: Pick<
+  GameTableViewProps,
+  "activeDialog" | "hotkeyDefinitions" | "onUiCommand"
+>) {
+  if (!activeDialog) {
+    return null;
+  }
+
+  return activeDialog === "hotkeys" ? (
+    <ModalDialog
+      title="Hot Keys"
+      className="game-dialog--hotkeys"
+      onClose={() => onUiCommand("close_active_overlay")}
+    >
+      <HotKeysDialogContent hotkeyDefinitions={hotkeyDefinitions} />
+    </ModalDialog>
+  ) : (
+    <ModalDialog
+      title="How To Play Tichu"
+      className="game-dialog--rules"
+      onClose={() => onUiCommand("close_active_overlay")}
+    >
+      <HowToPlayDialogContent />
+    </ModalDialog>
   );
 }
 
@@ -1914,17 +3455,28 @@ type EditorDragState = {
   surfaceRect: DOMRect;
 };
 
-function NormalLayoutEditor({
+export function NormalLayoutEditor({
   normalTableLayout,
   onNormalTableLayoutChange,
-  onNormalTableLayoutImport
-}: Pick<GameTableViewProps, "normalTableLayout" | "onNormalTableLayoutChange" | "onNormalTableLayoutImport">) {
+  onNormalTableLayoutImport,
+  onExportNormalTableLayout,
+  hotkeyDefinitions
+}: Pick<
+  GameTableViewProps,
+  | "normalTableLayout"
+  | "onNormalTableLayoutChange"
+  | "onNormalTableLayoutImport"
+  | "onExportNormalTableLayout"
+  | "hotkeyDefinitions"
+>) {
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const dragStateRef = useRef<EditorDragState | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [selectedElementId, setSelectedElementId] = useState<NormalLayoutElementId>("southHand");
+  const [selectedElementId, setSelectedElementId] =
+    useState<NormalLayoutElementId>("southHand");
   const [guidesVisible, setGuidesVisible] = useState(false);
   const [inspectorVisible, setInspectorVisible] = useState(true);
+  const editorHotkeys = getHotkeysForContext("table_editor", hotkeyDefinitions);
 
   function snapElementPosition(
     elementId: NormalLayoutElementId,
@@ -1935,8 +3487,14 @@ function NormalLayoutEditor({
     const spec = NORMAL_LAYOUT_ELEMENT_SPECS[elementId];
     const halfWidth = spec.width / 2;
     const halfHeight = spec.height / 2;
-    const clampedX = Math.min(surfaceRect.width - halfWidth, Math.max(halfWidth, centerX));
-    const clampedY = Math.min(surfaceRect.height - halfHeight, Math.max(halfHeight, centerY));
+    const clampedX = Math.min(
+      surfaceRect.width - halfWidth,
+      Math.max(halfWidth, centerX)
+    );
+    const clampedY = Math.min(
+      surfaceRect.height - halfHeight,
+      Math.max(halfHeight, centerY)
+    );
     const snappedX = Math.round(clampedX / 10) * 10;
     const snappedY = Math.round(clampedY / 10) * 10;
 
@@ -1946,46 +3504,79 @@ function NormalLayoutEditor({
     };
   }
 
-  const moveSelectedBy = useCallback((deltaX: number, deltaY: number) => {
-    const surface = surfaceRef.current;
-    if (!surface) {
-      return;
-    }
+  const moveSelectedBy = useCallback(
+    (deltaX: number, deltaY: number) => {
+      const surface = surfaceRef.current;
+      if (!surface) {
+        return;
+      }
 
-    const rect = surface.getBoundingClientRect();
-    const current = normalTableLayout[selectedElementId];
-    const next = snapElementPosition(selectedElementId, rect, current.x * rect.width + deltaX, current.y * rect.height + deltaY);
-    onNormalTableLayoutChange(updateLayoutElement(normalTableLayout, selectedElementId, next));
-  }, [normalTableLayout, onNormalTableLayoutChange, selectedElementId]);
+      const rect = surface.getBoundingClientRect();
+      const current = normalTableLayout[selectedElementId];
+      const next = snapElementPosition(
+        selectedElementId,
+        rect,
+        current.x * rect.width + deltaX,
+        current.y * rect.height + deltaY
+      );
+      onNormalTableLayoutChange(
+        updateLayoutElement(normalTableLayout, selectedElementId, next)
+      );
+    },
+    [normalTableLayout, onNormalTableLayoutChange, selectedElementId]
+  );
 
-  const rotateSelectedBy = useCallback((deltaRotation: number) => {
-    const current = normalTableLayout[selectedElementId];
-    onNormalTableLayoutChange(
-      updateLayoutElement(normalTableLayout, selectedElementId, { rotation: current.rotation + deltaRotation })
-    );
-  }, [normalTableLayout, onNormalTableLayoutChange, selectedElementId]);
+  const rotateSelectedBy = useCallback(
+    (deltaRotation: number) => {
+      const current = normalTableLayout[selectedElementId];
+      onNormalTableLayoutChange(
+        updateLayoutElement(normalTableLayout, selectedElementId, {
+          rotation: current.rotation + deltaRotation
+        })
+      );
+    },
+    [normalTableLayout, onNormalTableLayoutChange, selectedElementId]
+  );
 
-  const cycleSelectedElement = useCallback((delta: number) => {
-    const currentIndex = NORMAL_LAYOUT_EDITOR_ORDER.indexOf(selectedElementId);
-    const nextIndex =
-      (currentIndex + delta + NORMAL_LAYOUT_EDITOR_ORDER.length) % NORMAL_LAYOUT_EDITOR_ORDER.length;
-    setSelectedElementId(NORMAL_LAYOUT_EDITOR_ORDER[nextIndex]);
-  }, [selectedElementId]);
+  const cycleSelectedElement = useCallback(
+    (delta: number) => {
+      const currentIndex =
+        NORMAL_LAYOUT_EDITOR_ORDER.indexOf(selectedElementId);
+      const nextIndex =
+        (currentIndex + delta + NORMAL_LAYOUT_EDITOR_ORDER.length) %
+        NORMAL_LAYOUT_EDITOR_ORDER.length;
+      setSelectedElementId(NORMAL_LAYOUT_EDITOR_ORDER[nextIndex]);
+    },
+    [selectedElementId]
+  );
 
   const selectedElement = normalTableLayout[selectedElementId];
-  const opposingElementId = NORMAL_LAYOUT_OPPOSING_ELEMENT_IDS[selectedElementId] ?? null;
-  const opposingElement = opposingElementId ? normalTableLayout[opposingElementId] : null;
+  const opposingElementId =
+    NORMAL_LAYOUT_OPPOSING_ELEMENT_IDS[selectedElementId] ?? null;
+  const opposingElement = opposingElementId
+    ? normalTableLayout[opposingElementId]
+    : null;
   const surfaceRect = surfaceRef.current?.getBoundingClientRect() ?? null;
   const xAlignmentThreshold = surfaceRect ? 5 / surfaceRect.width : 0.0005;
   const yAlignmentThreshold = surfaceRect ? 5 / surfaceRect.height : 0.0005;
   const hasVerticalAlignment = Boolean(
-    opposingElement && Math.abs(selectedElement.x - opposingElement.x) <= xAlignmentThreshold
+    opposingElement &&
+    Math.abs(selectedElement.x - opposingElement.x) <= xAlignmentThreshold
   );
   const hasHorizontalAlignment = Boolean(
-    opposingElement && Math.abs(selectedElement.y - opposingElement.y) <= yAlignmentThreshold
+    opposingElement &&
+    Math.abs(selectedElement.y - opposingElement.y) <= yAlignmentThreshold
   );
-  const verticalGuideState = hasVerticalAlignment ? (hasHorizontalAlignment ? "both" : "vertical") : "idle";
-  const horizontalGuideState = hasHorizontalAlignment ? (hasVerticalAlignment ? "both" : "horizontal") : "idle";
+  const verticalGuideState = hasVerticalAlignment
+    ? hasHorizontalAlignment
+      ? "both"
+      : "vertical"
+    : "idle";
+  const horizontalGuideState = hasHorizontalAlignment
+    ? hasVerticalAlignment
+      ? "both"
+      : "horizontal"
+    : "idle";
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
@@ -2003,7 +3594,9 @@ function NormalLayoutEditor({
         dragState.startElement.y * dragState.surfaceRect.height + deltaY
       );
 
-      onNormalTableLayoutChange(updateLayoutElement(normalTableLayout, dragState.elementId, next));
+      onNormalTableLayoutChange(
+        updateLayoutElement(normalTableLayout, dragState.elementId, next)
+      );
     };
 
     const handlePointerUp = () => {
@@ -2020,47 +3613,57 @@ function NormalLayoutEditor({
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if ((event.key === "g" || event.key === "G") && event.ctrlKey) {
-        event.preventDefault();
-        setGuidesVisible((current) => !current);
+      const matchedHotkey = findMatchingHotkey(
+        event,
+        ["table_editor"],
+        hotkeyDefinitions
+      );
+      if (!matchedHotkey) {
         return;
       }
 
-      if ((event.key === "d" || event.key === "D") && event.ctrlKey) {
-        event.preventDefault();
-        setInspectorVisible((current) => !current);
-        return;
-      }
+      event.preventDefault();
 
-      const step = event.shiftKey ? 50 : 10;
+      switch (matchedHotkey.id) {
+        case "toggle_layout_guides":
+          setGuidesVisible((current) => !current);
+          break;
+        case "toggle_layout_inspector":
+          setInspectorVisible((current) => !current);
+          break;
+        case "export_layout_json":
+          onExportNormalTableLayout();
+          break;
+        case "next_layout_element":
+          cycleSelectedElement(1);
+          break;
+        case "previous_layout_element":
+          cycleSelectedElement(-1);
+          break;
+        case "nudge_layout_element":
+        case "nudge_layout_element_fast": {
+          const step = matchedHotkey.id === "nudge_layout_element_fast" ? 50 : 10;
 
-      switch (event.key) {
-        case "Tab":
-          event.preventDefault();
-          cycleSelectedElement(event.shiftKey ? -1 : 1);
+          switch (event.key) {
+            case "ArrowUp":
+              moveSelectedBy(0, -step);
+              break;
+            case "ArrowDown":
+              moveSelectedBy(0, step);
+              break;
+            case "ArrowLeft":
+              moveSelectedBy(-step, 0);
+              break;
+            case "ArrowRight":
+              moveSelectedBy(step, 0);
+              break;
+          }
           break;
-        case "ArrowUp":
-          event.preventDefault();
-          moveSelectedBy(0, -step);
-          break;
-        case "ArrowDown":
-          event.preventDefault();
-          moveSelectedBy(0, step);
-          break;
-        case "ArrowLeft":
-          event.preventDefault();
-          moveSelectedBy(-step, 0);
-          break;
-        case "ArrowRight":
-          event.preventDefault();
-          moveSelectedBy(step, 0);
-          break;
-        case "[":
-          event.preventDefault();
+        }
+        case "rotate_layout_element_ccw":
           rotateSelectedBy(-15);
           break;
-        case "]":
-          event.preventDefault();
+        case "rotate_layout_element_cw":
           rotateSelectedBy(15);
           break;
       }
@@ -2068,9 +3671,18 @@ function NormalLayoutEditor({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [cycleSelectedElement, moveSelectedBy, rotateSelectedBy]);
+  }, [
+    cycleSelectedElement,
+    hotkeyDefinitions,
+    moveSelectedBy,
+    onExportNormalTableLayout,
+    rotateSelectedBy
+  ]);
 
-  function startDrag(elementId: NormalLayoutElementId, event: ReactPointerEvent<HTMLButtonElement>) {
+  function startDrag(
+    elementId: NormalLayoutElementId,
+    event: ReactPointerEvent<HTMLButtonElement>
+  ) {
     event.preventDefault();
     event.stopPropagation();
 
@@ -2089,7 +3701,9 @@ function NormalLayoutEditor({
     };
   }
 
-  async function handleLayoutFileSelection(event: ReactChangeEvent<HTMLInputElement>) {
+  async function handleLayoutFileSelection(
+    event: ReactChangeEvent<HTMLInputElement>
+  ) {
     const file = event.target.files?.[0];
     if (!file) {
       return;
@@ -2110,7 +3724,11 @@ function NormalLayoutEditor({
   }
 
   return (
-    <div ref={surfaceRef} className="normal-layout-editor" aria-label="Table layout editor">
+    <div
+      ref={surfaceRef}
+      className="normal-layout-editor"
+      aria-label="Table layout editor"
+    >
       {guidesVisible && (
         <>
           <div
@@ -2156,7 +3774,8 @@ function NormalLayoutEditor({
                 }}
               >
                 <span className="normal-layout-editor__opposing-name">
-                  Opposing: {NORMAL_LAYOUT_ELEMENT_SPECS[opposingElementId].label}
+                  Opposing:{" "}
+                  {NORMAL_LAYOUT_ELEMENT_SPECS[opposingElementId].label}
                 </span>
               </div>
             </>
@@ -2172,7 +3791,11 @@ function NormalLayoutEditor({
           <button
             key={elementId}
             type="button"
-            className={isSelected ? "normal-layout-editor__element is-selected" : "normal-layout-editor__element"}
+            className={
+              isSelected
+                ? "normal-layout-editor__element is-selected"
+                : "normal-layout-editor__element"
+            }
             style={{
               ...anchorStyle(normalTableLayout[elementId]),
               width: `${spec.width}px`,
@@ -2181,8 +3804,12 @@ function NormalLayoutEditor({
             onClick={() => setSelectedElementId(elementId)}
             onPointerDown={(event) => startDrag(elementId, event)}
           >
-            <span className="normal-layout-editor__element-name">{spec.label}</span>
-            {isSelected && <span className="normal-layout-editor__element-handle" />}
+            <span className="normal-layout-editor__element-name">
+              {spec.label}
+            </span>
+            {isSelected && (
+              <span className="normal-layout-editor__element-handle" />
+            )}
           </button>
         );
       })}
@@ -2197,11 +3824,16 @@ function NormalLayoutEditor({
 
       {inspectorVisible && (
         <aside className="normal-layout-editor__inspector">
-          <strong>{NORMAL_LAYOUT_ELEMENT_SPECS[selectedElementId].label}</strong>
+          <strong>
+            {NORMAL_LAYOUT_ELEMENT_SPECS[selectedElementId].label}
+          </strong>
           <span>
-            x {normalTableLayout[selectedElementId].x.toFixed(3)} | y {normalTableLayout[selectedElementId].y.toFixed(3)}
+            x {normalTableLayout[selectedElementId].x.toFixed(3)} | y{" "}
+            {normalTableLayout[selectedElementId].y.toFixed(3)}
           </span>
-          <span>rotation {normalTableLayout[selectedElementId].rotation}deg</span>
+          <span>
+            rotation {normalTableLayout[selectedElementId].rotation}deg
+          </span>
           <div className="normal-layout-editor__controls">
             <button type="button" onClick={() => cycleSelectedElement(-1)}>
               Prev
@@ -2215,7 +3847,10 @@ function NormalLayoutEditor({
             <button type="button" onClick={() => rotateSelectedBy(15)}>
               Rotate +15
             </button>
-            <button type="button" onClick={() => setGuidesVisible((current) => !current)}>
+            <button
+              type="button"
+              onClick={() => setGuidesVisible((current) => !current)}
+            >
               {guidesVisible ? "Hide Guides" : "Show Guides"}
             </button>
             <button type="button" onClick={() => fileInputRef.current?.click()}>
@@ -2225,17 +3860,29 @@ function NormalLayoutEditor({
               type="button"
               onClick={() =>
                 onNormalTableLayoutChange(
-                  updateLayoutElement(normalTableLayout, selectedElementId, DEFAULT_NORMAL_TABLE_LAYOUT[selectedElementId])
+                  updateLayoutElement(
+                    normalTableLayout,
+                    selectedElementId,
+                    DEFAULT_NORMAL_TABLE_LAYOUT[selectedElementId]
+                  )
                 )
               }
             >
               Reset Selected
             </button>
-            <button type="button" onClick={() => onNormalTableLayoutImport(DEFAULT_NORMAL_TABLE_LAYOUT_CONFIG)}>
+            <button
+              type="button"
+              onClick={() =>
+                onNormalTableLayoutImport(DEFAULT_NORMAL_TABLE_LAYOUT_CONFIG)
+              }
+            >
               Reset All
             </button>
           </div>
-          <div className="normal-layout-editor__legend" aria-label="Alignment guide legend">
+          <div
+            className="normal-layout-editor__legend"
+            aria-label="Alignment guide legend"
+          >
             <span className="normal-layout-editor__legend-item">
               <span className="normal-layout-editor__legend-swatch normal-layout-editor__legend-swatch--vertical" />
               Red = vertical
@@ -2249,42 +3896,364 @@ function NormalLayoutEditor({
               Green = both
             </span>
           </div>
-          <p>Drag to move. Arrow keys nudge by 10px, Shift+Arrow by 50px, [ and ] rotate. Ctrl+G toggles guides, Ctrl+D hides this box, Ctrl+S exports JSON.</p>
+          <div className="normal-layout-editor__hotkeys">
+            {editorHotkeys.map((hotkey) => (
+              <span
+                key={hotkey.id}
+                className="normal-layout-editor__hotkey"
+              >
+                <kbd>{hotkey.comboLabel}</kbd>
+                <span>{hotkey.actionLabel}</span>
+              </span>
+            ))}
+          </div>
         </aside>
       )}
     </div>
   );
 }
 
+type NormalLayoutFailure = {
+  code: string;
+  message: string;
+  metrics: Record<string, number | string>;
+};
+
+function createNormalLayoutFailureSignature(failures: NormalLayoutFailure[]) {
+  return failures
+    .map(
+      (failure) => `${failure.code}:${JSON.stringify(failure.metrics)}`
+    )
+    .join("|");
+}
+
+function useNormalLayoutDiagnostics(config: {
+  rootRef: { current: HTMLElement | null };
+  dependencyKey: string;
+}) {
+  const [failures, setFailures] = useState<NormalLayoutFailure[]>([]);
+  const lastSignatureRef = useRef("");
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) {
+      return;
+    }
+
+    const root = config.rootRef.current;
+    if (!root) {
+      return;
+    }
+
+    let frameId = 0;
+
+    const runChecks = () => {
+      frameId = 0;
+
+      const nextFailures: NormalLayoutFailure[] = [];
+      const docElement = document.documentElement;
+      const viewportLabel = `${window.innerWidth}x${window.innerHeight}`;
+
+      if (docElement.scrollHeight > window.innerHeight + 1) {
+        nextFailures.push({
+          code: "document-height",
+          message: "Document scroll height exceeds the viewport height.",
+          metrics: {
+            viewport: viewportLabel,
+            scrollHeight: docElement.scrollHeight,
+            innerHeight: window.innerHeight
+          }
+        });
+      }
+
+      if (docElement.scrollWidth > window.innerWidth + 1) {
+        nextFailures.push({
+          code: "document-width",
+          message: "Document scroll width exceeds the viewport width.",
+          metrics: {
+            viewport: viewportLabel,
+            scrollWidth: docElement.scrollWidth,
+            innerWidth: window.innerWidth
+          }
+        });
+      }
+
+      const containers = [
+        root,
+        ...root.querySelectorAll<HTMLElement>("[data-layout-container]")
+      ];
+
+      for (const container of containers) {
+        const containerName =
+          container.dataset.layoutContainer ?? "normal-root";
+
+        if (container.scrollHeight > container.clientHeight + 1) {
+          nextFailures.push({
+            code: `container-height-${containerName}`,
+            message: "A game container is vertically scrolling.",
+            metrics: {
+              viewport: viewportLabel,
+              container: containerName,
+              scrollHeight: container.scrollHeight,
+              clientHeight: container.clientHeight
+            }
+          });
+        }
+
+        if (container.scrollWidth > container.clientWidth + 1) {
+          nextFailures.push({
+            code: `container-width-${containerName}`,
+            message: "A game container is horizontally scrolling.",
+            metrics: {
+              viewport: viewportLabel,
+              container: containerName,
+              scrollWidth: container.scrollWidth,
+              clientWidth: container.clientWidth
+            }
+          });
+        }
+      }
+
+      root.querySelectorAll<HTMLElement>("[data-seat-region]").forEach((seat) => {
+        const seatRect = seat.getBoundingClientRect();
+        const seatName = seat.dataset.seatRegion ?? "unknown-seat";
+
+        seat
+          .querySelectorAll<HTMLElement>("[data-seat-region-card]")
+          .forEach((card) => {
+            const cardRect = card.getBoundingClientRect();
+
+            if (
+              cardRect.top < seatRect.top - 1 ||
+              cardRect.right > seatRect.right + 1 ||
+              cardRect.bottom > seatRect.bottom + 1 ||
+              cardRect.left < seatRect.left - 1
+            ) {
+              nextFailures.push({
+                code: `seat-card-${seatName}-${card.dataset.seatRegionCard ?? "card"}`,
+                message: "A seat card escaped its region bounds.",
+                metrics: {
+                  viewport: viewportLabel,
+                  seat: seatName,
+                  cardTop: cardRect.top,
+                  cardRight: cardRect.right,
+                  cardBottom: cardRect.bottom,
+                  cardLeft: cardRect.left,
+                  seatTop: seatRect.top,
+                  seatRight: seatRect.right,
+                  seatBottom: seatRect.bottom,
+                  seatLeft: seatRect.left
+                }
+              });
+            }
+          });
+      });
+
+      const actionRow = root.querySelector<HTMLElement>("[data-action-row]");
+      if (actionRow) {
+        const actionRect = actionRow.getBoundingClientRect();
+
+        if (actionRect.bottom > window.innerHeight + 1) {
+          nextFailures.push({
+            code: "action-row-bottom",
+            message: "The action row fell below the viewport.",
+            metrics: {
+              viewport: viewportLabel,
+              actionBottom: actionRect.bottom,
+              innerHeight: window.innerHeight
+            }
+          });
+        }
+      }
+
+      const centerZone = root.querySelector<HTMLElement>(
+        "[data-layout-container='center-zone']"
+      );
+      const referenceCard = root.querySelector<HTMLElement>(
+        ".normal-card--local, .normal-card--seat"
+      );
+      if (centerZone) {
+        const centerRect = centerZone.getBoundingClientRect();
+        const referenceCardRect = referenceCard?.getBoundingClientRect() ?? null;
+
+        root.querySelectorAll<HTMLElement>("[data-pass-lane]").forEach((lane) => {
+          const laneRect = lane.getBoundingClientRect();
+          const laneName = lane.dataset.passLane ?? "pass-lane";
+
+          if (
+            laneRect.top < centerRect.top - 1 ||
+            laneRect.right > centerRect.right + 1 ||
+            laneRect.bottom > centerRect.bottom + 1 ||
+            laneRect.left < centerRect.left - 1
+          ) {
+            nextFailures.push({
+              code: `pass-lane-center-${laneName}`,
+              message: "A pass lane escaped the center play zone.",
+              metrics: {
+                viewport: viewportLabel,
+                lane: laneName,
+                laneTop: laneRect.top,
+                laneRight: laneRect.right,
+                laneBottom: laneRect.bottom,
+                laneLeft: laneRect.left,
+                centerTop: centerRect.top,
+                centerRight: centerRect.right,
+                centerBottom: centerRect.bottom,
+                centerLeft: centerRect.left
+              }
+            });
+          }
+
+          if (
+            referenceCardRect &&
+            (laneRect.width > referenceCardRect.width + 1 ||
+              laneRect.height > referenceCardRect.height + 1)
+          ) {
+            nextFailures.push({
+              code: `pass-lane-size-${laneName}`,
+              message: "A pass lane grew larger than a hand card.",
+              metrics: {
+                viewport: viewportLabel,
+                lane: laneName,
+                laneWidth: laneRect.width,
+                laneHeight: laneRect.height,
+                cardWidth: referenceCardRect.width,
+                cardHeight: referenceCardRect.height
+              }
+            });
+          }
+        });
+      }
+
+      const nextSignature = createNormalLayoutFailureSignature(nextFailures);
+
+      if (
+        nextFailures.length > 0 &&
+        nextSignature !== lastSignatureRef.current
+      ) {
+        nextFailures.forEach((failure) => {
+          console.error(`[normal-layout] ${failure.message}`, failure.metrics);
+        });
+      }
+
+      lastSignatureRef.current = nextSignature;
+      setFailures(nextFailures);
+    };
+
+    const scheduleChecks = () => {
+      if (frameId !== 0) {
+        return;
+      }
+
+      frameId = window.requestAnimationFrame(runChecks);
+    };
+
+    scheduleChecks();
+
+    const observer = new ResizeObserver(() => scheduleChecks());
+    observer.observe(root);
+    window.addEventListener("resize", scheduleChecks);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", scheduleChecks);
+      if (frameId !== 0) {
+        window.cancelAnimationFrame(frameId);
+      }
+    };
+  }, [config.dependencyKey, config.rootRef]);
+
+  return failures;
+}
+
 export function NormalGameTableView(props: GameTableViewProps) {
+  useNormalViewportLock();
+
+  const { ref: viewportRef, size: viewportSize } =
+    useElementSize<HTMLElement>();
+  const seatByPosition = Object.fromEntries(
+    props.seatViews.map((seatView) => [seatView.position, seatView])
+  ) as Record<SeatVisualPosition, SeatView>;
+  const layoutMetrics = computeNormalViewportLayoutMetrics({
+    viewportWidth: viewportSize.width,
+    viewportHeight: viewportSize.height,
+    topCount: seatByPosition.top.cards.length,
+    bottomCount: props.sortedLocalHand.length,
+    leftCount: seatByPosition.left.cards.length,
+    rightCount: seatByPosition.right.cards.length,
+    hasVariantPicker: props.matchingPlayActions.length > 1,
+    hasWishPicker: Boolean(props.activePlayVariant?.availableWishRanks)
+  });
+  const layoutStyle = {
+    ...normalTableLayoutTokenStyle(props.normalTableLayoutTokens),
+    "--normal-shell-pad-x": `${layoutMetrics.shellPaddingX}px`,
+    "--normal-shell-pad-y": `${layoutMetrics.shellPaddingY}px`,
+    "--normal-band-gap": `${layoutMetrics.bandGap}px`,
+    "--normal-header-height": `${layoutMetrics.headerHeight}px`,
+    "--normal-north-height": `${layoutMetrics.northBandHeight}px`,
+    "--normal-south-height": `${layoutMetrics.southBandHeight}px`,
+    "--normal-action-height": `${layoutMetrics.actionBandHeight}px`,
+    "--normal-side-column-width": `${layoutMetrics.sideColumnWidth}px`,
+    "--normal-center-column-width": `${layoutMetrics.centerColumnWidth}px`,
+    "--normal-seat-inset-x": `${layoutMetrics.seatInsetX}px`,
+    "--normal-center-inset": `${layoutMetrics.centerInset}px`,
+    "--normal-card-width": `${layoutMetrics.cardWidth}px`,
+    "--normal-card-height": `${layoutMetrics.cardHeight}px`,
+    "--normal-route-card-width": `${layoutMetrics.routeCardWidth}px`,
+    "--normal-route-card-height": `${layoutMetrics.routeCardHeight}px`,
+    "--normal-selected-lift": `${layoutMetrics.selectedLift}px`,
+    "--normal-top-card-step": `${layoutMetrics.topCardStep}px`,
+    "--normal-bottom-card-step": `${layoutMetrics.bottomCardStep}px`,
+    "--normal-side-card-step": `${layoutMetrics.sideCardStep}px`
+  } as CSSProperties;
+  useNormalLayoutDiagnostics({
+    rootRef: viewportRef,
+    dependencyKey: [
+      viewportSize.width,
+      viewportSize.height,
+      props.state.phase,
+      props.sortedLocalHand.length,
+      props.selectedCardIds.length,
+      props.matchingPlayActions.length,
+      props.activePlayVariant?.availableWishRanks?.length ?? 0,
+      props.passRouteViews.length
+    ].join(":")
+  });
+
   return (
     <main className="tabletop-app tabletop-app--normal">
-      <section className="normal-layout">
-        <button type="button" className="mode-toggle mode-toggle--normal" onClick={props.onToggleMode}>
-          Ctrl+D Debug
-        </button>
+      <section
+        ref={viewportRef}
+        className="normal-viewport"
+        style={layoutStyle}
+        data-layout-container="normal-viewport"
+      >
+        <div className="normal-viewport__board" data-layout-container="board">
+          <GameChromeMenu
+            variant="normal"
+            isOpen={props.mainMenuOpen}
+            uiMode={props.uiMode}
+            layoutEditorActive={props.layoutEditorActive}
+            onMainMenuOpenChange={props.onMainMenuOpenChange}
+            onUiCommand={props.onUiCommand}
+          />
+          <header
+            className="normal-header-band"
+            data-layout-container="header-band"
+          >
+            <div className="normal-header-band__spacer" aria-hidden="true" />
+            <div className="normal-scoreboard">
+              <strong>
+                NS {props.derived.matchScore["team-0"]} :{" "}
+                {props.derived.matchScore["team-1"]} EW
+              </strong>
+            </div>
+            <div className="normal-header-band__spacer" aria-hidden="true" />
+          </header>
 
-        <div
-          className={props.layoutEditorActive ? "normal-table normal-table--editing" : "normal-table"}
-          style={normalTableLayoutTokenStyle(props.normalTableLayoutTokens)}
-        >
-          <div className="normal-scoreboard" style={anchorStyle(props.normalTableLayout.scoreBadge)}>
-            <strong>
-              NS {props.derived.matchScore["team-0"]} : {props.derived.matchScore["team-1"]} EW
-            </strong>
-          </div>
-
-          <div className="normal-table__felt" />
-
-          {props.seatViews.map((seatView) => (
-            <NormalSeatLabel key={`${seatView.seat}-label`} normalTableLayout={props.normalTableLayout} seatView={seatView} />
-          ))}
-
-          {props.seatViews.map((seatView) => (
+          <div className="normal-grid" data-layout-container="table-grid">
             <NormalSeat
-              key={seatView.seat}
-              normalTableLayout={props.normalTableLayout}
-              seatView={seatView}
+              layoutMetrics={layoutMetrics}
+              seatView={seatByPosition.top}
               sortedLocalHand={props.sortedLocalHand}
               localCanInteract={props.localCanInteract}
               localPassInteractionEnabled={props.localPassInteractionEnabled}
@@ -2292,87 +4261,160 @@ export function NormalGameTableView(props: GameTableViewProps) {
               selectedCardIds={props.selectedCardIds}
               onLocalCardClick={props.onLocalCardClick}
             />
-          ))}
 
-          <TableSurface
-            variant="normal"
-            normalTableLayout={props.normalTableLayout}
-            state={props.state}
-            derived={props.derived}
-            controlHint={props.controlHint}
-            displayedTrick={props.displayedTrick}
-            trickIsResolving={props.trickIsResolving}
-            seatRelativePlays={props.seatRelativePlays}
-            tablePassGroups={props.tablePassGroups}
-            cardLookup={props.cardLookup}
-          />
+            <div
+              className="normal-middle-band"
+              data-layout-container="middle-band"
+            >
+              <NormalSeat
+                layoutMetrics={layoutMetrics}
+                seatView={seatByPosition.left}
+                sortedLocalHand={props.sortedLocalHand}
+                localCanInteract={props.localCanInteract}
+                localPassInteractionEnabled={props.localPassInteractionEnabled}
+                localLegalCardIds={props.localLegalCardIds}
+                selectedCardIds={props.selectedCardIds}
+                onLocalCardClick={props.onLocalCardClick}
+              />
+
+              <section
+                className="normal-center-zone"
+                data-layout-container="center-zone"
+              >
+                <div className="normal-table__felt" />
+                <TableSurface
+                  variant="normal"
+                  normalTableLayout={props.normalTableLayout}
+                  state={props.state}
+                  derived={props.derived}
+                  controlHint={props.controlHint}
+                  displayedTrick={props.displayedTrick}
+                  trickIsResolving={props.trickIsResolving}
+                  seatRelativePlays={props.seatRelativePlays}
+                  tablePassGroups={props.tablePassGroups}
+                  cardLookup={props.cardLookup}
+                />
+              </section>
+
+              <NormalSeat
+                layoutMetrics={layoutMetrics}
+                seatView={seatByPosition.right}
+                sortedLocalHand={props.sortedLocalHand}
+                localCanInteract={props.localCanInteract}
+                localPassInteractionEnabled={props.localPassInteractionEnabled}
+                localLegalCardIds={props.localLegalCardIds}
+                selectedCardIds={props.selectedCardIds}
+                onLocalCardClick={props.onLocalCardClick}
+              />
+            </div>
+
+            <NormalSeat
+              layoutMetrics={layoutMetrics}
+              seatView={seatByPosition.bottom}
+              sortedLocalHand={props.sortedLocalHand}
+              localCanInteract={props.localCanInteract}
+              localPassInteractionEnabled={props.localPassInteractionEnabled}
+              localLegalCardIds={props.localLegalCardIds}
+              selectedCardIds={props.selectedCardIds}
+              onLocalCardClick={props.onLocalCardClick}
+            />
+
+            <section
+              className="normal-bottom-controls"
+              data-layout-container="action-band"
+              data-action-row="true"
+            >
+              {props.matchingPlayActions.length > 1 && (
+                <div className="normal-inline-controls">
+                  <div className="variant-row variant-row--normal">
+                    {props.matchingPlayActions.map((action) => {
+                      const key = buildPlayVariantKey(action);
+                      const activeKey = props.activePlayVariant
+                        ? buildPlayVariantKey(props.activePlayVariant)
+                        : key;
+
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          className={
+                            key === activeKey
+                              ? "variant-pill is-active"
+                              : "variant-pill"
+                          }
+                          onClick={() => props.onVariantSelect(key)}
+                        >
+                          {formatCombinationKind(action.combination.kind)}
+                          {action.phoenixAsRank
+                            ? ` as ${formatRank(action.phoenixAsRank)}`
+                            : ""}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {props.activePlayVariant?.availableWishRanks && (
+                <div className="normal-inline-controls">
+                  <div className="wish-picker wish-picker--normal">
+                    <p>Wish</p>
+                    <div className="wish-picker__options">
+                      {props.activePlayVariant.availableWishRanks.map(
+                        (rank) => (
+                          <button
+                            key={rank}
+                            type="button"
+                            className={
+                              rank === props.resolvedWishRank
+                                ? "wish-chip wish-chip--active"
+                                : "wish-chip"
+                            }
+                            onClick={() => props.onWishRankSelect(rank)}
+                          >
+                            {formatRank(rank)}
+                          </button>
+                        )
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <NormalActionStrip
+                normalActionRail={props.normalActionRail}
+                localDragonRecipients={props.localDragonRecipients}
+                onDragonRecipientSelect={props.onDragonRecipientSelect}
+                onNormalAction={props.onNormalAction}
+              />
+            </section>
+          </div>
+
           <NormalPassStagingRegions
             normalTableLayout={props.normalTableLayout}
+            layoutMetrics={layoutMetrics}
             passRouteViews={props.passRouteViews}
             selectedPassTarget={props.selectedPassTarget}
             cardLookup={props.cardLookup}
             onPassTargetSelect={props.onPassTargetSelect}
             onPassLaneDrop={props.onPassLaneDrop}
           />
-          <section className="normal-bottom-controls" style={anchorStyle(props.normalTableLayout.actionRow)}>
-            {props.matchingPlayActions.length > 1 && (
-              <div className="normal-inline-controls">
-                <div className="variant-row variant-row--normal">
-                  {props.matchingPlayActions.map((action) => {
-                    const key = buildPlayVariantKey(action);
-                    const activeKey = props.activePlayVariant ? buildPlayVariantKey(props.activePlayVariant) : key;
-
-                    return (
-                      <button
-                        key={key}
-                        type="button"
-                        className={key === activeKey ? "variant-pill is-active" : "variant-pill"}
-                        onClick={() => props.onVariantSelect(key)}
-                      >
-                        {formatCombinationKind(action.combination.kind)}
-                        {action.phoenixAsRank ? ` as ${formatRank(action.phoenixAsRank)}` : ""}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {props.activePlayVariant?.availableWishRanks && (
-              <div className="normal-inline-controls">
-                <div className="wish-picker wish-picker--normal">
-                  <p>Wish</p>
-                  <div className="wish-picker__options">
-                    {props.activePlayVariant.availableWishRanks.map((rank) => (
-                      <button
-                        key={rank}
-                        type="button"
-                        className={rank === props.resolvedWishRank ? "wish-chip wish-chip--active" : "wish-chip"}
-                        onClick={() => props.onWishRankSelect(rank)}
-                      >
-                        {formatRank(rank)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <NormalActionStrip
-              normalActionRail={props.normalActionRail}
-              localDragonRecipients={props.localDragonRecipients}
-              onDragonRecipientSelect={props.onDragonRecipientSelect}
-              onNormalAction={props.onNormalAction}
-            />
-          </section>
 
           {props.layoutEditorActive && (
             <NormalLayoutEditor
               normalTableLayout={props.normalTableLayout}
               onNormalTableLayoutChange={props.onNormalTableLayoutChange}
               onNormalTableLayoutImport={props.onNormalTableLayoutImport}
+              onExportNormalTableLayout={props.onExportNormalTableLayout}
+              hotkeyDefinitions={props.hotkeyDefinitions}
             />
           )}
+
+          <GameDialogLayer
+            activeDialog={props.activeDialog}
+            hotkeyDefinitions={props.hotkeyDefinitions}
+            onUiCommand={props.onUiCommand}
+          />
         </div>
       </section>
     </main>
@@ -2384,11 +4426,19 @@ export function DebugGameTableView(props: GameTableViewProps) {
     <main className="tabletop-app">
       <header className="topbar">
         <div className="topbar__intro">
+          <GameChromeMenu
+            variant="debug"
+            isOpen={props.mainMenuOpen}
+            uiMode={props.uiMode}
+            layoutEditorActive={props.layoutEditorActive}
+            onMainMenuOpenChange={props.onMainMenuOpenChange}
+            onUiCommand={props.onUiCommand}
+          />
           <p className="topbar__eyebrow">Debug / AI Mode</p>
           <h1>Tichu Table</h1>
           <p className="topbar__summary">
-            Shared live game state with richer AI rationale, legality, and engine metadata. Press Ctrl+D to return to
-            the normal table.
+            Shared live game state with richer AI rationale, legality, and
+            engine metadata. Press Ctrl+D to return to the normal table.
           </p>
         </div>
 
@@ -2406,7 +4456,8 @@ export function DebugGameTableView(props: GameTableViewProps) {
           <section className="status-card">
             <span className="status-card__label">Scoreboard</span>
             <strong>
-              Team 0 {props.derived.matchScore["team-0"]} : {props.derived.matchScore["team-1"]} Team 1
+              Team 0 {props.derived.matchScore["team-0"]} :{" "}
+              {props.derived.matchScore["team-1"]} Team 1
             </strong>
             <small>Shared engine state</small>
           </section>
@@ -2422,10 +4473,18 @@ export function DebugGameTableView(props: GameTableViewProps) {
             <span>Autoplay local seat</span>
           </label>
 
-          <button type="button" className="utility-button" onClick={props.onToggleMode}>
+          <button
+            type="button"
+            className="utility-button"
+            onClick={() => props.onUiCommand("toggle_debug_mode")}
+          >
             Return to Table
           </button>
-          <button type="button" className="utility-button utility-button--primary" onClick={props.onNewRound}>
+          <button
+            type="button"
+            className="utility-button utility-button--primary"
+            onClick={() => props.onUiCommand("new_game")}
+          >
             New Round
           </button>
         </div>
@@ -2467,7 +4526,9 @@ export function DebugGameTableView(props: GameTableViewProps) {
             <div className="action-dock__header">
               <div>
                 <p className="action-dock__eyebrow">Action Rail</p>
-                <strong className="action-dock__title">Available Actions</strong>
+                <strong className="action-dock__title">
+                  Available Actions
+                </strong>
               </div>
               <span className="action-dock__phase">{props.derived.phase}</span>
             </div>
@@ -2478,7 +4539,11 @@ export function DebugGameTableView(props: GameTableViewProps) {
                   <button
                     key={lane.target}
                     type="button"
-                    className={lane.target === props.selectedPassTarget ? "pass-lane is-selected" : "pass-lane"}
+                    className={
+                      lane.target === props.selectedPassTarget
+                        ? "pass-lane is-selected"
+                        : "pass-lane"
+                    }
                     onClick={() => props.onPassTargetSelect(lane.target)}
                   >
                     <span className="pass-lane__label">
@@ -2494,17 +4559,25 @@ export function DebugGameTableView(props: GameTableViewProps) {
               <div className="variant-row">
                 {props.matchingPlayActions.map((action) => {
                   const key = buildPlayVariantKey(action);
-                  const activeKey = props.activePlayVariant ? buildPlayVariantKey(props.activePlayVariant) : key;
+                  const activeKey = props.activePlayVariant
+                    ? buildPlayVariantKey(props.activePlayVariant)
+                    : key;
 
                   return (
                     <button
                       key={key}
                       type="button"
-                      className={key === activeKey ? "variant-pill is-active" : "variant-pill"}
+                      className={
+                        key === activeKey
+                          ? "variant-pill is-active"
+                          : "variant-pill"
+                      }
                       onClick={() => props.onVariantSelect(key)}
                     >
                       {formatCombinationKind(action.combination.kind)}
-                      {action.phoenixAsRank ? ` as ${formatRank(action.phoenixAsRank)}` : ""}
+                      {action.phoenixAsRank
+                        ? ` as ${formatRank(action.phoenixAsRank)}`
+                        : ""}
                     </button>
                   );
                 })}
@@ -2519,7 +4592,11 @@ export function DebugGameTableView(props: GameTableViewProps) {
                     <button
                       key={rank}
                       type="button"
-                      className={rank === props.resolvedWishRank ? "wish-chip wish-chip--active" : "wish-chip"}
+                      className={
+                        rank === props.resolvedWishRank
+                          ? "wish-chip wish-chip--active"
+                          : "wish-chip"
+                      }
                       onClick={() => props.onWishRankSelect(rank)}
                     >
                       {formatRank(rank)}
@@ -2547,56 +4624,87 @@ export function DebugGameTableView(props: GameTableViewProps) {
             <p className="debug-panel__eyebrow">AI Read</p>
             {props.lastAiDecision ? (
               <>
-                <strong className="debug-sidebar__title">{formatActorLabel(props.lastAiDecision.actor)}</strong>
-                <p className="debug-panel__copy">{props.lastAiDecision.explanation.selectedReasonSummary.join(" ")}</p>
+                <strong className="debug-sidebar__title">
+                  {formatActorLabel(props.lastAiDecision.actor)}
+                </strong>
+                <p className="debug-panel__copy">
+                  {props.lastAiDecision.explanation.selectedReasonSummary.join(
+                    " "
+                  )}
+                </p>
                 {props.lastAiDecision.explanation.selectedTags.length > 0 && (
                   <div className="debug-tag-list">
-                    {props.lastAiDecision.explanation.selectedTags.map((tag) => (
-                      <span key={tag} className="debug-tag">
-                        {formatPolicyTag(tag)}
-                      </span>
-                    ))}
+                    {props.lastAiDecision.explanation.selectedTags.map(
+                      (tag) => (
+                        <span key={tag} className="debug-tag">
+                          {formatPolicyTag(tag)}
+                        </span>
+                      )
+                    )}
                   </div>
                 )}
-                {props.lastAiDecision.explanation.selectedTeamplay?.partnerCalledTichu && (
+                {props.lastAiDecision.explanation.selectedTeamplay
+                  ?.partnerCalledTichu && (
                   <p className="debug-panel__copy debug-panel__copy--compact">
-                    Partner Tichu active • cards {props.lastAiDecision.explanation.selectedTeamplay.partnerCardCount} •
-                    immediate threat{" "}
-                    {props.lastAiDecision.explanation.selectedTeamplay.opponentImmediateWinRisk ? "yes" : "no"} •
-                    salvage{" "}
-                    {props.lastAiDecision.explanation.selectedTeamplay.teamSalvageIntervention ? "yes" : "no"}
+                    Partner Tichu active • cards{" "}
+                    {
+                      props.lastAiDecision.explanation.selectedTeamplay
+                        .partnerCardCount
+                    }{" "}
+                    • immediate threat{" "}
+                    {props.lastAiDecision.explanation.selectedTeamplay
+                      .opponentImmediateWinRisk
+                      ? "yes"
+                      : "no"}{" "}
+                    • salvage{" "}
+                    {props.lastAiDecision.explanation.selectedTeamplay
+                      .teamSalvageIntervention
+                      ? "yes"
+                      : "no"}
                   </p>
                 )}
                 <ol className="candidate-list">
-                  {props.lastAiDecision.explanation.candidateScores.slice(0, 5).map((candidate, index) => (
-                    <li key={`${candidate.score}-${index}`}>
-                      <strong>{describeAction(candidate.action)}</strong>
-                      <span>{candidate.score.toFixed(0)}</span>
-                      <small>{candidate.reasons.join(" ")}</small>
-                      {candidate.tags.length > 0 && (
-                        <div className="debug-tag-list">
-                          {candidate.tags.map((tag) => (
-                            <span key={`${candidate.score}-${tag}`} className="debug-tag debug-tag--muted">
-                              {formatPolicyTag(tag)}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </li>
-                  ))}
+                  {props.lastAiDecision.explanation.candidateScores
+                    .slice(0, 5)
+                    .map((candidate, index) => (
+                      <li key={`${candidate.score}-${index}`}>
+                        <strong>{describeAction(candidate.action)}</strong>
+                        <span>{candidate.score.toFixed(0)}</span>
+                        <small>{candidate.reasons.join(" ")}</small>
+                        {candidate.tags.length > 0 && (
+                          <div className="debug-tag-list">
+                            {candidate.tags.map((tag) => (
+                              <span
+                                key={`${candidate.score}-${tag}`}
+                                className="debug-tag debug-tag--muted"
+                              >
+                                {formatPolicyTag(tag)}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </li>
+                    ))}
                 </ol>
               </>
             ) : (
-              <p className="debug-panel__copy">AI rationale will appear here after the first automated decision.</p>
+              <p className="debug-panel__copy">
+                AI rationale will appear here after the first automated
+                decision.
+              </p>
             )}
           </section>
 
           <section className="debug-sidebar__section">
             <p className="debug-panel__eyebrow">Local Surface</p>
-            <strong className="debug-sidebar__title">Current legal actions</strong>
+            <strong className="debug-sidebar__title">
+              Current legal actions
+            </strong>
             <ul className="debug-list">
               {props.localActionSummary.length > 0 ? (
-                props.localActionSummary.map((summary) => <li key={summary}>{summary}</li>)
+                props.localActionSummary.map((summary) => (
+                  <li key={summary}>{summary}</li>
+                ))
               ) : (
                 <li>No local legal actions right now.</li>
               )}
@@ -2607,13 +4715,22 @@ export function DebugGameTableView(props: GameTableViewProps) {
             <p className="debug-panel__eyebrow">Recent Flow</p>
             <strong className="debug-sidebar__title">Event feed</strong>
             <ul className="debug-list">
-              {props.recentEvents.slice(-8).reverse().map((eventText, index) => (
-                <li key={`${eventText}-${index}`}>{eventText}</li>
-              ))}
+              {props.recentEvents
+                .slice(-8)
+                .reverse()
+                .map((eventText, index) => (
+                  <li key={`${eventText}-${index}`}>{eventText}</li>
+                ))}
             </ul>
           </section>
         </aside>
       </div>
+
+      <GameDialogLayer
+        activeDialog={props.activeDialog}
+        hotkeyDefinitions={props.hotkeyDefinitions}
+        onUiCommand={props.onUiCommand}
+      />
     </main>
   );
 }

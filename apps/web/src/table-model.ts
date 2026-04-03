@@ -8,14 +8,36 @@ import {
   type GameState,
   type LegalAction,
   type LegalActionMap,
+  type RoundPhase,
   type SeatId
 } from "@tichuml/engine";
 
 export const LOCAL_SEAT: SeatId = "seat-0";
 export const PASS_TARGETS = ["left", "partner", "right"] as const;
+export const EXCHANGE_PHASES = [
+  "pass_select",
+  "pass_reveal",
+  "exchange_complete"
+] as const;
 
 export type PassTarget = (typeof PASS_TARGETS)[number];
 export type HandSortMode = "rank" | "suit" | "combo";
+export type ExchangeFlowState =
+  | "inactive"
+  | "exchange_init"
+  | "exchange_selecting"
+  | "exchange_waiting_for_ai"
+  | "exchange_ready_to_resolve"
+  | "exchange_resolving"
+  | "exchange_complete";
+export type ExchangeDraftValidation = {
+  isValid: boolean;
+  isComplete: boolean;
+  missingTargets: PassTarget[];
+  selectedCardIds: string[];
+  duplicateCardIds: string[];
+  invalidCardIds: string[];
+};
 
 export type PlayLegalAction = Extract<LegalAction, { type: "play_cards" }>;
 
@@ -71,6 +93,95 @@ function getComboParticipationScore(cardId: string, playActions: PlayLegalAction
 
 export function createRoundSeed(index: number): string {
   return `milestone-4-round-${index}`;
+}
+
+export function getPassTargetSeat(sourceSeat: SeatId, target: PassTarget): SeatId {
+  switch (target) {
+    case "left":
+      return SEAT_IDS[(SEAT_IDS.indexOf(sourceSeat) + 3) % SEAT_IDS.length]!;
+    case "partner":
+      return SEAT_IDS[(SEAT_IDS.indexOf(sourceSeat) + 2) % SEAT_IDS.length]!;
+    case "right":
+      return SEAT_IDS[(SEAT_IDS.indexOf(sourceSeat) + 1) % SEAT_IDS.length]!;
+  }
+}
+
+export function isExchangePhase(phase: RoundPhase): boolean {
+  return EXCHANGE_PHASES.includes(phase as (typeof EXCHANGE_PHASES)[number]);
+}
+
+export function countSubmittedExchangeSeats(
+  state: Pick<GameState, "passSelections">
+): number {
+  return SEAT_IDS.filter((seat) => Boolean(state.passSelections[seat])).length;
+}
+
+export function areAllExchangeSelectionsSubmitted(
+  state: Pick<GameState, "passSelections">
+): boolean {
+  return countSubmittedExchangeSeats(state) === SEAT_IDS.length;
+}
+
+export function validateExchangeDraft(
+  draft: Partial<Record<PassTarget, string>>,
+  availableCardIds: readonly string[] = [],
+  requiredTargets: readonly PassTarget[] = PASS_TARGETS
+): ExchangeDraftValidation {
+  const selectedCardIds = requiredTargets
+    .map((target) => draft[target])
+    .filter((value): value is string => Boolean(value));
+  const missingTargets = requiredTargets.filter((target) => !draft[target]);
+  const duplicateCardIds = selectedCardIds.filter(
+    (cardId, index) => selectedCardIds.indexOf(cardId) !== index
+  );
+  const availableCardIdSet = new Set(availableCardIds);
+  const invalidCardIds = selectedCardIds.filter(
+    (cardId) => !availableCardIdSet.has(cardId)
+  );
+
+  return {
+    isValid:
+      missingTargets.length === 0 &&
+      duplicateCardIds.length === 0 &&
+      invalidCardIds.length === 0,
+    isComplete: missingTargets.length === 0,
+    missingTargets,
+    selectedCardIds,
+    duplicateCardIds,
+    invalidCardIds
+  };
+}
+
+export function getExchangeFlowState(
+  state: Pick<GameState, "phase" | "passSelections">,
+  localSeat: SeatId = LOCAL_SEAT
+): ExchangeFlowState {
+  if (!isExchangePhase(state.phase)) {
+    return "inactive";
+  }
+
+  if (state.phase === "pass_reveal") {
+    return "exchange_resolving";
+  }
+
+  if (state.phase === "exchange_complete") {
+    return "exchange_complete";
+  }
+
+  const submittedCount = countSubmittedExchangeSeats(state);
+  if (submittedCount === 0) {
+    return "exchange_init";
+  }
+
+  if (areAllExchangeSelectionsSubmitted(state)) {
+    return "exchange_ready_to_resolve";
+  }
+
+  if (!state.passSelections[localSeat]) {
+    return "exchange_selecting";
+  }
+
+  return "exchange_waiting_for_ai";
 }
 
 export function getPrimaryActor(state: GameState, legalActions: LegalActionMap): ActorId | null {

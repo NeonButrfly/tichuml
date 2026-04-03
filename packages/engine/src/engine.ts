@@ -32,7 +32,11 @@ import {
   shuffleDeck,
   sortHand
 } from "./cards.js";
-import { beatsCombination, fulfillsWish, listCombinationInterpretations } from "./combination.js";
+import {
+  beatsCombination,
+  fulfillsWish,
+  listCombinationInterpretations
+} from "./combination.js";
 
 const EMPTY_MATCH_SCORE: Record<TeamId, number> = {
   "team-0": 0,
@@ -50,10 +54,26 @@ function createEmptyHandMap(): Record<SeatId, Card[]> {
 
 function createDefaultCalls() {
   return {
-    "seat-0": { grandTichu: false, smallTichu: false, hasPlayedFirstCard: false },
-    "seat-1": { grandTichu: false, smallTichu: false, hasPlayedFirstCard: false },
-    "seat-2": { grandTichu: false, smallTichu: false, hasPlayedFirstCard: false },
-    "seat-3": { grandTichu: false, smallTichu: false, hasPlayedFirstCard: false }
+    "seat-0": {
+      grandTichu: false,
+      smallTichu: false,
+      hasPlayedFirstCard: false
+    },
+    "seat-1": {
+      grandTichu: false,
+      smallTichu: false,
+      hasPlayedFirstCard: false
+    },
+    "seat-2": {
+      grandTichu: false,
+      smallTichu: false,
+      hasPlayedFirstCard: false
+    },
+    "seat-3": {
+      grandTichu: false,
+      smallTichu: false,
+      hasPlayedFirstCard: false
+    }
   };
 }
 
@@ -104,7 +124,9 @@ function cloneState(state: GameState): GameState {
           teamScores: { ...state.roundSummary.teamScores },
           finishOrder: [...state.roundSummary.finishOrder],
           doubleVictory: state.roundSummary.doubleVictory,
-          tichuBonuses: state.roundSummary.tichuBonuses.map((bonus) => ({ ...bonus }))
+          tichuBonuses: state.roundSummary.tichuBonuses.map((bonus) => ({
+            ...bonus
+          }))
         }
       : null,
     matchScore: { ...state.matchScore }
@@ -166,12 +188,23 @@ function getNextActiveSeat(state: GameState, fromSeat: SeatId): SeatId | null {
 }
 
 function getMahjongHolder(state: GameState): SeatId {
-  const holder = SEAT_IDS.find((seat) => state.hands[seat].some((card) => isMahjong(card)));
+  const holder = SEAT_IDS.find((seat) =>
+    state.hands[seat].some((card) => isMahjong(card))
+  );
   if (!holder) {
     throw new Error("Mahjong holder not found.");
   }
 
   return holder;
+}
+
+function isSmallTichuWindow(phase: GameState["phase"]): boolean {
+  return (
+    phase === "pass_select" ||
+    phase === "pass_reveal" ||
+    phase === "exchange_complete" ||
+    phase === "trick_play"
+  );
 }
 
 function dealCards(state: GameState, cardsPerSeat: number): void {
@@ -255,12 +288,14 @@ function compareLegalActions(left: LegalAction, right: LegalAction): number {
     return left.type.localeCompare(right.type);
   }
 
-  const rankDifference = left.combination.primaryRank - right.combination.primaryRank;
+  const rankDifference =
+    left.combination.primaryRank - right.combination.primaryRank;
   if (rankDifference !== 0) {
     return rankDifference;
   }
 
-  const countDifference = left.combination.cardCount - right.combination.cardCount;
+  const countDifference =
+    left.combination.cardCount - right.combination.cardCount;
   if (countDifference !== 0) {
     return countDifference;
   }
@@ -288,11 +323,19 @@ function enumerateHandSubsets(hand: Card[]): Card[][] {
 }
 
 function canSeatCallSmallTichu(state: GameState, seat: SeatId): boolean {
-  if (state.phase !== "trick_play" || state.pendingDragonGift || state.hands[seat].length === 0) {
+  if (
+    !isSmallTichuWindow(state.phase) ||
+    state.pendingDragonGift ||
+    state.hands[seat].length === 0
+  ) {
     return false;
   }
 
-  if (state.calls[seat].hasPlayedFirstCard || state.calls[seat].smallTichu || state.calls[seat].grandTichu) {
+  if (
+    state.calls[seat].hasPlayedFirstCard ||
+    state.calls[seat].smallTichu ||
+    state.calls[seat].grandTichu
+  ) {
     return false;
   }
 
@@ -300,7 +343,11 @@ function canSeatCallSmallTichu(state: GameState, seat: SeatId): boolean {
 }
 
 function generatePlayActions(state: GameState, seat: SeatId): LegalAction[] {
-  if (state.phase !== "trick_play" || state.pendingDragonGift || state.hands[seat].length === 0) {
+  if (
+    state.phase !== "trick_play" ||
+    state.pendingDragonGift ||
+    state.hands[seat].length === 0
+  ) {
     return [];
   }
 
@@ -315,16 +362,22 @@ function generatePlayActions(state: GameState, seat: SeatId): LegalAction[] {
   const actions = new Map<string, LegalAction>();
 
   for (const subset of enumerateHandSubsets(hand)) {
-    const combinations = listCombinationInterpretations(subset, currentCombination);
+    const combinations = listCombinationInterpretations(
+      subset,
+      currentCombination
+    );
 
     for (const combination of combinations) {
       const legalAsBomb =
-        currentCombination !== null && combination.isBomb && beatsCombination(combination, currentCombination);
+        currentCombination !== null &&
+        combination.isBomb &&
+        beatsCombination(combination, currentCombination);
       const legalOnTurn =
         isActiveSeat &&
         (currentCombination === null
           ? true
-          : !combination.isBomb && beatsCombination(combination, currentCombination));
+          : !combination.isBomb &&
+            beatsCombination(combination, currentCombination));
 
       if (!legalAsBomb && !legalOnTurn) {
         continue;
@@ -334,8 +387,12 @@ function generatePlayActions(state: GameState, seat: SeatId): LegalAction[] {
         type: "play_cards",
         seat,
         cardIds: combination.cardIds,
-        ...(combination.phoenixAsRank ? { phoenixAsRank: combination.phoenixAsRank } : {}),
-        ...(combination.containsMahjong ? { availableWishRanks: [...STANDARD_RANKS] } : {}),
+        ...(combination.phoenixAsRank
+          ? { phoenixAsRank: combination.phoenixAsRank }
+          : {}),
+        ...(combination.containsMahjong
+          ? { availableWishRanks: [...STANDARD_RANKS] }
+          : {}),
         combination
       };
 
@@ -351,7 +408,9 @@ function generatePlayActions(state: GameState, seat: SeatId): LegalAction[] {
   if (isActiveSeat && state.currentWish !== null) {
     const wishedRank = state.currentWish;
     const fulfillingActions = results.filter(
-      (action) => action.type === "play_cards" && fulfillsWish(action.combination, wishedRank)
+      (action) =>
+        action.type === "play_cards" &&
+        fulfillsWish(action.combination, wishedRank)
     );
 
     if (fulfillingActions.length > 0) {
@@ -371,6 +430,14 @@ export function getLegalActions(state: GameState): LegalActionMap {
     legalActions[actor] = actions.sort(compareLegalActions);
   };
 
+  const pushOptionalSmallTichuActions = () => {
+    for (const seat of SEAT_IDS) {
+      if (canSeatCallSmallTichu(state, seat)) {
+        pushAction(seat, { type: "call_tichu", seat });
+      }
+    }
+  };
+
   switch (state.phase) {
     case "grand_tichu_window": {
       const seat = state.grandTichuQueue[0];
@@ -385,6 +452,7 @@ export function getLegalActions(state: GameState): LegalActionMap {
       break;
     }
     case "pass_select": {
+      pushOptionalSmallTichuActions();
       for (const seat of SEAT_IDS) {
         if (state.passSelections[seat]) {
           continue;
@@ -401,12 +469,17 @@ export function getLegalActions(state: GameState): LegalActionMap {
     }
     case "pass_reveal":
     case "exchange_complete":
+      pushOptionalSmallTichuActions();
+      pushAction(SYSTEM_ACTOR, { type: "advance_phase", actor: SYSTEM_ACTOR });
+      break;
     case "round_scoring":
       pushAction(SYSTEM_ACTOR, { type: "advance_phase", actor: SYSTEM_ACTOR });
       break;
     case "trick_play": {
       if (state.pendingDragonGift) {
-        for (const recipient of getOpponentSeats(state.pendingDragonGift.winner)) {
+        for (const recipient of getOpponentSeats(
+          state.pendingDragonGift.winner
+        )) {
           pushAction(state.pendingDragonGift.winner, {
             type: "assign_dragon_trick",
             seat: state.pendingDragonGift.winner,
@@ -416,11 +489,8 @@ export function getLegalActions(state: GameState): LegalActionMap {
         break;
       }
 
+      pushOptionalSmallTichuActions();
       for (const seat of SEAT_IDS) {
-        if (canSeatCallSmallTichu(state, seat)) {
-          pushAction(seat, { type: "call_tichu", seat });
-        }
-
         for (const playAction of generatePlayActions(state, seat)) {
           pushAction(seat, playAction);
         }
@@ -432,11 +502,16 @@ export function getLegalActions(state: GameState): LegalActionMap {
         const wishLocked =
           wishedRank !== null &&
           activeActions.some(
-            (action) => action.type === "play_cards" && fulfillsWish(action.combination, wishedRank)
+            (action) =>
+              action.type === "play_cards" &&
+              fulfillsWish(action.combination, wishedRank)
           );
 
         if (!wishLocked) {
-          pushAction(state.activeSeat, { type: "pass_turn", seat: state.activeSeat });
+          pushAction(state.activeSeat, {
+            type: "pass_turn",
+            seat: state.activeSeat
+          });
         }
       }
       break;
@@ -448,7 +523,10 @@ export function getLegalActions(state: GameState): LegalActionMap {
   return legalActions;
 }
 
-function matchConcretePlayAction(legalAction: LegalAction, action: PlayCardsAction): boolean {
+function matchConcretePlayAction(
+  legalAction: LegalAction,
+  action: PlayCardsAction
+): boolean {
   if (legalAction.type !== "play_cards") {
     return false;
   }
@@ -468,7 +546,10 @@ function matchConcretePlayAction(legalAction: LegalAction, action: PlayCardsActi
   return legalAction.availableWishRanks?.includes(action.wishRank) ?? false;
 }
 
-function assertConcreteActionIsLegal(state: GameState, action: EngineAction): void {
+function assertConcreteActionIsLegal(
+  state: GameState,
+  action: EngineAction
+): void {
   const legalActions = getLegalActions(state);
 
   switch (action.type) {
@@ -478,21 +559,34 @@ function assertConcreteActionIsLegal(state: GameState, action: EngineAction): vo
     case "pass_turn":
     case "assign_dragon_trick": {
       const actorActions = legalActions[action.seat] ?? [];
-      if (!actorActions.some((legalAction) => JSON.stringify(legalAction) === JSON.stringify(action))) {
+      if (
+        !actorActions.some(
+          (legalAction) =>
+            JSON.stringify(legalAction) === JSON.stringify(action)
+        )
+      ) {
         throw new Error(`Illegal action: ${action.type}`);
       }
       return;
     }
     case "advance_phase": {
       const actorActions = legalActions[action.actor] ?? [];
-      if (!actorActions.some((legalAction) => legalAction.type === "advance_phase")) {
+      if (
+        !actorActions.some(
+          (legalAction) => legalAction.type === "advance_phase"
+        )
+      ) {
         throw new Error("Illegal action: advance_phase");
       }
       return;
     }
     case "play_cards": {
       const actorActions = legalActions[action.seat] ?? [];
-      if (!actorActions.some((legalAction) => matchConcretePlayAction(legalAction, action))) {
+      if (
+        !actorActions.some((legalAction) =>
+          matchConcretePlayAction(legalAction, action)
+        )
+      ) {
         throw new Error("Illegal action: play_cards");
       }
       return;
@@ -525,20 +619,31 @@ function resolveDoubleVictory(state: GameState): boolean {
   return true;
 }
 
-function collectTrickCards(state: GameState, seat: SeatId, trickCards: Card[]): void {
+function collectTrickCards(
+  state: GameState,
+  seat: SeatId,
+  trickCards: Card[]
+): void {
   state.collectedCards[seat] = [...state.collectedCards[seat], ...trickCards];
 }
 
 function getTrickCards(trick: TrickState): Card[] {
-  return trick.entries.flatMap((entry) => (entry.type === "play" ? entry.combination.cardIds.map(getCardById) : []));
+  return trick.entries.flatMap((entry) =>
+    entry.type === "play" ? entry.combination.cardIds.map(getCardById) : []
+  );
 }
 
 function transitionToNextLead(state: GameState, winner: SeatId): void {
   state.currentTrick = null;
-  state.activeSeat = state.hands[winner].length > 0 ? winner : getNextActiveSeat(state, winner);
+  state.activeSeat =
+    state.hands[winner].length > 0 ? winner : getNextActiveSeat(state, winner);
 }
 
-function resolveRoundEndIfNeeded(state: GameState, winner: SeatId, trickCards: Card[]): boolean {
+function resolveRoundEndIfNeeded(
+  state: GameState,
+  winner: SeatId,
+  trickCards: Card[]
+): boolean {
   if (activeSeatsWithCards(state).length > 1) {
     return false;
   }
@@ -554,7 +659,10 @@ function resolveRoundEndIfNeeded(state: GameState, winner: SeatId, trickCards: C
   return true;
 }
 
-function resolveCompletedTrick(state: GameState, roundEndsAfterResolution: boolean): void {
+function resolveCompletedTrick(
+  state: GameState,
+  roundEndsAfterResolution: boolean
+): void {
   const trick = state.currentTrick;
   if (!trick) {
     return;
@@ -568,7 +676,10 @@ function resolveCompletedTrick(state: GameState, roundEndsAfterResolution: boole
     state.pendingDragonGift = {
       winner,
       trickCards,
-      nextLeader: state.hands[winner].length > 0 ? winner : getNextActiveSeat(state, winner),
+      nextLeader:
+        state.hands[winner].length > 0
+          ? winner
+          : getNextActiveSeat(state, winner),
       roundEndsAfterGift: roundEndsAfterResolution
     };
     state.currentTrick = null;
@@ -593,12 +704,15 @@ function scoreRound(state: GameState): RoundScoreSummary {
   const finishOrder = [...state.finishedOrder];
   const [firstSeat, secondSeat] = finishOrder;
   const doubleVictory =
-    firstSeat && secondSeat && sameTeam(firstSeat, secondSeat) ? getTeamForSeat(firstSeat) : null;
+    firstSeat && secondSeat && sameTeam(firstSeat, secondSeat)
+      ? getTeamForSeat(firstSeat)
+      : null;
 
   if (doubleVictory) {
     teamScores[doubleVictory] = 200;
   } else {
-    const tailender = SEAT_IDS.find((seat) => state.hands[seat].length > 0) ?? null;
+    const tailender =
+      SEAT_IDS.find((seat) => state.hands[seat].length > 0) ?? null;
     const trickPointsBySeat: Record<SeatId, number> = {
       "seat-0": getCardsPoints(state.collectedCards["seat-0"]),
       "seat-1": getCardsPoints(state.collectedCards["seat-1"]),
@@ -622,13 +736,23 @@ function scoreRound(state: GameState): RoundScoreSummary {
   for (const seat of SEAT_IDS) {
     if (state.calls[seat].grandTichu) {
       const amount = finishOrder[0] === seat ? 200 : -200;
-      tichuBonuses.push({ seat, team: getTeamForSeat(seat), label: "grand", amount });
+      tichuBonuses.push({
+        seat,
+        team: getTeamForSeat(seat),
+        label: "grand",
+        amount
+      });
       teamScores[getTeamForSeat(seat)] += amount;
     }
 
     if (state.calls[seat].smallTichu) {
       const amount = finishOrder[0] === seat ? 100 : -100;
-      tichuBonuses.push({ seat, team: getTeamForSeat(seat), label: "small", amount });
+      tichuBonuses.push({
+        seat,
+        team: getTeamForSeat(seat),
+        label: "small",
+        amount
+      });
       teamScores[getTeamForSeat(seat)] += amount;
     }
   }
@@ -647,13 +771,28 @@ function applyPassExchange(state: GameState): void {
   for (const seat of SEAT_IDS) {
     const selection = state.passSelections[seat];
     if (!selection) {
-      throw new Error("Cannot reveal passes before all seats have selected cards.");
+      throw new Error(
+        "Cannot reveal passes before all seats have selected cards."
+      );
     }
 
-    state.hands[seat] = removeCardIds(state.hands[seat], [selection.left, selection.partner, selection.right]);
-    incoming[getLeftSeat(seat)] = [...incoming[getLeftSeat(seat)], getCardById(selection.left)];
-    incoming[getPartnerSeat(seat)] = [...incoming[getPartnerSeat(seat)], getCardById(selection.partner)];
-    incoming[getRightSeat(seat)] = [...incoming[getRightSeat(seat)], getCardById(selection.right)];
+    state.hands[seat] = removeCardIds(state.hands[seat], [
+      selection.left,
+      selection.partner,
+      selection.right
+    ]);
+    incoming[getLeftSeat(seat)] = [
+      ...incoming[getLeftSeat(seat)],
+      getCardById(selection.left)
+    ];
+    incoming[getPartnerSeat(seat)] = [
+      ...incoming[getPartnerSeat(seat)],
+      getCardById(selection.partner)
+    ];
+    incoming[getRightSeat(seat)] = [
+      ...incoming[getRightSeat(seat)],
+      getCardById(selection.right)
+    ];
   }
 
   for (const seat of SEAT_IDS) {
@@ -661,6 +800,65 @@ function applyPassExchange(state: GameState): void {
   }
 
   state.revealedPasses = { ...state.passSelections };
+}
+
+function clearExchangeArtifacts(state: GameState): void {
+  state.activeSeat = null;
+  state.currentWish = null;
+  state.currentTrick = null;
+  state.pendingDragonGift = null;
+}
+
+function hasAllPassSelections(state: Pick<GameState, "passSelections">): boolean {
+  return SEAT_IDS.every((seat) => Boolean(state.passSelections[seat]));
+}
+
+function validatePassSelection(
+  state: GameState,
+  action: Extract<EngineAction, { type: "select_pass" }>
+): PassSelection {
+  const hand = state.hands[action.seat];
+  const chosen = [action.left, action.partner, action.right];
+
+  if (new Set(chosen).size !== chosen.length || !handHasCardIds(hand, chosen)) {
+    throw new Error("Illegal pass selection.");
+  }
+
+  return {
+    left: action.left,
+    partner: action.partner,
+    right: action.right
+  };
+}
+
+function submitPassSelection(
+  state: GameState,
+  action: Extract<EngineAction, { type: "select_pass" }>
+): EngineEvent[] {
+  state.passSelections[action.seat] = validatePassSelection(state, action);
+
+  const events: EngineEvent[] = [
+    { type: "pass_selected", detail: action.seat }
+  ];
+
+  if (hasAllPassSelections(state)) {
+    clearExchangeArtifacts(state);
+    state.phase = "pass_reveal";
+    events.push({ type: "phase_changed", detail: state.phase });
+  }
+
+  return events;
+}
+
+function resolvePassExchange(state: GameState): EngineEvent[] {
+  clearExchangeArtifacts(state);
+  applyPassExchange(state);
+  state.phase = "exchange_complete";
+
+  return [
+    { type: "passes_revealed" },
+    { type: "phase_changed", detail: state.phase }
+  ];
 }
 
 function applyGrandTichuDecision(
@@ -672,7 +870,9 @@ function applyGrandTichuDecision(
   const actingSeat = state.grandTichuQueue.shift();
 
   if (actingSeat !== seat) {
-    throw new Error("Grand Tichu decisions must follow the deterministic seat queue.");
+    throw new Error(
+      "Grand Tichu decisions must follow the deterministic seat queue."
+    );
   }
 
   if (grandTichu) {
@@ -685,6 +885,7 @@ function applyGrandTichuDecision(
   if (state.grandTichuQueue.length === 0) {
     state.phase = "pass_select";
     state.activeSeat = null;
+    clearExchangeArtifacts(state);
     dealCards(state, 6);
     events.push({ type: "complete_deal" });
     events.push({ type: "phase_changed", detail: state.phase });
@@ -695,37 +896,26 @@ function applyGrandTichuDecision(
   return events;
 }
 
-function applySelectPass(state: GameState, action: Extract<EngineAction, { type: "select_pass" }>): EngineEvent[] {
-  const hand = state.hands[action.seat];
-  const chosen = [action.left, action.partner, action.right];
-
-  if (new Set(chosen).size !== chosen.length || !handHasCardIds(hand, chosen)) {
-    throw new Error("Illegal pass selection.");
-  }
-
-  state.passSelections[action.seat] = {
-    left: action.left,
-    partner: action.partner,
-    right: action.right
-  };
-
-  const events: EngineEvent[] = [{ type: "pass_selected", detail: action.seat }];
-
-  if (SEAT_IDS.every((seat) => state.passSelections[seat])) {
-    state.phase = "pass_reveal";
-    events.push({ type: "phase_changed", detail: state.phase });
-  }
-
-  return events;
+function applySelectPass(
+  state: GameState,
+  action: Extract<EngineAction, { type: "select_pass" }>
+): EngineEvent[] {
+  return submitPassSelection(state, action);
 }
 
-function applyPlayCards(state: GameState, action: PlayCardsAction): EngineEvent[] {
+function applyPlayCards(
+  state: GameState,
+  action: PlayCardsAction
+): EngineEvent[] {
   assertConcreteActionIsLegal(state, action);
 
   const events: EngineEvent[] = [];
   const cards = cardsFromIds([...action.cardIds].sort());
   const currentCombination = state.currentTrick?.currentCombination ?? null;
-  const combination = listCombinationInterpretations(cards, currentCombination).find(
+  const combination = listCombinationInterpretations(
+    cards,
+    currentCombination
+  ).find(
     (candidate) =>
       candidate.cardIds.join(",") === [...action.cardIds].sort().join(",") &&
       (candidate.phoenixAsRank ?? null) === (action.phoenixAsRank ?? null)
@@ -735,12 +925,18 @@ function applyPlayCards(state: GameState, action: PlayCardsAction): EngineEvent[
     throw new Error("Unable to evaluate played cards.");
   }
 
-  state.hands[action.seat] = removeCardIds(state.hands[action.seat], action.cardIds);
+  state.hands[action.seat] = removeCardIds(
+    state.hands[action.seat],
+    action.cardIds
+  );
   state.calls[action.seat].hasPlayedFirstCard = true;
 
   if (combination.containsMahjong) {
     state.currentWish = action.wishRank ?? null;
-  } else if (state.currentWish !== null && fulfillsWish(combination, state.currentWish)) {
+  } else if (
+    state.currentWish !== null &&
+    fulfillsWish(combination, state.currentWish)
+  ) {
     state.currentWish = null;
   }
 
@@ -748,7 +944,10 @@ function applyPlayCards(state: GameState, action: PlayCardsAction): EngineEvent[
     addFinishedSeat(state, action.seat);
     state.currentTrick = null;
     const partner = getPartnerSeat(action.seat);
-    state.activeSeat = state.hands[partner].length > 0 ? partner : getNextActiveSeat(state, partner);
+    state.activeSeat =
+      state.hands[partner].length > 0
+        ? partner
+        : getNextActiveSeat(state, partner);
     events.push({ type: "dog_led", detail: action.seat });
 
     if (resolveDoubleVictory(state)) {
@@ -775,13 +974,19 @@ function applyPlayCards(state: GameState, action: PlayCardsAction): EngineEvent[
       ...state.currentTrick,
       currentWinner: action.seat,
       currentCombination: combination,
-      entries: [...state.currentTrick.entries, { type: "play", seat: action.seat, combination }],
+      entries: [
+        ...state.currentTrick.entries,
+        { type: "play", seat: action.seat, combination }
+      ],
       passingSeats: []
     };
   }
 
   addFinishedSeat(state, action.seat);
-  events.push({ type: "cards_played", detail: `${action.seat}:${combination.kind}` });
+  events.push({
+    type: "cards_played",
+    detail: `${action.seat}:${combination.kind}`
+  });
 
   if (resolveDoubleVictory(state)) {
     events.push({ type: "phase_changed", detail: state.phase });
@@ -792,7 +997,10 @@ function applyPlayCards(state: GameState, action: PlayCardsAction): EngineEvent[
   if (roundEndsImmediately) {
     resolveCompletedTrick(state, true);
     if (state.pendingDragonGift) {
-      events.push({ type: "dragon_gift_pending", detail: state.pendingDragonGift.winner });
+      events.push({
+        type: "dragon_gift_pending",
+        detail: state.pendingDragonGift.winner
+      });
     } else {
       events.push({ type: "phase_changed", detail: state.phase });
     }
@@ -826,7 +1034,10 @@ function applyPassTurn(state: GameState, seat: SeatId): EngineEvent[] {
   if (state.currentTrick.passingSeats.length >= requiredPasses) {
     resolveCompletedTrick(state, activeSeatsWithCards(state).length === 1);
     if (state.pendingDragonGift) {
-      events.push({ type: "dragon_gift_pending", detail: state.pendingDragonGift.winner });
+      events.push({
+        type: "dragon_gift_pending",
+        detail: state.pendingDragonGift.winner
+      });
     } else {
       events.push({ type: "trick_resolved" });
     }
@@ -859,28 +1070,38 @@ function applyDragonGift(
     state.activeSeat = pending.nextLeader;
   }
 
-  return [{ type: "dragon_trick_assigned", detail: `${action.seat}->${action.recipient}` }];
+  return [
+    {
+      type: "dragon_trick_assigned",
+      detail: `${action.seat}->${action.recipient}`
+    }
+  ];
 }
 
 function applyAdvancePhase(state: GameState): EngineEvent[] {
   switch (state.phase) {
     case "pass_reveal":
-      applyPassExchange(state);
-      state.phase = "exchange_complete";
-      return [{ type: "passes_revealed" }, { type: "phase_changed", detail: state.phase }];
+      return resolvePassExchange(state);
     case "exchange_complete":
       state.phase = "trick_play";
       state.activeSeat = getMahjongHolder(state);
-      return [{ type: "exchange_completed" }, { type: "phase_changed", detail: state.phase }];
+      return [
+        { type: "exchange_completed" },
+        { type: "phase_changed", detail: state.phase }
+      ];
     case "round_scoring": {
       const roundSummary = scoreRound(state);
       state.roundSummary = roundSummary;
       state.matchScore = {
-        "team-0": state.matchScore["team-0"] + roundSummary.teamScores["team-0"],
+        "team-0":
+          state.matchScore["team-0"] + roundSummary.teamScores["team-0"],
         "team-1": state.matchScore["team-1"] + roundSummary.teamScores["team-1"]
       };
       state.phase = "finished";
-      return [{ type: "round_scored" }, { type: "phase_changed", detail: state.phase }];
+      return [
+        { type: "round_scored" },
+        { type: "phase_changed", detail: state.phase }
+      ];
     }
     default:
       throw new Error(`Phase ${state.phase} does not support advance_phase.`);
@@ -896,7 +1117,10 @@ export function createInitialGameState(seed: string | number): EngineResult {
   ]);
 }
 
-export function applyEngineAction(state: GameState, action: EngineAction): EngineResult {
+export function applyEngineAction(
+  state: GameState,
+  action: EngineAction
+): EngineResult {
   const nextState = cloneState(state);
   let events: EngineEvent[] = [];
 
@@ -938,7 +1162,9 @@ export function applyEngineAction(state: GameState, action: EngineAction): Engin
   return createResult(nextState, events);
 }
 
-export function createScenarioState(config: Partial<GameState> = {}): GameState {
+export function createScenarioState(
+  config: Partial<GameState> = {}
+): GameState {
   return {
     seed: config.seed ?? "scenario",
     phase: config.phase ?? "trick_play",

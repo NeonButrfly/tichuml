@@ -10,8 +10,14 @@ import {
   type GameState
 } from "@tichuml/engine";
 
-function combo(cardIds: string[], current: Combination | null = null): Combination {
-  const result = listCombinationInterpretations(cardsFromIds(cardIds), current)[0];
+function combo(
+  cardIds: string[],
+  current: Combination | null = null
+): Combination {
+  const result = listCombinationInterpretations(
+    cardsFromIds(cardIds),
+    current
+  )[0];
   if (!result) {
     throw new Error(`No combination found for ${cardIds.join(",")}`);
   }
@@ -56,7 +62,9 @@ describe("milestone 1 engine core", () => {
 
     const legalActions = getLegalActions(afterSeat1.nextState)["seat-2"] ?? [];
 
-    expect(legalActions).toEqual([{ type: "decline_grand_tichu", seat: "seat-2" }]);
+    expect(legalActions).toEqual([
+      { type: "decline_grand_tichu", seat: "seat-2" }
+    ]);
   });
 
   it("forces wish fulfillment only when the player holds the wished rank", () => {
@@ -77,11 +85,18 @@ describe("milestone 1 engine core", () => {
     });
 
     const mustFulfillActions = getLegalActions(mustFulfill)["seat-1"] ?? [];
-    expect(mustFulfillActions.filter((action) => action.type === "play_cards")).toHaveLength(1);
-    expect(mustFulfillActions.some((action) => action.type === "play_cards" && action.cardIds[0] === "jade-8")).toBe(
-      true
-    );
-    expect(mustFulfillActions.some((action) => action.type === "pass_turn")).toBe(false);
+    expect(
+      mustFulfillActions.filter((action) => action.type === "play_cards")
+    ).toHaveLength(1);
+    expect(
+      mustFulfillActions.some(
+        (action) =>
+          action.type === "play_cards" && action.cardIds[0] === "jade-8"
+      )
+    ).toBe(true);
+    expect(
+      mustFulfillActions.some((action) => action.type === "pass_turn")
+    ).toBe(false);
 
     const phoenixDoesNotCount = scenario({
       currentWish: 8,
@@ -99,8 +114,15 @@ describe("milestone 1 engine core", () => {
     });
 
     const phoenixActions = getLegalActions(phoenixDoesNotCount)["seat-1"] ?? [];
-    expect(phoenixActions.some((action) => action.type === "pass_turn")).toBe(true);
-    expect(phoenixActions.some((action) => action.type === "play_cards" && action.cardIds[0] === "dragon")).toBe(true);
+    expect(phoenixActions.some((action) => action.type === "pass_turn")).toBe(
+      true
+    );
+    expect(
+      phoenixActions.some(
+        (action) =>
+          action.type === "play_cards" && action.cardIds[0] === "dragon"
+      )
+    ).toBe(true);
   });
 
   it("handles Phoenix single-card legality against Ace and Dragon", () => {
@@ -120,7 +142,12 @@ describe("milestone 1 engine core", () => {
     });
 
     const aceActions = getLegalActions(againstAce)["seat-1"] ?? [];
-    expect(aceActions.some((action) => action.type === "play_cards" && action.cardIds[0] === "phoenix")).toBe(true);
+    expect(
+      aceActions.some(
+        (action) =>
+          action.type === "play_cards" && action.cardIds[0] === "phoenix"
+      )
+    ).toBe(true);
 
     const dragonLead = combo(["dragon"]);
     const againstDragon = scenario({
@@ -138,7 +165,12 @@ describe("milestone 1 engine core", () => {
     });
 
     const dragonActions = getLegalActions(againstDragon)["seat-1"] ?? [];
-    expect(dragonActions.some((action) => action.type === "play_cards" && action.cardIds[0] === "phoenix")).toBe(false);
+    expect(
+      dragonActions.some(
+        (action) =>
+          action.type === "play_cards" && action.cardIds[0] === "phoenix"
+      )
+    ).toBe(false);
   });
 
   it("transfers the lead to the partner when Dog is led", () => {
@@ -158,6 +190,166 @@ describe("milestone 1 engine core", () => {
 
     expect(result.nextState.activeSeat).toBe("seat-2");
     expect(result.nextState.currentTrick).toBeNull();
+  });
+
+  it("keeps Small Tichu available until a seat actually plays", () => {
+    const liveHand = cardsFromIds(["mahjong", "jade-7", "sword-9"]);
+    const supportHand = cardsFromIds(["jade-3"]);
+    const passSelectState = scenario({
+      phase: "pass_select",
+      hands: {
+        "seat-0": liveHand,
+        "seat-1": supportHand,
+        "seat-2": supportHand,
+        "seat-3": supportHand
+      }
+    });
+
+    expect(getLegalActions(passSelectState)["seat-0"]).toEqual(
+      expect.arrayContaining([{ type: "call_tichu", seat: "seat-0" }])
+    );
+
+    const passRevealState = scenario({
+      phase: "pass_reveal",
+      hands: {
+        "seat-0": liveHand,
+        "seat-1": supportHand,
+        "seat-2": supportHand,
+        "seat-3": supportHand
+      }
+    });
+
+    expect(getLegalActions(passRevealState)["seat-0"]).toEqual(
+      expect.arrayContaining([{ type: "call_tichu", seat: "seat-0" }])
+    );
+
+    const exchangeCompleteState = scenario({
+      phase: "exchange_complete",
+      hands: {
+        "seat-0": liveHand,
+        "seat-1": supportHand,
+        "seat-2": supportHand,
+        "seat-3": supportHand
+      }
+    });
+
+    expect(getLegalActions(exchangeCompleteState)["seat-0"]).toEqual(
+      expect.arrayContaining([{ type: "call_tichu", seat: "seat-0" }])
+    );
+
+    const openingLeadState = scenario({
+      phase: "trick_play",
+      activeSeat: "seat-0",
+      hands: {
+        "seat-0": liveHand,
+        "seat-1": supportHand,
+        "seat-2": supportHand,
+        "seat-3": supportHand
+      },
+      currentTrick: null
+    });
+
+    expect(getLegalActions(openingLeadState)["seat-0"]).toEqual(
+      expect.arrayContaining([{ type: "call_tichu", seat: "seat-0" }])
+    );
+
+    const afterFirstPlay = applyEngineAction(openingLeadState, {
+      type: "play_cards",
+      seat: "seat-0",
+      cardIds: ["mahjong"]
+    });
+
+    expect(afterFirstPlay.nextState.calls["seat-0"].hasPlayedFirstCard).toBe(
+      true
+    );
+    expect(
+      (getLegalActions(afterFirstPlay.nextState)["seat-0"] ?? []).some(
+        (action) => action.type === "call_tichu"
+      )
+    ).toBe(false);
+    expect(
+      (getLegalActions(afterFirstPlay.nextState)["seat-1"] ?? []).some(
+        (action) => action.type === "call_tichu"
+      )
+    ).toBe(true);
+  });
+
+  it("resolves the full exchange exactly once and delivers cards to the correct recipients", () => {
+    const initial = scenario({
+      phase: "pass_select",
+      activeSeat: null,
+      hands: {
+        "seat-0": cardsFromIds(["mahjong", "jade-2", "jade-3", "jade-4"]),
+        "seat-1": cardsFromIds(["dragon", "sword-2", "sword-3", "sword-4"]),
+        "seat-2": cardsFromIds(["phoenix", "pagoda-2", "pagoda-3", "pagoda-4"]),
+        "seat-3": cardsFromIds(["jade-14", "star-2", "star-3", "star-4"])
+      }
+    });
+
+    const afterSeat0 = applyEngineAction(initial, {
+      type: "select_pass",
+      seat: "seat-0",
+      left: "jade-2",
+      partner: "jade-3",
+      right: "jade-4"
+    });
+    const afterSeat1 = applyEngineAction(afterSeat0.nextState, {
+      type: "select_pass",
+      seat: "seat-1",
+      left: "sword-2",
+      partner: "sword-3",
+      right: "sword-4"
+    });
+    const afterSeat2 = applyEngineAction(afterSeat1.nextState, {
+      type: "select_pass",
+      seat: "seat-2",
+      left: "pagoda-2",
+      partner: "pagoda-3",
+      right: "pagoda-4"
+    });
+    const afterSeat3 = applyEngineAction(afterSeat2.nextState, {
+      type: "select_pass",
+      seat: "seat-3",
+      left: "star-2",
+      partner: "star-3",
+      right: "star-4"
+    });
+
+    expect(afterSeat3.nextState.phase).toBe("pass_reveal");
+
+    const revealed = applyEngineAction(afterSeat3.nextState, {
+      type: "advance_phase",
+      actor: "system"
+    });
+
+    expect(revealed.nextState.phase).toBe("exchange_complete");
+    expect(revealed.nextState.currentTrick).toBeNull();
+    expect(
+      [...revealed.nextState.hands["seat-0"].map((card) => card.id)].sort()
+    ).toEqual(["mahjong", "sword-2", "pagoda-3", "star-4"].sort());
+    expect(
+      [...revealed.nextState.hands["seat-1"].map((card) => card.id)].sort()
+    ).toEqual(["jade-4", "pagoda-2", "dragon", "star-3"].sort());
+    expect(
+      [...revealed.nextState.hands["seat-2"].map((card) => card.id)].sort()
+    ).toEqual(["jade-3", "sword-4", "phoenix", "star-2"].sort());
+    expect(
+      [...revealed.nextState.hands["seat-3"].map((card) => card.id)].sort()
+    ).toEqual(["jade-2", "sword-3", "pagoda-4", "jade-14"].sort());
+
+    const afterExchangeComplete = applyEngineAction(revealed.nextState, {
+      type: "advance_phase",
+      actor: "system"
+    });
+
+    expect(afterExchangeComplete.nextState.phase).toBe("trick_play");
+    expect(afterExchangeComplete.nextState.currentTrick).toBeNull();
+    expect(afterExchangeComplete.nextState.hands["seat-0"].map((card) => card.id)).toEqual(
+      revealed.nextState.hands["seat-0"].map((card) => card.id)
+    );
+    expect(afterExchangeComplete.events.map((event) => event.type)).toContain(
+      "exchange_completed"
+    );
   });
 
   it("allows out-of-turn bombs and requires Dragon trick assignment", () => {
@@ -203,9 +395,18 @@ describe("milestone 1 engine core", () => {
       }
     });
 
-    const afterPass1 = applyEngineAction(dragonState, { type: "pass_turn", seat: "seat-1" });
-    const afterPass2 = applyEngineAction(afterPass1.nextState, { type: "pass_turn", seat: "seat-2" });
-    const afterPass3 = applyEngineAction(afterPass2.nextState, { type: "pass_turn", seat: "seat-3" });
+    const afterPass1 = applyEngineAction(dragonState, {
+      type: "pass_turn",
+      seat: "seat-1"
+    });
+    const afterPass2 = applyEngineAction(afterPass1.nextState, {
+      type: "pass_turn",
+      seat: "seat-2"
+    });
+    const afterPass3 = applyEngineAction(afterPass2.nextState, {
+      type: "pass_turn",
+      seat: "seat-3"
+    });
     const dragonActions = getLegalActions(afterPass3.nextState)["seat-0"] ?? [];
 
     expect(afterPass3.nextState.pendingDragonGift?.winner).toBe("seat-0");
@@ -241,21 +442,42 @@ describe("milestone 1 engine core", () => {
     });
 
     expect(afterWinningSingle.nextState.finishedOrder).toEqual(["seat-1"]);
-    expect(afterWinningSingle.nextState.currentTrick?.currentCombination.kind).toBe("single");
-    expect(afterWinningSingle.nextState.currentTrick?.currentWinner).toBe("seat-1");
+    expect(
+      afterWinningSingle.nextState.currentTrick?.currentCombination.kind
+    ).toBe("single");
+    expect(afterWinningSingle.nextState.currentTrick?.currentWinner).toBe(
+      "seat-1"
+    );
     expect(afterWinningSingle.nextState.activeSeat).toBe("seat-2");
 
-    const seat2Actions = getLegalActions(afterWinningSingle.nextState)["seat-2"] ?? [];
-    expect(seat2Actions.some((action) => action.type === "play_cards" && action.cardIds[0] === "jade-5")).toBe(true);
+    const seat2Actions =
+      getLegalActions(afterWinningSingle.nextState)["seat-2"] ?? [];
+    expect(
+      seat2Actions.some(
+        (action) =>
+          action.type === "play_cards" && action.cardIds[0] === "jade-5"
+      )
+    ).toBe(true);
 
-    const afterPass1 = applyEngineAction(afterWinningSingle.nextState, { type: "pass_turn", seat: "seat-2" });
-    const afterPass2 = applyEngineAction(afterPass1.nextState, { type: "pass_turn", seat: "seat-3" });
-    const afterPass3 = applyEngineAction(afterPass2.nextState, { type: "pass_turn", seat: "seat-0" });
+    const afterPass1 = applyEngineAction(afterWinningSingle.nextState, {
+      type: "pass_turn",
+      seat: "seat-2"
+    });
+    const afterPass2 = applyEngineAction(afterPass1.nextState, {
+      type: "pass_turn",
+      seat: "seat-3"
+    });
+    const afterPass3 = applyEngineAction(afterPass2.nextState, {
+      type: "pass_turn",
+      seat: "seat-0"
+    });
 
     expect(afterPass3.nextState.phase).toBe("trick_play");
     expect(afterPass3.nextState.currentTrick).toBeNull();
     expect(afterPass3.nextState.activeSeat).toBe("seat-2");
-    expect(afterPass3.events.some((event) => event.type === "trick_resolved")).toBe(true);
+    expect(
+      afterPass3.events.some((event) => event.type === "trick_resolved")
+    ).toBe(true);
   });
 
   it("scores double victories and tailender transfers correctly", () => {
@@ -263,10 +485,26 @@ describe("milestone 1 engine core", () => {
       phase: "round_scoring",
       finishedOrder: ["seat-0", "seat-2"],
       calls: {
-        "seat-0": { grandTichu: false, smallTichu: true, hasPlayedFirstCard: true },
-        "seat-1": { grandTichu: false, smallTichu: false, hasPlayedFirstCard: true },
-        "seat-2": { grandTichu: false, smallTichu: false, hasPlayedFirstCard: true },
-        "seat-3": { grandTichu: false, smallTichu: false, hasPlayedFirstCard: true }
+        "seat-0": {
+          grandTichu: false,
+          smallTichu: true,
+          hasPlayedFirstCard: true
+        },
+        "seat-1": {
+          grandTichu: false,
+          smallTichu: false,
+          hasPlayedFirstCard: true
+        },
+        "seat-2": {
+          grandTichu: false,
+          smallTichu: false,
+          hasPlayedFirstCard: true
+        },
+        "seat-3": {
+          grandTichu: false,
+          smallTichu: false,
+          hasPlayedFirstCard: true
+        }
       }
     });
 
@@ -292,10 +530,26 @@ describe("milestone 1 engine core", () => {
         "seat-3": cardsFromIds(["jade-5"])
       },
       calls: {
-        "seat-0": { grandTichu: false, smallTichu: false, hasPlayedFirstCard: true },
-        "seat-1": { grandTichu: false, smallTichu: false, hasPlayedFirstCard: true },
-        "seat-2": { grandTichu: false, smallTichu: false, hasPlayedFirstCard: true },
-        "seat-3": { grandTichu: false, smallTichu: false, hasPlayedFirstCard: true }
+        "seat-0": {
+          grandTichu: false,
+          smallTichu: false,
+          hasPlayedFirstCard: true
+        },
+        "seat-1": {
+          grandTichu: false,
+          smallTichu: false,
+          hasPlayedFirstCard: true
+        },
+        "seat-2": {
+          grandTichu: false,
+          smallTichu: false,
+          hasPlayedFirstCard: true
+        },
+        "seat-3": {
+          grandTichu: false,
+          smallTichu: false,
+          hasPlayedFirstCard: true
+        }
       }
     });
 
@@ -304,7 +558,9 @@ describe("milestone 1 engine core", () => {
       actor: "system"
     });
 
-    expect(transferResult.nextState.roundSummary?.teamScores["team-0"]).toBe(40);
+    expect(transferResult.nextState.roundSummary?.teamScores["team-0"]).toBe(
+      40
+    );
     expect(transferResult.nextState.roundSummary?.teamScores["team-1"]).toBe(0);
   });
 });
