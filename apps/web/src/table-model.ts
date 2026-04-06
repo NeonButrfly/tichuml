@@ -152,6 +152,54 @@ export function validateExchangeDraft(
   };
 }
 
+export function removePassCardFromDraft(
+  draft: Partial<Record<PassTarget, string>>,
+  target: PassTarget
+): Partial<Record<PassTarget, string>> {
+  if (!draft[target]) {
+    return draft;
+  }
+
+  const nextDraft = { ...draft };
+  delete nextDraft[target];
+  return nextDraft;
+}
+
+export function assignPassCardToDraft(
+  draft: Partial<Record<PassTarget, string>>,
+  target: PassTarget,
+  cardId: string
+): Partial<Record<PassTarget, string>> {
+  if (draft[target] === cardId) {
+    return draft;
+  }
+
+  const nextDraft: Partial<Record<PassTarget, string>> = {};
+
+  for (const draftTarget of PASS_TARGETS) {
+    const existingCardId = draft[draftTarget];
+    if (!existingCardId || existingCardId === cardId || draftTarget === target) {
+      continue;
+    }
+
+    nextDraft[draftTarget] = existingCardId;
+  }
+
+  const displacedCardId = draft[target];
+  if (displacedCardId && displacedCardId !== cardId) {
+    const previousTarget = PASS_TARGETS.find(
+      (draftTarget) => draft[draftTarget] === cardId
+    );
+
+    if (previousTarget && previousTarget !== target) {
+      nextDraft[previousTarget] = displacedCardId;
+    }
+  }
+
+  nextDraft[target] = cardId;
+  return nextDraft;
+}
+
 export function getExchangeFlowState(
   state: Pick<GameState, "phase" | "passSelections">,
   localSeat: SeatId = LOCAL_SEAT

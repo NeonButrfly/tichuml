@@ -16,8 +16,10 @@ import {
   type EngineAction,
   type EngineEvent,
   type EngineResult,
+  type MatchHandHistoryEntry,
   type SeatId,
   type StandardRank,
+  type TeamId,
   type TrickEntry
 } from "@tichuml/engine";
 import type {
@@ -28,6 +30,10 @@ import type {
   UiDialogId,
   UiMode
 } from "./game-table-view-model";
+import type {
+  SeedDebugSnapshot,
+  SeedJsonValue
+} from "@tichuml/shared";
 import {
   findMatchingHotkey,
   GAME_MENU_ITEMS,
@@ -134,6 +140,7 @@ export type GameTableViewProps = {
   layoutEditorActive: boolean;
   mainMenuOpen: boolean;
   activeDialog: UiDialogId | null;
+  latestEntropyDebug: SeedDebugSnapshot | null;
   hotkeyDefinitions: readonly HotkeyDefinition[];
   cardLookup: ReadonlyMap<string, Card>;
   onAutoplayChange: (checked: boolean) => void;
@@ -142,6 +149,9 @@ export type GameTableViewProps = {
   onLocalCardClick: (cardId: string) => void;
   onPassTargetSelect: (target: PassTarget) => void;
   onPassLaneDrop: (target: PassTarget, cardId: string) => void;
+  onPassLaneCardClick: (target: PassTarget) => void;
+  onPassLaneCardDragStart: (target: PassTarget, cardId: string) => void;
+  onPassLaneCardDragEnd: (target: PassTarget, cardId: string) => void;
   onVariantSelect: (key: string) => void;
   onWishRankSelect: (rank: StandardRank) => void;
   onDragonRecipientSelect: (recipient: SeatId) => void;
@@ -257,29 +267,29 @@ export const DEFAULT_NORMAL_TABLE_LAYOUT: NormalTableLayout = {
   southStage: { x: 0.5, y: 0.614, rotation: 0 },
   westStage: { x: 0.18, y: 0.494, rotation: 0 },
   northToEastLane: {
-    x: 0.4341889388303771,
-    y: 0.3055555555555556,
+    x: 0.5636070853462157,
+    y: 0.3154875532927035,
     rotation: 90
   },
   northToSouthLane: {
-    x: 0.4997268918613775,
-    y: 0.3472222222222222,
+    x: 0.499194847020934,
+    y: 0.32982789662419004,
     rotation: 0
   },
   northToWestLane: {
-    x: 0.5652648448923778,
-    y: 0.3055555555555556,
+    x: 0.43478260869565216,
+    y: 0.3154875532927035,
     rotation: -90
   },
   eastToNorthLane: {
-    x: 0.8356089011452541,
-    y: 0.3888888888888889,
+    x: 0.8373590982286635,
+    y: 0.3585085832871631,
     rotation: 270
   },
-  eastToWestLane: { x: 0.811032168758629, y: 0.5, rotation: 0 },
+  eastToWestLane: { x: 0.8293075684380032, y: 0.4732313299390553, rotation: 0 },
   eastToSouthLane: {
-    x: 0.8356089011452541,
-    y: 0.6111111111111112,
+    x: 0.8373590982286635,
+    y: 0.5879540765909474,
     rotation: 90
   },
   southToWestLane: {
@@ -287,17 +297,17 @@ export const DEFAULT_NORMAL_TABLE_LAYOUT: NormalTableLayout = {
     y: 0.6527777777777778,
     rotation: -90
   },
-  southToNorthLane: { x: 0.5, y: 0.616, rotation: 0 },
+  southToNorthLane: { x: 0.499194847020934, y: 0.630975106585407, rotation: 0 },
   southToEastLane: {
     x: 0.5652648448923778,
     y: 0.6527777777777778,
     rotation: 90
   },
-  westToNorthLane: { x: 0.156, y: 0.386, rotation: -90 },
-  westToEastLane: { x: 0.1802293708352509, y: 0.5, rotation: 0 },
+  westToNorthLane: { x: 0.1610305958132045, y: 0.3585085832871631, rotation: -90 },
+  westToEastLane: { x: 0.16908212560386474, y: 0.4732313299390553, rotation: 0 },
   westToSouthLane: {
-    x: 0.15565263844862576,
-    y: 0.6111111111111112,
+    x: 0.1610305958132045,
+    y: 0.5879540765909474,
     rotation: 90
   },
   playSurface: { x: 0.5, y: 0.458, rotation: 0 },
@@ -615,6 +625,46 @@ export function formatSeatShort(seat: SeatId): string {
   }
 }
 
+function formatTeamShort(team: TeamId): string {
+  return team === "team-0" ? "NS" : "EW";
+}
+
+type ScoreMarker = {
+  key: string;
+  label: "T" | "GT" | "DO";
+  tone: "accent" | "alert" | "success";
+  detail: string;
+};
+
+function getTeamScoreMarkers(
+  handHistory: MatchHandHistoryEntry | null,
+  team: TeamId
+): ScoreMarker[] {
+  if (!handHistory) {
+    return [];
+  }
+
+  const markers = handHistory.tichuBonuses
+    .filter((bonus) => bonus.team === team)
+    .map<ScoreMarker>((bonus) => ({
+      key: `${bonus.seat}-${bonus.label}-${bonus.amount}`,
+      label: bonus.label === "grand" ? "GT" : "T",
+      tone: bonus.label === "grand" ? "alert" : "accent",
+      detail: `${formatSeatShort(bonus.seat)} ${bonus.label === "grand" ? "Grand Tichu" : "Tichu"} ${bonus.amount > 0 ? `+${bonus.amount}` : String(bonus.amount)}`
+    }));
+
+  if (handHistory.doubleVictory === team) {
+    markers.push({
+      key: `${team}-double-victory`,
+      label: "DO",
+      tone: "success",
+      detail: `${formatTeamShort(team)} double-out`
+    });
+  }
+
+  return markers;
+}
+
 function formatSeatMarker(seat: SeatId): string {
   switch (seat) {
     case "seat-0":
@@ -743,6 +793,12 @@ export function formatEvent(event: EngineEvent): string {
       return "The trick resolved and control moved to the winner.";
     case "round_scored":
       return "Round scoring completed.";
+    case "match_completed":
+      return event.detail === "team-0"
+        ? "NS won the match."
+        : event.detail === "team-1"
+          ? "EW won the match."
+          : "The match completed at the score threshold.";
     case "phase_changed":
       return `Phase changed to ${event.detail}.`;
     default:
@@ -1333,8 +1389,16 @@ function surfaceMessage(
 
   if (props.state.phase === "finished" && props.state.roundSummary) {
     return {
-      title: "Round complete",
-      body: `Finish: ${props.state.roundSummary.finishOrder.map((seat) => formatSeatShort(seat)).join(" -> ")}`
+      title: props.state.matchComplete ? "Match complete" : "Round complete",
+      body: props.state.matchComplete
+        ? props.state.matchWinner
+          ? `${formatTeamShort(props.state.matchWinner)} won the match ${props.state.matchScore[props.state.matchWinner]} to ${
+              props.state.matchWinner === "team-0"
+                ? props.state.matchScore["team-1"]
+                : props.state.matchScore["team-0"]
+            }.`
+          : `The match reached the 1000-point threshold with a ${props.state.matchScore["team-0"]}:${props.state.matchScore["team-1"]} tie.`
+        : `Finish: ${props.state.roundSummary.finishOrder.map((seat) => formatSeatShort(seat)).join(" -> ")}`
     };
   }
 
@@ -2162,16 +2226,36 @@ function SeatCountPreview({ count }: { count: number }) {
 
 function PassRouteToken({
   route,
-  cardLookup
+  cardLookup,
+  interactive = false,
+  onCardClick,
+  onCardDragStart,
+  onCardDragEnd
 }: {
   route: PassRouteView;
   cardLookup: ReadonlyMap<string, Card>;
+  interactive?: boolean;
+  onCardClick?: () => void;
+  onCardDragStart?: (cardId: string) => void;
+  onCardDragEnd?: (cardId: string) => void;
 }) {
   if (route.visibleCardId) {
     return (
       <CardFace
         card={resolveCard(route.visibleCardId, cardLookup)}
         className="normal-card normal-card--route"
+        interactive={interactive}
+        draggable={interactive}
+        onClick={onCardClick}
+        onDragStart={(event) => {
+          event.dataTransfer.effectAllowed = "move";
+          event.dataTransfer.setData(
+            "application/x-tichu-pass-card",
+            route.visibleCardId!
+          );
+          onCardDragStart?.(route.visibleCardId!);
+        }}
+        onDragEnd={() => onCardDragEnd?.(route.visibleCardId!)}
       />
     );
   }
@@ -2499,7 +2583,10 @@ function NormalPassStagingRegions({
   selectedPassTarget,
   cardLookup,
   onPassTargetSelect,
-  onPassLaneDrop
+  onPassLaneDrop,
+  onPassLaneCardClick,
+  onPassLaneCardDragStart,
+  onPassLaneCardDragEnd
 }: Pick<
   GameTableViewProps,
   | "normalTableLayout"
@@ -2508,6 +2595,9 @@ function NormalPassStagingRegions({
   | "cardLookup"
   | "onPassTargetSelect"
   | "onPassLaneDrop"
+  | "onPassLaneCardClick"
+  | "onPassLaneCardDragStart"
+  | "onPassLaneCardDragEnd"
 > & {
   layoutMetrics: NormalViewportLayoutMetrics;
 }) {
@@ -2552,8 +2642,20 @@ function NormalPassStagingRegions({
           }
 
           const isInteractive = route.interactive;
+          const tokenInteractive = isInteractive && Boolean(route.visibleCardId);
           const slotContents = (
-            <PassRouteToken route={route} cardLookup={cardLookup} />
+            <PassRouteToken
+              route={route}
+              cardLookup={cardLookup}
+              interactive={tokenInteractive}
+              onCardClick={() => onPassLaneCardClick(route.target)}
+              onCardDragStart={(cardId) =>
+                onPassLaneCardDragStart(route.target, cardId)
+              }
+              onCardDragEnd={(cardId) =>
+                onPassLaneCardDragEnd(route.target, cardId)
+              }
+            />
           );
           const laneClassName = [
             "normal-pass-lane",
@@ -2627,27 +2729,50 @@ function NormalPassStagingRegions({
                   </span>
                 </span>
               </div>
-              <button
-                type="button"
-                className={slotClassName}
-                aria-label={`${formatPassDirectionLabel(laneSpec.direction)} pass to ${formatSeatShort(route.targetSeat)}`}
-                onClick={() => onPassTargetSelect(route.target)}
-                onDragOver={(event) => {
-                  event.preventDefault();
-                  event.dataTransfer.dropEffect = "move";
-                }}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  const cardId = event.dataTransfer.getData(
-                    "application/x-tichu-pass-card"
-                  );
-                  if (cardId) {
-                    onPassLaneDrop(route.target, cardId);
-                  }
-                }}
-              >
-                {slotContents}
-              </button>
+              {tokenInteractive ? (
+                <div
+                  className={slotClassName}
+                  aria-label={`${formatPassDirectionLabel(laneSpec.direction)} pass to ${formatSeatShort(route.targetSeat)}`}
+                  onClick={() => onPassTargetSelect(route.target)}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = "move";
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    const cardId = event.dataTransfer.getData(
+                      "application/x-tichu-pass-card"
+                    );
+                    if (cardId) {
+                      onPassLaneDrop(route.target, cardId);
+                    }
+                  }}
+                >
+                  {slotContents}
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className={slotClassName}
+                  aria-label={`${formatPassDirectionLabel(laneSpec.direction)} pass to ${formatSeatShort(route.targetSeat)}`}
+                  onClick={() => onPassTargetSelect(route.target)}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = "move";
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    const cardId = event.dataTransfer.getData(
+                      "application/x-tichu-pass-card"
+                    );
+                    if (cardId) {
+                      onPassLaneDrop(route.target, cardId);
+                    }
+                  }}
+                >
+                  {slotContents}
+                </button>
+              )}
             </div>
           );
         });
@@ -2968,6 +3093,59 @@ function NormalActionStrip({
   );
 }
 
+export function MatchScoreboard({
+  state,
+  derived,
+  className = "",
+  onOpenHistory
+}: {
+  state: GameTableViewProps["state"];
+  derived: GameTableViewProps["derived"];
+  className?: string;
+  onOpenHistory: () => void;
+}) {
+  const latestHand = state.matchHistory.at(-1) ?? null;
+  const team0Markers = getTeamScoreMarkers(latestHand, "team-0");
+  const team1Markers = getTeamScoreMarkers(latestHand, "team-1");
+
+  return (
+    <button
+      type="button"
+      className={["normal-scoreboard", "normal-scoreboard--button", className]
+        .filter(Boolean)
+        .join(" ")}
+      aria-label="Open score history"
+      onClick={onOpenHistory}
+    >
+      <span className="normal-scoreboard__team normal-scoreboard__team--team-0">
+        {team0Markers.map((marker) => (
+          <span
+            key={marker.key}
+            className={`score-marker score-marker--${marker.tone}`}
+            title={marker.detail}
+          >
+            {marker.label}
+          </span>
+        ))}
+        <strong>NS {derived.matchScore["team-0"]}</strong>
+      </span>
+      <span className="normal-scoreboard__divider">:</span>
+      <span className="normal-scoreboard__team normal-scoreboard__team--team-1">
+        <strong>{derived.matchScore["team-1"]} EW</strong>
+        {team1Markers.map((marker) => (
+          <span
+            key={marker.key}
+            className={`score-marker score-marker--${marker.tone}`}
+            title={marker.detail}
+          >
+            {marker.label}
+          </span>
+        ))}
+      </span>
+    </button>
+  );
+}
+
 function DebugActionStrip({
   normalActionRail,
   localDragonRecipients,
@@ -3117,7 +3295,7 @@ function moveFocusByStep(
   elements[nextIndex]?.focus();
 }
 
-function GameChromeMenu({
+export function GameChromeMenu({
   variant,
   isOpen,
   uiMode,
@@ -3399,6 +3577,393 @@ function HotKeysDialogContent({
   );
 }
 
+function stableDisplayJson(value: SeedJsonValue): string {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value, null, 2);
+  }
+
+  if (Array.isArray(value)) {
+    return `[${value.map((entry) => stableDisplayJson(entry)).join(", ")}]`;
+  }
+
+  const entries = Object.entries(value).sort(([left], [right]) =>
+    left.localeCompare(right)
+  );
+  return `{\n${entries
+    .map(
+      ([key, entry]) => `  ${JSON.stringify(key)}: ${stableDisplayJson(entry)}`
+    )
+    .join(",\n")}\n}`;
+}
+
+function formatDuration(durationMs: number) {
+  return durationMs >= 1000
+    ? `${(durationMs / 1000).toFixed(2)}s`
+    : `${Math.round(durationMs)}ms`;
+}
+
+function formatEntropyTimestamp(unixTimeMs: number) {
+  return new Date(unixTimeMs).toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "medium"
+  });
+}
+
+async function copyToClipboard(text: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "true");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  textarea.style.pointerEvents = "none";
+  document.body.append(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  textarea.remove();
+}
+
+function CopyableEntropyField({
+  label,
+  value,
+  copied,
+  onCopy
+}: {
+  label: string;
+  value: string;
+  copied: boolean;
+  onCopy: () => void;
+}) {
+  return (
+    <div className="entropy-field">
+      <div className="entropy-field__header">
+        <strong>{label}</strong>
+        <button
+          type="button"
+          className={copied ? "entropy-copy-button is-copied" : "entropy-copy-button"}
+          onClick={onCopy}
+        >
+          {copied ? "Copied" : "Copy"}
+        </button>
+      </div>
+      <textarea
+        className="entropy-field__input"
+        value={value}
+        readOnly
+        rows={1}
+        wrap="off"
+        spellCheck={false}
+      />
+    </div>
+  );
+}
+
+export function RandomSourcesDialogContent({
+  latestEntropyDebug
+}: Pick<GameTableViewProps, "latestEntropyDebug">) {
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!copiedField) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => setCopiedField(null), 1200);
+    return () => window.clearTimeout(timeout);
+  }, [copiedField]);
+
+  if (!latestEntropyDebug) {
+    return (
+      <div className="entropy-empty-state">
+        <p>No random source data available yet. Start a game first.</p>
+      </div>
+    );
+  }
+
+  const primarySource =
+    latestEntropyDebug.sources.find(
+      (source) =>
+        source.sourceId === latestEntropyDebug.provenance.primaryProvider
+    ) ?? null;
+  const generationSucceeded = latestEntropyDebug.sourceSummary.metMinimum;
+  const statusTitle = generationSucceeded
+    ? "Seed generation succeeded"
+    : "Seed generation failed";
+  const statusBody = !generationSucceeded
+    ? "No valid entropy source completed the minimum path for this run."
+    : latestEntropyDebug.provenance.localFallbackUsed
+      ? "Remote sources timed out or were unavailable. Local cryptographic randomness completed the entropy set, and the stored final seed remains deterministic for replay."
+      : latestEntropyDebug.sourceSummary.failed > 0
+        ? `${primarySource?.displayName ?? "The primary source"} completed successfully, and the final seed was derived from the successful sources while unavailable providers were skipped cleanly.`
+        : "All attempted sources for this run completed successfully and were combined into the final deterministic seed.";
+
+  const copyValue = async (fieldId: string, value: string) => {
+    await copyToClipboard(value);
+    setCopiedField(fieldId);
+  };
+
+  return (
+    <div className="entropy-dialog">
+      <div className="entropy-dialog__intro">
+        <p className="entropy-dialog__subtitle">Most recent seed generation</p>
+      </div>
+
+      <section className="entropy-section">
+        <div
+          className={[
+            "entropy-status-card",
+            generationSucceeded
+              ? "entropy-status-card--success"
+              : "entropy-status-card--failed"
+          ].join(" ")}
+        >
+          <div className="entropy-status-card__header">
+            <strong>{statusTitle}</strong>
+            <span className="entropy-status-card__badge">
+              {latestEntropyDebug.provenance.localFallbackUsed
+                ? "Local fallback used"
+                : primarySource?.displayName ?? "Primary source"}
+            </span>
+          </div>
+          <p>{statusBody}</p>
+        </div>
+      </section>
+
+      <section className="entropy-section">
+        <h3>Final Values</h3>
+        <div className="entropy-field-grid">
+          <CopyableEntropyField
+            label="Final Seed (hex)"
+            value={latestEntropyDebug.finalSeedHex}
+            copied={copiedField === "final-seed-hex"}
+            onCopy={() =>
+              void copyValue("final-seed-hex", latestEntropyDebug.finalSeedHex)
+            }
+          />
+          <CopyableEntropyField
+            label="Final Seed (base64)"
+            value={latestEntropyDebug.finalSeedBase64}
+            copied={copiedField === "final-seed-base64"}
+            onCopy={() =>
+              void copyValue(
+                "final-seed-base64",
+                latestEntropyDebug.finalSeedBase64
+              )
+            }
+          />
+          <CopyableEntropyField
+            label="Shuffle Seed (hex)"
+            value={latestEntropyDebug.shuffleSeedHex}
+            copied={copiedField === "shuffle-seed-hex"}
+            onCopy={() =>
+              void copyValue(
+                "shuffle-seed-hex",
+                latestEntropyDebug.shuffleSeedHex
+              )
+            }
+          />
+          <CopyableEntropyField
+            label="Audit Hash"
+            value={latestEntropyDebug.auditHashHex}
+            copied={copiedField === "audit-hash"}
+            onCopy={() =>
+              void copyValue("audit-hash", latestEntropyDebug.auditHashHex)
+            }
+          />
+        </div>
+        <div className="entropy-kv-grid">
+          <div className="entropy-kv-card">
+            <span>Game ID</span>
+            <strong>{latestEntropyDebug.gameId}</strong>
+          </div>
+          <div className="entropy-kv-card">
+            <span>Timestamp</span>
+            <strong>
+              {formatEntropyTimestamp(latestEntropyDebug.unixTimeMs)}
+            </strong>
+          </div>
+        </div>
+      </section>
+
+      <section className="entropy-section">
+        <h3>Source Summary</h3>
+        <div className="entropy-summary-grid">
+          <article className="entropy-summary-card">
+            <span>Attempted</span>
+            <strong>{latestEntropyDebug.sourceSummary.attempted}</strong>
+          </article>
+          <article className="entropy-summary-card">
+            <span>Succeeded</span>
+            <strong>{latestEntropyDebug.sourceSummary.succeeded}</strong>
+          </article>
+          <article className="entropy-summary-card">
+            <span>Failed</span>
+            <strong>{latestEntropyDebug.sourceSummary.failed}</strong>
+          </article>
+        </div>
+      </section>
+
+      <section className="entropy-section">
+        <h3>Sources</h3>
+        <div className="entropy-source-list">
+          {latestEntropyDebug.sources.map((source) => (
+            <article
+              key={source.sourceId}
+              className={source.ok ? "entropy-source" : "entropy-source is-failed"}
+            >
+              <div className="entropy-source__header">
+                <div className="entropy-source__titles">
+                  <strong>{source.displayName}</strong>
+                  <span>{source.sourceId}</span>
+                </div>
+                <span
+                  className={
+                    source.ok
+                      ? "entropy-source__status is-success"
+                      : "entropy-source__status is-failed"
+                  }
+                >
+                  {source.ok ? "Success" : "Failed"}
+                </span>
+              </div>
+
+              <div className="entropy-source__metrics">
+                <span>Weight {source.qualityWeight}</span>
+                <span>{formatDuration(source.durationMs)}</span>
+                <span>{source.bytesLength} bytes</span>
+              </div>
+
+              {source.previewValue ? (
+                <p className="entropy-source__preview">{source.previewValue}</p>
+              ) : null}
+
+              {source.normalizedHashHex ? (
+                <textarea
+                  className="entropy-source__hash"
+                  value={source.normalizedHashHex}
+                  readOnly
+                  rows={1}
+                  wrap="off"
+                  spellCheck={false}
+                />
+              ) : null}
+
+              {source.error ? (
+                <p className="entropy-source__error">{source.error}</p>
+              ) : null}
+
+              <details className="entropy-source__meta">
+                <summary>Metadata</summary>
+                <pre>{stableDisplayJson(source.meta)}</pre>
+              </details>
+            </article>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+export function ScoreHistoryDialogContent({
+  state
+}: Pick<GameTableViewProps, "state">) {
+  if (state.matchHistory.length === 0) {
+    return (
+      <div className="entropy-empty-state">
+        <p>No completed hands yet. Finish a hand to populate score history.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="score-history">
+      <div className="score-history__summary">
+        <article className="score-history__summary-card">
+          <span>Match Score</span>
+          <strong>
+            NS {state.matchScore["team-0"]} : {state.matchScore["team-1"]} EW
+          </strong>
+        </article>
+        {state.matchComplete && (
+          <article className="score-history__summary-card">
+            <span>Status</span>
+            <strong>
+              {state.matchWinner
+                ? `${formatTeamShort(state.matchWinner)} won the match`
+                : "Match complete"}
+            </strong>
+          </article>
+        )}
+      </div>
+
+      <div className="score-history__list">
+        {state.matchHistory.map((entry) => {
+          const team0Markers = getTeamScoreMarkers(entry, "team-0");
+          const team1Markers = getTeamScoreMarkers(entry, "team-1");
+
+          return (
+            <article
+              key={`${entry.handNumber}-${entry.roundSeed}`}
+              className="score-history__entry"
+            >
+              <div className="score-history__entry-header">
+                <strong>Hand {entry.handNumber}</strong>
+                <span>
+                  Finish {entry.finishOrder.map((seat) => formatSeatShort(seat)).join(" -> ")}
+                </span>
+              </div>
+
+              <div className="score-history__teams">
+                <div className="score-history__team score-history__team--team-0">
+                  <div className="score-history__team-line">
+                    <span className="score-history__team-name">NS</span>
+                    <span className="score-history__team-markers">
+                      {team0Markers.map((marker) => (
+                        <span
+                          key={marker.key}
+                          className={`score-marker score-marker--${marker.tone}`}
+                          title={marker.detail}
+                        >
+                          {marker.label}
+                        </span>
+                      ))}
+                    </span>
+                    <strong>{entry.teamScores["team-0"]}</strong>
+                  </div>
+                  <small>Cumulative {entry.cumulativeScores["team-0"]}</small>
+                </div>
+
+                <div className="score-history__team score-history__team--team-1">
+                  <div className="score-history__team-line">
+                    <span className="score-history__team-name">EW</span>
+                    <strong>{entry.teamScores["team-1"]}</strong>
+                    <span className="score-history__team-markers">
+                      {team1Markers.map((marker) => (
+                        <span
+                          key={marker.key}
+                          className={`score-marker score-marker--${marker.tone}`}
+                          title={marker.detail}
+                        >
+                          {marker.label}
+                        </span>
+                      ))}
+                    </span>
+                  </div>
+                  <small>Cumulative {entry.cumulativeScores["team-1"]}</small>
+                </div>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function HowToPlayDialogContent() {
   return (
     <div className="how-to-play">
@@ -3418,11 +3983,17 @@ function HowToPlayDialogContent() {
 
 function GameDialogLayer({
   activeDialog,
+  state,
+  latestEntropyDebug,
   hotkeyDefinitions,
   onUiCommand
 }: Pick<
   GameTableViewProps,
-  "activeDialog" | "hotkeyDefinitions" | "onUiCommand"
+  | "activeDialog"
+  | "state"
+  | "latestEntropyDebug"
+  | "hotkeyDefinitions"
+  | "onUiCommand"
 >) {
   if (!activeDialog) {
     return null;
@@ -3435,6 +4006,22 @@ function GameDialogLayer({
       onClose={() => onUiCommand("close_active_overlay")}
     >
       <HotKeysDialogContent hotkeyDefinitions={hotkeyDefinitions} />
+    </ModalDialog>
+  ) : activeDialog === "random_sources" ? (
+    <ModalDialog
+      title="Random Sources"
+      className="game-dialog--entropy"
+      onClose={() => onUiCommand("close_active_overlay")}
+    >
+      <RandomSourcesDialogContent latestEntropyDebug={latestEntropyDebug} />
+    </ModalDialog>
+  ) : activeDialog === "score_history" ? (
+    <ModalDialog
+      title="Score History"
+      className="game-dialog--score-history"
+      onClose={() => onUiCommand("close_active_overlay")}
+    >
+      <ScoreHistoryDialogContent state={state} />
     </ModalDialog>
   ) : (
     <ModalDialog
@@ -4236,17 +4823,26 @@ export function NormalGameTableView(props: GameTableViewProps) {
             onMainMenuOpenChange={props.onMainMenuOpenChange}
             onUiCommand={props.onUiCommand}
           />
+          {props.derived.currentWish !== null && (
+            <div className="normal-active-wish" aria-live="polite">
+              <span className="normal-active-wish__label">Active wish</span>
+              <span className="wish-chip wish-chip--table">
+                {formatRank(props.derived.currentWish)}
+              </span>
+            </div>
+          )}
           <header
             className="normal-header-band"
             data-layout-container="header-band"
           >
             <div className="normal-header-band__spacer" aria-hidden="true" />
-            <div className="normal-scoreboard">
-              <strong>
-                NS {props.derived.matchScore["team-0"]} :{" "}
-                {props.derived.matchScore["team-1"]} EW
-              </strong>
-            </div>
+            <MatchScoreboard
+              state={props.state}
+              derived={props.derived}
+              onOpenHistory={() =>
+                props.onUiCommand("open_score_history_dialog")
+              }
+            />
             <div className="normal-header-band__spacer" aria-hidden="true" />
           </header>
 
@@ -4398,6 +4994,9 @@ export function NormalGameTableView(props: GameTableViewProps) {
             cardLookup={props.cardLookup}
             onPassTargetSelect={props.onPassTargetSelect}
             onPassLaneDrop={props.onPassLaneDrop}
+            onPassLaneCardClick={props.onPassLaneCardClick}
+            onPassLaneCardDragStart={props.onPassLaneCardDragStart}
+            onPassLaneCardDragEnd={props.onPassLaneCardDragEnd}
           />
 
           {props.layoutEditorActive && (
@@ -4412,6 +5011,8 @@ export function NormalGameTableView(props: GameTableViewProps) {
 
           <GameDialogLayer
             activeDialog={props.activeDialog}
+            state={props.state}
+            latestEntropyDebug={props.latestEntropyDebug}
             hotkeyDefinitions={props.hotkeyDefinitions}
             onUiCommand={props.onUiCommand}
           />
@@ -4455,10 +5056,14 @@ export function DebugGameTableView(props: GameTableViewProps) {
           </section>
           <section className="status-card">
             <span className="status-card__label">Scoreboard</span>
-            <strong>
-              Team 0 {props.derived.matchScore["team-0"]} :{" "}
-              {props.derived.matchScore["team-1"]} Team 1
-            </strong>
+            <MatchScoreboard
+              state={props.state}
+              derived={props.derived}
+              className="normal-scoreboard--debug"
+              onOpenHistory={() =>
+                props.onUiCommand("open_score_history_dialog")
+              }
+            />
             <small>Shared engine state</small>
           </section>
         </div>
@@ -4485,7 +5090,7 @@ export function DebugGameTableView(props: GameTableViewProps) {
             className="utility-button utility-button--primary"
             onClick={() => props.onUiCommand("new_game")}
           >
-            New Round
+            New Game
           </button>
         </div>
       </header>
@@ -4728,6 +5333,8 @@ export function DebugGameTableView(props: GameTableViewProps) {
 
       <GameDialogLayer
         activeDialog={props.activeDialog}
+        state={props.state}
+        latestEntropyDebug={props.latestEntropyDebug}
         hotkeyDefinitions={props.hotkeyDefinitions}
         onUiCommand={props.onUiCommand}
       />

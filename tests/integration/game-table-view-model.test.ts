@@ -14,7 +14,7 @@ import {
   parseNormalTableLayoutConfigText
 } from "../../apps/web/src/game-table-views";
 
-describe("milestone 4.5.2 view-model helpers", () => {
+describe("game-table view-model helpers", () => {
   it("toggles debug mode only for ctrl+d", () => {
     expect(
       isDebugToggleShortcut({
@@ -53,6 +53,7 @@ describe("milestone 4.5.2 view-model helpers", () => {
       "Table Editor",
       "Debug Mode",
       "Hot Keys",
+      "Random Sources",
       "How To Play Tichu"
     ]);
   });
@@ -94,12 +95,14 @@ describe("milestone 4.5.2 view-model helpers", () => {
       createNormalActionRail({
         phase: "grand_tichu_window",
         nextEnabled: true,
+        nextDealEnabled: false,
         grandTichuEnabled: true,
         tichuEnabled: false,
         passEnabled: false,
         exchangeEnabled: false,
         pickupEnabled: false,
-        playEnabled: false
+        playEnabled: false,
+        matchComplete: false
       }).map((slot) => slot.label)
     ).toEqual(["Next", "Grand Tichu", "Pass"]);
   });
@@ -109,12 +112,14 @@ describe("milestone 4.5.2 view-model helpers", () => {
       createNormalActionRail({
         phase: "pass_select",
         nextEnabled: false,
+        nextDealEnabled: false,
         grandTichuEnabled: false,
         tichuEnabled: false,
         passEnabled: false,
         exchangeEnabled: true,
         pickupEnabled: false,
-        playEnabled: false
+        playEnabled: false,
+        matchComplete: false
       }).map((slot) => slot.label)
     ).toEqual(["Tichu", "Pass", "Exchange"]);
   });
@@ -124,12 +129,14 @@ describe("milestone 4.5.2 view-model helpers", () => {
       createNormalActionRail({
         phase: "trick_play",
         nextEnabled: false,
+        nextDealEnabled: false,
         grandTichuEnabled: false,
         tichuEnabled: true,
         passEnabled: true,
         exchangeEnabled: false,
         pickupEnabled: false,
-        playEnabled: true
+        playEnabled: true,
+        matchComplete: false
       }).map((slot) => slot.label)
     ).toEqual(["Pass", "Tichu", "Play"]);
   });
@@ -138,12 +145,14 @@ describe("milestone 4.5.2 view-model helpers", () => {
     const slots = createNormalActionRail({
       phase: "exchange_complete",
       nextEnabled: false,
+      nextDealEnabled: false,
       grandTichuEnabled: false,
       tichuEnabled: true,
       passEnabled: false,
       exchangeEnabled: false,
       pickupEnabled: true,
-      playEnabled: false
+      playEnabled: false,
+      matchComplete: false
     });
 
     expect(slots.map((slot) => slot.label)).toEqual([
@@ -159,9 +168,47 @@ describe("milestone 4.5.2 view-model helpers", () => {
     });
   });
 
+  it("shows Next Deal only while the match is still live", () => {
+    expect(
+      createNormalActionRail({
+        phase: "finished",
+        nextEnabled: false,
+        nextDealEnabled: true,
+        grandTichuEnabled: false,
+        tichuEnabled: false,
+        passEnabled: false,
+        exchangeEnabled: false,
+        pickupEnabled: false,
+        playEnabled: false,
+        matchComplete: false
+      }).map((slot) => slot.label)
+    ).toEqual(["Next Deal"]);
+
+    expect(
+      createNormalActionRail({
+        phase: "finished",
+        nextEnabled: false,
+        nextDealEnabled: false,
+        grandTichuEnabled: false,
+        tichuEnabled: false,
+        passEnabled: false,
+        exchangeEnabled: false,
+        pickupEnabled: false,
+        playEnabled: false,
+        matchComplete: true
+      })
+    ).toEqual([]);
+  });
+
   it("describes single-card plays explicitly in the event feed", () => {
     expect(formatEvent({ type: "cards_played", detail: "seat-1:single" })).toBe(
       "East played Single."
+    );
+  });
+
+  it("describes match completion events explicitly", () => {
+    expect(formatEvent({ type: "match_completed", detail: "team-0" })).toBe(
+      "NS won the match."
     );
   });
 

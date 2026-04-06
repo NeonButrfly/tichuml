@@ -7,6 +7,11 @@ const projectDir = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   plugins: [react()],
+  server: {
+    proxy: {
+      "/api": "http://127.0.0.1:4310"
+    }
+  },
   resolve: {
     alias: {
       "@tichuml/ai-heuristics": path.resolve(projectDir, "../../packages/ai-heuristics/src/index.ts"),

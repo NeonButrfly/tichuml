@@ -16,6 +16,8 @@ import {
   type ActorId,
   type EngineAction,
   type EngineResult,
+  type GameState,
+  type InitialGameSeedConfig,
   type LegalAction,
   type SeatId,
   type StandardRank,
@@ -24,15 +26,16 @@ import {
 import {
   LOCAL_SEAT,
   PASS_TARGETS,
+  assignPassCardToDraft,
   areAllExchangeSelectionsSubmitted,
   buildPlayVariantKey,
   collectLocalLegalCardIds,
-  createRoundSeed,
   findMatchingPlayActions,
   getExchangeFlowState,
   getPassTargetSeat,
   getPrimaryActorFromResult,
   isExchangePhase,
+  removePassCardFromDraft,
   shouldAllowAiEndgameContinuation,
   sortCardsForHand,
   validateExchangeDraft,
@@ -64,6 +67,8 @@ import {
   type NormalTableLayoutTokens,
   type SeatVisualPosition
 } from "./game-table-views";
+import { generateSeedWithEntropy } from "./seed/orchestrator";
+import type { SeedDebugSnapshot } from "@tichuml/shared";
 import defaultLayoutXml from "./layout.xml?raw";
 
 const AI_STEP_DELAY_MS = 420;
@@ -124,14 +129,39 @@ export function shouldPauseForLocalOptionalAction(config: {
   forceAiEndgameContinuation: boolean;
   openingLeadPending: boolean;
   exchangePhaseActive?: boolean;
+  pickupPending?: boolean;
 }) {
   return (
     !config.autoplayLocal &&
-    config.localHasOptionalAction &&
-    !config.forceAiEndgameContinuation &&
-    !config.openingLeadPending &&
-    !config.exchangePhaseActive
+    (Boolean(config.pickupPending) ||
+      (config.localHasOptionalAction &&
+        !config.forceAiEndgameContinuation &&
+        !config.openingLeadPending &&
+        !config.exchangePhaseActive))
   );
+}
+
+type RoundCarryState = Pick<InitialGameSeedConfig, "matchHistory" | "matchScore">;
+
+export function createNextDealCarryState(
+  state: Pick<GameState, "matchComplete" | "matchHistory" | "matchScore">
+): RoundCarryState {
+  if (state.matchComplete) {
+    throw new Error("Cannot create another deal after the match is complete.");
+  }
+
+  return {
+    matchScore: { ...state.matchScore },
+    matchHistory: state.matchHistory.map((entry) => ({
+      handNumber: entry.handNumber,
+      roundSeed: entry.roundSeed,
+      teamScores: { ...entry.teamScores },
+      cumulativeScores: { ...entry.cumulativeScores },
+      finishOrder: [...entry.finishOrder],
+      doubleVictory: entry.doubleVictory,
+      tichuBonuses: entry.tichuBonuses.map((bonus) => ({ ...bonus }))
+    }))
+  };
 }
 
 function findNextEmptyPassTarget(
@@ -160,11 +190,142 @@ const INITIAL_NORMAL_TABLE_LAYOUT_CONFIG =
   parseNormalTableLayoutConfigText(defaultLayoutXml) ??
   DEFAULT_NORMAL_TABLE_LAYOUT_CONFIG;
 
-export function App() {
-  const [seedIndex, setSeedIndex] = useState(INITIAL_SEED_INDEX);
-  const [round, setRound] = useState<EngineResult>(() =>
-    createInitialGameState(createRoundSeed(INITIAL_SEED_INDEX))
+type RoundSession = {
+  roundIndex: number;
+  round: EngineResult;
+  entropyDebug: SeedDebugSnapshot;
+};
+
+type AppSessionProps = {
+  initialSession: RoundSession;
+  createRoundSession: (
+    roundIndex: number,
+    carryState?: RoundCarryState
+  ) => Promise<RoundSession>;
+};
+
+function AppLoadingScreen({
+  message,
+  error,
+  onRetry
+}: {
+  message: string;
+  error: string | null;
+  onRetry: () => void;
+}) {
+  return (
+    <main className="tabletop-app tabletop-app--normal">
+      <section className="normal-viewport">
+        <div className="normal-viewport__board">
+          <div
+            style={{
+              position: "relative",
+              zIndex: 2,
+              display: "grid",
+              placeItems: "center",
+              height: "100%",
+              textAlign: "center",
+              padding: "24px"
+            }}
+          >
+            <div
+              style={{
+                display: "grid",
+                gap: "12px",
+                maxWidth: "420px",
+                color: "#eef6f0"
+              }}
+            >
+              <strong style={{ fontSize: "1.2rem", letterSpacing: "0.04em" }}>
+                Starting New Game
+              </strong>
+              <p style={{ margin: 0, color: "rgba(238, 246, 240, 0.82)" }}>
+                {error ?? message}
+              </p>
+              {error ? (
+                <div>
+                  <button type="button" className="action-btn" onClick={onRetry}>
+                    Retry
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
   );
+}
+
+export function App() {
+  const [initialSession, setInitialSession] = useState<RoundSession | null>(
+    null
+  );
+  const [bootError, setBootError] = useState<string | null>(null);
+
+  const createRoundSession = useEffectEvent(
+    async (
+      roundIndex: number,
+      carryState?: RoundCarryState
+    ): Promise<RoundSession> => {
+      const generatedSeed = await generateSeedWithEntropy({ roundIndex });
+      return {
+        roundIndex,
+        entropyDebug: generatedSeed.debug,
+        round: createInitialGameState({
+          seed: generatedSeed.shuffleSeedHex,
+          seedProvenance: generatedSeed.provenance,
+          ...(carryState ?? {})
+        })
+      };
+    }
+  );
+
+  const bootstrapInitialRound = useEffectEvent(async () => {
+    try {
+      setBootError(null);
+      const session = await createRoundSession(INITIAL_SEED_INDEX);
+      startTransition(() => setInitialSession(session));
+    } catch (error) {
+      setBootError(
+        error instanceof Error
+          ? error.message
+          : "Failed to create the first game seed."
+      );
+    }
+  });
+
+  useEffect(() => {
+    if (initialSession) {
+      return;
+    }
+
+    void bootstrapInitialRound();
+  }, [bootstrapInitialRound, initialSession]);
+
+  if (!initialSession) {
+    return (
+      <AppLoadingScreen
+        message="Collecting layered entropy and deriving a deterministic shuffle seed."
+        error={bootError}
+        onRetry={() => {
+          void bootstrapInitialRound();
+        }}
+      />
+    );
+  }
+
+  return (
+    <AppSession
+      initialSession={initialSession}
+      createRoundSession={createRoundSession}
+    />
+  );
+}
+
+function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
+  const [seedIndex, setSeedIndex] = useState(initialSession.roundIndex);
+  const [round, setRound] = useState<EngineResult>(initialSession.round);
   const [decisionCount, setDecisionCount] = useState(0);
   const [uiMode, setUiMode] = useState<UiMode>("normal");
   const [layoutEditorActive, setLayoutEditorActive] = useState(false);
@@ -176,9 +337,14 @@ export function App() {
     null
   );
   const [recentEvents, setRecentEvents] = useState<string[]>(() =>
-    createInitialGameState(createRoundSeed(INITIAL_SEED_INDEX)).events.map(
-      formatEvent
-    )
+    initialSession.round.events.map(formatEvent)
+  );
+  const [roundGenerationPending, setRoundGenerationPending] = useState(false);
+  const [roundGenerationError, setRoundGenerationError] = useState<
+    string | null
+  >(null);
+  const [latestEntropyDebug, setLatestEntropyDebug] = useState<SeedDebugSnapshot>(
+    initialSession.entropyDebug
   );
   const [sortMode, setSortMode] = useState<HandSortMode>("rank");
   const [selectedCardIds, setSelectedCardIds] = useState<string[]>([]);
@@ -203,11 +369,16 @@ export function App() {
     useState<NormalTableLayoutTokens>(
       () => INITIAL_NORMAL_TABLE_LAYOUT_CONFIG.tokens
     );
+  const localPassDragRef = useRef<{
+    sourceTarget: PassTarget;
+    cardId: string;
+    completed: boolean;
+  } | null>(null);
 
   const state = round.nextState;
   const derived = round.derivedView;
   const primaryActor = getPrimaryActorFromResult(round);
-  const roundSeed = createRoundSeed(seedIndex);
+  const roundSeed = state.seed;
   const localActions = round.legalActions[LOCAL_SEAT] ?? [];
   const localPlayActions = localActions.filter(
     (action): action is PlayLegalAction => action.type === "play_cards"
@@ -269,6 +440,8 @@ export function App() {
     primaryActor
   );
   const openingLeadPending = isMandatoryOpeningLead(state, primaryActor);
+  const pickupPending =
+    state.phase === "exchange_complete" && Boolean(systemAdvanceAction);
   const localExchangeValidation = validateExchangeDraft(
     passDraft,
     localPassSelection?.availableCardIds ?? [],
@@ -276,10 +449,11 @@ export function App() {
   );
   const previousLocalExchangeReadyRef = useRef(localExchangeValidation.isValid);
   const localCanInteract =
-    autoplayLocal ||
-    localIsPrimaryActor ||
-    Boolean(localPassSelection) ||
-    (!exchangePhaseActive && localHasOptionalAction);
+    !roundGenerationPending &&
+    (autoplayLocal ||
+      localIsPrimaryActor ||
+      Boolean(localPassSelection) ||
+      (!exchangePhaseActive && localHasOptionalAction));
   const localActionSummary = localActions.map(describeAction);
   const localSummaryText =
     localActionSummary.length > 0
@@ -291,8 +465,18 @@ export function App() {
   const trickIsResolving = !exchangePhaseActive && derived.currentTrick === null && stagedTrick !== null;
   const passSelectionReady = localExchangeValidation.isValid;
   const controlHint =
-    state.phase === "finished"
-      ? "Round complete"
+    roundGenerationPending
+      ? "Starting new game"
+      : roundGenerationError
+        ? `New game failed: ${roundGenerationError}`
+      : state.phase === "finished"
+      ? state.matchComplete
+        ? derived.matchWinner === "team-0"
+          ? "Match complete - NS reached 1000"
+          : derived.matchWinner === "team-1"
+            ? "Match complete - EW reached 1000"
+            : "Match complete"
+        : "Round complete"
       : exchangePhaseActive
         ? localPassSelection
           ? "Select 3 cards and assign one to each destination"
@@ -301,7 +485,9 @@ export function App() {
             : exchangeFlowState === "exchange_resolving"
               ? "Resolving exchanges"
               : exchangeFlowState === "exchange_complete"
-                ? "Exchange complete"
+                ? pickupPending
+                  ? "Review the received cards, then click Pickup"
+                  : "Exchange complete"
             : "Exchange cards"
           : localDragonActions.length > 0
             ? "Choose who gets the Dragon"
@@ -309,7 +495,7 @@ export function App() {
               ? "Your turn"
               : localHasOptionalAction && !forceAiEndgameContinuation
                 ? "Interrupt available"
-                : thinkingActor
+              : thinkingActor
                   ? `${formatActorLabel(thinkingActor)} thinking`
                   : "Auto-advancing";
 
@@ -401,7 +587,10 @@ export function App() {
               occupied: Boolean(stagedCardId),
               visibleCardId,
               faceDown: Boolean(stagedCardId) && !visibleCardId,
-              interactive: seat === LOCAL_SEAT && state.phase === "pass_select"
+              interactive:
+                !roundGenerationPending &&
+                seat === LOCAL_SEAT &&
+                state.phase === "pass_select"
             };
           })
         )
@@ -413,13 +602,20 @@ export function App() {
   }));
   const normalActionRail = createNormalActionRail({
     phase: state.phase,
-    nextEnabled: Boolean(localDeclineGrandTichuAction),
-    grandTichuEnabled: Boolean(localGrandTichuAction),
-    tichuEnabled: Boolean(localCallTichuAction),
-    passEnabled: Boolean(localPassAction && localIsPrimaryActor),
-    exchangeEnabled: passSelectionReady,
-    pickupEnabled: Boolean(systemAdvanceAction),
-    playEnabled: Boolean(activePlayVariant)
+    nextEnabled: !roundGenerationPending && Boolean(localDeclineGrandTichuAction),
+    nextDealEnabled:
+      !roundGenerationPending &&
+      state.phase === "finished" &&
+      !state.matchComplete,
+    grandTichuEnabled:
+      !roundGenerationPending && Boolean(localGrandTichuAction),
+    tichuEnabled: !roundGenerationPending && Boolean(localCallTichuAction),
+    passEnabled:
+      !roundGenerationPending && Boolean(localPassAction && localIsPrimaryActor),
+    exchangeEnabled: !roundGenerationPending && passSelectionReady,
+    pickupEnabled: !roundGenerationPending && Boolean(systemAdvanceAction),
+    playEnabled: !roundGenerationPending && Boolean(activePlayVariant),
+    matchComplete: state.matchComplete
   });
   const executeUiHotkeyCommand = useEffectEvent((commandId: UiCommandId) => {
     executeUiCommand(commandId);
@@ -460,6 +656,11 @@ export function App() {
   }, [activeDialog, executeUiHotkeyCommand, layoutEditorActive, mainMenuOpen]);
 
   useEffect(() => {
+    if (roundGenerationPending) {
+      setThinkingActor(null);
+      return;
+    }
+
     if (state.phase === "finished") {
       setThinkingActor(null);
       return;
@@ -481,7 +682,8 @@ export function App() {
         localHasOptionalAction,
         forceAiEndgameContinuation,
         openingLeadPending,
-        exchangePhaseActive
+        exchangePhaseActive,
+        pickupPending
       })
     ) {
       setThinkingActor(null);
@@ -564,7 +766,9 @@ export function App() {
     localHasOptionalAction,
     localIsPrimaryActor,
     openingLeadPending,
+    pickupPending,
     primaryActor,
+    roundGenerationPending,
     round,
     state.phase
   ]);
@@ -694,9 +898,14 @@ export function App() {
     setSelectedWishRank(null);
     setPassDraft({});
     setSelectedPassTarget("left");
+    localPassDragRef.current = null;
   }
 
   function applyClientAction(action: EngineAction, chosen?: ChosenDecision) {
+    if (roundGenerationPending) {
+      return;
+    }
+
     const nextResult = applyEngineAction(state, action);
 
     startTransition(() => {
@@ -712,22 +921,58 @@ export function App() {
     });
   }
 
-  function startNextRound() {
-    const nextSeedIndex = seedIndex + 1;
-    const nextRound = createInitialGameState(createRoundSeed(nextSeedIndex));
+  const loadRoundSession = useEffectEvent(
+    async (carryState?: RoundCarryState) => {
+      if (roundGenerationPending) {
+        return;
+      }
 
-    startTransition(() => {
-      setSeedIndex(nextSeedIndex);
-      setRound(nextRound);
-      setDecisionCount(0);
-      setThinkingActor(null);
-      setLastAiDecision(null);
-      setRecentEvents(nextRound.events.map(formatEvent));
-      setSortMode("rank");
-      setStagedTrick(null);
-      resetInteractionState();
-    });
-  }
+      const nextSeedIndex = seedIndex + 1;
+      setRoundGenerationPending(true);
+      setRoundGenerationError(null);
+
+      try {
+        const nextSession = await createRoundSession(nextSeedIndex, carryState);
+
+        startTransition(() => {
+          setSeedIndex(nextSession.roundIndex);
+          setRound(nextSession.round);
+          setLatestEntropyDebug(nextSession.entropyDebug);
+          setDecisionCount(0);
+          setThinkingActor(null);
+          setLastAiDecision(null);
+          setRecentEvents(nextSession.round.events.map(formatEvent));
+          setSortMode("rank");
+          setStagedTrick(null);
+          resetInteractionState();
+        });
+      } catch (error) {
+        setRoundGenerationError(
+          error instanceof Error
+            ? error.message
+            : "Failed to generate a new round seed."
+        );
+      } finally {
+        setRoundGenerationPending(false);
+      }
+    }
+  );
+
+  const startFreshGame = useEffectEvent(async () => {
+    await loadRoundSession();
+  });
+
+  const startNextDeal = useEffectEvent(async () => {
+    if (roundGenerationPending) {
+      return;
+    }
+
+    if (state.phase !== "finished" || state.matchComplete) {
+      return;
+    }
+
+    await loadRoundSession(createNextDealCarryState(state));
+  });
 
   function exportCurrentNormalTableLayout() {
     const payload = {
@@ -755,10 +1000,14 @@ export function App() {
   }
 
   function executeUiCommand(commandId: UiCommandId) {
+    if (roundGenerationPending && commandId !== "close_active_overlay") {
+      return;
+    }
+
     switch (commandId) {
       case "new_game":
         closeActiveOverlay();
-        startNextRound();
+        void startFreshGame();
         break;
       case "toggle_table_editor":
         closeActiveOverlay();
@@ -779,6 +1028,14 @@ export function App() {
         setMainMenuOpen(false);
         setActiveDialog("hotkeys");
         break;
+      case "open_random_sources_dialog":
+        setMainMenuOpen(false);
+        setActiveDialog("random_sources");
+        break;
+      case "open_score_history_dialog":
+        setMainMenuOpen(false);
+        setActiveDialog("score_history");
+        break;
       case "open_how_to_play_dialog":
         setMainMenuOpen(false);
         setActiveDialog("how_to_play");
@@ -795,7 +1052,7 @@ export function App() {
   }
 
   function continueWithAi() {
-    if (!primaryActor || primaryActor === LOCAL_SEAT) {
+    if (roundGenerationPending || !primaryActor || primaryActor === LOCAL_SEAT) {
       return;
     }
 
@@ -808,7 +1065,7 @@ export function App() {
   }
 
   function playSelectedCards() {
-    if (!activePlayVariant) {
+    if (roundGenerationPending || !activePlayVariant) {
       return;
     }
 
@@ -825,6 +1082,7 @@ export function App() {
 
   function confirmPassSelection() {
     if (
+      roundGenerationPending ||
       !localPassSelection ||
       !passSelectionReady ||
       !passDraft.left ||
@@ -844,34 +1102,31 @@ export function App() {
   }
 
   function assignPassCard(target: PassTarget, cardId: string) {
-    if (!localPassSelection) {
+    if (roundGenerationPending || !localPassSelection) {
       return;
     }
 
     setPassDraft((current) => {
-      if (current[target] === cardId) {
+      const nextDraft = assignPassCardToDraft(current, target, cardId);
+      if (nextDraft === current) {
         setSelectedPassTarget(target);
         return current;
       }
 
-      const nextDraft: Partial<Record<PassTarget, string>> = {};
-
-      for (const draftTarget of PASS_TARGETS) {
-        const existingCardId = current[draftTarget];
-        if (
-          !existingCardId ||
-          existingCardId === cardId ||
-          draftTarget === target
-        ) {
-          continue;
-        }
-
-        nextDraft[draftTarget] = existingCardId;
-      }
-
-      nextDraft[target] = cardId;
       const nextEmptyTarget = findNextEmptyPassTarget(nextDraft);
       setSelectedPassTarget(nextEmptyTarget ?? target);
+      return nextDraft;
+    });
+  }
+
+  function removePassCard(target: PassTarget) {
+    setPassDraft((current) => {
+      const nextDraft = removePassCardFromDraft(current, target);
+      if (nextDraft === current) {
+        return current;
+      }
+
+      setSelectedPassTarget(target);
       return nextDraft;
     });
   }
@@ -906,6 +1161,10 @@ export function App() {
   }
 
   function handleNormalAction(slotId: NormalActionSlotId) {
+    if (roundGenerationPending && slotId !== "new_round") {
+      return;
+    }
+
     switch (slotId) {
       case "next":
         if (localDeclineGrandTichuAction) {
@@ -939,16 +1198,60 @@ export function App() {
         playSelectedCards();
         break;
       case "new_round":
-        startNextRound();
+        void startNextDeal();
         break;
     }
   }
 
   function handlePassLaneDrop(target: PassTarget, cardId: string) {
+    if (roundGenerationPending) {
+      return;
+    }
+
+    if (localPassDragRef.current?.cardId === cardId) {
+      localPassDragRef.current.completed = true;
+    }
     assignPassCard(target, cardId);
   }
 
+  function handlePassLaneCardClick(target: PassTarget) {
+    if (roundGenerationPending || !localPassSelection) {
+      return;
+    }
+
+    removePassCard(target);
+  }
+
+  function handlePassLaneCardDragStart(target: PassTarget, cardId: string) {
+    localPassDragRef.current = {
+      sourceTarget: target,
+      cardId,
+      completed: false
+    };
+  }
+
+  function handlePassLaneCardDragEnd(target: PassTarget, cardId: string) {
+    const dragState = localPassDragRef.current;
+    if (
+      !dragState ||
+      dragState.sourceTarget !== target ||
+      dragState.cardId !== cardId
+    ) {
+      return;
+    }
+
+    if (!dragState.completed) {
+      removePassCard(target);
+    }
+
+    localPassDragRef.current = null;
+  }
+
   function handleDragonRecipientSelect(recipient: SeatId) {
+    if (roundGenerationPending) {
+      return;
+    }
+
     const action = localDragonActions.find(
       (candidate) => candidate.recipient === recipient
     );
@@ -972,7 +1275,8 @@ export function App() {
     passLaneViews,
     sortedLocalHand,
     localCanInteract,
-    localPassInteractionEnabled: Boolean(localPassSelection),
+    localPassInteractionEnabled:
+      !roundGenerationPending && Boolean(localPassSelection),
     localLegalCardIds,
     selectedCardIds,
     selectedPassTarget,
@@ -987,7 +1291,8 @@ export function App() {
     recentEvents,
     localActionSummary,
     localSummaryText,
-    canContinueAi: Boolean(primaryActor && primaryActor !== LOCAL_SEAT),
+    canContinueAi:
+      !roundGenerationPending && Boolean(primaryActor && primaryActor !== LOCAL_SEAT),
     localDragonRecipients: localDragonActions.map((action) => action.recipient),
     uiMode,
     normalTableLayout,
@@ -995,6 +1300,7 @@ export function App() {
     layoutEditorActive,
     mainMenuOpen,
     activeDialog,
+    latestEntropyDebug,
     hotkeyDefinitions: UI_HOTKEYS,
     cardLookup,
     onAutoplayChange: setAutoplayLocal,
@@ -1003,6 +1309,9 @@ export function App() {
     onLocalCardClick: handleLocalCardClick,
     onPassTargetSelect: setSelectedPassTarget,
     onPassLaneDrop: handlePassLaneDrop,
+    onPassLaneCardClick: handlePassLaneCardClick,
+    onPassLaneCardDragStart: handlePassLaneCardDragStart,
+    onPassLaneCardDragEnd: handlePassLaneCardDragEnd,
     onVariantSelect: setSelectedVariantKey,
     onWishRankSelect: setSelectedWishRank,
     onDragonRecipientSelect: handleDragonRecipientSelect,

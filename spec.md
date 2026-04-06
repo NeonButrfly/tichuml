@@ -657,6 +657,8 @@ Must cover:
 
 Implementation should proceed in bounded milestones.
 
+The canonical milestone plan lives here. The normalized repository history and recommended milestone commit naming convention live in [docs/milestones/README.md](./docs/milestones/README.md).
+
 ### Milestone 0 — Foundation
 Deliver:
 - monorepo scaffold
@@ -817,9 +819,9 @@ The system is considered on track only if the following stay true:
 
 ---
 
-## 17. Initial Codex Prompt
+## 17. Initial Codex Prompt (Historical Bootstrap Prompt)
 
-Use this as the starting prompt for Codex:
+Use this as the original bootstrap prompt that created the staged build-out. For current work, combine it with the live repository state and the milestone history in [docs/milestones/README.md](./docs/milestones/README.md) instead of assuming the repository is still at Milestone 0.
 
 ```text
 Build TichuML as a production-leaning monorepo for a fully playable, telemetry-rich Tichu platform.
@@ -924,18 +926,15 @@ First inspect the repository, summarize the current state, identify the minimum 
 
 ---
 
-## 18. Immediate Next Step
+## 18. Execution Guidance
 
-Start with Milestone 0 only.
+Use milestone-bounded work, but start from the next assigned or unfinished milestone stream in the current repository rather than resetting active development back to Milestone 0.
 
-Do not attempt the full build in one pass.
-
-The right workflow is:
+The intended sequencing is still:
 1. scaffold foundation
 2. lock in deterministic engine core
 3. add headless AI flow and telemetry
 4. build mature UI on top of authoritative engine behavior
 5. add replay/debug/simulation capabilities
 
-That sequencing is part of the specification, not an implementation suggestion.
-
+That sequencing remains part of the specification. The Milestone 0-only instruction in the bootstrap prompt is historical context, not a standing instruction for every future task.

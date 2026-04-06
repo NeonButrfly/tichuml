@@ -1,3 +1,5 @@
+import type { SeedProvenance } from "@tichuml/shared";
+
 export const SEAT_IDS = ["seat-0", "seat-1", "seat-2", "seat-3"] as const;
 export const SYSTEM_ACTOR = "system" as const;
 export const SUITS = ["jade", "sword", "pagoda", "star"] as const;
@@ -115,8 +117,19 @@ export type RoundScoreSummary = {
   }>;
 };
 
+export type MatchHandHistoryEntry = {
+  handNumber: number;
+  roundSeed: string;
+  teamScores: Record<TeamId, number>;
+  cumulativeScores: Record<TeamId, number>;
+  finishOrder: SeatId[];
+  doubleVictory: TeamId | null;
+  tichuBonuses: RoundScoreSummary["tichuBonuses"];
+};
+
 export type GameState = {
   seed: string;
+  seedProvenance: SeedProvenance | null;
   phase: RoundPhase;
   shuffledDeck: Card[];
   deckIndex: number;
@@ -133,6 +146,16 @@ export type GameState = {
   pendingDragonGift: DragonGiftState | null;
   roundSummary: RoundScoreSummary | null;
   matchScore: Record<TeamId, number>;
+  matchHistory: MatchHandHistoryEntry[];
+  matchComplete: boolean;
+  matchWinner: TeamId | null;
+};
+
+export type InitialGameSeedConfig = {
+  seed: string | number;
+  seedProvenance?: SeedProvenance | null;
+  matchScore?: Record<TeamId, number>;
+  matchHistory?: MatchHandHistoryEntry[];
 };
 
 export type EngineEvent = {
@@ -236,6 +259,8 @@ export type PublicDerivedState = {
     entries: TrickEntry[];
   } | null;
   matchScore: Record<TeamId, number>;
+  matchComplete: boolean;
+  matchWinner: TeamId | null;
   pendingDragonGift: DragonGiftState | null;
   roundSummary: RoundScoreSummary | null;
 };

@@ -7,6 +7,7 @@ import {
   listCombinationInterpretations
 } from "@tichuml/engine";
 import {
+  assignPassCardToDraft,
   areAllExchangeSelectionsSubmitted,
   findMatchingPlayActions,
   getExchangeFlowState,
@@ -14,12 +15,14 @@ import {
   getPrimaryActor,
   isExchangePhase,
   LOCAL_SEAT,
+  removePassCardFromDraft,
   shouldAllowAiEndgameContinuation,
   sortCardsForHand,
   validateExchangeDraft,
   type PlayLegalAction
 } from "../../apps/web/src/table-model";
 import {
+  createNextDealCarryState,
   isMandatoryOpeningLead,
   shouldPauseForLocalOptionalAction
 } from "../../apps/web/src/App";
@@ -28,7 +31,7 @@ function isPlayLegalAction(action: LegalAction): action is PlayLegalAction {
   return action.type === "play_cards";
 }
 
-describe("milestone 4 table model helpers", () => {
+describe("table model helpers", () => {
   it("keeps the active seat as the primary actor even when a local bomb is available", () => {
     const currentCombination = listCombinationInterpretations(
       cardsFromIds(["jade-9"]),
@@ -255,5 +258,77 @@ describe("milestone 4 table model helpers", () => {
         exchangePhaseActive: true
       })
     ).toBe(false);
+  });
+
+  it("pauses at exchange completion until the local pickup step is acknowledged", () => {
+    expect(
+      shouldPauseForLocalOptionalAction({
+        autoplayLocal: false,
+        localHasOptionalAction: false,
+        forceAiEndgameContinuation: false,
+        openingLeadPending: false,
+        pickupPending: true
+      })
+    ).toBe(true);
+  });
+
+  it("supports removing and reassigning staged local pass cards without duplication", () => {
+    const initialDraft = {
+      left: "jade-2",
+      partner: "jade-3",
+      right: "jade-4"
+    } as const;
+
+    expect(removePassCardFromDraft(initialDraft, "partner")).toEqual({
+      left: "jade-2",
+      right: "jade-4"
+    });
+
+    expect(assignPassCardToDraft(initialDraft, "partner", "jade-4")).toEqual({
+      left: "jade-2",
+      partner: "jade-4",
+      right: "jade-3"
+    });
+  });
+
+  it("builds next-deal carry state from the finished hand without resetting the match score", () => {
+    const carryState = createNextDealCarryState({
+      matchComplete: false,
+      matchScore: { "team-0": 340, "team-1": 220 },
+      matchHistory: [
+        {
+          handNumber: 1,
+          roundSeed: "seed-1",
+          teamScores: { "team-0": 120, "team-1": -20 },
+          cumulativeScores: { "team-0": 120, "team-1": -20 },
+          finishOrder: ["seat-0", "seat-2", "seat-1", "seat-3"],
+          doubleVictory: "team-0",
+          tichuBonuses: [
+            {
+              seat: "seat-0",
+              team: "team-0",
+              label: "small",
+              amount: 100
+            }
+          ]
+        }
+      ]
+    });
+
+    expect(carryState.matchScore).toEqual({
+      "team-0": 340,
+      "team-1": 220
+    });
+    expect(carryState.matchHistory).toHaveLength(1);
+  });
+
+  it("refuses to create another deal after the match has completed", () => {
+    expect(() =>
+      createNextDealCarryState({
+        matchComplete: true,
+        matchScore: { "team-0": 1000, "team-1": 840 },
+        matchHistory: []
+      })
+    ).toThrow("Cannot create another deal after the match is complete.");
   });
 });

@@ -37,7 +37,7 @@ function selectedActionMatchesLegalShape(record: {
   });
 }
 
-describe("milestone 2 headless AI flow", () => {
+describe("headless AI flow", () => {
   it("completes a headless AI-only round with append-only telemetry", () => {
     const result = runHeadlessRound({ seed: "headless-round" });
 

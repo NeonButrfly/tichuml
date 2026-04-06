@@ -42,7 +42,7 @@ function playCandidateByCards(
   );
 }
 
-describe("milestone 3 heuristics", () => {
+describe("heuristics v1", () => {
   it("calls Grand Tichu with a clearly strong opening hand", () => {
     const state = scenario({
       phase: "grand_tichu_window",

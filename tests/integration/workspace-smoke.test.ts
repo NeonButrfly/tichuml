@@ -4,8 +4,8 @@ import { engineFoundation } from "@tichuml/engine";
 import { telemetryFoundation } from "@tichuml/telemetry";
 import { FOUNDATION_MILESTONE, workspaceManifests } from "@tichuml/shared";
 
-describe("milestone 0 workspace scaffold", () => {
-  it("keeps foundational packages aligned to the same milestone", () => {
+describe("workspace milestone metadata", () => {
+  it("keeps foundational packages aligned to the expected historical milestone markers", () => {
     expect(FOUNDATION_MILESTONE).toBe("milestone-0");
     expect(engineFoundation.milestone).toBe("milestone-1");
     expect(engineFoundation.deterministicCoreReady).toBe(true);

@@ -38,7 +38,7 @@ function scenario(config: Partial<GameState> = {}): GameState {
   });
 }
 
-describe("milestone 1 engine core", () => {
+describe("engine core", () => {
   it("deals deterministically from a seed", () => {
     const first = createInitialGameState("alpha-seed");
     const second = createInitialGameState("alpha-seed");
@@ -123,6 +123,133 @@ describe("milestone 1 engine core", () => {
           action.type === "play_cards" && action.cardIds[0] === "dragon"
       )
     ).toBe(true);
+  });
+
+  it("allows normal legal moves when the wished rank is held but cannot legally beat the trick", () => {
+    const elevatedLead = combo(["jade-9"]);
+    const state = scenario({
+      currentWish: 8,
+      activeSeat: "seat-1",
+      currentTrick: {
+        leader: "seat-0",
+        currentWinner: "seat-0",
+        currentCombination: elevatedLead,
+        entries: [{ type: "play", seat: "seat-0", combination: elevatedLead }],
+        passingSeats: []
+      },
+      hands: {
+        "seat-1": cardsFromIds(["jade-8", "dragon"])
+      }
+    });
+
+    const actions = getLegalActions(state)["seat-1"] ?? [];
+
+    expect(actions.some((action) => action.type === "pass_turn")).toBe(true);
+    expect(
+      actions.some(
+        (action) =>
+          action.type === "play_cards" && action.cardIds[0] === "dragon"
+      )
+    ).toBe(true);
+    expect(
+      actions.some(
+        (action) =>
+          action.type === "play_cards" && action.cardIds[0] === "jade-8"
+      )
+    ).toBe(false);
+  });
+
+  it("keeps the game moving when no player can satisfy an active wish", () => {
+    const mahjongLead = combo(["mahjong"]);
+    const seat1State = scenario({
+      currentWish: 8,
+      activeSeat: "seat-1",
+      currentTrick: {
+        leader: "seat-0",
+        currentWinner: "seat-0",
+        currentCombination: mahjongLead,
+        entries: [{ type: "play", seat: "seat-0", combination: mahjongLead }],
+        passingSeats: []
+      },
+      hands: {
+        "seat-1": cardsFromIds(["dragon"]),
+        "seat-2": cardsFromIds(["jade-9"]),
+        "seat-3": cardsFromIds(["jade-10"])
+      }
+    });
+
+    const seat1Actions = getLegalActions(seat1State)["seat-1"] ?? [];
+    expect(seat1Actions.length).toBeGreaterThan(0);
+    expect(seat1Actions.some((action) => action.type === "pass_turn")).toBe(
+      true
+    );
+
+    const afterSeat1Pass = applyEngineAction(seat1State, {
+      type: "pass_turn",
+      seat: "seat-1"
+    });
+    const seat2Actions = getLegalActions(afterSeat1Pass.nextState)["seat-2"] ?? [];
+
+    expect(afterSeat1Pass.nextState.activeSeat).toBe("seat-2");
+    expect(seat2Actions.length).toBeGreaterThan(0);
+    expect(
+      seat2Actions.some(
+        (action) =>
+          action.type === "play_cards" && action.cardIds[0] === "jade-9"
+      )
+    ).toBe(true);
+  });
+
+  it("never returns zero legal actions after Mahjong creates a wish", () => {
+    const initial = scenario({
+      currentWish: null,
+      activeSeat: "seat-0",
+      currentTrick: null,
+      hands: {
+        "seat-0": cardsFromIds(["mahjong"]),
+        "seat-1": cardsFromIds(["dragon"]),
+        "seat-2": cardsFromIds(["jade-9"]),
+        "seat-3": cardsFromIds(["jade-10"])
+      }
+    });
+
+    const afterMahjong = applyEngineAction(initial, {
+      type: "play_cards",
+      seat: "seat-0",
+      cardIds: ["mahjong"],
+      wishRank: 8
+    });
+    const nextSeat = afterMahjong.nextState.activeSeat;
+
+    expect(afterMahjong.nextState.currentWish).toBe(8);
+    expect(nextSeat).toBe("seat-1");
+    expect((getLegalActions(afterMahjong.nextState)[nextSeat!] ?? []).length).toBeGreaterThan(0);
+  });
+
+  it("clears the active wish immediately after a legal fulfilling play", () => {
+    const mahjongLead = combo(["mahjong"]);
+    const state = scenario({
+      currentWish: 8,
+      activeSeat: "seat-1",
+      currentTrick: {
+        leader: "seat-0",
+        currentWinner: "seat-0",
+        currentCombination: mahjongLead,
+        entries: [{ type: "play", seat: "seat-0", combination: mahjongLead }],
+        passingSeats: []
+      },
+      hands: {
+        "seat-1": cardsFromIds(["jade-8", "dragon"])
+      }
+    });
+
+    const result = applyEngineAction(state, {
+      type: "play_cards",
+      seat: "seat-1",
+      cardIds: ["jade-8"]
+    });
+
+    expect(result.nextState.currentWish).toBeNull();
   });
 
   it("handles Phoenix single-card legality against Ace and Dragon", () => {
@@ -562,5 +689,146 @@ describe("milestone 1 engine core", () => {
       40
     );
     expect(transferResult.nextState.roundSummary?.teamScores["team-1"]).toBe(0);
+  });
+
+  it("preserves cumulative match state across deals when the next hand is created", () => {
+    const carriedState = createInitialGameState({
+      seed: "carry-forward-seed",
+      matchScore: { "team-0": 340, "team-1": 220 },
+      matchHistory: [
+        {
+          handNumber: 1,
+          roundSeed: "seed-1",
+          teamScores: { "team-0": 120, "team-1": -20 },
+          cumulativeScores: { "team-0": 120, "team-1": -20 },
+          finishOrder: ["seat-0", "seat-2", "seat-1", "seat-3"],
+          doubleVictory: "team-0",
+          tichuBonuses: [
+            {
+              seat: "seat-0",
+              team: "team-0",
+              label: "small",
+              amount: 100
+            }
+          ]
+        }
+      ]
+    });
+
+    expect(carriedState.nextState.matchScore).toEqual({
+      "team-0": 340,
+      "team-1": 220
+    });
+    expect(carriedState.nextState.matchHistory).toHaveLength(1);
+  });
+
+  it("marks the match complete when a team reaches exactly 1000", () => {
+    const scoringState = scenario({
+      phase: "round_scoring",
+      matchScore: { "team-0": 900, "team-1": 840 },
+      finishedOrder: ["seat-0", "seat-1", "seat-2"],
+      collectedCards: {
+        "seat-0": cardsFromIds([
+          "dragon",
+          "phoenix",
+          "jade-10",
+          "sword-10",
+          "pagoda-10",
+          "star-10",
+          "jade-13",
+          "sword-13",
+          "pagoda-13",
+          "star-13",
+          "jade-5",
+          "sword-5",
+          "pagoda-5",
+          "star-5"
+        ]),
+        "seat-1": [],
+        "seat-2": [],
+        "seat-3": []
+      },
+      calls: {
+        "seat-0": {
+          grandTichu: false,
+          smallTichu: false,
+          hasPlayedFirstCard: true
+        },
+        "seat-1": {
+          grandTichu: false,
+          smallTichu: false,
+          hasPlayedFirstCard: true
+        },
+        "seat-2": {
+          grandTichu: false,
+          smallTichu: false,
+          hasPlayedFirstCard: true
+        },
+        "seat-3": {
+          grandTichu: false,
+          smallTichu: false,
+          hasPlayedFirstCard: true
+        }
+      }
+    });
+
+    const result = applyEngineAction(scoringState, {
+      type: "advance_phase",
+      actor: "system"
+    });
+
+    expect(result.nextState.matchScore["team-0"]).toBe(1000);
+    expect(result.nextState.matchComplete).toBe(true);
+    expect(result.nextState.matchWinner).toBe("team-0");
+    expect(result.nextState.matchHistory.at(-1)?.cumulativeScores["team-0"]).toBe(
+      1000
+    );
+    expect(result.events.map((event) => event.type)).toContain("match_completed");
+  });
+
+  it("marks the match complete when a team exceeds 1000 and blocks another carried deal", () => {
+    const scoringState = scenario({
+      phase: "round_scoring",
+      matchScore: { "team-0": 880, "team-1": 760 },
+      finishedOrder: ["seat-0", "seat-2"],
+      calls: {
+        "seat-0": {
+          grandTichu: false,
+          smallTichu: true,
+          hasPlayedFirstCard: true
+        },
+        "seat-1": {
+          grandTichu: false,
+          smallTichu: false,
+          hasPlayedFirstCard: true
+        },
+        "seat-2": {
+          grandTichu: false,
+          smallTichu: false,
+          hasPlayedFirstCard: true
+        },
+        "seat-3": {
+          grandTichu: false,
+          smallTichu: false,
+          hasPlayedFirstCard: true
+        }
+      }
+    });
+
+    const result = applyEngineAction(scoringState, {
+      type: "advance_phase",
+      actor: "system"
+    });
+
+    expect(result.nextState.matchScore["team-0"]).toBe(1180);
+    expect(result.nextState.matchComplete).toBe(true);
+    expect(result.nextState.matchWinner).toBe("team-0");
+    expect(() =>
+      createInitialGameState({
+        seed: "should-not-start",
+        matchScore: result.nextState.matchScore,
+        matchHistory: result.nextState.matchHistory
+      })
+    ).toThrow("Cannot start another deal after the match is complete.");
   });
 });

@@ -819,14 +819,51 @@ function collectCandidates(ctx: HeadlessDecisionContext): CandidateDecision[] {
   });
 }
 
+function selectEmergencyPassCandidate(
+  ctx: HeadlessDecisionContext
+): CandidateDecision | null {
+  for (const actor of SEAT_IDS) {
+    const passAction = (ctx.legalActions[actor] ?? []).find(
+      (action): action is Extract<LegalAction, { type: "pass_turn" }> =>
+        action.type === "pass_turn"
+    );
+
+    if (!passAction) {
+      continue;
+    }
+
+    return {
+      actor,
+      action: passAction,
+      score: Number.NEGATIVE_INFINITY,
+      reasons: [
+        "emergency fallback: forcing pass because no scored action candidate was available"
+      ],
+      tags: []
+    };
+  }
+
+  return null;
+}
+
 export const heuristicsV1Policy: HeuristicPolicy = {
   name: "heuristics-v1",
   chooseAction(ctx) {
     const candidates = collectCandidates(ctx);
-    const selected = candidates[0];
+    const selected = candidates[0] ?? selectEmergencyPassCandidate(ctx);
 
     if (!selected) {
       throw new Error("No legal action candidates available for heuristics-v1.");
+    }
+
+    if (candidates.length === 0) {
+      console.error("[ai] No scored legal candidates were available; using emergency pass fallback.", {
+        actor: selected.actor,
+        action: selected.action,
+        phase: ctx.state.phase,
+        activeSeat: ctx.state.activeSeat,
+        currentWish: ctx.state.currentWish
+      });
     }
 
     return {

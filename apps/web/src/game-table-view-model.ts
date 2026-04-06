@@ -2,12 +2,18 @@ import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { RoundPhase } from "@tichuml/engine";
 
 export type UiMode = "normal" | "debug";
-export type UiDialogId = "hotkeys" | "how_to_play";
+export type UiDialogId =
+  | "hotkeys"
+  | "how_to_play"
+  | "random_sources"
+  | "score_history";
 export type HotkeyContextId = "global" | "table_editor" | "dialogs";
 export type UiCommandId =
   | "new_game"
   | "toggle_table_editor"
   | "toggle_debug_mode"
+  | "open_score_history_dialog"
+  | "open_random_sources_dialog"
   | "open_hotkeys_dialog"
   | "open_how_to_play_dialog"
   | "close_active_overlay";
@@ -32,12 +38,14 @@ export type NormalActionSlot = {
 export type NormalActionRailConfig = {
   phase: RoundPhase;
   nextEnabled: boolean;
+  nextDealEnabled: boolean;
   grandTichuEnabled: boolean;
   tichuEnabled: boolean;
   passEnabled: boolean;
   exchangeEnabled: boolean;
   pickupEnabled: boolean;
   playEnabled: boolean;
+  matchComplete: boolean;
 };
 
 export type HotkeyEventLike = Pick<
@@ -106,6 +114,12 @@ export const GAME_MENU_ITEMS: readonly GameMenuItemDefinition[] = [
     label: "Hot Keys",
     description: "Show the current keyboard shortcuts.",
     commandId: "open_hotkeys_dialog"
+  },
+  {
+    id: "random_sources",
+    label: "Random Sources",
+    description: "Inspect the most recent entropy collection and derived seeds.",
+    commandId: "open_random_sources_dialog"
   },
   {
     id: "how_to_play_tichu",
@@ -352,8 +366,17 @@ export function createNormalActionRail(
       ];
     case "round_scoring":
     case "finished":
+      if (config.matchComplete) {
+        return [];
+      }
+
       return [
-        { id: "new_round", label: "New Round", enabled: true, tone: "primary" }
+        {
+          id: "new_round",
+          label: "Next Deal",
+          enabled: config.nextDealEnabled,
+          tone: "primary"
+        }
       ];
     default:
       return [];

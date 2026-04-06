@@ -8,8 +8,11 @@ import {
   type EngineEvent,
   type EngineResult,
   type GameState,
+  type InitialGameSeedConfig,
   type LegalAction,
   type LegalActionMap,
+  type MatchHandHistoryEntry,
+  type PassSelection,
   type PlayCardsAction,
   type PublicDerivedState,
   type RoundScoreSummary,
@@ -129,7 +132,18 @@ function cloneState(state: GameState): GameState {
           }))
         }
       : null,
-    matchScore: { ...state.matchScore }
+    matchScore: { ...state.matchScore },
+    matchHistory: state.matchHistory.map((entry) => ({
+      handNumber: entry.handNumber,
+      roundSeed: entry.roundSeed,
+      teamScores: { ...entry.teamScores },
+      cumulativeScores: { ...entry.cumulativeScores },
+      finishOrder: [...entry.finishOrder],
+      doubleVictory: entry.doubleVictory,
+      tichuBonuses: entry.tichuBonuses.map((bonus) => ({ ...bonus }))
+    })),
+    matchComplete: state.matchComplete,
+    matchWinner: state.matchWinner
   };
 }
 
@@ -221,10 +235,20 @@ function dealCards(state: GameState, cardsPerSeat: number): void {
   }
 }
 
-function createBaseState(seed: string): GameState {
+function createBaseState(
+  seed: string,
+  seedProvenance: GameState["seedProvenance"] = null,
+  matchScore: Record<TeamId, number> = { ...EMPTY_MATCH_SCORE },
+  matchHistory: MatchHandHistoryEntry[] = []
+): GameState {
+  if (matchScore["team-0"] >= 1000 || matchScore["team-1"] >= 1000) {
+    throw new Error("Cannot start another deal after the match is complete.");
+  }
+
   const shuffledDeck = shuffleDeck(seed);
   const state: GameState = {
     seed,
+    seedProvenance,
     phase: "grand_tichu_window",
     shuffledDeck,
     deckIndex: 0,
@@ -240,7 +264,18 @@ function createBaseState(seed: string): GameState {
     finishedOrder: [],
     pendingDragonGift: null,
     roundSummary: null,
-    matchScore: { ...EMPTY_MATCH_SCORE }
+    matchScore: { ...matchScore },
+    matchHistory: matchHistory.map((entry) => ({
+      handNumber: entry.handNumber,
+      roundSeed: entry.roundSeed,
+      teamScores: { ...entry.teamScores },
+      cumulativeScores: { ...entry.cumulativeScores },
+      finishOrder: [...entry.finishOrder],
+      doubleVictory: entry.doubleVictory,
+      tichuBonuses: entry.tichuBonuses.map((bonus) => ({ ...bonus }))
+    })),
+    matchComplete: false,
+    matchWinner: null
   };
 
   dealCards(state, 8);
@@ -269,6 +304,8 @@ function createDerivedView(state: GameState): PublicDerivedState {
         }
       : null,
     matchScore: state.matchScore,
+    matchComplete: state.matchComplete,
+    matchWinner: state.matchWinner,
     pendingDragonGift: state.pendingDragonGift,
     roundSummary: state.roundSummary
   };
@@ -342,6 +379,54 @@ function canSeatCallSmallTichu(state: GameState, seat: SeatId): boolean {
   return !state.calls[getPartnerSeat(seat)].smallTichu;
 }
 
+function createPassTurnLegalAction(
+  seat: SeatId
+): Extract<LegalAction, { type: "pass_turn" }> {
+  return {
+    type: "pass_turn",
+    seat
+  };
+}
+
+function assertInvariant(condition: boolean, message: string): asserts condition {
+  console.assert(condition, message);
+  if (!condition) {
+    throw new Error(message);
+  }
+}
+
+function applyWishConstraintToPlayActions(
+  state: GameState,
+  seat: SeatId,
+  legalMoves: LegalAction[]
+): LegalAction[] {
+  if (state.activeSeat !== seat || state.currentWish === null) {
+    return legalMoves;
+  }
+
+  const wishedRank = state.currentWish;
+  const wishMoves = legalMoves.filter(
+    (move) =>
+      move.type === "play_cards" && fulfillsWish(move.combination, wishedRank)
+  );
+
+  if (wishMoves.length > 0) {
+    return wishMoves;
+  }
+
+  const holdsWishRank = state.hands[seat].some(
+    (card) => card.kind === "standard" && card.rank === wishedRank
+  );
+  console.warn("[engine] Active wish had no legal fulfilling moves; using unfiltered legal moves.", {
+    seat,
+    wishedRank,
+    legalMoveCount: legalMoves.length,
+    holdsWishRank,
+    currentCombination: state.currentTrick?.currentCombination.key ?? null
+  });
+  return legalMoves;
+}
+
 function generatePlayActions(state: GameState, seat: SeatId): LegalAction[] {
   if (
     state.phase !== "trick_play" ||
@@ -403,22 +488,8 @@ function generatePlayActions(state: GameState, seat: SeatId): LegalAction[] {
     }
   }
 
-  let results = [...actions.values()].sort(compareLegalActions);
-
-  if (isActiveSeat && state.currentWish !== null) {
-    const wishedRank = state.currentWish;
-    const fulfillingActions = results.filter(
-      (action) =>
-        action.type === "play_cards" &&
-        fulfillsWish(action.combination, wishedRank)
-    );
-
-    if (fulfillingActions.length > 0) {
-      results = fulfillingActions;
-    }
-  }
-
-  return results;
+  const results = [...actions.values()].sort(compareLegalActions);
+  return applyWishConstraintToPlayActions(state, seat, results);
 }
 
 export function getLegalActions(state: GameState): LegalActionMap {
@@ -508,16 +579,34 @@ export function getLegalActions(state: GameState): LegalActionMap {
           );
 
         if (!wishLocked) {
-          pushAction(state.activeSeat, {
-            type: "pass_turn",
-            seat: state.activeSeat
-          });
+          pushAction(state.activeSeat, createPassTurnLegalAction(state.activeSeat));
         }
       }
       break;
     }
     default:
       break;
+  }
+
+  if (state.phase === "trick_play" && state.activeSeat) {
+    const activeSeatActions = legalActions[state.activeSeat] ?? [];
+
+    if (activeSeatActions.length === 0 && state.currentTrick) {
+      console.error(
+        "[engine] Active seat had no legal trick actions; forcing pass fallback.",
+        {
+          seat: state.activeSeat,
+          wishedRank: state.currentWish,
+          currentCombination: state.currentTrick.currentCombination.key
+        }
+      );
+      pushAction(state.activeSeat, createPassTurnLegalAction(state.activeSeat));
+    }
+
+    assertInvariant(
+      (legalActions[state.activeSeat] ?? []).length > 0,
+      `[engine] Active seat ${state.activeSeat} must always have at least one legal action during trick_play.`
+    );
   }
 
   return legalActions;
@@ -762,6 +851,40 @@ function scoreRound(state: GameState): RoundScoreSummary {
     finishOrder,
     doubleVictory,
     tichuBonuses
+  };
+}
+
+function hasReachedMatchTarget(matchScore: Record<TeamId, number>): boolean {
+  return matchScore["team-0"] >= 1000 || matchScore["team-1"] >= 1000;
+}
+
+function resolveMatchWinner(
+  matchScore: Record<TeamId, number>
+): TeamId | null {
+  if (!hasReachedMatchTarget(matchScore)) {
+    return null;
+  }
+
+  if (matchScore["team-0"] === matchScore["team-1"]) {
+    return null;
+  }
+
+  return matchScore["team-0"] > matchScore["team-1"] ? "team-0" : "team-1";
+}
+
+function createMatchHandHistoryEntry(
+  state: GameState,
+  roundSummary: RoundScoreSummary,
+  cumulativeScores: Record<TeamId, number>
+): MatchHandHistoryEntry {
+  return {
+    handNumber: state.matchHistory.length + 1,
+    roundSeed: state.seed,
+    teamScores: { ...roundSummary.teamScores },
+    cumulativeScores: { ...cumulativeScores },
+    finishOrder: [...roundSummary.finishOrder],
+    doubleVictory: roundSummary.doubleVictory,
+    tichuBonuses: roundSummary.tichuBonuses.map((bonus) => ({ ...bonus }))
   };
 }
 
@@ -1091,15 +1214,30 @@ function applyAdvancePhase(state: GameState): EngineEvent[] {
       ];
     case "round_scoring": {
       const roundSummary = scoreRound(state);
-      state.roundSummary = roundSummary;
-      state.matchScore = {
+      const nextMatchScore = {
         "team-0":
           state.matchScore["team-0"] + roundSummary.teamScores["team-0"],
         "team-1": state.matchScore["team-1"] + roundSummary.teamScores["team-1"]
-      };
+      } satisfies Record<TeamId, number>;
+      state.roundSummary = roundSummary;
+      state.matchScore = nextMatchScore;
+      state.matchHistory = [
+        ...state.matchHistory,
+        createMatchHandHistoryEntry(state, roundSummary, nextMatchScore)
+      ];
+      state.matchComplete = hasReachedMatchTarget(nextMatchScore);
+      state.matchWinner = resolveMatchWinner(nextMatchScore);
       state.phase = "finished";
       return [
         { type: "round_scored" },
+        ...(state.matchComplete
+          ? [
+              {
+                type: "match_completed",
+                detail: state.matchWinner ?? "tie"
+              }
+            ]
+          : []),
         { type: "phase_changed", detail: state.phase }
       ];
     }
@@ -1108,8 +1246,19 @@ function applyAdvancePhase(state: GameState): EngineEvent[] {
   }
 }
 
-export function createInitialGameState(seed: string | number): EngineResult {
-  const state = createBaseState(String(seed));
+export function createInitialGameState(
+  seedOrConfig: string | number | InitialGameSeedConfig
+): EngineResult {
+  const config =
+    typeof seedOrConfig === "object" && seedOrConfig !== null
+      ? seedOrConfig
+      : { seed: seedOrConfig };
+  const state = createBaseState(
+    String(config.seed),
+    config.seedProvenance ?? null,
+    config.matchScore ?? { ...EMPTY_MATCH_SCORE },
+    config.matchHistory ?? []
+  );
   return createResult(state, [
     { type: "shuffle_completed" },
     { type: "deal8_completed" },
@@ -1167,6 +1316,7 @@ export function createScenarioState(
 ): GameState {
   return {
     seed: config.seed ?? "scenario",
+    seedProvenance: config.seedProvenance ?? null,
     phase: config.phase ?? "trick_play",
     shuffledDeck: config.shuffledDeck ?? [],
     deckIndex: config.deckIndex ?? 0,
@@ -1192,7 +1342,19 @@ export function createScenarioState(
     finishedOrder: config.finishedOrder ?? [],
     pendingDragonGift: config.pendingDragonGift ?? null,
     roundSummary: config.roundSummary ?? null,
-    matchScore: config.matchScore ?? { ...EMPTY_MATCH_SCORE }
+    matchScore: config.matchScore ?? { ...EMPTY_MATCH_SCORE },
+    matchHistory:
+      config.matchHistory?.map((entry) => ({
+        handNumber: entry.handNumber,
+        roundSeed: entry.roundSeed,
+        teamScores: { ...entry.teamScores },
+        cumulativeScores: { ...entry.cumulativeScores },
+        finishOrder: [...entry.finishOrder],
+        doubleVictory: entry.doubleVictory,
+        tichuBonuses: entry.tichuBonuses.map((bonus) => ({ ...bonus }))
+      })) ?? [],
+    matchComplete: config.matchComplete ?? false,
+    matchWinner: config.matchWinner ?? null
   };
 }
 
