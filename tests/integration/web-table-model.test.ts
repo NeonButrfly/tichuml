@@ -13,6 +13,7 @@ import {
   getExchangeFlowState,
   getPassTargetSeat,
   getPrimaryActor,
+  getTurnActions,
   isExchangePhase,
   LOCAL_SEAT,
   removePassCardFromDraft,
@@ -29,6 +30,15 @@ import {
 
 function isPlayLegalAction(action: LegalAction): action is PlayLegalAction {
   return action.type === "play_cards";
+}
+
+function combo(cardIds: string[], current: ReturnType<typeof listCombinationInterpretations>[number] | null = null) {
+  const result = listCombinationInterpretations(cardsFromIds(cardIds), current ?? null)[0];
+  if (!result) {
+    throw new Error(`No combination found for ${cardIds.join(",")}`);
+  }
+
+  return result;
 }
 
 describe("table model helpers", () => {
@@ -258,6 +268,197 @@ describe("table model helpers", () => {
         exchangePhaseActive: true
       })
     ).toBe(false);
+  });
+
+  it("enables Pass when the local seat cannot beat an active straight", () => {
+    const straightLead = combo([
+      "jade-4",
+      "sword-5",
+      "pagoda-6",
+      "star-7",
+      "jade-8"
+    ]);
+    const state = createScenarioState({
+      phase: "trick_play",
+      activeSeat: LOCAL_SEAT,
+      currentTrick: {
+        leader: "seat-3",
+        currentWinner: "seat-3",
+        currentCombination: straightLead,
+        entries: [{ type: "play", seat: "seat-3", combination: straightLead }],
+        passingSeats: []
+      },
+      hands: {
+        "seat-0": cardsFromIds(["jade-3", "sword-3", "pagoda-10", "dragon"]),
+        "seat-1": cardsFromIds(["jade-11"]),
+        "seat-2": cardsFromIds(["sword-12"]),
+        "seat-3": cardsFromIds(["star-13"])
+      }
+    });
+
+    const turnActions = getTurnActions({
+      state,
+      legalActions: getLegalActions(state),
+      seat: LOCAL_SEAT,
+      selectedCardIds: []
+    });
+
+    expect(turnActions.hasActiveTrick).toBe(true);
+    expect(turnActions.leadCombinationKind).toBe("straight");
+    expect(turnActions.canPlay).toBe(false);
+    expect(turnActions.canPass).toBe(true);
+    expect(turnActions.isTichuOnlyDeadlock).toBe(false);
+  });
+
+  it("enables Play when the local seat selects a legal straight response", () => {
+    const straightLead = combo([
+      "jade-4",
+      "sword-5",
+      "pagoda-6",
+      "star-7",
+      "jade-8"
+    ]);
+    const state = createScenarioState({
+      phase: "trick_play",
+      activeSeat: LOCAL_SEAT,
+      currentTrick: {
+        leader: "seat-3",
+        currentWinner: "seat-3",
+        currentCombination: straightLead,
+        entries: [{ type: "play", seat: "seat-3", combination: straightLead }],
+        passingSeats: []
+      },
+      hands: {
+        "seat-0": cardsFromIds([
+          "jade-5",
+          "sword-6",
+          "pagoda-7",
+          "star-8",
+          "jade-9",
+          "dragon"
+        ]),
+        "seat-1": cardsFromIds(["jade-11"]),
+        "seat-2": cardsFromIds(["sword-12"]),
+        "seat-3": cardsFromIds(["star-13"])
+      }
+    });
+
+    const turnActions = getTurnActions({
+      state,
+      legalActions: getLegalActions(state),
+      seat: LOCAL_SEAT,
+      selectedCardIds: [
+        "jade-5",
+        "sword-6",
+        "pagoda-7",
+        "star-8",
+        "jade-9"
+      ]
+    });
+
+    expect(turnActions.leadCombinationKind).toBe("straight");
+    expect(turnActions.canPlay).toBe(true);
+    expect(turnActions.canPass).toBe(true);
+  });
+
+  it("never makes Tichu the only progression action during an active response turn", () => {
+    const straightLead = combo([
+      "jade-4",
+      "sword-5",
+      "pagoda-6",
+      "star-7",
+      "jade-8"
+    ]);
+    const state = createScenarioState({
+      phase: "trick_play",
+      activeSeat: LOCAL_SEAT,
+      currentTrick: {
+        leader: "seat-3",
+        currentWinner: "seat-3",
+        currentCombination: straightLead,
+        entries: [{ type: "play", seat: "seat-3", combination: straightLead }],
+        passingSeats: []
+      },
+      calls: {
+        "seat-0": {
+          grandTichu: false,
+          smallTichu: false,
+          hasPlayedFirstCard: false
+        },
+        "seat-1": {
+          grandTichu: false,
+          smallTichu: false,
+          hasPlayedFirstCard: true
+        },
+        "seat-2": {
+          grandTichu: false,
+          smallTichu: false,
+          hasPlayedFirstCard: true
+        },
+        "seat-3": {
+          grandTichu: false,
+          smallTichu: false,
+          hasPlayedFirstCard: true
+        }
+      },
+      hands: {
+        "seat-0": cardsFromIds(["jade-3", "sword-3", "pagoda-10", "dragon"]),
+        "seat-1": cardsFromIds(["jade-11"]),
+        "seat-2": cardsFromIds(["sword-12"]),
+        "seat-3": cardsFromIds(["star-13"])
+      }
+    });
+
+    const turnActions = getTurnActions({
+      state,
+      legalActions: getLegalActions(state),
+      seat: LOCAL_SEAT,
+      selectedCardIds: []
+    });
+
+    expect(turnActions.canCallTichu).toBe(true);
+    expect(turnActions.canPlay).toBe(false);
+    expect(turnActions.canPass).toBe(true);
+    expect(turnActions.isTichuOnlyDeadlock).toBe(false);
+  });
+
+  it("falls back to normal legality when a wish cannot be satisfied and still enables Pass", () => {
+    const straightLead = combo([
+      "jade-4",
+      "sword-5",
+      "pagoda-6",
+      "star-7",
+      "jade-8"
+    ]);
+    const state = createScenarioState({
+      phase: "trick_play",
+      activeSeat: LOCAL_SEAT,
+      currentWish: 10,
+      currentTrick: {
+        leader: "seat-3",
+        currentWinner: "seat-3",
+        currentCombination: straightLead,
+        entries: [{ type: "play", seat: "seat-3", combination: straightLead }],
+        passingSeats: []
+      },
+      hands: {
+        "seat-0": cardsFromIds(["jade-3", "sword-3", "pagoda-9", "dragon"]),
+        "seat-1": cardsFromIds(["jade-11"]),
+        "seat-2": cardsFromIds(["sword-12"]),
+        "seat-3": cardsFromIds(["star-13"])
+      }
+    });
+
+    const turnActions = getTurnActions({
+      state,
+      legalActions: getLegalActions(state),
+      seat: LOCAL_SEAT,
+      selectedCardIds: []
+    });
+
+    expect(turnActions.canPlay).toBe(false);
+    expect(turnActions.canPass).toBe(true);
+    expect(turnActions.isTichuOnlyDeadlock).toBe(false);
   });
 
   it("pauses at exchange completion until the local pickup step is acknowledged", () => {

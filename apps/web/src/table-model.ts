@@ -40,6 +40,21 @@ export type ExchangeDraftValidation = {
 };
 
 export type PlayLegalAction = Extract<LegalAction, { type: "play_cards" }>;
+export type TurnActionAvailability = {
+  seat: SeatId;
+  isActiveTurnSeat: boolean;
+  hasActiveTrick: boolean;
+  leadCombinationKind: string | null;
+  leadCombinationKey: string | null;
+  selectedCardIds: string[];
+  legalPlayCount: number;
+  hasAnyLegalPlay: boolean;
+  matchingPlayActions: PlayLegalAction[];
+  canPlay: boolean;
+  canPass: boolean;
+  canCallTichu: boolean;
+  isTichuOnlyDeadlock: boolean;
+};
 
 function isPlayLegalAction(action: LegalAction): action is PlayLegalAction {
   return action.type === "play_cards";
@@ -300,6 +315,47 @@ export function findMatchingPlayActions(
   }
 
   return actions.filter((action) => action.cardIds.join(",") === normalizedSelection);
+}
+
+export function getTurnActions(config: {
+  state: Pick<GameState, "phase" | "activeSeat" | "currentTrick" | "pendingDragonGift">;
+  legalActions: LegalActionMap;
+  seat: SeatId;
+  selectedCardIds: string[];
+}): TurnActionAvailability {
+  const seatActions = config.legalActions[config.seat] ?? [];
+  const legalPlayActions = seatActions.filter(isPlayLegalAction);
+  const matchingPlayActions = findMatchingPlayActions(
+    legalPlayActions,
+    config.selectedCardIds
+  );
+  const canPass = seatActions.some((action) => action.type === "pass_turn");
+  const canCallTichu = seatActions.some((action) => action.type === "call_tichu");
+  const hasActiveTrick =
+    config.state.phase === "trick_play" && config.state.currentTrick !== null;
+  const isActiveTurnSeat =
+    config.state.phase === "trick_play" &&
+    !config.state.pendingDragonGift &&
+    config.state.activeSeat === config.seat;
+
+  return {
+    seat: config.seat,
+    isActiveTurnSeat,
+    hasActiveTrick,
+    leadCombinationKind:
+      config.state.currentTrick?.currentCombination.kind ?? null,
+    leadCombinationKey:
+      config.state.currentTrick?.currentCombination.key ?? null,
+    selectedCardIds: [...config.selectedCardIds],
+    legalPlayCount: legalPlayActions.length,
+    hasAnyLegalPlay: legalPlayActions.length > 0,
+    matchingPlayActions,
+    canPlay: matchingPlayActions.length > 0,
+    canPass,
+    canCallTichu,
+    isTichuOnlyDeadlock:
+      isActiveTurnSeat && hasActiveTrick && !canPass && matchingPlayActions.length === 0 && canCallTichu
+  };
 }
 
 export function collectLocalLegalCardIds(actions: LegalAction[]): Set<string> {

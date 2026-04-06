@@ -15,6 +15,7 @@ The game UI is designed around a single-screen, no-scroll table layout with expl
 - the engine decides legality; the UI decides presentation
 - exchange, pickup, and trick-play states should render different controls
 - active Mahjong wishes should remain visible in normal gameplay chrome without obscuring the table
+- Play, Pass, and Tichu button states should come from one shared turn-action helper derived from engine legal actions
 - hotkeys, menu actions, and dialogs should route through shared command handlers
 - debug and inspection UI should not leak into normal gameplay unexpectedly
 

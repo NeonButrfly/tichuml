@@ -30,10 +30,10 @@ import {
   areAllExchangeSelectionsSubmitted,
   buildPlayVariantKey,
   collectLocalLegalCardIds,
-  findMatchingPlayActions,
   getExchangeFlowState,
   getPassTargetSeat,
   getPrimaryActorFromResult,
+  getTurnActions,
   isExchangePhase,
   removePassCardFromDraft,
   shouldAllowAiEndgameContinuation,
@@ -414,11 +414,15 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
   const previousAllExchangeReadyRef = useRef(
     areAllExchangeSelectionsSubmitted(state)
   );
+  const previousTurnActionSnapshotRef = useRef("");
   const localLegalCardIds = collectLocalLegalCardIds(localActions);
-  const matchingPlayActions = findMatchingPlayActions(
-    localPlayActions,
+  const localTurnActions = getTurnActions({
+    state,
+    legalActions: round.legalActions,
+    seat: LOCAL_SEAT,
     selectedCardIds
-  );
+  });
+  const matchingPlayActions = localTurnActions.matchingPlayActions;
   const activePlayVariant =
     matchingPlayActions.find(
       (action) => buildPlayVariantKey(action) === selectedVariantKey
@@ -609,17 +613,60 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
       !state.matchComplete,
     grandTichuEnabled:
       !roundGenerationPending && Boolean(localGrandTichuAction),
-    tichuEnabled: !roundGenerationPending && Boolean(localCallTichuAction),
-    passEnabled:
-      !roundGenerationPending && Boolean(localPassAction && localIsPrimaryActor),
+    tichuEnabled: !roundGenerationPending && localTurnActions.canCallTichu,
+    passEnabled: !roundGenerationPending && localTurnActions.canPass,
     exchangeEnabled: !roundGenerationPending && passSelectionReady,
     pickupEnabled: !roundGenerationPending && Boolean(systemAdvanceAction),
-    playEnabled: !roundGenerationPending && Boolean(activePlayVariant),
+    playEnabled: !roundGenerationPending && localTurnActions.canPlay,
     matchComplete: state.matchComplete
   });
   const executeUiHotkeyCommand = useEffectEvent((commandId: UiCommandId) => {
     executeUiCommand(commandId);
   });
+
+  useEffect(() => {
+    const turnActionSnapshot = JSON.stringify({
+      seat: LOCAL_SEAT,
+      phase: state.phase,
+      activeSeat: state.activeSeat,
+      trickType: localTurnActions.leadCombinationKind,
+      leadCombo: localTurnActions.leadCombinationKey,
+      selectedCards: localTurnActions.selectedCardIds,
+      legalMoveCount: localTurnActions.legalPlayCount,
+      canPlay: localTurnActions.canPlay,
+      canPass: localTurnActions.canPass,
+      canCallTichu: localTurnActions.canCallTichu,
+      wish: state.currentWish,
+      legalMoves: localPlayActions.map((action) => ({
+        cards: action.cardIds,
+        kind: action.combination.kind,
+        primaryRank: action.combination.primaryRank
+      }))
+    });
+
+    if (
+      (uiMode === "debug" || import.meta.env.DEV) &&
+      previousTurnActionSnapshotRef.current !== turnActionSnapshot
+    ) {
+      console.info("[turn-actions]", JSON.parse(turnActionSnapshot));
+    }
+
+    if (localTurnActions.isTichuOnlyDeadlock) {
+      console.error(
+        "[turn-actions] Critical turn deadlock: Tichu is the only enabled progression action.",
+        JSON.parse(turnActionSnapshot)
+      );
+    }
+
+    previousTurnActionSnapshotRef.current = turnActionSnapshot;
+  }, [
+    localPlayActions,
+    localTurnActions,
+    state.activeSeat,
+    state.currentWish,
+    state.phase,
+    uiMode
+  ]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -1065,7 +1112,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
   }
 
   function playSelectedCards() {
-    if (roundGenerationPending || !activePlayVariant) {
+    if (roundGenerationPending || !localTurnActions.canPlay || !activePlayVariant) {
       return;
     }
 
@@ -1177,12 +1224,12 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
         }
         break;
       case "tichu":
-        if (localCallTichuAction) {
+        if (localTurnActions.canCallTichu && localCallTichuAction) {
           applyClientAction(localCallTichuAction);
         }
         break;
       case "pass":
-        if (localPassAction && localIsPrimaryActor) {
+        if (localTurnActions.canPass && localPassAction) {
           applyClientAction(localPassAction);
         }
         break;

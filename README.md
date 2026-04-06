@@ -58,7 +58,7 @@ npm run db:migrate
 
 ## Milestone Snapshot
 
-The current repository head is Milestone `6.0`. The canonical milestone plan still lives in [SPEC](./spec.md), while the normalized repository history and recommended commit naming convention now live in [docs/milestones/README.md](./docs/milestones/README.md).
+The current repository head is Milestone `6.1`. The canonical milestone plan still lives in [SPEC](./spec.md), while the normalized repository history and recommended commit naming convention now live in [docs/milestones/README.md](./docs/milestones/README.md).
 
 When making new milestone commits, prefer:
 
@@ -69,7 +69,7 @@ Milestone <id>: <short scope summary>
 Example:
 
 ```text
-Milestone 6.0: developer inspection and gameplay hardening
+Milestone 6.1: fix turn action deadlock
 ```
 
 Use the commit body for:
@@ -78,7 +78,13 @@ Use the commit body for:
 - key engine/UI/server changes
 - tests and validation
 
-Milestone 6.0 currently covers:
+Milestone 6.1 currently adds:
+
+- centralized human turn action availability derived from engine legal actions
+- protection against the illegal Tichu-only progression state on an active response turn
+- straight-response and wish-fallback regression coverage for play/pass legality
+
+Milestone 6.0 still covers:
 
 - server-backed multi-source entropy collection and deterministic shuffle seed derivation
 - Random Sources inspection UI and related debug surfaces
