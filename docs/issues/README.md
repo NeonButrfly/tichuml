@@ -12,3 +12,4 @@ Use this folder as the local issue tracker for repositories that do not have a h
 
 - [LOCAL-001](./LOCAL-001-response-legality-deadlock.md) - response legality deadlock on combo turns (`resolved in working tree`)
 - [LOCAL-002](./LOCAL-002-ui-trick-display-and-play-area-cleanup.md) - trick display and play-area cleanup (`resolved in working tree`)
+- [LOCAL-003](./LOCAL-003-straight-regression-and-play-area-shadow.md) - straight-response regression and gameplay play-area shadow (`resolved in working tree`)

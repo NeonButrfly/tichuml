@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyEngineAction,
   cardsFromIds,
   createScenarioState,
   getCanonicalCardIdsKey,
@@ -295,5 +296,115 @@ describe("heuristics v1", () => {
       ])
     );
     expect(chosen.explanation.selectedTeamplay?.teamControlWouldBeLostWithoutIntervention).toBe(true);
+  });
+
+  it("passes on an active straight when no legal higher straight exists", () => {
+    const straightLead = combo([
+      "jade-4",
+      "sword-5",
+      "pagoda-6",
+      "star-7",
+      "jade-8"
+    ]);
+    const state = scenario({
+      activeSeat: "seat-3",
+      currentTrick: {
+        leader: "seat-2",
+        currentWinner: "seat-2",
+        currentCombination: straightLead,
+        entries: [{ type: "play", seat: "seat-2", combination: straightLead }],
+        passingSeats: []
+      },
+      hands: {
+        "seat-0": cardsFromIds(["jade-2"]),
+        "seat-1": cardsFromIds(["sword-2"]),
+        "seat-2": cardsFromIds(["star-2"]),
+        "seat-3": cardsFromIds(["jade-8", "sword-9", "pagoda-10", "star-11", "jade-13"])
+      }
+    });
+
+    const chosen = heuristicsV1Policy.chooseAction({
+      state,
+      legalActions: getLegalActions(state)
+    });
+
+    expect(chosen.action).toEqual({ type: "pass_turn", seat: "seat-3" });
+
+    const afterPass = applyEngineAction(state, chosen.action);
+    expect(afterPass.nextState.activeSeat).toBe("seat-0");
+  });
+
+  it("plays a legal higher straight on an active straight response turn", () => {
+    const straightLead = combo([
+      "jade-3",
+      "sword-4",
+      "pagoda-5",
+      "star-6",
+      "jade-7"
+    ]);
+    const state = scenario({
+      activeSeat: "seat-3",
+      currentTrick: {
+        leader: "seat-2",
+        currentWinner: "seat-2",
+        currentCombination: straightLead,
+        entries: [{ type: "play", seat: "seat-2", combination: straightLead }],
+        passingSeats: []
+      },
+      hands: {
+        "seat-0": cardsFromIds(["jade-2"]),
+        "seat-1": cardsFromIds(["sword-2"]),
+        "seat-2": cardsFromIds(["star-2"]),
+        "seat-3": cardsFromIds(["jade-8", "sword-9", "pagoda-10", "star-11", "jade-12"])
+      }
+    });
+
+    const chosen = heuristicsV1Policy.chooseAction({
+      state,
+      legalActions: getLegalActions(state)
+    });
+
+    expect(chosen.action).toEqual({
+      type: "play_cards",
+      seat: "seat-3",
+      cardIds: ["jade-8", "sword-9", "pagoda-10", "star-11", "jade-12"]
+    });
+
+    const afterPlay = applyEngineAction(state, chosen.action);
+    expect(afterPlay.nextState.activeSeat).toBe("seat-0");
+    expect(afterPlay.nextState.currentTrick?.currentWinner).toBe("seat-3");
+  });
+
+  it("always resolves an active straight response turn to play or pass", () => {
+    const straightLead = combo([
+      "jade-5",
+      "sword-6",
+      "pagoda-7",
+      "star-8",
+      "jade-9"
+    ]);
+    const state = scenario({
+      activeSeat: "seat-3",
+      currentTrick: {
+        leader: "seat-2",
+        currentWinner: "seat-2",
+        currentCombination: straightLead,
+        entries: [{ type: "play", seat: "seat-2", combination: straightLead }],
+        passingSeats: []
+      },
+      hands: {
+        "seat-0": cardsFromIds(["jade-2"]),
+        "seat-1": cardsFromIds(["sword-2"]),
+        "seat-2": cardsFromIds(["star-2"]),
+        "seat-3": cardsFromIds(["jade-11", "sword-12", "pagoda-13", "star-14", "dragon"])
+      }
+    });
+
+    const chosen = heuristicsV1Policy.chooseAction({
+      state,
+      legalActions: getLegalActions(state)
+    });
+
+    expect(["play_cards", "pass_turn"]).toContain(chosen.action.type);
   });
 });

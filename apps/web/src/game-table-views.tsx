@@ -2345,6 +2345,10 @@ export function getNormalCenterZoneClassName(layoutEditorActive: boolean): strin
     .join(" ");
 }
 
+export function shouldRenderNormalCenterZoneFelt(layoutEditorActive: boolean): boolean {
+  return layoutEditorActive;
+}
+
 export function TableSurface({
   variant,
   normalTableLayout: _normalTableLayout,
@@ -4899,7 +4903,9 @@ export function NormalGameTableView(props: GameTableViewProps) {
                 className={getNormalCenterZoneClassName(props.layoutEditorActive)}
                 data-layout-container="center-zone"
               >
-                <div className="normal-table__felt" />
+                {shouldRenderNormalCenterZoneFelt(props.layoutEditorActive) && (
+                  <div className="normal-table__felt" />
+                )}
                 <TableSurface
                   variant="normal"
                   normalTableLayout={props.normalTableLayout}

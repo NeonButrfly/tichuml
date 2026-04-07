@@ -217,7 +217,8 @@ describe("table model helpers", () => {
         autoplayLocal: false,
         localHasOptionalAction,
         forceAiEndgameContinuation: false,
-        openingLeadPending: true
+        openingLeadPending: true,
+        activeResponseTurn: false
       })
     ).toBe(false);
   });
@@ -265,7 +266,20 @@ describe("table model helpers", () => {
         localHasOptionalAction: true,
         forceAiEndgameContinuation: false,
         openingLeadPending: false,
+        activeResponseTurn: false,
         exchangePhaseActive: true
+      })
+    ).toBe(false);
+  });
+
+  it("does not pause AI on another seat's active response turn just because local Tichu remains optional", () => {
+    expect(
+      shouldPauseForLocalOptionalAction({
+        autoplayLocal: false,
+        localHasOptionalAction: true,
+        forceAiEndgameContinuation: false,
+        openingLeadPending: false,
+        activeResponseTurn: true
       })
     ).toBe(false);
   });
@@ -359,6 +373,56 @@ describe("table model helpers", () => {
     expect(turnActions.leadCombinationKind).toBe("straight");
     expect(turnActions.canPlay).toBe(true);
     expect(turnActions.canPass).toBe(true);
+  });
+
+  it("matches an unordered straight selection against the canonical legal response", () => {
+    const straightLead = combo([
+      "jade-4",
+      "sword-5",
+      "pagoda-6",
+      "star-7",
+      "jade-8"
+    ]);
+    const state = createScenarioState({
+      phase: "trick_play",
+      activeSeat: LOCAL_SEAT,
+      currentTrick: {
+        leader: "seat-3",
+        currentWinner: "seat-3",
+        currentCombination: straightLead,
+        entries: [{ type: "play", seat: "seat-3", combination: straightLead }],
+        passingSeats: []
+      },
+      hands: {
+        "seat-0": cardsFromIds([
+          "jade-5",
+          "sword-6",
+          "pagoda-7",
+          "star-8",
+          "jade-9",
+          "dragon"
+        ]),
+        "seat-1": cardsFromIds(["jade-11"]),
+        "seat-2": cardsFromIds(["sword-12"]),
+        "seat-3": cardsFromIds(["star-13"])
+      }
+    });
+
+    const turnActions = getTurnActions({
+      state,
+      legalActions: getLegalActions(state),
+      seat: LOCAL_SEAT,
+      selectedCardIds: [
+        "star-8",
+        "jade-5",
+        "jade-9",
+        "pagoda-7",
+        "sword-6"
+      ]
+    });
+
+    expect(turnActions.matchingPlayActions).toHaveLength(1);
+    expect(turnActions.canPlay).toBe(true);
   });
 
   it("never makes Tichu the only progression action during an active response turn", () => {
@@ -639,6 +703,7 @@ describe("table model helpers", () => {
         localHasOptionalAction: false,
         forceAiEndgameContinuation: false,
         openingLeadPending: false,
+        activeResponseTurn: false,
         pickupPending: true
       })
     ).toBe(true);

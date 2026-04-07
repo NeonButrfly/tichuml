@@ -427,6 +427,97 @@ describe("engine core", () => {
     }
   });
 
+  it("advances to the next seat when a straight responder has no legal beat and must pass", () => {
+    const straightLead = combo([
+      "jade-4",
+      "sword-5",
+      "pagoda-6",
+      "star-7",
+      "jade-8"
+    ]);
+    const state = scenario({
+      activeSeat: "seat-3",
+      currentTrick: {
+        leader: "seat-2",
+        currentWinner: "seat-2",
+        currentCombination: straightLead,
+        entries: [{ type: "play", seat: "seat-2", combination: straightLead }],
+        passingSeats: []
+      },
+      hands: {
+        "seat-0": cardsFromIds(["jade-2"]),
+        "seat-1": cardsFromIds(["sword-2"]),
+        "seat-2": cardsFromIds(["star-2"]),
+        "seat-3": cardsFromIds([
+          "jade-8",
+          "sword-9",
+          "pagoda-10",
+          "star-11",
+          "jade-13"
+        ])
+      }
+    });
+
+    const actions = getLegalActions(state)["seat-3"] ?? [];
+    expect(actions.some((action) => action.type === "pass_turn")).toBe(true);
+    expect(actions.some((action) => action.type === "play_cards")).toBe(false);
+
+    const result = applyEngineAction(state, { type: "pass_turn", seat: "seat-3" });
+    expect(result.nextState.activeSeat).toBe("seat-0");
+    expect(result.nextState.currentTrick?.entries.at(-1)).toEqual({
+      type: "pass",
+      seat: "seat-3"
+    });
+  });
+
+  it("keeps a higher straight response legal and advances turn order after the play", () => {
+    const straightLead = combo([
+      "jade-3",
+      "sword-4",
+      "pagoda-5",
+      "star-6",
+      "jade-7"
+    ]);
+    const state = scenario({
+      activeSeat: "seat-3",
+      currentTrick: {
+        leader: "seat-2",
+        currentWinner: "seat-2",
+        currentCombination: straightLead,
+        entries: [{ type: "play", seat: "seat-2", combination: straightLead }],
+        passingSeats: []
+      },
+      hands: {
+        "seat-0": cardsFromIds(["jade-2"]),
+        "seat-1": cardsFromIds(["sword-2"]),
+        "seat-2": cardsFromIds(["star-2"]),
+        "seat-3": cardsFromIds([
+          "jade-8",
+          "sword-9",
+          "pagoda-10",
+          "star-11",
+          "jade-12"
+        ])
+      }
+    });
+
+    const actions = getLegalActions(state)["seat-3"] ?? [];
+    const response = actions.find(
+      (action) =>
+        action.type === "play_cards" &&
+        action.combination.kind === "straight"
+    );
+    expect(response).toBeTruthy();
+
+    const result = applyEngineAction(state, {
+      type: "play_cards",
+      seat: "seat-3",
+      cardIds: ["jade-8", "sword-9", "pagoda-10", "star-11", "jade-12"]
+    });
+    expect(result.nextState.activeSeat).toBe("seat-0");
+    expect(result.nextState.currentTrick?.currentWinner).toBe("seat-3");
+  });
+
   it("handles Phoenix single-card legality against Ace and Dragon", () => {
     const aceLead = combo(["jade-14"]);
     const againstAce = scenario({

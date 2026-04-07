@@ -26,6 +26,7 @@ TichuML is organized around a few strict boundaries:
 - Human action-row availability should be computed from engine legal actions through one shared helper instead of duplicated button-local conditions.
 - Combo response legality must flow from one engine-authoritative pipeline across AI, human UI, and concrete action validation.
 - Combination card ids must be normalized through a shared rank-first canonical ordering helper before matching, deduping, or building combination keys.
+- Active trick response turns must always resolve to a legal play or a legal pass; optional Tichu handling may not block progression for the current responder.
 - UI layout changes must preserve one-screen table fit and no-scroll gameplay.
 
 ## Related Docs

@@ -83,9 +83,14 @@ type CandidateDecision = {
 };
 
 type PlayLegalAction = Extract<LegalAction, { type: "play_cards" }>;
+type PassLegalAction = Extract<LegalAction, { type: "pass_turn" }>;
 
 function isPlayLegalAction(action: LegalAction): action is PlayLegalAction {
   return action.type === "play_cards";
+}
+
+function isPassLegalAction(action: LegalAction): action is PassLegalAction {
+  return action.type === "pass_turn";
 }
 
 function isStandardCard(card: Card): card is Extract<Card, { kind: "standard" }> {
@@ -819,71 +824,197 @@ function collectCandidates(ctx: HeadlessDecisionContext): CandidateDecision[] {
   });
 }
 
+function summarizePlayCandidates(actions: LegalAction[]): string[] {
+  return actions.filter(isPlayLegalAction).map((action) => action.combination.key);
+}
+
+function selectSeatEmergencyPassCandidate(
+  ctx: HeadlessDecisionContext,
+  actor: SeatId
+): CandidateDecision | null {
+  const passAction = (ctx.legalActions[actor] ?? []).find(isPassLegalAction);
+  if (!passAction) {
+    return null;
+  }
+
+  return {
+    actor,
+    action: passAction,
+    score: Number.NEGATIVE_INFINITY,
+    reasons: [
+      "emergency fallback: forcing pass because the active turn could not resolve a progression action"
+    ],
+    tags: []
+  };
+}
+
 function selectEmergencyPassCandidate(
   ctx: HeadlessDecisionContext
 ): CandidateDecision | null {
   for (const actor of SEAT_IDS) {
-    const passAction = (ctx.legalActions[actor] ?? []).find(
-      (action): action is Extract<LegalAction, { type: "pass_turn" }> =>
-        action.type === "pass_turn"
-    );
-
-    if (!passAction) {
-      continue;
+    const candidate = selectSeatEmergencyPassCandidate(ctx, actor);
+    if (candidate) {
+      return candidate;
     }
-
-    return {
-      actor,
-      action: passAction,
-      score: Number.NEGATIVE_INFINITY,
-      reasons: [
-        "emergency fallback: forcing pass because no scored action candidate was available"
-      ],
-      tags: []
-    };
   }
 
   return null;
 }
 
+function selectProgressionCandidateForActiveTurn(
+  ctx: HeadlessDecisionContext,
+  candidates: CandidateDecision[]
+): CandidateDecision | null {
+  const actor = ctx.state.activeSeat;
+  if (
+    !actor ||
+    ctx.state.phase !== "trick_play" ||
+    ctx.state.pendingDragonGift ||
+    ctx.state.currentTrick === null ||
+    ctx.state.currentTrick.currentCombination.kind !== "straight"
+  ) {
+    return null;
+  }
+
+  const actorActions = ctx.legalActions[actor] ?? [];
+  const progressionCandidates = candidates.filter(
+    (candidate) =>
+      candidate.actor === actor &&
+      (candidate.action.type === "play_cards" || candidate.action.type === "pass_turn")
+  );
+
+  console.info("[ai] Straight response options", {
+    activeSeat: actor,
+    leadCombo: ctx.state.currentTrick.currentCombination.key,
+    legalResponseCount: actorActions.filter(isPlayLegalAction).length,
+    normalizedResponseList: summarizePlayCandidates(actorActions),
+    canPass: actorActions.some(isPassLegalAction),
+    wishState: ctx.state.currentWish
+  });
+
+  const leadingCandidate = candidates[0] ?? null;
+  if (
+    leadingCandidate &&
+    (leadingCandidate.action.type === "play_cards" ||
+      leadingCandidate.action.type === "pass_turn")
+  ) {
+    console.info("[ai] Straight response selected", {
+      activeSeat: actor,
+      chosenAction: leadingCandidate.action,
+      fallbackUsed: false
+    });
+    return leadingCandidate;
+  }
+
+  const selected = progressionCandidates[0] ?? null;
+  if (selected) {
+    console.info("[ai] Straight response selected", {
+      activeSeat: actor,
+      chosenAction: selected.action,
+      fallbackUsed: false
+    });
+    return selected;
+  }
+
+  const fallbackPass = selectSeatEmergencyPassCandidate(ctx, actor);
+  if (fallbackPass) {
+    console.info("[ai] Straight response selected", {
+      activeSeat: actor,
+      chosenAction: fallbackPass.action,
+      fallbackUsed: true
+    });
+  }
+
+  return fallbackPass;
+}
+
+function toChosenDecision(
+  selected: CandidateDecision,
+  candidates: CandidateDecision[]
+): ChosenDecision {
+  return {
+    actor: selected.actor,
+    action: selected.action,
+    explanation: {
+      policy: "heuristics-v1",
+      actor: selected.actor,
+      candidateScores: candidates.map((candidate) => ({
+        action: candidate.action,
+        score: candidate.score,
+        reasons: candidate.reasons,
+        tags: candidate.tags,
+        ...(candidate.teamplay ? { teamplay: candidate.teamplay } : {})
+      })),
+      selectedReasonSummary: selected.reasons,
+      selectedTags: selected.tags,
+      ...(selected.teamplay ? { selectedTeamplay: selected.teamplay } : {})
+    }
+  };
+}
+
 export const heuristicsV1Policy: HeuristicPolicy = {
   name: "heuristics-v1",
   chooseAction(ctx) {
-    const candidates = collectCandidates(ctx);
-    const selected = candidates[0] ?? selectEmergencyPassCandidate(ctx);
+    try {
+      const candidates = collectCandidates(ctx);
+      const progressionSelected =
+        selectProgressionCandidateForActiveTurn(ctx, candidates);
+      const selected =
+        progressionSelected ?? candidates[0] ?? selectEmergencyPassCandidate(ctx);
 
-    if (!selected) {
-      throw new Error("No legal action candidates available for heuristics-v1.");
-    }
-
-    if (candidates.length === 0) {
-      console.error("[ai] No scored legal candidates were available; using emergency pass fallback.", {
-        actor: selected.actor,
-        action: selected.action,
-        phase: ctx.state.phase,
-        activeSeat: ctx.state.activeSeat,
-        currentWish: ctx.state.currentWish
-      });
-    }
-
-    return {
-      actor: selected.actor,
-      action: selected.action,
-      explanation: {
-        policy: "heuristics-v1",
-        actor: selected.actor,
-        candidateScores: candidates.map((candidate) => ({
-          action: candidate.action,
-          score: candidate.score,
-          reasons: candidate.reasons,
-          tags: candidate.tags,
-          ...(candidate.teamplay ? { teamplay: candidate.teamplay } : {})
-        })),
-        selectedReasonSummary: selected.reasons,
-        selectedTags: selected.tags,
-        ...(selected.teamplay ? { selectedTeamplay: selected.teamplay } : {})
+      if (!selected) {
+        throw new Error("No legal action candidates available for heuristics-v1.");
       }
-    };
+
+      if (candidates.length === 0) {
+        console.error(
+          "[ai] No scored legal candidates were available; using emergency pass fallback.",
+          {
+            actor: selected.actor,
+            action: selected.action,
+            phase: ctx.state.phase,
+            activeSeat: ctx.state.activeSeat,
+            currentWish: ctx.state.currentWish
+          }
+        );
+      }
+
+      return toChosenDecision(selected, candidates);
+    } catch (error) {
+      const activeSeatFallback =
+        ctx.state.activeSeat && ctx.state.phase === "trick_play"
+          ? selectSeatEmergencyPassCandidate(ctx, ctx.state.activeSeat)
+          : null;
+      const fallback = activeSeatFallback ?? selectEmergencyPassCandidate(ctx);
+
+      console.error(
+        "[ai] Failed to resolve legal action candidates; attempting emergency pass fallback.",
+        {
+          error: error instanceof Error ? error.message : String(error),
+          phase: ctx.state.phase,
+          activeSeat: ctx.state.activeSeat,
+          currentCombination: ctx.state.currentTrick?.currentCombination.key ?? null,
+          currentWish: ctx.state.currentWish
+        }
+      );
+
+      if (!fallback) {
+        throw error;
+      }
+
+      if (
+        ctx.state.phase === "trick_play" &&
+        ctx.state.currentTrick?.currentCombination.kind === "straight"
+      ) {
+        console.info("[ai] Straight response selected", {
+          activeSeat: fallback.actor,
+          chosenAction: fallback.action,
+          fallbackUsed: true
+        });
+      }
+
+      return toChosenDecision(fallback, []);
+    }
   }
 };
 

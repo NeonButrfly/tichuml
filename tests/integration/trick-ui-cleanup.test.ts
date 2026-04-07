@@ -16,6 +16,7 @@ import {
   TableSurface,
   getDisplayedTrickPoints,
   getNormalCenterZoneClassName,
+  shouldRenderNormalCenterZoneFelt,
   type SeatPlayView
 } from "../../apps/web/src/game-table-views";
 
@@ -209,5 +210,7 @@ describe("trick UI cleanup", () => {
     expect(getNormalCenterZoneClassName(true)).toBe(
       "normal-center-zone normal-center-zone--editor"
     );
+    expect(shouldRenderNormalCenterZoneFelt(false)).toBe(false);
+    expect(shouldRenderNormalCenterZoneFelt(true)).toBe(true);
   });
 });

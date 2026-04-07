@@ -391,6 +391,39 @@ function createPassTurnLegalAction(
   };
 }
 
+function isPlayLegalAction(
+  action: LegalAction
+): action is Extract<LegalAction, { type: "play_cards" }> {
+  return action.type === "play_cards";
+}
+
+function summarizeLegalPlayActions(actions: LegalAction[]): string[] {
+  return actions.filter(isPlayLegalAction).map((action) => action.combination.key);
+}
+
+function logActiveStraightResponseActions(
+  state: GameState,
+  activeActions: LegalAction[]
+): void {
+  if (
+    state.phase !== "trick_play" ||
+    !state.activeSeat ||
+    !state.currentTrick ||
+    state.currentTrick.currentCombination.kind !== "straight"
+  ) {
+    return;
+  }
+
+  console.info("[engine] Straight response availability", {
+    activeSeat: state.activeSeat,
+    leadCombo: state.currentTrick.currentCombination.key,
+    legalResponseCount: activeActions.filter(isPlayLegalAction).length,
+    normalizedResponseList: summarizeLegalPlayActions(activeActions),
+    canPass: activeActions.some((action) => action.type === "pass_turn"),
+    wishState: state.currentWish
+  });
+}
+
 function assertInvariant(condition: boolean, message: string): asserts condition {
   console.assert(condition, message);
   if (!condition) {
@@ -609,6 +642,11 @@ export function getLegalActions(state: GameState): LegalActionMap {
     assertInvariant(
       (legalActions[state.activeSeat] ?? []).length > 0,
       `[engine] Active seat ${state.activeSeat} must always have at least one legal action during trick_play.`
+    );
+
+    logActiveStraightResponseActions(
+      state,
+      legalActions[state.activeSeat] ?? []
     );
   }
 

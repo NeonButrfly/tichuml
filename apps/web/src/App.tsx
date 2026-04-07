@@ -129,6 +129,7 @@ export function shouldPauseForLocalOptionalAction(config: {
   forceAiEndgameContinuation: boolean;
   openingLeadPending: boolean;
   exchangePhaseActive?: boolean;
+  activeResponseTurn?: boolean;
   pickupPending?: boolean;
 }) {
   return (
@@ -137,7 +138,8 @@ export function shouldPauseForLocalOptionalAction(config: {
       (config.localHasOptionalAction &&
         !config.forceAiEndgameContinuation &&
         !config.openingLeadPending &&
-        !config.exchangePhaseActive))
+        !config.exchangePhaseActive &&
+        !config.activeResponseTurn))
   );
 }
 
@@ -444,6 +446,11 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     primaryActor
   );
   const openingLeadPending = isMandatoryOpeningLead(state, primaryActor);
+  const activeResponseTurn =
+    state.phase === "trick_play" &&
+    state.currentTrick !== null &&
+    primaryActor !== null &&
+    primaryActor !== SYSTEM_ACTOR;
   const pickupPending =
     state.phase === "exchange_complete" && Boolean(systemAdvanceAction);
   const localExchangeValidation = validateExchangeDraft(
@@ -730,6 +737,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
         forceAiEndgameContinuation,
         openingLeadPending,
         exchangePhaseActive,
+        activeResponseTurn,
         pickupPending
       })
     ) {
@@ -812,6 +820,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     forceAiEndgameContinuation,
     localHasOptionalAction,
     localIsPrimaryActor,
+    activeResponseTurn,
     openingLeadPending,
     pickupPending,
     primaryActor,

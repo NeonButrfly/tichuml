@@ -23,6 +23,8 @@ The game UI is designed around a single-screen, no-scroll table layout with expl
 - debug and inspection UI should not leak into normal gameplay unexpectedly
 - trick lanes should present cards only; directional indicators are intentionally removed from live trick rendering
 - play-area inset shadow is editor-only so gameplay keeps a cleaner center surface
+- the blurred center felt layer is editor-only; gameplay should not mount any duplicate glow layer there
+- active response turns must always resolve through a legal play or a legal pass, never by pausing on optional Tichu alone
 
 ## Overlay And Dialog Guidance
 
