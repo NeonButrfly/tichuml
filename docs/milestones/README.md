@@ -24,7 +24,7 @@ Sub-milestones such as `4.5`, `4.6`, `5.1.3`, and `5.9` are acceptable when a bo
 
 ## Normalized Repository History
 
-The table below reflects the normalized git history up through the Milestone `5.9` checkpoint. The current repository head is Milestone `6.1.1`, described in the snapshot section below.
+The table below reflects the normalized git history up through the Milestone `5.9` checkpoint. The current repository head is Milestone `6.1.2`, described in the snapshot section below.
 
 | Commit | Normalized subject |
 | --- | --- |
@@ -45,13 +45,19 @@ The table below reflects the normalized git history up through the Milestone `5.
 
 ## Current Milestone Head
 
-Milestone `6.1.1` is the current repository-head milestone. Its scope is:
+Milestone `6.1.2` is the current repository-head milestone. Its scope is:
+
+- `LOCAL-002` trick-display and play-area cleanup
+- normalized north-stage repositioning to keep the top trick area clear of header text
+- central trick-point display plus gameplay-only removal of the play-area inset shadow
+
+Milestone `6.1.1` remains the prior repository-head milestone. Its scope is:
 
 - `LOCAL-001` combo-response legality deadlock audit and fix
 - shared rank-first combo normalization across engine legality, selection matching, and concrete play validation
 - regression coverage across single, pair, trio, full house, straight, pair sequence, and bomb response families
 
-Milestone `6.1` remains the prior repository-head milestone. Its scope was:
+Milestone `6.1` remains the earlier repository-head milestone. Its scope was:
 
 - centralized turn-action availability for the local player UI
 - protection against the illegal Tichu-only progression state
@@ -64,7 +70,7 @@ Milestone `6.0` remains the earlier repository-head milestone. Its scope was:
 - exchange/pickup and cumulative-score flow corrections
 - Mahjong wish hard-rule enforcement plus engine no-stall safeguards
 
-When a future milestone supersedes `6.1.1`, append its normalized subject to the history table and move the scope summary forward.
+When a future milestone supersedes `6.1.2`, append its normalized subject to the history table and move the scope summary forward.
 
 ## Commit Subject Convention
 
@@ -79,6 +85,7 @@ Examples:
 - `Milestone 5.1.5: fix pickup flow and cumulative scoring`
 - `Milestone 6.0: add multi-source entropy inspection dialog`
 - `Milestone 6.1.1: audit combo response legality`
+- `Milestone 6.1.2: clean up trick UI and play area visuals`
 
 Avoid:
 

@@ -8,6 +8,7 @@ The game UI is designed around a single-screen, no-scroll table layout with expl
 - keep all four hands, center table, score, and action rail visible at once
 - preserve card aspect ratio and readable fanning
 - keep pass-lane geometry aligned with the table editor layout
+- show the current trick point total centrally while a trick is active
 - avoid masking overflow instead of truly fitting content
 
 ## Interaction Principles
@@ -20,6 +21,8 @@ The game UI is designed around a single-screen, no-scroll table layout with expl
 - no active response turn may leave Tichu as the only progression action because of legality or matching drift
 - hotkeys, menu actions, and dialogs should route through shared command handlers
 - debug and inspection UI should not leak into normal gameplay unexpectedly
+- trick lanes should present cards only; directional indicators are intentionally removed from live trick rendering
+- play-area inset shadow is editor-only so gameplay keeps a cleaner center surface
 
 ## Overlay And Dialog Guidance
 

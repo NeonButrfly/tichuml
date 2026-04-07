@@ -11,3 +11,4 @@ Use this folder as the local issue tracker for repositories that do not have a h
 ## Current Issues
 
 - [LOCAL-001](./LOCAL-001-response-legality-deadlock.md) - response legality deadlock on combo turns (`resolved in working tree`)
+- [LOCAL-002](./LOCAL-002-ui-trick-display-and-play-area-cleanup.md) - trick display and play-area cleanup (`resolved in working tree`)

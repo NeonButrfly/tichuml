@@ -2465,6 +2465,11 @@ input {
   backdrop-filter: blur(8px);
 }
 
+.normal-play-surface__badge--points {
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
 .normal-play-surface__empty {
   position: absolute;
   left: 50%;
@@ -3462,6 +3467,9 @@ body.normal-layout-locked {
   background:
     radial-gradient(circle at center, rgba(180, 226, 198, 0.1), transparent 42%),
     linear-gradient(180deg, rgba(17, 54, 31, 0.66), rgba(10, 36, 21, 0.54));
+}
+
+.normal-center-zone--editor {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.04),
     inset 0 -18px 32px rgba(0, 0, 0, 0.12);

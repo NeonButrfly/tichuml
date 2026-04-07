@@ -58,7 +58,7 @@ npm run db:migrate
 
 ## Milestone Snapshot
 
-The current repository head is Milestone `6.1.1`. The canonical milestone plan still lives in [SPEC](./spec.md), while the normalized repository history and recommended commit naming convention now live in [docs/milestones/README.md](./docs/milestones/README.md).
+The current repository head is Milestone `6.1.2`. The canonical milestone plan still lives in [SPEC](./spec.md), while the normalized repository history and recommended commit naming convention now live in [docs/milestones/README.md](./docs/milestones/README.md).
 
 When making new milestone commits, prefer:
 
@@ -69,7 +69,7 @@ Milestone <id>: <short scope summary>
 Example:
 
 ```text
-Milestone 6.1.1: fix combo response legality deadlock
+Milestone 6.1.2: clean up trick UI and play area visuals
 ```
 
 Use the commit body for:
@@ -78,7 +78,13 @@ Use the commit body for:
 - key engine/UI/server changes
 - tests and validation
 
-Milestone 6.1.1 currently targets:
+Milestone 6.1.2 currently targets:
+
+- `LOCAL-002` trick-display and play-area cleanup
+- removal of directional indicators from live trick rendering
+- central current-trick point display and editor-only play-surface shadow
+
+Milestone 6.1.1 still targets:
 
 - `LOCAL-001` combo-response legality deadlock audit and fix
 - shared rank-first combo normalization across engine legality, selection matching, and concrete play validation

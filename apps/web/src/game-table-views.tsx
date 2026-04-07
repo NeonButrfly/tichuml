@@ -10,7 +10,9 @@ import type {
 } from "react";
 import type { ChosenDecision } from "@tichuml/ai-heuristics";
 import {
+  cardsFromIds,
   getCanonicalCardIdsKey,
+  getCardsPoints,
   SYSTEM_ACTOR,
   type ActorId,
   type Card,
@@ -263,7 +265,7 @@ export const DEFAULT_NORMAL_TABLE_LAYOUT: NormalTableLayout = {
   eastHand: { x: 0.918, y: 0.494, rotation: 0 },
   southHand: { x: 0.5, y: 0.778, rotation: 0 },
   westHand: { x: 0.082, y: 0.494, rotation: 0 },
-  northStage: { x: 0.5, y: 0.29, rotation: 0 },
+  northStage: { x: 0.5, y: 0.276, rotation: 0 },
   eastStage: { x: 0.82, y: 0.494, rotation: 0 },
   southStage: { x: 0.5, y: 0.614, rotation: 0 },
   westStage: { x: 0.18, y: 0.494, rotation: 0 },
@@ -2327,7 +2329,23 @@ function SeatFlagChips({
   );
 }
 
-function TableSurface({
+export function getDisplayedTrickPoints(seatRelativePlays: readonly SeatPlayView[]): number {
+  return getCardsPoints(
+    cardsFromIds(
+      seatRelativePlays.flatMap(({ plays }) =>
+        plays.flatMap((entry) => entry.combination.cardIds)
+      )
+    )
+  );
+}
+
+export function getNormalCenterZoneClassName(layoutEditorActive: boolean): string {
+  return ["normal-center-zone", layoutEditorActive ? "normal-center-zone--editor" : ""]
+    .filter(Boolean)
+    .join(" ");
+}
+
+export function TableSurface({
   variant,
   normalTableLayout: _normalTableLayout,
   state,
@@ -2355,6 +2373,9 @@ function TableSurface({
   void _normalTableLayout;
   const status = surfaceMessage({ controlHint, state, derived });
   const exchangePhaseActive = isExchangePhase(state.phase);
+  const trickPoints = displayedTrick
+    ? getDisplayedTrickPoints(seatRelativePlays)
+    : 0;
 
   return (
     <section
@@ -2396,6 +2417,15 @@ function TableSurface({
             >
               {formatSeatShort(displayedTrick.currentWinner)} ahead
             </span>
+            <span
+              className={
+                variant === "normal"
+                  ? "normal-play-surface__badge normal-play-surface__badge--points"
+                  : "table-trick__lead"
+              }
+            >
+              Trick: {trickPoints} pts
+            </span>
             {derived.currentWish !== null && (
               <span
                 className={
@@ -2409,7 +2439,7 @@ function TableSurface({
             )}
           </div>
 
-          {seatRelativePlays.map(({ seat, position, label, plays }) => {
+          {seatRelativePlays.map(({ seat, position, plays }) => {
             if (plays.length === 0) {
               return null;
             }
@@ -2423,15 +2453,6 @@ function TableSurface({
                     : `table-trick__lane table-trick__lane--${position}`
                 }
               >
-                <span
-                  className={
-                    variant === "normal"
-                      ? "normal-trick-lane__label"
-                      : "table-trick__seat-label"
-                  }
-                >
-                  {label}
-                </span>
                 <div
                   className={
                     variant === "normal"
@@ -4875,7 +4896,7 @@ export function NormalGameTableView(props: GameTableViewProps) {
               />
 
               <section
-                className="normal-center-zone"
+                className={getNormalCenterZoneClassName(props.layoutEditorActive)}
                 data-layout-container="center-zone"
               >
                 <div className="normal-table__felt" />
