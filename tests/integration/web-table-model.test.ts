@@ -422,6 +422,177 @@ describe("table model helpers", () => {
     expect(turnActions.isTichuOnlyDeadlock).toBe(false);
   });
 
+  it("matches legal responses across all combo families regardless of selection order", () => {
+    const cases = [
+      {
+        label: "single",
+        lead: ["jade-9"],
+        response: ["sword-10"],
+        kind: "single"
+      },
+      {
+        label: "pair",
+        lead: ["jade-7", "sword-7"],
+        response: ["star-8", "pagoda-8"],
+        kind: "pair"
+      },
+      {
+        label: "trio",
+        lead: ["jade-7", "sword-7", "pagoda-7"],
+        response: ["star-8", "jade-8", "sword-8"],
+        kind: "trio"
+      },
+      {
+        label: "full house",
+        lead: ["jade-7", "sword-7", "pagoda-7", "jade-5", "sword-5"],
+        response: ["star-8", "jade-8", "sword-8", "jade-6", "sword-6"],
+        kind: "full-house"
+      },
+      {
+        label: "straight",
+        lead: ["jade-4", "sword-5", "pagoda-6", "star-7", "jade-8"],
+        response: ["jade-9", "star-8", "pagoda-7", "sword-6", "jade-5"],
+        kind: "straight"
+      },
+      {
+        label: "pair sequence",
+        lead: ["jade-4", "sword-4", "jade-5", "sword-5"],
+        response: ["star-6", "pagoda-6", "star-5", "pagoda-5"],
+        kind: "pair-sequence"
+      },
+      {
+        label: "four-kind bomb",
+        lead: ["jade-7", "sword-7", "pagoda-7", "star-7"],
+        response: ["jade-8", "sword-8", "pagoda-8", "star-8"],
+        kind: "bomb-four-kind"
+      },
+      {
+        label: "straight bomb",
+        lead: ["jade-4", "jade-5", "jade-6", "jade-7", "jade-8"],
+        response: ["sword-9", "sword-8", "sword-7", "sword-6", "sword-5"],
+        kind: "bomb-straight"
+      }
+    ] as const;
+
+    for (const testCase of cases) {
+      const leadCombination = combo(testCase.lead);
+      const selectedCardIds = [...testCase.response].reverse();
+      const state = createScenarioState({
+        phase: "trick_play",
+        activeSeat: LOCAL_SEAT,
+        currentTrick: {
+          leader: "seat-3",
+          currentWinner: "seat-3",
+          currentCombination: leadCombination,
+          entries: [
+            { type: "play", seat: "seat-3", combination: leadCombination }
+          ],
+          passingSeats: []
+        },
+        hands: {
+          "seat-0": cardsFromIds(testCase.response),
+          "seat-1": cardsFromIds(["jade-11"]),
+          "seat-2": cardsFromIds(["sword-12"]),
+          "seat-3": cardsFromIds(["star-13"])
+        }
+      });
+
+      const legalActions = getLegalActions(state);
+      const playActions = (legalActions[LOCAL_SEAT] ?? []).filter(isPlayLegalAction);
+      const matches = findMatchingPlayActions(playActions, selectedCardIds);
+      const turnActions = getTurnActions({
+        state,
+        legalActions,
+        seat: LOCAL_SEAT,
+        selectedCardIds
+      });
+
+      expect(matches, `${testCase.label} should match a legal response`).toHaveLength(1);
+      expect(matches[0]?.combination.kind).toBe(testCase.kind);
+      expect(turnActions.canPlay, `${testCase.label} should enable Play`).toBe(true);
+      expect(turnActions.isTichuOnlyDeadlock).toBe(false);
+    }
+  });
+
+  it("keeps Pass available when no legal response exists across all combo families", () => {
+    const cases = [
+      {
+        label: "single",
+        lead: ["jade-10"],
+        hand: ["sword-9"]
+      },
+      {
+        label: "pair",
+        lead: ["jade-10", "sword-10"],
+        hand: ["pagoda-9", "star-9"]
+      },
+      {
+        label: "trio",
+        lead: ["jade-10", "sword-10", "pagoda-10"],
+        hand: ["jade-9", "sword-9", "pagoda-9"]
+      },
+      {
+        label: "full house",
+        lead: ["jade-10", "sword-10", "pagoda-10", "jade-5", "sword-5"],
+        hand: ["jade-9", "sword-9", "pagoda-9", "jade-4", "sword-4"]
+      },
+      {
+        label: "straight",
+        lead: ["jade-6", "sword-7", "pagoda-8", "star-9", "jade-10"],
+        hand: ["jade-2", "sword-3", "pagoda-4", "star-5", "jade-6"]
+      },
+      {
+        label: "pair sequence",
+        lead: ["jade-7", "sword-7", "jade-8", "sword-8"],
+        hand: ["pagoda-4", "star-4", "pagoda-5", "star-5"]
+      },
+      {
+        label: "four-kind bomb",
+        lead: ["jade-8", "sword-8", "pagoda-8", "star-8"],
+        hand: ["jade-7", "sword-7", "pagoda-7", "star-7"]
+      },
+      {
+        label: "straight bomb",
+        lead: ["jade-5", "jade-6", "jade-7", "jade-8", "jade-9"],
+        hand: ["sword-4", "sword-5", "sword-6", "sword-7", "sword-8"]
+      }
+    ] as const;
+
+    for (const testCase of cases) {
+      const leadCombination = combo(testCase.lead);
+      const state = createScenarioState({
+        phase: "trick_play",
+        activeSeat: LOCAL_SEAT,
+        currentTrick: {
+          leader: "seat-3",
+          currentWinner: "seat-3",
+          currentCombination: leadCombination,
+          entries: [
+            { type: "play", seat: "seat-3", combination: leadCombination }
+          ],
+          passingSeats: []
+        },
+        hands: {
+          "seat-0": cardsFromIds(testCase.hand),
+          "seat-1": cardsFromIds(["jade-11"]),
+          "seat-2": cardsFromIds(["sword-12"]),
+          "seat-3": cardsFromIds(["star-13"])
+        }
+      });
+
+      const turnActions = getTurnActions({
+        state,
+        legalActions: getLegalActions(state),
+        seat: LOCAL_SEAT,
+        selectedCardIds: []
+      });
+
+      expect(turnActions.canPlay, `${testCase.label} should not enable Play`).toBe(false);
+      expect(turnActions.canPass, `${testCase.label} should keep Pass available`).toBe(true);
+      expect(turnActions.isTichuOnlyDeadlock).toBe(false);
+    }
+  });
+
   it("falls back to normal legality when a wish cannot be satisfied and still enables Pass", () => {
     const straightLead = combo([
       "jade-4",

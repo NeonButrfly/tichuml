@@ -20,11 +20,11 @@ These milestone bands remain the source-of-truth plan from [SPEC](../../spec.md)
 - `7` - simulation harness and bulk analysis
 - `8` - polish and production-readiness
 
-Sub-milestones such as `4.5`, `4.6`, `5.1.3`, and `5.9` are acceptable when a bounded stream needs more than one commit or iteration.
+Sub-milestones such as `4.5`, `4.6`, `5.1.3`, and `5.9` are acceptable when a bounded stream needs more than one commit or iteration. Bugfix follow-ups may use a third revision segment such as `6.1.1` when they are clearly scoped corrective work on top of an already-cut milestone.
 
 ## Normalized Repository History
 
-The table below reflects the normalized git history up through the Milestone `5.9` checkpoint. The current repository head is Milestone `6.1`, described in the snapshot section below.
+The table below reflects the normalized git history up through the Milestone `5.9` checkpoint. The current repository head is Milestone `6.1.1`, described in the snapshot section below.
 
 | Commit | Normalized subject |
 | --- | --- |
@@ -45,20 +45,26 @@ The table below reflects the normalized git history up through the Milestone `5.
 
 ## Current Milestone Head
 
-Milestone `6.1` is the current repository-head milestone. Its scope is:
+Milestone `6.1.1` is the current repository-head milestone. Its scope is:
+
+- `LOCAL-001` combo-response legality deadlock audit and fix
+- shared rank-first combo normalization across engine legality, selection matching, and concrete play validation
+- regression coverage across single, pair, trio, full house, straight, pair sequence, and bomb response families
+
+Milestone `6.1` remains the prior repository-head milestone. Its scope was:
 
 - centralized turn-action availability for the local player UI
 - protection against the illegal Tichu-only progression state
 - regression coverage for straight-response and wish-fallback pass/play legality
 
-Milestone `6.0` remains the prior repository-head milestone. Its scope was:
+Milestone `6.0` remains the earlier repository-head milestone. Its scope was:
 
 - production-ready entropy orchestration with deterministic shuffle integration
 - Random Sources inspection UI and related seed provenance/debug surfaces
 - exchange/pickup and cumulative-score flow corrections
 - Mahjong wish hard-rule enforcement plus engine no-stall safeguards
 
-When a future milestone supersedes `6.1`, append its normalized subject to the history table and move the scope summary forward.
+When a future milestone supersedes `6.1.1`, append its normalized subject to the history table and move the scope summary forward.
 
 ## Commit Subject Convention
 
@@ -72,6 +78,7 @@ Examples:
 
 - `Milestone 5.1.5: fix pickup flow and cumulative scoring`
 - `Milestone 6.0: add multi-source entropy inspection dialog`
+- `Milestone 6.1.1: audit combo response legality`
 
 Avoid:
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   cardsFromIds,
   createScenarioState,
+  getCanonicalCardIdsKey,
   getLegalActions,
   listCombinationInterpretations,
   type Combination,
@@ -35,10 +36,11 @@ function playCandidateByCards(
   chosen: ReturnType<typeof heuristicsV1Policy.chooseAction>,
   cardIds: string[]
 ) {
-  const target = [...cardIds].sort().join(",");
+  const target = getCanonicalCardIdsKey(cardIds);
   return chosen.explanation.candidateScores.find(
     (candidate) =>
-      candidate.action.type === "play_cards" && [...candidate.action.cardIds].sort().join(",") === target
+      candidate.action.type === "play_cards" &&
+      getCanonicalCardIdsKey(candidate.action.cardIds) === target
   );
 }
 
@@ -232,7 +234,7 @@ describe("heuristics v1", () => {
     expect(chosen.action).toEqual({
       type: "play_cards",
       seat: "seat-0",
-      cardIds: ["jade-10", "pagoda-10", "star-10", "sword-10"]
+      cardIds: ["jade-10", "sword-10", "pagoda-10", "star-10"]
     });
     expect(chosen.explanation.selectedTags).toEqual(
       expect.arrayContaining([
@@ -280,7 +282,7 @@ describe("heuristics v1", () => {
     expect(chosen.action).toEqual({
       type: "play_cards",
       seat: "seat-0",
-      cardIds: ["jade-11", "pagoda-11", "star-11", "sword-11"]
+      cardIds: ["jade-11", "sword-11", "pagoda-11", "star-11"]
     });
     expect(chosen.explanation.selectedTags).toEqual(
       expect.arrayContaining([

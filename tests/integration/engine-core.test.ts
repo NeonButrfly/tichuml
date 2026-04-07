@@ -252,6 +252,181 @@ describe("engine core", () => {
     expect(result.nextState.currentWish).toBeNull();
   });
 
+  it("normalizes combination card ids in canonical rank-first order", () => {
+    const straight = combo([
+      "star-7",
+      "jade-5",
+      "jade-9",
+      "pagoda-8",
+      "sword-6"
+    ]);
+    const trio = combo(["star-8", "jade-8", "sword-8"]);
+
+    expect(straight.cardIds).toEqual([
+      "jade-5",
+      "sword-6",
+      "star-7",
+      "pagoda-8",
+      "jade-9"
+    ]);
+    expect(straight.actualRanks).toEqual([5, 6, 7, 8, 9]);
+    expect(trio.cardIds).toEqual(["jade-8", "sword-8", "star-8"]);
+  });
+
+  it("generates legal responses or pass fallbacks across all combo families without deadlocking", () => {
+    const playableCases = [
+      {
+        label: "single",
+        lead: ["jade-9"],
+        response: ["sword-10"],
+        kind: "single"
+      },
+      {
+        label: "pair",
+        lead: ["jade-7", "sword-7"],
+        response: ["pagoda-8", "star-8"],
+        kind: "pair"
+      },
+      {
+        label: "trio",
+        lead: ["jade-7", "sword-7", "pagoda-7"],
+        response: ["jade-8", "sword-8", "star-8"],
+        kind: "trio"
+      },
+      {
+        label: "full house",
+        lead: ["jade-7", "sword-7", "pagoda-7", "jade-5", "sword-5"],
+        response: ["jade-8", "sword-8", "star-8", "jade-6", "sword-6"],
+        kind: "full-house"
+      },
+      {
+        label: "straight",
+        lead: ["jade-4", "sword-5", "pagoda-6", "star-7", "jade-8"],
+        response: ["jade-5", "sword-6", "pagoda-7", "star-8", "jade-9"],
+        kind: "straight"
+      },
+      {
+        label: "pair sequence",
+        lead: ["jade-4", "sword-4", "jade-5", "sword-5"],
+        response: ["pagoda-5", "star-5", "pagoda-6", "star-6"],
+        kind: "pair-sequence"
+      },
+      {
+        label: "four-kind bomb",
+        lead: ["jade-7", "sword-7", "pagoda-7", "star-7"],
+        response: ["jade-8", "sword-8", "pagoda-8", "star-8"],
+        kind: "bomb-four-kind"
+      },
+      {
+        label: "straight bomb",
+        lead: ["jade-4", "jade-5", "jade-6", "jade-7", "jade-8"],
+        response: ["sword-5", "sword-6", "sword-7", "sword-8", "sword-9"],
+        kind: "bomb-straight"
+      }
+    ] as const;
+
+    for (const testCase of playableCases) {
+      const leadCombination = combo(testCase.lead);
+      const state = scenario({
+        activeSeat: "seat-1",
+        currentTrick: {
+          leader: "seat-0",
+          currentWinner: "seat-0",
+          currentCombination: leadCombination,
+          entries: [{ type: "play", seat: "seat-0", combination: leadCombination }],
+          passingSeats: []
+        },
+        hands: {
+          "seat-1": cardsFromIds(testCase.response)
+        }
+      });
+
+      const actions = getLegalActions(state)["seat-1"] ?? [];
+      const playAction = actions.find(
+        (action) =>
+          action.type === "play_cards" &&
+          action.combination.kind === testCase.kind &&
+          action.cardIds.every((cardId) => testCase.response.includes(cardId)) &&
+          action.cardIds.length === testCase.response.length
+      );
+
+      expect(actions.length, `${testCase.label} should have legal actions`).toBeGreaterThan(0);
+      expect(playAction, `${testCase.label} should produce a legal beating response`).toBeTruthy();
+    }
+
+    const passCases = [
+      {
+        label: "single",
+        lead: ["jade-10"],
+        hand: ["sword-9"]
+      },
+      {
+        label: "pair",
+        lead: ["jade-10", "sword-10"],
+        hand: ["pagoda-9", "star-9"]
+      },
+      {
+        label: "trio",
+        lead: ["jade-10", "sword-10", "pagoda-10"],
+        hand: ["jade-9", "sword-9", "pagoda-9"]
+      },
+      {
+        label: "full house",
+        lead: ["jade-10", "sword-10", "pagoda-10", "jade-5", "sword-5"],
+        hand: ["jade-9", "sword-9", "pagoda-9", "jade-4", "sword-4"]
+      },
+      {
+        label: "straight",
+        lead: ["jade-6", "sword-7", "pagoda-8", "star-9", "jade-10"],
+        hand: ["jade-2", "sword-3", "pagoda-4", "star-5", "jade-6"]
+      },
+      {
+        label: "pair sequence",
+        lead: ["jade-7", "sword-7", "jade-8", "sword-8"],
+        hand: ["pagoda-4", "star-4", "pagoda-5", "star-5"]
+      },
+      {
+        label: "four-kind bomb",
+        lead: ["jade-8", "sword-8", "pagoda-8", "star-8"],
+        hand: ["jade-7", "sword-7", "pagoda-7", "star-7"]
+      },
+      {
+        label: "straight bomb",
+        lead: ["jade-5", "jade-6", "jade-7", "jade-8", "jade-9"],
+        hand: ["sword-4", "sword-5", "sword-6", "sword-7", "sword-8"]
+      }
+    ] as const;
+
+    for (const testCase of passCases) {
+      const leadCombination = combo(testCase.lead);
+      const state = scenario({
+        activeSeat: "seat-1",
+        currentTrick: {
+          leader: "seat-0",
+          currentWinner: "seat-0",
+          currentCombination: leadCombination,
+          entries: [{ type: "play", seat: "seat-0", combination: leadCombination }],
+          passingSeats: []
+        },
+        hands: {
+          "seat-1": cardsFromIds(testCase.hand)
+        }
+      });
+
+      const actions = getLegalActions(state)["seat-1"] ?? [];
+
+      expect(actions.length, `${testCase.label} should never deadlock`).toBeGreaterThan(0);
+      expect(
+        actions.some((action) => action.type === "pass_turn"),
+        `${testCase.label} should keep pass legal when no beat exists`
+      ).toBe(true);
+      expect(
+        actions.some((action) => action.type === "play_cards"),
+        `${testCase.label} should not invent a beating play`
+      ).toBe(false);
+    }
+  });
+
   it("handles Phoenix single-card legality against Ace and Dragon", () => {
     const aceLead = combo(["jade-14"]);
     const againstAce = scenario({

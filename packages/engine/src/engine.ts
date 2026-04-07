@@ -22,6 +22,7 @@ import {
 } from "./types.js";
 import {
   cardsFromIds,
+  getCanonicalCardIdsKey,
   getCardById,
   getCardsPoints,
   getLeftSeat,
@@ -337,7 +338,9 @@ function compareLegalActions(left: LegalAction, right: LegalAction): number {
     return countDifference;
   }
 
-  return left.cardIds.join(",").localeCompare(right.cardIds.join(","));
+  return getCanonicalCardIdsKey(left.cardIds).localeCompare(
+    getCanonicalCardIdsKey(right.cardIds)
+  );
 }
 
 function enumerateHandSubsets(hand: Card[]): Card[][] {
@@ -482,7 +485,7 @@ function generatePlayActions(state: GameState, seat: SeatId): LegalAction[] {
       };
 
       actions.set(
-        `${action.cardIds.join(",")}:${action.phoenixAsRank ?? "none"}`,
+        `${getCanonicalCardIdsKey(action.cardIds)}:${action.phoenixAsRank ?? "none"}`,
         action
       );
     }
@@ -622,7 +625,8 @@ function matchConcretePlayAction(
 
   if (
     legalAction.seat !== action.seat ||
-    legalAction.cardIds.join(",") !== [...action.cardIds].sort().join(",") ||
+    getCanonicalCardIdsKey(legalAction.cardIds) !==
+      getCanonicalCardIdsKey(action.cardIds) ||
     (legalAction.phoenixAsRank ?? null) !== (action.phoenixAsRank ?? null)
   ) {
     return false;
@@ -1033,14 +1037,15 @@ function applyPlayCards(
   assertConcreteActionIsLegal(state, action);
 
   const events: EngineEvent[] = [];
-  const cards = cardsFromIds([...action.cardIds].sort());
+  const normalizedActionCardIds = getCanonicalCardIdsKey(action.cardIds);
+  const cards = cardsFromIds(action.cardIds);
   const currentCombination = state.currentTrick?.currentCombination ?? null;
   const combination = listCombinationInterpretations(
     cards,
     currentCombination
   ).find(
     (candidate) =>
-      candidate.cardIds.join(",") === [...action.cardIds].sort().join(",") &&
+      getCanonicalCardIdsKey(candidate.cardIds) === normalizedActionCardIds &&
       (candidate.phoenixAsRank ?? null) === (action.phoenixAsRank ?? null)
   );
 

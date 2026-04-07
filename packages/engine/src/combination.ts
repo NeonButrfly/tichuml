@@ -1,5 +1,12 @@
 import { type Card, type Combination, type StandardRank } from "./types.js";
-import { getStraightRank, isDog, isDragon, isMahjong, isPhoenix } from "./cards.js";
+import {
+  getStraightRank,
+  isDog,
+  isDragon,
+  isMahjong,
+  isPhoenix,
+  sortCardsForCombination
+} from "./cards.js";
 
 type EvaluationContext = {
   currentSingleValue: number | null;
@@ -13,11 +20,13 @@ function buildCombination(
   phoenixAsRank: StandardRank | null,
   pairCount: number | null
 ): Combination {
-  const sortedCardIds = [...cards].map((card) => card.id).sort();
-  const actualRanks = cards
+  const normalizedCards = sortCardsForCombination(cards);
+  const sortedCardIds = normalizedCards.map((card) => card.id);
+  const actualRanks = normalizedCards
     .filter((card) => !isPhoenix(card))
     .map((card) => getStraightRank(card))
-    .filter((rank): rank is NonNullable<typeof rank> => rank !== null);
+    .filter((rank): rank is NonNullable<typeof rank> => rank !== null)
+    .sort((left, right) => left - right);
 
   return {
     key: `${kind}:${sortedCardIds.join(",")}:${phoenixAsRank ?? "none"}`,

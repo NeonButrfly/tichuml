@@ -6,6 +6,7 @@ Use this folder as the canonical human-facing map of the project.
 
 - [../spec.md](../spec.md) - master specification, architecture goals, and milestone plan
 - [./milestones/README.md](./milestones/README.md) - normalized milestone history and commit-subject guidance
+- [./issues/README.md](./issues/README.md) - local issue tracker for repos without a hosted issue system
 - [./architecture/README.md](./architecture/README.md) - package boundaries, authoritative systems, and runtime data flow
 - [./product/README.md](./product/README.md) - gameplay surfaces and user-facing flows
 - [./ui/README.md](./ui/README.md) - table layout, interaction, dialog, and responsiveness guidance

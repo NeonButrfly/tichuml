@@ -24,6 +24,8 @@ TichuML is organized around a few strict boundaries:
 - Replay determinism depends on stored seed plus deterministic engine transitions.
 - Active Mahjong wishes are hard legality constraints when fulfillable, but the engine must still guarantee at least one legal action for the active seat.
 - Human action-row availability should be computed from engine legal actions through one shared helper instead of duplicated button-local conditions.
+- Combo response legality must flow from one engine-authoritative pipeline across AI, human UI, and concrete action validation.
+- Combination card ids must be normalized through a shared rank-first canonical ordering helper before matching, deduping, or building combination keys.
 - UI layout changes must preserve one-screen table fit and no-scroll gameplay.
 
 ## Related Docs

@@ -10,6 +10,7 @@ import type {
 } from "react";
 import type { ChosenDecision } from "@tichuml/ai-heuristics";
 import {
+  getCanonicalCardIdsKey,
   SYSTEM_ACTOR,
   type ActorId,
   type Card,
@@ -832,7 +833,7 @@ export function describeAction(action: EngineAction): string {
 
 function buildPlayVariantKey(action: PlayLegalAction): string {
   return [
-    action.cardIds.join(","),
+    getCanonicalCardIdsKey(action.cardIds),
     String(action.phoenixAsRank ?? "none"),
     action.combination.kind,
     String(action.combination.primaryRank)

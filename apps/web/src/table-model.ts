@@ -2,6 +2,7 @@ import {
   SEAT_IDS,
   SYSTEM_ACTOR,
   compareCardsForHand,
+  getCanonicalCardIdsKey,
   type ActorId,
   type Card,
   type EngineResult,
@@ -297,7 +298,7 @@ export function shouldAllowAiEndgameContinuation(
 
 export function buildPlayVariantKey(action: PlayLegalAction): string {
   return [
-    action.cardIds.join(","),
+    getCanonicalCardIdsKey(action.cardIds),
     String(action.phoenixAsRank ?? "none"),
     action.combination.kind,
     String(action.combination.primaryRank)
@@ -308,13 +309,15 @@ export function findMatchingPlayActions(
   actions: PlayLegalAction[],
   selectedCardIds: string[]
 ): PlayLegalAction[] {
-  const normalizedSelection = [...selectedCardIds].sort().join(",");
+  const normalizedSelection = getCanonicalCardIdsKey(selectedCardIds);
 
   if (normalizedSelection.length === 0) {
     return [];
   }
 
-  return actions.filter((action) => action.cardIds.join(",") === normalizedSelection);
+  return actions.filter(
+    (action) => getCanonicalCardIdsKey(action.cardIds) === normalizedSelection
+  );
 }
 
 export function getTurnActions(config: {

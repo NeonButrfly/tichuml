@@ -154,25 +154,42 @@ export function cardsFromIds(cardIds: string[]): Card[] {
   return cardIds.map((cardId) => getCardById(cardId));
 }
 
+function getCardRankWeight(card: Card): number {
+  if (card.kind === "standard") {
+    return card.rank;
+  }
+
+  switch (card.special) {
+    case "dog":
+      return 0;
+    case "mahjong":
+      return 1;
+    case "phoenix":
+      return 14.5;
+    case "dragon":
+      return 15;
+  }
+}
+
+function getCardSuitWeight(card: Card): number {
+  if (card.kind !== "standard") {
+    return -1;
+  }
+
+  switch (card.suit) {
+    case "jade":
+      return 0;
+    case "sword":
+      return 1;
+    case "pagoda":
+      return 2;
+    case "star":
+      return 3;
+  }
+}
+
 export function compareCardsForHand(left: Card, right: Card): number {
-  const weight = (card: Card): number => {
-    if (card.kind === "standard") {
-      return card.rank;
-    }
-
-    switch (card.special) {
-      case "dog":
-        return 0;
-      case "mahjong":
-        return 1;
-      case "phoenix":
-        return 14.5;
-      case "dragon":
-        return 15;
-    }
-  };
-
-  const rankDifference = weight(left) - weight(right);
+  const rankDifference = getCardRankWeight(left) - getCardRankWeight(right);
   if (rankDifference !== 0) {
     return rankDifference;
   }
@@ -182,6 +199,32 @@ export function compareCardsForHand(left: Card, right: Card): number {
 
 export function sortHand(cards: Card[]): Card[] {
   return [...cards].sort(compareCardsForHand);
+}
+
+export function compareCardsForCombination(left: Card, right: Card): number {
+  const rankDifference = getCardRankWeight(left) - getCardRankWeight(right);
+  if (rankDifference !== 0) {
+    return rankDifference;
+  }
+
+  const suitDifference = getCardSuitWeight(left) - getCardSuitWeight(right);
+  if (suitDifference !== 0) {
+    return suitDifference;
+  }
+
+  return left.id.localeCompare(right.id);
+}
+
+export function sortCardsForCombination(cards: readonly Card[]): Card[] {
+  return [...cards].sort(compareCardsForCombination);
+}
+
+export function sortCardIdsForCombination(cardIds: readonly string[]): string[] {
+  return sortCardsForCombination(cardsFromIds([...cardIds])).map((card) => card.id);
+}
+
+export function getCanonicalCardIdsKey(cardIds: readonly string[]): string {
+  return sortCardIdsForCombination(cardIds).join(",");
 }
 
 export function isPhoenix(card: Card): boolean {
