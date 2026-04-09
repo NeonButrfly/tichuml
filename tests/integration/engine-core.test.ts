@@ -67,6 +67,44 @@ describe("engine core", () => {
     ]);
   });
 
+  it("suppresses a small Tichu call when the partner already called Grand Tichu", () => {
+    const state = scenario({
+      phase: "pass_select",
+      activeSeat: "seat-2",
+      calls: {
+        "seat-0": {
+          grandTichu: true,
+          smallTichu: false,
+          hasPlayedFirstCard: false
+        },
+        "seat-1": {
+          grandTichu: false,
+          smallTichu: false,
+          hasPlayedFirstCard: false
+        },
+        "seat-2": {
+          grandTichu: false,
+          smallTichu: false,
+          hasPlayedFirstCard: false
+        },
+        "seat-3": {
+          grandTichu: false,
+          smallTichu: false,
+          hasPlayedFirstCard: false
+        }
+      },
+      hands: {
+        "seat-2": cardsFromIds(["jade-2", "sword-3", "pagoda-4"])
+      }
+    });
+
+    const legalActions = getLegalActions(state)["seat-2"] ?? [];
+
+    expect(
+      legalActions.some((action) => action.type === "call_tichu")
+    ).toBe(false);
+  });
+
   it("forces wish fulfillment only when the player holds the wished rank", () => {
     const mahjongLead = combo(["mahjong"]);
     const mustFulfill = scenario({

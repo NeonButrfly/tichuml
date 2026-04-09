@@ -52,8 +52,70 @@ import {
   type PassTarget,
   type PlayLegalAction
 } from "./table-model";
- 
-export type SeatVisualPosition = "top" | "right" | "bottom" | "left";
+export type {
+  NormalLayoutElement,
+  NormalLayoutElementId,
+  NormalPassLaneGeometry,
+  NormalPassLaneSpec,
+  NormalTableLayout,
+  NormalTableLayoutConfig,
+  NormalTableLayoutTokens,
+  NormalTrickFanMetrics,
+  NormalViewportLayoutMetrics,
+  PassLaneDirection,
+  SeatVisualPosition
+} from "./table-layout";
+export {
+  anchorStyle,
+  CARD_ASPECT,
+  computeNormalViewportLayoutMetrics,
+  DEFAULT_NORMAL_TABLE_LAYOUT,
+  DEFAULT_NORMAL_TABLE_LAYOUT_CONFIG,
+  DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS,
+  DEFAULT_NORMAL_TABLE_SURFACE,
+  getNormalPassLaneLayoutId,
+  getNormalSeatLayout,
+  getNormalTrickFanMetrics,
+  NORMAL_BOARD_INSET,
+  NORMAL_HAND_LAYOUT_IDS,
+  NORMAL_LABEL_LAYOUT_IDS,
+  NORMAL_LAYOUT_EDITOR_ORDER,
+  NORMAL_LAYOUT_ELEMENT_SPECS,
+  NORMAL_LAYOUT_OPPOSING_ELEMENT_IDS,
+  NORMAL_PASS_LANE_LAYOUT_IDS,
+  NORMAL_PASS_LANE_SCALE,
+  NORMAL_PASS_STAGE_MAP,
+  NORMAL_STAGE_LAYOUT_IDS,
+  requiredFanSpan,
+  resolveNormalPassLaneGeometry,
+  resolveNormalStageAnchorStyle
+} from "./table-layout";
+import {
+  anchorStyle,
+  DEFAULT_NORMAL_TABLE_LAYOUT,
+  DEFAULT_NORMAL_TABLE_LAYOUT_CONFIG,
+  DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS,
+  DEFAULT_NORMAL_TABLE_SURFACE,
+  computeNormalViewportLayoutMetrics,
+  getNormalSeatLayout,
+  getNormalTrickFanMetrics,
+  NORMAL_HAND_LAYOUT_IDS,
+  NORMAL_LAYOUT_EDITOR_ORDER,
+  NORMAL_LAYOUT_ELEMENT_SPECS,
+  NORMAL_LAYOUT_OPPOSING_ELEMENT_IDS,
+  NORMAL_PASS_STAGE_MAP,
+  NORMAL_STAGE_LAYOUT_IDS,
+  requiredFanSpan,
+  resolveNormalPassLaneGeometry,
+  type NormalLayoutElement,
+  type NormalLayoutElementId,
+  type NormalTableLayout,
+  type NormalTableLayoutConfig,
+  type NormalTableLayoutTokens,
+  type NormalViewportLayoutMetrics,
+  type PassLaneDirection,
+  type SeatVisualPosition
+} from "./table-layout";
 
 export type SeatView = {
   seat: SeatId;
@@ -174,411 +236,6 @@ export type GameTableViewProps = {
   onMainMenuOpenChange: (open: boolean) => void;
 };
 
-export type NormalLayoutElementId =
-  | "scoreBadge"
-  | "northHand"
-  | "eastHand"
-  | "southHand"
-  | "westHand"
-  | "northStage"
-  | "eastStage"
-  | "southStage"
-  | "westStage"
-  | "northToEastLane"
-  | "northToSouthLane"
-  | "northToWestLane"
-  | "eastToNorthLane"
-  | "eastToWestLane"
-  | "eastToSouthLane"
-  | "southToWestLane"
-  | "southToNorthLane"
-  | "southToEastLane"
-  | "westToNorthLane"
-  | "westToEastLane"
-  | "westToSouthLane"
-  | "playSurface"
-  | "actionRow"
-  | "northLabel"
-  | "eastLabel"
-  | "southLabel"
-  | "westLabel";
-
-export type NormalLayoutElement = {
-  x: number;
-  y: number;
-  rotation: number;
-};
-
-export type NormalTableLayout = Record<
-  NormalLayoutElementId,
-  NormalLayoutElement
->;
-
-export type NormalTableSurfaceConfig = {
-  widthMode: "relative";
-  heightMode: "relative";
-  gridSize: number;
-};
-
-export type NormalTableLayoutTokens = {
-  topHandOverlap: number;
-  bottomHandOverlap: number;
-  sideHandOverlap: number;
-  trickLaneGap: number;
-  playCardOverlap: number;
-  passCardOverlap: number;
-  actionAreaGap: number;
-  actionButtonGap: number;
-  stageCardScale: number;
-};
-
-export type NormalTableLayoutConfig = {
-  version: number;
-  surface: NormalTableSurfaceConfig;
-  elements: NormalTableLayout;
-  tokens: NormalTableLayoutTokens;
-};
-
-type NormalLayoutElementSpec = {
-  label: string;
-  width: number;
-  height: number;
-};
-
-const CARD_CANONICAL_WIDTH = 5;
-const CARD_CANONICAL_HEIGHT = 7;
-export const CARD_ASPECT = CARD_CANONICAL_WIDTH / CARD_CANONICAL_HEIGHT;
-const CARD_HEIGHT_PER_WIDTH =
-  CARD_CANONICAL_HEIGHT / CARD_CANONICAL_WIDTH;
-export const NORMAL_PASS_LANE_SCALE = 0.68;
-const NORMAL_ROUTE_CARD_WIDTH = 60;
-const NORMAL_ROUTE_CARD_HEIGHT = Math.round(
-  NORMAL_ROUTE_CARD_WIDTH * CARD_HEIGHT_PER_WIDTH
-);
-const NORMAL_MIN_CARD_WIDTH = 44;
-const NORMAL_MAX_CARD_HEIGHT = 132;
-const NORMAL_MAX_CARD_HEIGHT_VIEWPORT_SHARE = 0.145;
-const NORMAL_PASS_LANE_MIN_WIDTH = 32;
-const NORMAL_PASS_LANE_MAX_WIDTH = 72;
-
-export const DEFAULT_NORMAL_TABLE_SURFACE: NormalTableSurfaceConfig = {
-  widthMode: "relative",
-  heightMode: "relative",
-  gridSize: 10
-};
-
-export const DEFAULT_NORMAL_TABLE_LAYOUT: NormalTableLayout = {
-  scoreBadge: { x: 0.5, y: 0.024, rotation: 0 },
-  northHand: { x: 0.5, y: 0.148, rotation: 0 },
-  eastHand: { x: 0.918, y: 0.494, rotation: 0 },
-  southHand: { x: 0.5, y: 0.778, rotation: 0 },
-  westHand: { x: 0.082, y: 0.494, rotation: 0 },
-  northStage: { x: 0.5, y: 0.29, rotation: 0 },
-  eastStage: { x: 0.82, y: 0.494, rotation: 0 },
-  southStage: { x: 0.5, y: 0.614, rotation: 0 },
-  westStage: { x: 0.18, y: 0.494, rotation: 0 },
-  northToEastLane: {
-    x: 0.5636070853462157,
-    y: 0.3154875532927035,
-    rotation: 90
-  },
-  northToSouthLane: {
-    x: 0.499194847020934,
-    y: 0.32982789662419004,
-    rotation: 0
-  },
-  northToWestLane: {
-    x: 0.43478260869565216,
-    y: 0.3154875532927035,
-    rotation: -90
-  },
-  eastToNorthLane: {
-    x: 0.8373590982286635,
-    y: 0.3585085832871631,
-    rotation: 270
-  },
-  eastToWestLane: { x: 0.8293075684380032, y: 0.4732313299390553, rotation: 0 },
-  eastToSouthLane: {
-    x: 0.8373590982286635,
-    y: 0.5879540765909474,
-    rotation: 90
-  },
-  southToWestLane: {
-    x: 0.4341889388303771,
-    y: 0.6527777777777778,
-    rotation: -90
-  },
-  southToNorthLane: { x: 0.499194847020934, y: 0.630975106585407, rotation: 0 },
-  southToEastLane: {
-    x: 0.5652648448923778,
-    y: 0.6527777777777778,
-    rotation: 90
-  },
-  westToNorthLane: { x: 0.1610305958132045, y: 0.3585085832871631, rotation: -90 },
-  westToEastLane: { x: 0.16908212560386474, y: 0.4732313299390553, rotation: 0 },
-  westToSouthLane: {
-    x: 0.1610305958132045,
-    y: 0.5879540765909474,
-    rotation: 90
-  },
-  playSurface: { x: 0.5, y: 0.458, rotation: 0 },
-  actionRow: { x: 0.5, y: 0.934, rotation: 0 },
-  northLabel: { x: 0.5, y: 0.055, rotation: 0 },
-  eastLabel: { x: 0.9830692954650049, y: 0.5, rotation: 0 },
-  southLabel: { x: 0.5, y: 0.852, rotation: 0 },
-  westLabel: { x: 0.01638448825775008, y: 0.5, rotation: 0 }
-};
-
-export const DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS: NormalTableLayoutTokens = {
-  topHandOverlap: 34,
-  bottomHandOverlap: 16,
-  sideHandOverlap: 34,
-  trickLaneGap: 10,
-  playCardOverlap: 22,
-  passCardOverlap: 22,
-  actionAreaGap: 8,
-  actionButtonGap: 8,
-  stageCardScale: 0.86
-};
-
-export const DEFAULT_NORMAL_TABLE_LAYOUT_CONFIG: NormalTableLayoutConfig = {
-  version: 1,
-  surface: DEFAULT_NORMAL_TABLE_SURFACE,
-  elements: DEFAULT_NORMAL_TABLE_LAYOUT,
-  tokens: DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS
-};
-
-export const NORMAL_LAYOUT_ELEMENT_SPECS: Record<
-  NormalLayoutElementId,
-  NormalLayoutElementSpec
-> = {
-  scoreBadge: { label: "Score Badge", width: 136, height: 28 },
-  northHand: { label: "North Hand", width: 560, height: 120 },
-  eastHand: { label: "East Hand", width: 96, height: 512 },
-  southHand: { label: "South Hand", width: 920, height: 140 },
-  westHand: { label: "West Hand", width: 96, height: 512 },
-  northStage: { label: "North Staging", width: 260, height: 112 },
-  eastStage: { label: "East Staging", width: 96, height: 260 },
-  southStage: { label: "South Staging", width: 260, height: 112 },
-  westStage: { label: "West Staging", width: 96, height: 260 },
-  northToEastLane: {
-    label: "North -> East",
-    width: NORMAL_ROUTE_CARD_WIDTH,
-    height: NORMAL_ROUTE_CARD_HEIGHT
-  },
-  northToSouthLane: {
-    label: "North -> South",
-    width: NORMAL_ROUTE_CARD_WIDTH,
-    height: NORMAL_ROUTE_CARD_HEIGHT
-  },
-  northToWestLane: {
-    label: "North -> West",
-    width: NORMAL_ROUTE_CARD_WIDTH,
-    height: NORMAL_ROUTE_CARD_HEIGHT
-  },
-  eastToNorthLane: {
-    label: "East -> North",
-    width: NORMAL_ROUTE_CARD_HEIGHT,
-    height: NORMAL_ROUTE_CARD_WIDTH
-  },
-  eastToWestLane: {
-    label: "East -> West",
-    width: NORMAL_ROUTE_CARD_HEIGHT,
-    height: NORMAL_ROUTE_CARD_WIDTH
-  },
-  eastToSouthLane: {
-    label: "East -> South",
-    width: NORMAL_ROUTE_CARD_HEIGHT,
-    height: NORMAL_ROUTE_CARD_WIDTH
-  },
-  southToWestLane: {
-    label: "South -> West",
-    width: NORMAL_ROUTE_CARD_WIDTH,
-    height: NORMAL_ROUTE_CARD_HEIGHT
-  },
-  southToNorthLane: {
-    label: "South -> North",
-    width: NORMAL_ROUTE_CARD_WIDTH,
-    height: NORMAL_ROUTE_CARD_HEIGHT
-  },
-  southToEastLane: {
-    label: "South -> East",
-    width: NORMAL_ROUTE_CARD_WIDTH,
-    height: NORMAL_ROUTE_CARD_HEIGHT
-  },
-  westToNorthLane: {
-    label: "West -> North",
-    width: NORMAL_ROUTE_CARD_HEIGHT,
-    height: NORMAL_ROUTE_CARD_WIDTH
-  },
-  westToEastLane: {
-    label: "West -> East",
-    width: NORMAL_ROUTE_CARD_HEIGHT,
-    height: NORMAL_ROUTE_CARD_WIDTH
-  },
-  westToSouthLane: {
-    label: "West -> South",
-    width: NORMAL_ROUTE_CARD_HEIGHT,
-    height: NORMAL_ROUTE_CARD_WIDTH
-  },
-  playSurface: { label: "Play Surface", width: 920, height: 360 },
-  actionRow: { label: "Action Row", width: 340, height: 88 },
-  northLabel: { label: "North Label", width: 120, height: 28 },
-  eastLabel: { label: "East Label", width: 32, height: 160 },
-  southLabel: { label: "South Label", width: 120, height: 28 },
-  westLabel: { label: "West Label", width: 32, height: 160 }
-};
-
-const NORMAL_LAYOUT_EDITOR_ORDER: NormalLayoutElementId[] = [
-  "scoreBadge",
-  "playSurface",
-  "northHand",
-  "eastHand",
-  "southHand",
-  "westHand",
-  "northStage",
-  "eastStage",
-  "southStage",
-  "westStage",
-  "northToEastLane",
-  "northToSouthLane",
-  "northToWestLane",
-  "eastToNorthLane",
-  "eastToWestLane",
-  "eastToSouthLane",
-  "southToWestLane",
-  "southToNorthLane",
-  "southToEastLane",
-  "westToNorthLane",
-  "westToEastLane",
-  "westToSouthLane",
-  "northLabel",
-  "eastLabel",
-  "southLabel",
-  "westLabel",
-  "actionRow"
-];
-
-const NORMAL_LAYOUT_OPPOSING_ELEMENT_IDS: Partial<
-  Record<NormalLayoutElementId, NormalLayoutElementId>
-> = {
-  scoreBadge: "actionRow",
-  actionRow: "scoreBadge",
-  northHand: "southHand",
-  southHand: "northHand",
-  eastHand: "westHand",
-  westHand: "eastHand",
-  northStage: "southStage",
-  southStage: "northStage",
-  eastStage: "westStage",
-  westStage: "eastStage",
-  northToEastLane: "southToWestLane",
-  southToWestLane: "northToEastLane",
-  northToSouthLane: "southToNorthLane",
-  southToNorthLane: "northToSouthLane",
-  northToWestLane: "southToEastLane",
-  southToEastLane: "northToWestLane",
-  eastToNorthLane: "westToNorthLane",
-  westToNorthLane: "eastToNorthLane",
-  eastToWestLane: "westToEastLane",
-  westToEastLane: "eastToWestLane",
-  eastToSouthLane: "westToSouthLane",
-  westToSouthLane: "eastToSouthLane",
-  northLabel: "southLabel",
-  southLabel: "northLabel",
-  eastLabel: "westLabel",
-  westLabel: "eastLabel"
-};
-
-export const NORMAL_HAND_LAYOUT_IDS: Record<
-  SeatVisualPosition,
-  NormalLayoutElementId
-> = {
-  top: "northHand",
-  right: "eastHand",
-  bottom: "southHand",
-  left: "westHand"
-};
-
-export const NORMAL_LABEL_LAYOUT_IDS: Record<
-  SeatVisualPosition,
-  NormalLayoutElementId
-> = {
-  top: "northLabel",
-  right: "eastLabel",
-  bottom: "southLabel",
-  left: "westLabel"
-};
-
-export const NORMAL_STAGE_LAYOUT_IDS: Record<
-  SeatVisualPosition,
-  NormalLayoutElementId
-> = {
-  top: "northStage",
-  right: "eastStage",
-  bottom: "southStage",
-  left: "westStage"
-};
-
-export const NORMAL_PASS_LANE_LAYOUT_IDS: Record<
-  SeatVisualPosition,
-  Partial<Record<SeatVisualPosition, NormalLayoutElementId>>
-> = {
-  top: {
-    right: "northToEastLane",
-    bottom: "northToSouthLane",
-    left: "northToWestLane"
-  },
-  right: {
-    top: "eastToNorthLane",
-    left: "eastToWestLane",
-    bottom: "eastToSouthLane"
-  },
-  bottom: {
-    left: "southToWestLane",
-    top: "southToNorthLane",
-    right: "southToEastLane"
-  },
-  left: {
-    top: "westToNorthLane",
-    right: "westToEastLane",
-    bottom: "westToSouthLane"
-  }
-};
-
-type PassLaneDirection = "up" | "right" | "down" | "left";
-
-type NormalPassLaneSpec = {
-  targetPosition: SeatVisualPosition;
-  direction: PassLaneDirection;
-};
-
-export const NORMAL_PASS_STAGE_MAP: Record<
-  SeatVisualPosition,
-  readonly NormalPassLaneSpec[]
-> = {
-  top: [
-    { targetPosition: "left", direction: "left" },
-    { targetPosition: "bottom", direction: "down" },
-    { targetPosition: "right", direction: "right" }
-  ],
-  left: [
-    { targetPosition: "top", direction: "up" },
-    { targetPosition: "bottom", direction: "down" },
-    { targetPosition: "right", direction: "right" }
-  ],
-  right: [
-    { targetPosition: "top", direction: "up" },
-    { targetPosition: "bottom", direction: "down" },
-    { targetPosition: "left", direction: "left" }
-  ],
-  bottom: [
-    { targetPosition: "left", direction: "left" },
-    { targetPosition: "top", direction: "up" },
-    { targetPosition: "right", direction: "right" }
-  ]
-};
-
 export function formatRank(rank: number): string {
   switch (rank) {
     case 11:
@@ -696,32 +353,6 @@ function getTeamScoreMarkers(
   }
 
   return markers;
-}
-
-function formatSeatMarker(seat: SeatId): string {
-  switch (seat) {
-    case "seat-0":
-      return "S";
-    case "seat-1":
-      return "E";
-    case "seat-2":
-      return "N";
-    case "seat-3":
-      return "W";
-  }
-}
-
-function formatPassDirectionGlyph(direction: PassLaneDirection): string {
-  switch (direction) {
-    case "up":
-      return "↑";
-    case "right":
-      return "→";
-    case "down":
-      return "↓";
-    case "left":
-      return "←";
-  }
 }
 
 function formatPassDirectionLabel(direction: PassLaneDirection): string {
@@ -1481,504 +1112,8 @@ function clamp01(value: number) {
   return Math.min(1, Math.max(0, value));
 }
 
-function anchorStyle(element: NormalLayoutElement): CSSProperties {
-  return {
-    left: `${element.x * 100}%`,
-    top: `${element.y * 100}%`,
-    transform: `translate(-50%, -50%) rotate(${element.rotation}deg)`
-  };
-}
-
-function scaleNormalLayoutElementSize(
-  elementId: NormalLayoutElementId,
-  scale: number
-) {
-  const spec = NORMAL_LAYOUT_ELEMENT_SPECS[elementId];
-
-  return {
-    width: Math.max(1, Math.round(spec.width * scale)),
-    height: Math.max(1, Math.round(spec.height * scale))
-  };
-}
-
-export function getNormalPassLaneLayoutId(
-  sourcePosition: SeatVisualPosition,
-  targetPosition: SeatVisualPosition
-): NormalLayoutElementId | null {
-  return NORMAL_PASS_LANE_LAYOUT_IDS[sourcePosition][targetPosition] ?? null;
-}
-
-function getPassTokenRotation(direction: PassLaneDirection): number {
-  switch (direction) {
-    case "right":
-      return 90;
-    case "left":
-      return -90;
-    default:
-      return 0;
-  }
-}
-
-export type NormalPassLaneGeometry = {
-  elementId: NormalLayoutElementId;
-  targetPosition: SeatVisualPosition;
-  rotation: number;
-  width: number;
-  height: number;
-  style: CSSProperties;
-};
-
-export function resolveNormalPassLaneGeometry(config: {
-  normalTableLayout: NormalTableLayout;
-  layoutMetrics: NormalViewportLayoutMetrics;
-  sourcePosition: SeatVisualPosition;
-  targetPosition: SeatVisualPosition;
-  direction: PassLaneDirection;
-}): NormalPassLaneGeometry | null {
-  const elementId = getNormalPassLaneLayoutId(
-    config.sourcePosition,
-    config.targetPosition
-  );
-  if (!elementId) {
-    return null;
-  }
-
-  const routeScale =
-    config.layoutMetrics.routeCardWidth / NORMAL_ROUTE_CARD_WIDTH;
-  const layoutElement = config.normalTableLayout[elementId];
-  const size = scaleNormalLayoutElementSize(elementId, routeScale);
-
-  return {
-    elementId,
-    targetPosition: config.targetPosition,
-    rotation: layoutElement.rotation,
-    width: size.width,
-    height: size.height,
-    style: {
-      ...anchorStyle(layoutElement),
-      width: `${size.width}px`,
-      height: `${size.height}px`,
-      "--normal-pass-lane-badge-rotation": `${layoutElement.rotation * -1}deg`,
-      "--normal-pass-token-rotation": `${getPassTokenRotation(config.direction) - layoutElement.rotation}deg`
-    } as CSSProperties
-  };
-}
-
-function clampNumber(value: number, minimum: number, maximum: number) {
-  return Math.min(maximum, Math.max(minimum, value));
-}
-
-function cardHeightFromWidth(width: number) {
-  return Math.round(width * CARD_HEIGHT_PER_WIDTH);
-}
-
-function cardWidthFromHeight(height: number) {
-  return Math.floor(height * CARD_ASPECT);
-}
-
-function requiredFanSpan(
-  count: number,
-  cardPrimarySize: number,
-  spread: number
-) {
-  if (count <= 0) {
-    return 0;
-  }
-
-  return cardPrimarySize + Math.max(0, count - 1) * spread;
-}
-
-function fanDensity(count: number) {
-  return clampNumber((count - 8) / 6, 0, 1);
-}
-
-function resolveFanRevealRange(config: {
-  seat: "top" | "bottom" | "side";
-  count: number;
-  cardWidth: number;
-}) {
-  const density = fanDensity(config.count);
-
-  if (config.seat === "bottom") {
-    const minimumRatio = 0.42 - density * 0.1;
-    const maximumRatio = 0.64 - density * 0.12;
-    const minimum = Math.max(20, Math.round(config.cardWidth * minimumRatio));
-    const maximum = Math.max(
-      minimum,
-      Math.round(config.cardWidth * maximumRatio)
-    );
-
-    return { minimum, maximum };
-  }
-
-  if (config.seat === "side") {
-    const minimumRatio = 0.16 - density * 0.04;
-    const maximumRatio = 0.24 - density * 0.06;
-    const minimum = Math.max(10, Math.round(config.cardWidth * minimumRatio));
-    const maximum = Math.max(
-      minimum,
-      Math.round(config.cardWidth * maximumRatio)
-    );
-
-    return { minimum, maximum };
-  }
-
-  const minimumRatio = 0.18 - density * 0.04;
-  const maximumRatio = 0.3 - density * 0.06;
-  const minimum = Math.max(10, Math.round(config.cardWidth * minimumRatio));
-  const maximum = Math.max(
-    minimum,
-    Math.round(config.cardWidth * maximumRatio)
-  );
-
-  return { minimum, maximum };
-}
-
-function calculateFanStep(config: {
-  count: number;
-  cardPrimarySize: number;
-  availableSpan: number;
-  minimumReveal: number;
-  maximumReveal: number;
-}) {
-  if (config.count <= 1) {
-    return config.cardPrimarySize;
-  }
-
-  const unconstrainedSpread =
-    (config.availableSpan - config.cardPrimarySize) / (config.count - 1);
-
-  return clampNumber(
-    unconstrainedSpread,
-    config.minimumReveal,
-    Math.max(config.minimumReveal, config.maximumReveal)
-  );
-}
-
-export type NormalViewportLayoutMetrics = {
-  viewportWidth: number;
-  viewportHeight: number;
-  shellPaddingX: number;
-  shellPaddingY: number;
-  bandGap: number;
-  seatInsetX: number;
-  centerInset: number;
-  headerHeight: number;
-  northBandHeight: number;
-  centerBandHeight: number;
-  southBandHeight: number;
-  actionBandHeight: number;
-  sideColumnWidth: number;
-  centerColumnWidth: number;
-  cardWidth: number;
-  cardHeight: number;
-  routeCardWidth: number;
-  routeCardHeight: number;
-  topCardStep: number;
-  bottomCardStep: number;
-  sideCardStep: number;
-  selectedLift: number;
-  topMinReveal: number;
-  bottomMinReveal: number;
-  sideMinReveal: number;
-  totalRequiredHeight: number;
-  minimumMiddleWidth: number;
-  minimumMiddleHeight: number;
-};
-
-export function computeNormalViewportLayoutMetrics(config: {
-  viewportWidth: number;
-  viewportHeight: number;
-  topCount: number;
-  bottomCount: number;
-  leftCount: number;
-  rightCount: number;
-  hasVariantPicker: boolean;
-  hasWishPicker: boolean;
-}): NormalViewportLayoutMetrics {
-  const viewportWidth = Math.max(320, Math.round(config.viewportWidth));
-  const viewportHeight = Math.max(320, Math.round(config.viewportHeight));
-  const shellPaddingX = clampNumber(
-    Math.round(viewportWidth * 0.0115),
-    8,
-    18
-  );
-  const shellPaddingY = clampNumber(
-    Math.round(viewportHeight * 0.0125),
-    8,
-    16
-  );
-  const bandGap = clampNumber(Math.round(viewportHeight * 0.009), 6, 10);
-  const seatInsetX = clampNumber(Math.round(viewportWidth * 0.006), 6, 10);
-  const centerInset = clampNumber(Math.round(viewportWidth * 0.008), 8, 14);
-  const headerHeight = clampNumber(Math.round(viewportHeight * 0.046), 38, 48);
-  const actionBandHeight =
-    46 +
-    (config.hasVariantPicker ? 38 : 0) +
-    (config.hasWishPicker ? 36 : 0);
-  const availableShellWidth = viewportWidth - shellPaddingX * 2;
-  const availableShellHeight = viewportHeight - shellPaddingY * 2;
-  const maximumCandidateWidth = Math.max(
-    NORMAL_MIN_CARD_WIDTH,
-    cardWidthFromHeight(
-      Math.min(
-        NORMAL_MAX_CARD_HEIGHT,
-        Math.round(availableShellHeight * NORMAL_MAX_CARD_HEIGHT_VIEWPORT_SHARE)
-      )
-    )
-  );
-  const northMetaHeight = 28;
-  const southMetaHeight = 34;
-  const sideMetaHeight = 20;
-  const sideLabelWidth = 26;
-
-  let resolvedCardWidth = NORMAL_MIN_CARD_WIDTH;
-
-  for (
-    let candidateWidth = maximumCandidateWidth;
-    candidateWidth >= NORMAL_MIN_CARD_WIDTH;
-    candidateWidth -= 1
-  ) {
-    const candidateHeight = cardHeightFromWidth(candidateWidth);
-    const selectedLift = Math.min(14, Math.round(candidateWidth * 0.14));
-    const topReveal = resolveFanRevealRange({
-      seat: "top",
-      count: config.topCount,
-      cardWidth: candidateWidth
-    });
-    const bottomReveal = resolveFanRevealRange({
-      seat: "bottom",
-      count: config.bottomCount,
-      cardWidth: candidateWidth
-    });
-    const sideReveal = resolveFanRevealRange({
-      seat: "side",
-      count: Math.max(config.leftCount, config.rightCount),
-      cardWidth: candidateWidth
-    });
-    const northBandHeight = candidateHeight + northMetaHeight;
-    const southBandHeight = candidateHeight + southMetaHeight + selectedLift;
-    const routeCardWidth = clampNumber(
-      Math.round(candidateWidth * NORMAL_PASS_LANE_SCALE),
-      NORMAL_PASS_LANE_MIN_WIDTH,
-      Math.min(candidateWidth - 12, NORMAL_PASS_LANE_MAX_WIDTH)
-    );
-    const routeCardHeight = cardHeightFromWidth(routeCardWidth);
-    const sideColumnWidth =
-      candidateHeight + sideLabelWidth + seatInsetX * 2 + 6;
-    const minimumMiddleWidth = Math.max(
-      260,
-      Math.round(candidateWidth * 3.4),
-      routeCardWidth * 3 + centerInset * 2
-    );
-    const sideRequiredHeight =
-      Math.max(config.leftCount, config.rightCount) > 0
-        ? requiredFanSpan(
-            Math.max(config.leftCount, config.rightCount),
-            candidateWidth,
-            sideReveal.minimum
-          ) + sideMetaHeight
-        : 0;
-    const minimumMiddleHeight = Math.max(
-      156,
-      Math.round(candidateHeight * 1.14),
-      routeCardHeight * 2 + 28,
-      sideRequiredHeight
-    );
-    const totalRequiredHeight =
-      headerHeight +
-      northBandHeight +
-      southBandHeight +
-      actionBandHeight +
-      minimumMiddleHeight +
-      bandGap * 4;
-    const horizontalHandWidth = availableShellWidth - seatInsetX * 2;
-    const topRequiredWidth = requiredFanSpan(
-      config.topCount,
-      candidateWidth,
-      topReveal.minimum
-    );
-    const bottomRequiredWidth = requiredFanSpan(
-      config.bottomCount,
-      candidateWidth,
-      bottomReveal.minimum
-    );
-    const middleRequiredWidth = sideColumnWidth * 2 + minimumMiddleWidth + bandGap * 2;
-
-    if (
-      topRequiredWidth <= horizontalHandWidth &&
-      bottomRequiredWidth <= horizontalHandWidth &&
-      middleRequiredWidth <= availableShellWidth &&
-      totalRequiredHeight <= availableShellHeight
-    ) {
-      resolvedCardWidth = candidateWidth;
-      break;
-    }
-  }
-
-  const cardWidth = resolvedCardWidth;
-  const cardHeight = cardHeightFromWidth(cardWidth);
-  const selectedLift = Math.min(14, Math.round(cardWidth * 0.14));
-  const topReveal = resolveFanRevealRange({
-    seat: "top",
-    count: config.topCount,
-    cardWidth
-  });
-  const bottomReveal = resolveFanRevealRange({
-    seat: "bottom",
-    count: config.bottomCount,
-    cardWidth
-  });
-  const sideReveal = resolveFanRevealRange({
-    seat: "side",
-    count: Math.max(config.leftCount, config.rightCount),
-    cardWidth
-  });
-  const northBandHeight = cardHeight + northMetaHeight;
-  const southBandHeight = cardHeight + southMetaHeight + selectedLift;
-  const routeCardWidth = clampNumber(
-    Math.round(cardWidth * NORMAL_PASS_LANE_SCALE),
-    NORMAL_PASS_LANE_MIN_WIDTH,
-    Math.min(cardWidth - 12, NORMAL_PASS_LANE_MAX_WIDTH)
-  );
-  const routeCardHeight = cardHeightFromWidth(routeCardWidth);
-  const sideColumnWidth = cardHeight + sideLabelWidth + seatInsetX * 2 + 6;
-  const minimumMiddleWidth = Math.max(
-    260,
-    Math.round(cardWidth * 3.4),
-    routeCardWidth * 3 + centerInset * 2
-  );
-  const minimumMiddleHeight = Math.max(
-    156,
-    Math.round(cardHeight * 1.14),
-    routeCardHeight * 2 + 28,
-    requiredFanSpan(
-      Math.max(config.leftCount, config.rightCount),
-      cardWidth,
-      sideReveal.minimum
-    ) + sideMetaHeight
-  );
-  const centerBandHeight = Math.max(
-    minimumMiddleHeight,
-    availableShellHeight -
-      headerHeight -
-      northBandHeight -
-      southBandHeight -
-      actionBandHeight -
-      bandGap * 4
-  );
-  const centerColumnWidth = Math.max(
-    minimumMiddleWidth,
-    availableShellWidth - sideColumnWidth * 2 - bandGap * 2
-  );
-  const horizontalHandWidth = availableShellWidth - seatInsetX * 2;
-  const topCardStep = calculateFanStep({
-    count: config.topCount,
-    cardPrimarySize: cardWidth,
-    availableSpan: horizontalHandWidth,
-    minimumReveal: topReveal.minimum,
-    maximumReveal: topReveal.maximum
-  });
-  const bottomCardStep = calculateFanStep({
-    count: config.bottomCount,
-    cardPrimarySize: cardWidth,
-    availableSpan: horizontalHandWidth,
-    minimumReveal: bottomReveal.minimum,
-    maximumReveal: bottomReveal.maximum
-  });
-  const sideCardCount = Math.max(config.leftCount, config.rightCount);
-  const sideCardStep = calculateFanStep({
-    count: sideCardCount,
-    cardPrimarySize: cardWidth,
-    availableSpan: Math.max(0, centerBandHeight - 10),
-    minimumReveal: sideReveal.minimum,
-    maximumReveal: sideReveal.maximum
-  });
-  const totalRequiredHeight =
-    headerHeight +
-    northBandHeight +
-    centerBandHeight +
-    southBandHeight +
-    actionBandHeight +
-    bandGap * 4;
-
-  return {
-    viewportWidth,
-    viewportHeight,
-    shellPaddingX,
-    shellPaddingY,
-    bandGap,
-    seatInsetX,
-    centerInset,
-    headerHeight,
-    northBandHeight,
-    centerBandHeight,
-    southBandHeight,
-    actionBandHeight,
-    sideColumnWidth,
-    centerColumnWidth,
-    cardWidth,
-    cardHeight,
-    routeCardWidth,
-    routeCardHeight,
-    topCardStep,
-    bottomCardStep,
-    sideCardStep,
-    selectedLift,
-    topMinReveal: topReveal.minimum,
-    bottomMinReveal: bottomReveal.minimum,
-    sideMinReveal: sideReveal.minimum,
-    totalRequiredHeight,
-    minimumMiddleWidth,
-    minimumMiddleHeight
-  };
-}
-
 function getNormalTrickCardWidth(layoutMetrics: NormalViewportLayoutMetrics) {
-  return clampNumber(Math.round(layoutMetrics.cardWidth * 0.82), 44, 84);
-}
-
-type NormalTrickFanMetrics = {
-  cardDx: number;
-  cardDy: number;
-  rotationStep: number;
-  groupDx: number;
-  groupDy: number;
-};
-
-function getNormalTrickFanMetrics(
-  position: SeatVisualPosition,
-  trickCardWidth: number
-): NormalTrickFanMetrics {
-  const horizontalStep = Math.max(11, Math.round(trickCardWidth * 0.22));
-  const verticalStep = Math.max(7, Math.round(trickCardWidth * 0.12));
-  const groupHorizontal = Math.max(16, Math.round(trickCardWidth * 0.28));
-  const groupVertical = Math.max(10, Math.round(trickCardWidth * 0.18));
-
-  if (position === "bottom") {
-    return {
-      cardDx: -horizontalStep,
-      cardDy: -verticalStep,
-      rotationStep: -4,
-      groupDx: -groupHorizontal,
-      groupDy: -groupVertical
-    };
-  }
-
-  return {
-    cardDx: horizontalStep,
-    cardDy: verticalStep,
-    rotationStep: 4,
-    groupDx: groupHorizontal,
-    groupDy: groupVertical
-  };
-}
-
-function resolveNormalStageAnchorStyle(
-  normalTableLayout: NormalTableLayout,
-  position: SeatVisualPosition
-): CSSProperties {
-  return anchorStyle(normalTableLayout[NORMAL_STAGE_LAYOUT_IDS[position]]);
+  return Math.min(84, Math.max(44, Math.round(layoutMetrics.cardWidth * 0.82)));
 }
 
 function useElementSize<T extends HTMLElement>() {
@@ -2649,26 +1784,86 @@ export function TableSurface({
   );
 }
 
-function NormalSeatTichuMarker({
-  label,
-  position
-}: {
-  label: "GT" | "T";
-  position: "top" | "bottom" | "side";
+function NormalSeatOverlayLayer({
+  seatViews,
+  sortedLocalHand,
+  layoutMetrics,
+  normalTableLayout
+}: Pick<GameTableViewProps, "seatViews" | "sortedLocalHand" | "normalTableLayout"> & {
+  layoutMetrics: NormalViewportLayoutMetrics;
 }) {
   return (
-    <span
-      className={[
-        "normal-seat__tichu-marker",
-        `normal-seat__tichu-marker--${position}`,
-        label === "GT"
-          ? "normal-seat__tichu-marker--grand"
-          : "normal-seat__tichu-marker--small"
-      ].join(" ")}
-      title={label === "GT" ? "Grand Tichu" : "Tichu"}
-    >
-      {label}
-    </span>
+    <div className="normal-seat-overlays" aria-hidden="true">
+      {seatViews.map((seatView) => {
+        const handCardCount = seatView.isLocalSeat
+          ? sortedLocalHand.length
+          : seatView.cards.length;
+        const seatLayout = getNormalSeatLayout({
+          position: seatView.position,
+          normalTableLayout,
+          layoutMetrics,
+          handCardCount
+        });
+        const tichuMarkerLabel = getTichuMarkerLabel(seatView.callState);
+
+        return (
+          <div key={`overlay-${seatView.seat}`}>
+            <div
+              className={[
+                "normal-seat-overlay__label",
+                `normal-seat-overlay__label--${seatView.position}`,
+                seatView.isPrimarySeat ? "normal-seat-overlay__label--active" : ""
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              style={seatLayout.nameLabel}
+            >
+              <span>{seatView.title}</span>
+            </div>
+
+            {tichuMarkerLabel && (
+              <span
+                className={[
+                  "normal-seat-overlay__call",
+                  `normal-seat-overlay__call--${seatView.position}`,
+                  tichuMarkerLabel === "GT"
+                    ? "normal-seat-overlay__call--grand"
+                    : "normal-seat-overlay__call--small"
+                ].join(" ")}
+                style={seatLayout.callBadge}
+                title={tichuMarkerLabel === "GT" ? "Grand Tichu" : "Tichu"}
+              >
+                {tichuMarkerLabel}
+              </span>
+            )}
+
+            {seatView.isPrimarySeat && (
+              <span
+                className={[
+                  "normal-seat-overlay__turn",
+                  `normal-seat-overlay__turn--${seatView.position}`
+                ].join(" ")}
+                style={seatLayout.turnBadge}
+              >
+                TURN
+              </span>
+            )}
+
+            {seatView.finishIndex >= 0 && (
+              <span
+                className={[
+                  "normal-seat-overlay__out",
+                  `normal-seat-overlay__out--${seatView.position}`
+                ].join(" ")}
+                style={seatLayout.outBadge}
+              >
+                {formatPlacement(seatView.finishIndex)}
+              </span>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -2745,13 +1940,19 @@ export function NormalTrickStagingRegions({
           }
 
           const fanMetrics = getNormalTrickFanMetrics(position, trickCardWidth);
+          const seatLayout = getNormalSeatLayout({
+            position,
+            normalTableLayout,
+            layoutMetrics,
+            handCardCount: 0
+          });
 
           return (
             <div
               key={seat}
               className={`normal-trick-stage normal-trick-stage--${position}`}
               data-trick-stage={position}
-              style={resolveNormalStageAnchorStyle(normalTableLayout, position)}
+              style={seatLayout.trickZone}
             >
               {plays.map((entry, playIndex) => {
                 const reverseIndex = plays.length - 1 - playIndex;
@@ -2803,13 +2004,19 @@ export function NormalTrickStagingRegions({
 
       {pickupStageViews.map((group) => {
         const fanMetrics = getNormalTrickFanMetrics(group.position, trickCardWidth);
+        const seatLayout = getNormalSeatLayout({
+          position: group.position,
+          normalTableLayout,
+          layoutMetrics,
+          handCardCount: 0
+        });
 
         return (
           <div
             key={`pickup-${group.seat}`}
             className={`normal-pickup-stage normal-pickup-stage--${group.position}`}
             data-pickup-stage={group.seat}
-            style={resolveNormalStageAnchorStyle(normalTableLayout, group.position)}
+            style={seatLayout.pickupZone}
           >
             <span className="normal-pickup-stage__label">{group.label}</span>
             <div className="normal-pickup-stage__cards">
@@ -2960,16 +2167,7 @@ function NormalPassStagingRegions({
                 data-pass-target={laneSpec.targetPosition}
                 aria-label={`${formatSeatShort(route.sourceSeat)} pass ${formatPassDirectionLabel(laneSpec.direction)} to ${formatSeatShort(route.targetSeat)}`}
               >
-                <div className="normal-pass-lane__frame" aria-hidden="true">
-                  <span className="normal-pass-lane__badge">
-                    <span className="normal-pass-lane__arrow">
-                      {formatPassDirectionGlyph(laneSpec.direction)}
-                    </span>
-                    <span className="normal-pass-lane__marker">
-                      {formatSeatMarker(route.targetSeat)}
-                    </span>
-                  </span>
-                </div>
+                <div className="normal-pass-lane__frame" aria-hidden="true" />
                 <div
                   className={slotClassName}
                   aria-label={`${formatSeatShort(route.sourceSeat)} ${formatPassTarget(route.target)} staged card`}
@@ -2990,16 +2188,7 @@ function NormalPassStagingRegions({
               data-pass-direction={laneSpec.direction}
               data-pass-target={laneSpec.targetPosition}
             >
-              <div className="normal-pass-lane__frame" aria-hidden="true">
-                <span className="normal-pass-lane__badge">
-                  <span className="normal-pass-lane__arrow">
-                    {formatPassDirectionGlyph(laneSpec.direction)}
-                  </span>
-                  <span className="normal-pass-lane__marker">
-                    {formatSeatMarker(route.targetSeat)}
-                  </span>
-                </span>
-              </div>
+              <div className="normal-pass-lane__frame" aria-hidden="true" />
               {tokenInteractive ? (
                 <div
                   className={slotClassName}
@@ -3081,7 +2270,6 @@ function NormalSeat({
       : isSideSeat
         ? layoutMetrics.sideCardStep
         : layoutMetrics.topCardStep;
-  const tichuMarkerLabel = getTichuMarkerLabel(seatView.callState);
   const handCardCount = seatView.isLocalSeat
     ? sortedLocalHand.length
     : seatView.cards.length;
@@ -3104,27 +2292,8 @@ function NormalSeat({
       className={
         isSideSeat ? "normal-seat__meta normal-seat__meta--side" : "normal-seat__meta"
       }
-    >
-      {!isSideSeat && (
-        <span className="normal-seat__title" aria-hidden="true">
-          {seatView.title}
-        </span>
-      )}
-      {isSideSeat && tichuMarkerLabel ? (
-        <NormalSeatTichuMarker label={tichuMarkerLabel} position="side" />
-      ) : null}
-      <div className="normal-seat__flags">
-        <SeatFlagChips
-          callState={seatView.callState}
-          finishIndex={seatView.finishIndex}
-          passReady={seatView.passReady}
-          isPrimarySeat={seatView.isPrimarySeat}
-          isThinkingSeat={seatView.isThinkingSeat}
-          compact
-          showCallMarkers={false}
-        />
-      </div>
-    </div>
+      aria-hidden="true"
+    />
   );
   const renderSeatCard = (card: Card, cardIndex: number) =>
     isSideSeat ? (
@@ -3150,12 +2319,6 @@ function NormalSeat({
   const localHand = (
     <div className="normal-seat__body normal-seat__body--local">
       <div className="normal-seat__hand-shell" style={handMarkerStyle}>
-        {tichuMarkerLabel && (
-          <NormalSeatTichuMarker
-            label={tichuMarkerLabel}
-            position="bottom"
-          />
-        )}
         <div
           className="normal-seat__hand normal-seat__hand--bottom"
           style={handStyle}
@@ -3191,12 +2354,6 @@ function NormalSeat({
   const remoteHand = (
     <div className="normal-seat__body">
       <div className="normal-seat__hand-shell" style={handMarkerStyle}>
-        {!isSideSeat && tichuMarkerLabel ? (
-          <NormalSeatTichuMarker
-            label={tichuMarkerLabel}
-            position={seatView.position === "top" ? "top" : "bottom"}
-          />
-        ) : null}
         <div
           className={`normal-seat__hand normal-seat__hand--${seatView.position}`}
           style={handStyle}
@@ -3221,11 +2378,6 @@ function NormalSeat({
       data-seat-region={seatView.position}
       data-layout-container={`${seatView.position}-seat`}
     >
-      {isSideSeat && seatView.position === "left" ? (
-        <span className="normal-seat__side-label" aria-hidden="true">
-          {seatView.title}
-        </span>
-      ) : null}
       <div className="normal-seat__content">
         {seatView.position === "bottom" ? (
           <>
@@ -3239,11 +2391,6 @@ function NormalSeat({
           </>
         )}
       </div>
-      {isSideSeat && seatView.position === "right" ? (
-        <span className="normal-seat__side-label" aria-hidden="true">
-          {seatView.title}
-        </span>
-      ) : null}
     </section>
   );
 }
@@ -5302,6 +4449,13 @@ export function NormalGameTableView(props: GameTableViewProps) {
               />
             </section>
           </div>
+
+          <NormalSeatOverlayLayer
+            seatViews={props.seatViews}
+            sortedLocalHand={props.sortedLocalHand}
+            layoutMetrics={layoutMetrics}
+            normalTableLayout={props.normalTableLayout}
+          />
 
           <NormalPassStagingRegions
             normalTableLayout={props.normalTableLayout}

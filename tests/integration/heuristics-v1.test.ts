@@ -136,6 +136,44 @@ describe("heuristics v1", () => {
     expect(chosen.action).toEqual({ type: "call_tichu", seat: "seat-0" });
   });
 
+  it("refuses to call Tichu when the partner already called Grand Tichu", () => {
+    const state = scenario({
+      phase: "trick_play",
+      activeSeat: "seat-0",
+      calls: {
+        "seat-0": { grandTichu: false, smallTichu: false, hasPlayedFirstCard: false },
+        "seat-1": { grandTichu: false, smallTichu: false, hasPlayedFirstCard: false },
+        "seat-2": { grandTichu: true, smallTichu: false, hasPlayedFirstCard: false },
+        "seat-3": { grandTichu: false, smallTichu: false, hasPlayedFirstCard: false }
+      },
+      hands: {
+        "seat-0": cardsFromIds(["dragon", "phoenix", "star-14"])
+      }
+    });
+    const legalActions: LegalActionMap = {
+      "seat-0": [
+        { type: "call_tichu", seat: "seat-0" },
+        { type: "pass_turn", seat: "seat-0" }
+      ],
+      "seat-1": [],
+      "seat-2": [],
+      "seat-3": []
+    };
+
+    const chosen = heuristicsV1Policy.chooseAction({
+      state,
+      legalActions
+    });
+    const blockedCall = chosen.explanation.candidateScores.find(
+      (candidate) => candidate.action.type === "call_tichu"
+    );
+
+    expect(chosen.action).toEqual({ type: "pass_turn", seat: "seat-0" });
+    expect(blockedCall?.reasons).toContain(
+      "partner already holds the team Tichu call slot"
+    );
+  });
+
   it("does not pass Dragon, Phoenix, or Aces out of a Tichu-viable hand", () => {
     const state = scenario({
       phase: "pass_select",

@@ -7,6 +7,7 @@ TichuML is organized around a few strict boundaries:
 - `packages/telemetry` records append-only decision and event data for replay, debugging, and analysis.
 - `apps/web` renders phase-aware UI, local interaction, dialogs, and editor tooling without becoming the rules authority.
 - `apps/server` owns live entropy collection and returns normalized seed-generation results to the client.
+- `apps/web/src/table-layout.ts` is the canonical normal-table geometry schema; components should consume seat/global anchors from it instead of inventing seat-local offsets.
 
 ## Runtime Data Flow
 
@@ -30,6 +31,8 @@ TichuML is organized around a few strict boundaries:
 - Combination card ids must be normalized through a shared rank-first canonical ordering helper before matching, deduping, or building combination keys.
 - Active trick response turns must always resolve to a legal play or a legal pass; optional Tichu handling may not block progression for the current responder.
 - UI layout changes must preserve one-screen table fit and no-scroll gameplay.
+- Per-seat overlays, trick staging, pickup staging, and pass lanes should derive from the shared table-layout schema so state flows through state -> schema -> render.
+- Same-team Tichu / Grand Tichu stacking is forbidden; engine legality and bot scoring should both reject the second call.
 
 ## Related Docs
 

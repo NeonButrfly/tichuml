@@ -21,6 +21,10 @@ import {
   shouldRenderNormalCenterZoneFelt,
   type SeatPlayView
 } from "../../apps/web/src/game-table-views";
+import {
+  getBoardBounds,
+  getNormalSeatLayout
+} from "../../apps/web/src/table-layout";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
@@ -290,6 +294,37 @@ describe("trick UI cleanup", () => {
     ).toHaveLength(3);
 
     view.unmount();
+  });
+
+  it("derives seat-local pickup and south label anchors from the shared layout schema", () => {
+    const metrics = computeNormalViewportLayoutMetrics({
+      viewportWidth: 1366,
+      viewportHeight: 768,
+      topCount: 8,
+      bottomCount: 14,
+      leftCount: 8,
+      rightCount: 8,
+      hasVariantPicker: false,
+      hasWishPicker: false
+    });
+    const board = getBoardBounds(metrics);
+    const bottomLayout = getNormalSeatLayout({
+      position: "bottom",
+      normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+      layoutMetrics: metrics,
+      handCardCount: 14
+    });
+
+    const southHandY = board.top + board.height * DEFAULT_NORMAL_TABLE_LAYOUT.southHand.y;
+    const trickY = parseFloat(String(bottomLayout.trickZone.top));
+    const pickupY = parseFloat(String(bottomLayout.pickupZone.top));
+    const nameY = parseFloat(String(bottomLayout.nameLabel.top));
+    const actionY = board.top + board.height * DEFAULT_NORMAL_TABLE_LAYOUT.actionRow.y;
+
+    expect(pickupY).toBeGreaterThan(trickY);
+    expect(pickupY).toBeLessThan(southHandY);
+    expect(nameY).toBeGreaterThan(southHandY);
+    expect(nameY).toBeLessThan(actionY);
   });
 
   it("renders Dog lead transfer using the engine-resolved target seat", () => {

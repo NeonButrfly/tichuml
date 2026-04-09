@@ -1078,6 +1078,16 @@ function scoreGrandTichu(state: GameState, seat: SeatId, action: EngineAction): 
 }
 
 function scoreTichu(state: GameState, seat: SeatId, action: EngineAction): CandidateDecision {
+  if (partnerHasCalledTichu(state, seat)) {
+    return {
+      actor: seat,
+      action,
+      score: -1000,
+      tags: [],
+      reasons: ["partner already holds the team Tichu call slot"]
+    };
+  }
+
   const analysis = buildHandEvaluation(state, seat);
   const hasMahjong = state.hands[seat].some(
     (card) => card.kind === "special" && card.special === "mahjong"

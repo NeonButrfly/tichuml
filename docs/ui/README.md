@@ -7,6 +7,7 @@ The game UI is designed around a single-screen, no-scroll table layout with expl
 - fit the game screen to the viewport
 - keep all four hands, center table, score, and action rail visible at once
 - preserve card aspect ratio and readable fanning
+- route normal-mode geometry through one canonical schema module (`apps/web/src/table-layout.ts`) before rendering
 - keep pass-lane geometry aligned with the table editor layout
 - show the current trick point total centrally while a trick is active
 - keep live played cards in seat-local trick areas instead of a shared center pile
@@ -20,6 +21,9 @@ The game UI is designed around a single-screen, no-scroll table layout with expl
 - Play, Pass, and Tichu button states should come from one shared turn-action helper derived from engine legal actions
 - selected cards must match legal play variants through the engine's shared canonical combo-card ordering, never through ad hoc UI sorting
 - no active response turn may leave Tichu as the only progression action because of legality or matching drift
+- seat name labels, call badges, turn badges, and out badges should render from schema-defined anchors instead of seat-local pixel tweaks
+- received pickup cards should render from seat-local pickup anchors, not a shared center pile
+- played cards should render from seat-local trick anchors with deterministic seat-specific fan directions
 - hotkeys, menu actions, and dialogs should route through shared command handlers
 - debug and inspection UI should not leak into normal gameplay unexpectedly
 - trick lanes should present cards only; directional indicators are intentionally removed from live trick rendering
@@ -31,6 +35,7 @@ The game UI is designed around a single-screen, no-scroll table layout with expl
 - play-area inset shadow is editor-only so gameplay keeps a cleaner center surface
 - the blurred center felt layer is editor-only; gameplay should not mount any duplicate glow layer there
 - active response turns must always resolve through a legal play or a legal pass, never by pausing on optional Tichu alone
+- only one live Tichu-family call may exist per team; a partner Grand Tichu or Tichu suppresses further same-team Tichu calls
 
 ## Overlay And Dialog Guidance
 

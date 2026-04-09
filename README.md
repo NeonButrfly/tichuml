@@ -58,7 +58,7 @@ npm run db:migrate
 
 ## Milestone Snapshot
 
-The current repository head is Milestone `6.2`. The canonical milestone plan still lives in [SPEC](./spec.md), while the normalized repository history and recommended commit naming convention now live in [docs/milestones/README.md](./docs/milestones/README.md).
+The current repository head is Milestone `6.3`. The canonical milestone plan still lives in [SPEC](./spec.md), while the normalized repository history and recommended commit naming convention now live in [docs/milestones/README.md](./docs/milestones/README.md).
 
 When making new milestone commits, prefer:
 
@@ -69,7 +69,7 @@ Milestone <id>: <short scope summary>
 Example:
 
 ```text
-Milestone 6.2: port deterministic heuristics brain
+Milestone 6.3: stabilize canonical table layout schema
 ```
 
 Use the commit body for:
@@ -78,7 +78,14 @@ Use the commit body for:
 - key engine/UI/server changes
 - tests and validation
 
-Milestone 6.2 currently targets:
+Milestone 6.3 currently targets:
+
+- one canonical data-driven table layout schema in `apps/web/src/table-layout.ts`
+- shared seat anchors for labels, call badges, turn badges, out badges, trick zones, pickup zones, and pass lanes
+- per-seat trick and pickup staging driven from schema anchors instead of ad hoc component offsets
+- same-team Tichu / Grand Tichu stacking prevented in both engine eligibility and deterministic bot scoring
+
+Milestone 6.2 still targets:
 
 - one canonical deterministic heuristics policy shared by the web client and simulator
 - stronger hand-structure-aware play selection, passing, wish choice, Dragon gifting, and Tichu / Grand Tichu evaluation

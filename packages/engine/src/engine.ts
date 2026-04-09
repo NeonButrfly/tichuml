@@ -379,7 +379,10 @@ function canSeatCallSmallTichu(state: GameState, seat: SeatId): boolean {
     return false;
   }
 
-  return !state.calls[getPartnerSeat(seat)].smallTichu;
+  return !(
+    state.calls[getPartnerSeat(seat)].smallTichu ||
+    state.calls[getPartnerSeat(seat)].grandTichu
+  );
 }
 
 function createPassTurnLegalAction(
