@@ -274,7 +274,7 @@ export const DEFAULT_NORMAL_TABLE_LAYOUT: NormalTableLayout = {
   eastHand: { x: 0.918, y: 0.494, rotation: 0 },
   southHand: { x: 0.5, y: 0.778, rotation: 0 },
   westHand: { x: 0.082, y: 0.494, rotation: 0 },
-  northStage: { x: 0.5, y: 0.276, rotation: 0 },
+  northStage: { x: 0.5, y: 0.29, rotation: 0 },
   eastStage: { x: 0.82, y: 0.494, rotation: 0 },
   southStage: { x: 0.5, y: 0.614, rotation: 0 },
   westStage: { x: 0.18, y: 0.494, rotation: 0 },
