@@ -13,6 +13,7 @@ import {
   getExchangeFlowState,
   getPassTargetSeat,
   getPrimaryActor,
+  getReceivedPassCardIds,
   getTurnActions,
   isExchangePhase,
   LOCAL_SEAT,
@@ -726,6 +727,62 @@ describe("table model helpers", () => {
       partner: "jade-4",
       right: "jade-3"
     });
+  });
+
+  it("derives received exchange cards for the pickup lane from canonical pass selections", () => {
+    const state = createScenarioState({
+      phase: "exchange_complete",
+      passSelections: {
+        "seat-0": {
+          left: "jade-2",
+          partner: "jade-3",
+          right: "jade-4"
+        },
+        "seat-1": {
+          left: "sword-2",
+          partner: "sword-3",
+          right: "sword-4"
+        },
+        "seat-2": {
+          left: "pagoda-2",
+          partner: "pagoda-3",
+          right: "pagoda-4"
+        },
+        "seat-3": {
+          left: "star-2",
+          partner: "star-3",
+          right: "star-4"
+        }
+      },
+      revealedPasses: {
+        "seat-0": {
+          left: "jade-2",
+          partner: "jade-3",
+          right: "jade-4"
+        },
+        "seat-1": {
+          left: "sword-2",
+          partner: "sword-3",
+          right: "sword-4"
+        },
+        "seat-2": {
+          left: "pagoda-2",
+          partner: "pagoda-3",
+          right: "pagoda-4"
+        },
+        "seat-3": {
+          left: "star-2",
+          partner: "star-3",
+          right: "star-4"
+        }
+      }
+    });
+
+    expect(getReceivedPassCardIds(state, LOCAL_SEAT)).toEqual([
+      "star-4",
+      "pagoda-3",
+      "sword-2"
+    ]);
   });
 
   it("builds next-deal carry state from the finished hand without resetting the match score", () => {

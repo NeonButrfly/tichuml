@@ -122,6 +122,39 @@ export function getPassTargetSeat(sourceSeat: SeatId, target: PassTarget): SeatI
   }
 }
 
+export function getReceivedPassCardIds(
+  state: Pick<GameState, "passSelections" | "revealedPasses">,
+  seat: SeatId
+): string[] {
+  const availableSelections =
+    Object.keys(state.revealedPasses).length > 0
+      ? state.revealedPasses
+      : state.passSelections;
+  const seatIndex = SEAT_IDS.indexOf(seat);
+  const sourceOrder: SeatId[] = [
+    SEAT_IDS[(seatIndex + 3) % SEAT_IDS.length]!,
+    SEAT_IDS[(seatIndex + 2) % SEAT_IDS.length]!,
+    SEAT_IDS[(seatIndex + 1) % SEAT_IDS.length]!
+  ];
+
+  return sourceOrder.flatMap((sourceSeat) => {
+    const selection = availableSelections[sourceSeat];
+    if (!selection) {
+      return [];
+    }
+
+    const target = PASS_TARGETS.find(
+      (candidateTarget) => getPassTargetSeat(sourceSeat, candidateTarget) === seat
+    );
+    if (!target) {
+      return [];
+    }
+
+    const cardId = selection[target];
+    return cardId ? [cardId] : [];
+  });
+}
+
 export function isExchangePhase(phase: RoundPhase): boolean {
   return EXCHANGE_PHASES.includes(phase as (typeof EXCHANGE_PHASES)[number]);
 }

@@ -33,6 +33,7 @@ import {
   getExchangeFlowState,
   getPassTargetSeat,
   getPrimaryActorFromResult,
+  getReceivedPassCardIds,
   getTurnActions,
   isExchangePhase,
   removePassCardFromDraft,
@@ -62,6 +63,7 @@ import {
   formatActorLabel,
   formatEvent,
   parseNormalTableLayoutConfigText,
+  type DogLeadAnimationView,
   type NormalTableLayoutConfig,
   type NormalTableLayout,
   type NormalTableLayoutTokens,
@@ -186,6 +188,26 @@ function collectStagedPassCardIds(
       (value): value is string => Boolean(value)
     )
   );
+}
+
+function getDogLeadAnimationView(
+  action: EngineAction,
+  result: EngineResult
+): DogLeadAnimationView | null {
+  if (
+    action.type !== "play_cards" ||
+    action.cardIds.length !== 1 ||
+    action.cardIds[0] !== "dog" ||
+    !result.events.some((event) => event.type === "dog_led") ||
+    !result.nextState.activeSeat
+  ) {
+    return null;
+  }
+
+  return {
+    sourceSeat: action.seat,
+    targetSeat: result.nextState.activeSeat
+  };
 }
 
 const INITIAL_NORMAL_TABLE_LAYOUT_CONFIG =
@@ -364,6 +386,8 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
   const [stagedTrick, setStagedTrick] = useState<
     EngineResult["derivedView"]["currentTrick"] | null
   >(null);
+  const [dogLeadAnimation, setDogLeadAnimation] =
+    useState<DogLeadAnimationView | null>(null);
   const [normalTableLayout, setNormalTableLayout] = useState<NormalTableLayout>(
     () => INITIAL_NORMAL_TABLE_LAYOUT_CONFIG.elements
   );
@@ -431,11 +455,11 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     ) ??
     matchingPlayActions[0] ??
     null;
-  const resolvedWishRank = activePlayVariant?.availableWishRanks?.includes(
-    selectedWishRank ?? -1
-  )
-    ? selectedWishRank
-    : (activePlayVariant?.availableWishRanks?.at(-1) ?? null);
+  const resolvedWishRank =
+    selectedWishRank !== null &&
+    activePlayVariant?.availableWishRanks?.includes(selectedWishRank)
+      ? selectedWishRank
+      : (activePlayVariant?.availableWishRanks?.at(-1) ?? null);
   const localIsPrimaryActor = primaryActor === LOCAL_SEAT;
   const localHasOptionalAction =
     primaryActor !== LOCAL_SEAT && localActions.length > 0;
@@ -453,6 +477,9 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     primaryActor !== SYSTEM_ACTOR;
   const pickupPending =
     state.phase === "exchange_complete" && Boolean(systemAdvanceAction);
+  const localPickupCardIds = pickupPending
+    ? getReceivedPassCardIds(state, LOCAL_SEAT)
+    : [];
   const localExchangeValidation = validateExchangeDraft(
     passDraft,
     localPassSelection?.availableCardIds ?? [],
@@ -465,7 +492,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
       localIsPrimaryActor ||
       Boolean(localPassSelection) ||
       (!exchangePhaseActive && localHasOptionalAction));
-  const localActionSummary = localActions.map(describeAction);
+  const localActionSummary = localActions.map((action) => describeAction(action));
   const localSummaryText =
     localActionSummary.length > 0
       ? localActionSummary.join(" • ")
@@ -527,10 +554,18 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
         state.phase === "exchange_complete"
           ? collectStagedPassCardIds(stagedSelectionBySeat[seat])
           : new Set<string>();
+      const localPickupCardIdSet =
+        seat === LOCAL_SEAT && pickupPending
+          ? new Set(localPickupCardIds)
+          : new Set<string>();
 
       return [
         seat,
-        state.hands[seat].filter((card) => !stagedCardIds.has(card.id))
+        state.hands[seat].filter(
+          (card) =>
+            !stagedCardIds.has(card.id) &&
+            !localPickupCardIdSet.has(card.id)
+        )
       ];
     })
   ) as Record<SeatId, (typeof state.hands)[SeatId]>;
@@ -568,11 +603,19 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
   }));
   const tablePassGroups = SEAT_LAYOUT.map(({ seat, position, title }) => {
     const selection = stagedSelectionBySeat[seat];
-    const cardIds = PASS_TARGETS.map((target) => selection?.[target]).filter(
-      (value): value is string => Boolean(value)
-    );
+    const cardIds =
+      pickupPending && seat === LOCAL_SEAT
+        ? localPickupCardIds
+        : PASS_TARGETS.map((target) => selection?.[target]).filter(
+            (value): value is string => Boolean(value)
+          );
 
-    return { seat, position, label: title, cardIds };
+    return {
+      seat,
+      position,
+      label: pickupPending && seat === LOCAL_SEAT ? `${title} Pickup` : title,
+      cardIds
+    };
   }).filter((group) => group.cardIds.length > 0);
   const passRouteViews =
     state.phase === "pass_select" ||
@@ -765,6 +808,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
       let recordedDecision: ChosenDecision | null =
         chosen.actor !== SYSTEM_ACTOR ? chosen : null;
       const nextEvents = [...nextResult.events];
+      let dogAnimation = getDogLeadAnimationView(chosen.action, nextResult);
 
       if (
         isMandatoryOpeningLead(round.nextState, primaryActor) &&
@@ -787,6 +831,9 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
           );
           nextEvents.push(...nextResult.events);
           decisionDelta += 1;
+          dogAnimation =
+            getDogLeadAnimationView(forcedOpeningPlay.action, nextResult) ??
+            dogAnimation;
           recordedDecision =
             forcedOpeningPlay.actor !== SYSTEM_ACTOR
               ? forcedOpeningPlay
@@ -805,6 +852,9 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
         setSelectedWishRank(null);
         if (recordedDecision) {
           setLastAiDecision(recordedDecision);
+        }
+        if (dogAnimation) {
+          setDogLeadAnimation(dogAnimation);
         }
         if (nextResult.nextState.phase !== "pass_select") {
           setPassDraft({});
@@ -828,6 +878,15 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     round,
     state.phase
   ]);
+
+  useEffect(() => {
+    if (!dogLeadAnimation) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => setDogLeadAnimation(null), 760);
+    return () => window.clearTimeout(timeout);
+  }, [dogLeadAnimation]);
 
   useEffect(() => {
     if (exchangePhaseActive) {
@@ -963,6 +1022,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     }
 
     const nextResult = applyEngineAction(state, action);
+    const dogAnimation = getDogLeadAnimationView(action, nextResult);
 
     startTransition(() => {
       setRound(nextResult);
@@ -972,6 +1032,9 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
       );
       if (chosen && chosen.actor !== SYSTEM_ACTOR) {
         setLastAiDecision(chosen);
+      }
+      if (dogAnimation) {
+        setDogLeadAnimation(dogAnimation);
       }
       resetInteractionState();
     });
@@ -1000,6 +1063,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
           setRecentEvents(nextSession.round.events.map(formatEvent));
           setSortMode("rank");
           setStagedTrick(null);
+          setDogLeadAnimation(null);
           resetInteractionState();
         });
       } catch (error) {
@@ -1326,6 +1390,8 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     seatRelativePlays,
     displayedTrick,
     trickIsResolving,
+    localPickupCardIds,
+    dogLeadAnimation,
     tablePassGroups,
     passRouteViews,
     passLaneViews,

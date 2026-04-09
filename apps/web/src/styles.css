@@ -1,6 +1,7 @@
 :root {
   --font-ui: "Trebuchet MS", "Aptos", "Segoe UI", sans-serif;
   --font-display: "Rockwell", "Georgia", serif;
+  --font-ornamental: "Kaiti SC", "STKaiti", "KaiTi", "Noto Serif SC", serif;
   --bg-0: #081012;
   --bg-1: #102126;
   --panel: rgba(10, 24, 28, 0.88);
@@ -3464,12 +3465,13 @@ body.normal-layout-locked {
   overflow: hidden;
   border-radius: 24px;
   padding: var(--normal-center-inset, 10px);
-  background:
-    radial-gradient(circle at center, rgba(180, 226, 198, 0.1), transparent 42%),
-    linear-gradient(180deg, rgba(17, 54, 31, 0.66), rgba(10, 36, 21, 0.54));
+  background: transparent;
 }
 
 .normal-center-zone--editor {
+  background:
+    radial-gradient(circle at center, rgba(180, 226, 198, 0.1), transparent 42%),
+    linear-gradient(180deg, rgba(17, 54, 31, 0.66), rgba(10, 36, 21, 0.54));
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.04),
     inset 0 -18px 32px rgba(0, 0, 0, 0.12);
@@ -3580,6 +3582,8 @@ body.normal-layout-locked {
   left: 0;
   right: 0;
   z-index: 2;
+  flex-direction: column;
+  gap: 4px;
   justify-content: center;
   min-height: 0;
 }
@@ -3608,6 +3612,54 @@ body.normal-layout-locked {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   border: 1px solid transparent;
+}
+
+.normal-seat__call--grand,
+.normal-seat__call--small,
+.normal-seat__tichu-marker {
+  font-family: var(--font-ornamental);
+  color: #f6d388;
+  text-shadow:
+    0 0 6px rgba(244, 206, 111, 0.42),
+    0 0 18px rgba(214, 156, 64, 0.26);
+}
+
+.normal-seat__hand-shell {
+  position: relative;
+  width: 100%;
+  display: grid;
+  place-items: center;
+}
+
+.normal-seat__tichu-marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.normal-seat__tichu-marker--grand {
+  font-size: 1.08rem;
+}
+
+.normal-seat__tichu-marker--top,
+.normal-seat__tichu-marker--bottom {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(
+    calc(-50% - (var(--normal-hand-span, 0px) / 2) - var(--normal-tichu-offset, 12px)),
+    -50%
+  );
+}
+
+.normal-seat__tichu-marker--side {
+  position: static;
 }
 
 .normal-seat__body {
@@ -3765,6 +3817,102 @@ body.normal-layout-locked {
   width: 100%;
   height: 100%;
   pointer-events: none;
+}
+
+.normal-trick-staging {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.normal-trick-stage,
+.normal-pickup-stage {
+  position: absolute;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.normal-trick-stage__play,
+.normal-pickup-stage__card {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+.normal-trick-stage__card {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: center center;
+}
+
+.normal-trick-stage__play--winning .normal-card--trick {
+  filter: brightness(1.05);
+  box-shadow:
+    0 18px 30px rgba(0, 0, 0, 0.24),
+    0 0 0 1px rgba(248, 229, 164, 0.28);
+}
+
+.normal-pickup-stage__label {
+  position: absolute;
+  left: 0;
+  top: -26px;
+  transform: translateX(-50%);
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: rgba(8, 18, 22, 0.58);
+  color: rgba(241, 247, 243, 0.88);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  backdrop-filter: blur(8px);
+}
+
+.normal-pickup-stage__cards {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+.normal-dog-transfer {
+  position: absolute;
+  z-index: 7;
+  pointer-events: none;
+  transform: translate(-50%, -50%) scale(0.96);
+  transition:
+    left 620ms cubic-bezier(0.22, 1, 0.36, 1),
+    top 620ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 620ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 620ms ease;
+  opacity: 0.94;
+  filter: drop-shadow(0 16px 28px rgba(0, 0, 0, 0.24));
+}
+
+.normal-dog-transfer.is-active {
+  transform: translate(-50%, -50%) scale(0.92) rotate(10deg);
+  opacity: 0.86;
+}
+
+.normal-card--dog-transfer {
+  --card-frame-width: clamp(
+    44px,
+    calc(var(--normal-card-width, 72px) * 0.82),
+    84px
+  );
+  --card-frame-radius: clamp(
+    13px,
+    calc(var(--card-frame-width) * 0.22),
+    16px
+  );
+  width: var(--card-frame-width);
+  height: calc(
+    var(--card-frame-width) * var(--card-canonical-height) /
+      var(--card-canonical-width)
+  );
+  padding: 0;
 }
 
 .normal-play-surface__core {

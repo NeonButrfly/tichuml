@@ -20,6 +20,7 @@ import {
   type EngineEvent,
   type EngineResult,
   type MatchHandHistoryEntry,
+  type LegalAction,
   type SeatId,
   type StandardRank,
   type TeamId,
@@ -47,6 +48,7 @@ import {
 import {
   getExchangeFlowState,
   isExchangePhase,
+  LOCAL_SEAT,
   type HandSortMode,
   type PassTarget,
   type PlayLegalAction
@@ -78,6 +80,11 @@ export type SeatPlayView = {
   position: SeatVisualPosition;
   label: string;
   plays: Array<Extract<TrickEntry, { type: "play" }>>;
+};
+
+export type DogLeadAnimationView = {
+  sourceSeat: SeatId;
+  targetSeat: SeatId;
 };
 
 export type PassLaneView = {
@@ -115,6 +122,8 @@ export type GameTableViewProps = {
   seatRelativePlays: SeatPlayView[];
   displayedTrick: EngineResult["derivedView"]["currentTrick"] | null;
   trickIsResolving: boolean;
+  localPickupCardIds: string[];
+  dogLeadAnimation: DogLeadAnimationView | null;
   tablePassGroups: PassSurfaceView[];
   passRouteViews: PassRouteView[];
   passLaneViews: PassLaneView[];
@@ -502,6 +511,16 @@ export const NORMAL_LABEL_LAYOUT_IDS: Record<
   left: "westLabel"
 };
 
+export const NORMAL_STAGE_LAYOUT_IDS: Record<
+  SeatVisualPosition,
+  NormalLayoutElementId
+> = {
+  top: "northStage",
+  right: "eastStage",
+  bottom: "southStage",
+  left: "westStage"
+};
+
 export const NORMAL_PASS_LANE_LAYOUT_IDS: Record<
   SeatVisualPosition,
   Partial<Record<SeatVisualPosition, NormalLayoutElementId>>
@@ -630,6 +649,18 @@ export function formatSeatShort(seat: SeatId): string {
 
 function formatTeamShort(team: TeamId): string {
   return team === "team-0" ? "NS" : "EW";
+}
+
+function getTichuMarkerLabel(callState: SeatView["callState"]): "GT" | "T" | null {
+  if (callState.grandTichu) {
+    return "GT";
+  }
+
+  if (callState.smallTichu) {
+    return "T";
+  }
+
+  return null;
 }
 
 type ScoreMarker = {
@@ -809,7 +840,7 @@ export function formatEvent(event: EngineEvent): string {
   }
 }
 
-export function describeAction(action: EngineAction): string {
+export function describeAction(action: EngineAction | LegalAction): string {
   switch (action.type) {
     case "call_grand_tichu":
       return "Grand Tichu";
@@ -827,9 +858,15 @@ export function describeAction(action: EngineAction): string {
       return `Gift Dragon to ${formatSeatShort(action.recipient)}`;
     case "play_cards":
       if ("combination" in action) {
-        return `${formatCombinationKind(action.combination.kind)} (${action.cardIds.length})`;
+        const combinationAction = action as Extract<
+          LegalAction,
+          { type: "play_cards" }
+        >;
+        return `${formatCombinationKind(combinationAction.combination.kind)} (${action.cardIds.length})`;
       }
       return `Play ${action.cardIds.join(", ")}`;
+    default:
+      return "Unknown action";
   }
 }
 
@@ -1898,6 +1935,53 @@ export function computeNormalViewportLayoutMetrics(config: {
   };
 }
 
+function getNormalTrickCardWidth(layoutMetrics: NormalViewportLayoutMetrics) {
+  return clampNumber(Math.round(layoutMetrics.cardWidth * 0.82), 44, 84);
+}
+
+type NormalTrickFanMetrics = {
+  cardDx: number;
+  cardDy: number;
+  rotationStep: number;
+  groupDx: number;
+  groupDy: number;
+};
+
+function getNormalTrickFanMetrics(
+  position: SeatVisualPosition,
+  trickCardWidth: number
+): NormalTrickFanMetrics {
+  const horizontalStep = Math.max(11, Math.round(trickCardWidth * 0.22));
+  const verticalStep = Math.max(7, Math.round(trickCardWidth * 0.12));
+  const groupHorizontal = Math.max(16, Math.round(trickCardWidth * 0.28));
+  const groupVertical = Math.max(10, Math.round(trickCardWidth * 0.18));
+
+  if (position === "bottom") {
+    return {
+      cardDx: -horizontalStep,
+      cardDy: -verticalStep,
+      rotationStep: -4,
+      groupDx: -groupHorizontal,
+      groupDy: -groupVertical
+    };
+  }
+
+  return {
+    cardDx: horizontalStep,
+    cardDy: verticalStep,
+    rotationStep: 4,
+    groupDx: groupHorizontal,
+    groupDy: groupVertical
+  };
+}
+
+function resolveNormalStageAnchorStyle(
+  normalTableLayout: NormalTableLayout,
+  position: SeatVisualPosition
+): CSSProperties {
+  return anchorStyle(normalTableLayout[NORMAL_STAGE_LAYOUT_IDS[position]]);
+}
+
 function useElementSize<T extends HTMLElement>() {
   const ref = useRef<T | null>(null);
   const [size, setSize] = useState(() => ({
@@ -2117,8 +2201,9 @@ export function parseNormalTableLayoutConfigText(
       {};
 
     for (const match of trimmed.matchAll(/<element\b([^>]*)\/?>/g)) {
+      const attributeSource = match[1] ?? "";
       const attributes = Object.fromEntries(
-        Array.from(match[1].matchAll(/(\w+)="([^"]*)"/g), ([, key, value]) => [
+        Array.from(attributeSource.matchAll(/(\w+)="([^"]*)"/g), ([, key, value]) => [
           key,
           value
         ])
@@ -2194,20 +2279,31 @@ function CardFace({
     .join(" ");
 
   if (interactive) {
+    const buttonProps: {
+      onClick?: () => void;
+      onDragStart?: (event: ReactDragEvent<HTMLButtonElement>) => void;
+      onDragEnd?: () => void;
+    } = {};
+
+    if (onClick) {
+      buttonProps.onClick = onClick;
+    }
+
+    buttonProps.onDragStart = (event) => {
+      setIsDragging(true);
+      onDragStart?.(event);
+    };
+    buttonProps.onDragEnd = () => {
+      setIsDragging(false);
+      onDragEnd?.();
+    };
+
     return (
       <button
         type="button"
         className={classes}
-        onClick={onClick}
         draggable={draggable}
-        onDragStart={(event) => {
-          setIsDragging(true);
-          onDragStart?.(event);
-        }}
-        onDragEnd={() => {
-          setIsDragging(false);
-          onDragEnd?.();
-        }}
+        {...buttonProps}
       >
         {cardContent(card)}
       </button>
@@ -2243,22 +2339,28 @@ function PassRouteToken({
   onCardDragEnd?: (cardId: string) => void;
 }) {
   if (route.visibleCardId) {
+    const interactiveProps = interactive
+      ? {
+          interactive: true as const,
+          draggable: true,
+          onClick: onCardClick ?? (() => undefined),
+          onDragStart: (event: ReactDragEvent<HTMLButtonElement>) => {
+            event.dataTransfer.effectAllowed = "move";
+            event.dataTransfer.setData(
+              "application/x-tichu-pass-card",
+              route.visibleCardId!
+            );
+            onCardDragStart?.(route.visibleCardId!);
+          },
+          onDragEnd: () => onCardDragEnd?.(route.visibleCardId!)
+        }
+      : {};
+
     return (
       <CardFace
         card={resolveCard(route.visibleCardId, cardLookup)}
         className="normal-card normal-card--route"
-        interactive={interactive}
-        draggable={interactive}
-        onClick={onCardClick}
-        onDragStart={(event) => {
-          event.dataTransfer.effectAllowed = "move";
-          event.dataTransfer.setData(
-            "application/x-tichu-pass-card",
-            route.visibleCardId!
-          );
-          onCardDragStart?.(route.visibleCardId!);
-        }}
-        onDragEnd={() => onCardDragEnd?.(route.visibleCardId!)}
+        {...interactiveProps}
       />
     );
   }
@@ -2280,29 +2382,34 @@ function SeatFlagChips({
   passReady,
   isPrimarySeat,
   isThinkingSeat,
-  compact = false
+  compact = false,
+  showCallMarkers = true
 }: Pick<
   SeatView,
   "callState" | "finishIndex" | "passReady" | "isPrimarySeat" | "isThinkingSeat"
 > & {
   compact?: boolean;
+  showCallMarkers?: boolean;
 }) {
   const className = compact ? "normal-seat__call" : "seat-chip";
+  const tichuMarkerLabel = getTichuMarkerLabel(callState);
 
   return (
     <>
-      {callState.grandTichu && (
+      {showCallMarkers && tichuMarkerLabel === "GT" && (
         <span
           className={`${className} ${compact ? "normal-seat__call--grand" : "seat-chip--alert"}`}
+          title="Grand Tichu"
         >
-          Grand Tichu
+          GT
         </span>
       )}
-      {callState.smallTichu && (
+      {showCallMarkers && tichuMarkerLabel === "T" && (
         <span
           className={`${className} ${compact ? "normal-seat__call--small" : "seat-chip--accent"}`}
+          title="Tichu"
         >
-          Tichu
+          T
         </span>
       )}
       {isPrimarySeat && (
@@ -2380,6 +2487,7 @@ export function TableSurface({
   const trickPoints = displayedTrick
     ? getDisplayedTrickPoints(seatRelativePlays)
     : 0;
+  const renderSharedTrickLanes = variant === "debug";
 
   return (
     <section
@@ -2443,96 +2551,55 @@ export function TableSurface({
             )}
           </div>
 
-          {seatRelativePlays.map(({ seat, position, plays }) => {
-            if (plays.length === 0) {
-              return null;
-            }
+          {renderSharedTrickLanes &&
+            seatRelativePlays.map(({ seat, position, plays }) => {
+              if (plays.length === 0) {
+                return null;
+              }
 
-            return (
-              <div
-                key={seat}
-                className={
-                  variant === "normal"
-                    ? `normal-trick-lane normal-trick-lane--${position}`
-                    : `table-trick__lane table-trick__lane--${position}`
-                }
-              >
+              return (
                 <div
-                  className={
-                    variant === "normal"
-                      ? "normal-trick-lane__sequence"
-                      : "table-trick__sequence"
-                  }
+                  key={seat}
+                  className={`table-trick__lane table-trick__lane--${position}`}
                 >
-                  {plays.map((entry, index) => {
-                    const isWinningPlay =
-                      entry.seat === displayedTrick.currentWinner &&
-                      entry.combination.key ===
-                        displayedTrick.currentCombination.key;
+                  <div className="table-trick__sequence">
+                    {plays.map((entry, index) => {
+                      const isWinningPlay =
+                        entry.seat === displayedTrick.currentWinner &&
+                        entry.combination.key ===
+                          displayedTrick.currentCombination.key;
 
-                    return (
-                      <div
-                        key={`${seat}-${entry.combination.key}-${index}`}
-                        className={
-                          variant === "normal"
-                            ? `normal-play-group${isWinningPlay ? " normal-play-group--winning" : ""}`
-                            : `table-trick__play${isWinningPlay ? " table-trick__play--winning" : ""}`
-                        }
-                      >
-                        {entry.combination.kind === "single" && (
-                          <span
-                            className={
-                              variant === "normal"
-                                ? "normal-play-group__kind"
-                                : "table-trick__play-kind"
-                            }
-                          >
-                            {formatCombinationKind(entry.combination.kind)}
-                          </span>
-                        )}
+                      return (
                         <div
-                          className={
-                            variant === "normal"
-                              ? "normal-play-group__cards"
-                              : "table-trick__combo"
-                          }
+                          key={`${seat}-${entry.combination.key}-${index}`}
+                          className={`table-trick__play${isWinningPlay ? " table-trick__play--winning" : ""}`}
                         >
-                          {entry.combination.cardIds.map((cardId) => (
-                            <CardFace
-                              key={cardId}
-                              card={resolveCard(cardId, cardLookup)}
-                              className={
-                                variant === "normal"
-                                  ? "normal-card normal-card--trick"
-                                  : "table-trick__card"
-                              }
-                            />
-                          ))}
+                          {entry.combination.kind === "single" && (
+                            <span className="table-trick__play-kind">
+                              {formatCombinationKind(entry.combination.kind)}
+                            </span>
+                          )}
+                          <div className="table-trick__combo">
+                            {entry.combination.cardIds.map((cardId) => (
+                              <CardFace
+                                key={cardId}
+                                card={resolveCard(cardId, cardLookup)}
+                                className="table-trick__card"
+                              />
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
         </>
       ) : variant === "debug" && exchangePhaseActive && tablePassGroups.length > 0 ? (
         <>
-          <div
-            className={
-              variant === "normal"
-                ? "normal-play-surface__core"
-                : "table-trick__core"
-            }
-          >
-            <span
-              className={
-                variant === "normal"
-                  ? "normal-play-surface__badge"
-                  : "table-trick__lead"
-              }
-            >
+          <div className="table-trick__core">
+            <span className="table-trick__lead">
               {state.phase === "pass_select" ? "Pass lanes" : "Exchange ready"}
             </span>
           </div>
@@ -2540,37 +2607,15 @@ export function TableSurface({
           {tablePassGroups.map((group) => (
             <div
               key={group.seat}
-              className={
-                variant === "normal"
-                  ? `normal-pass-cluster normal-pass-cluster--${group.position}`
-                  : `table-trick__lane table-trick__lane--${group.position}`
-              }
+              className={`table-trick__lane table-trick__lane--${group.position}`}
             >
-              <span
-                className={
-                  variant === "normal"
-                    ? "normal-trick-lane__label"
-                    : "table-trick__seat-label"
-                }
-              >
-                {group.label}
-              </span>
-              <div
-                className={
-                  variant === "normal"
-                    ? "normal-pass-cluster__cards"
-                    : "table-trick__combo"
-                }
-              >
+              <span className="table-trick__seat-label">{group.label}</span>
+              <div className="table-trick__combo">
                 {group.cardIds.map((cardId) => (
                   <CardFace
                     key={`${group.seat}-${cardId}`}
                     card={resolveCard(cardId, cardLookup)}
-                    className={
-                      variant === "normal"
-                        ? "normal-card normal-card--pass"
-                        : "table-trick__card"
-                    }
+                    className="table-trick__card"
                   />
                 ))}
               </div>
@@ -2589,16 +2634,216 @@ export function TableSurface({
           <p>{status.body}</p>
           {state.phase === "finished" && state.roundSummary && (
             <p>
-              Team 0 {state.roundSummary.teamScores["team-0"]} | Team 1{" "}
+              NS {state.roundSummary.teamScores["team-0"]} | EW{" "}
               {state.roundSummary.teamScores["team-1"]}
             </p>
           )}
           {state.phase === "finished" && state.roundSummary?.doubleVictory && (
-            <p>{state.roundSummary.doubleVictory} scored a double victory.</p>
+            <p>
+              {formatTeamShort(state.roundSummary.doubleVictory)} scored a double
+              victory.
+            </p>
           )}
         </div>
       )}
     </section>
+  );
+}
+
+function NormalSeatTichuMarker({
+  label,
+  position
+}: {
+  label: "GT" | "T";
+  position: "top" | "bottom" | "side";
+}) {
+  return (
+    <span
+      className={[
+        "normal-seat__tichu-marker",
+        `normal-seat__tichu-marker--${position}`,
+        label === "GT"
+          ? "normal-seat__tichu-marker--grand"
+          : "normal-seat__tichu-marker--small"
+      ].join(" ")}
+      title={label === "GT" ? "Grand Tichu" : "Tichu"}
+    >
+      {label}
+    </span>
+  );
+}
+
+function NormalDogLeadTransfer({
+  normalTableLayout,
+  animation
+}: {
+  normalTableLayout: NormalTableLayout;
+  animation: DogLeadAnimationView;
+}) {
+  const [active, setActive] = useState(false);
+  const sourcePosition = getSeatVisualPosition(animation.sourceSeat);
+  const targetPosition = getSeatVisualPosition(animation.targetSeat);
+  const sourceAnchor = normalTableLayout[NORMAL_STAGE_LAYOUT_IDS[sourcePosition]];
+  const targetAnchor = normalTableLayout[NORMAL_HAND_LAYOUT_IDS[targetPosition]];
+
+  useEffect(() => {
+    const frameId = window.requestAnimationFrame(() => setActive(true));
+    return () => window.cancelAnimationFrame(frameId);
+  }, [animation.sourceSeat, animation.targetSeat]);
+
+  return (
+    <div
+      className={active ? "normal-dog-transfer is-active" : "normal-dog-transfer"}
+      data-dog-transfer={`${animation.sourceSeat}->${animation.targetSeat}`}
+      style={{
+        left: `${(active ? targetAnchor.x : sourceAnchor.x) * 100}%`,
+        top: `${(active ? targetAnchor.y : sourceAnchor.y) * 100}%`
+      }}
+    >
+      <CardFace
+        card={handCardFromId("dog")}
+        className="normal-card normal-card--trick normal-card--dog-transfer"
+      />
+    </div>
+  );
+}
+
+export function NormalTrickStagingRegions({
+  normalTableLayout,
+  layoutMetrics,
+  displayedTrick,
+  seatRelativePlays,
+  localPickupCardIds,
+  dogLeadAnimation,
+  cardLookup
+}: Pick<
+  GameTableViewProps,
+  | "normalTableLayout"
+  | "displayedTrick"
+  | "seatRelativePlays"
+  | "localPickupCardIds"
+  | "dogLeadAnimation"
+  | "cardLookup"
+> & {
+  layoutMetrics: NormalViewportLayoutMetrics;
+}) {
+  const trickCardWidth = getNormalTrickCardWidth(layoutMetrics);
+
+  if (
+    !displayedTrick &&
+    localPickupCardIds.length === 0 &&
+    !dogLeadAnimation
+  ) {
+    return null;
+  }
+
+  return (
+    <div
+      className="normal-trick-staging"
+      aria-hidden="true"
+      data-layout-container="trick-staging"
+    >
+      {displayedTrick &&
+        seatRelativePlays.map(({ seat, position, plays }) => {
+          if (plays.length === 0) {
+            return null;
+          }
+
+          const fanMetrics = getNormalTrickFanMetrics(position, trickCardWidth);
+
+          return (
+            <div
+              key={seat}
+              className={`normal-trick-stage normal-trick-stage--${position}`}
+              data-trick-stage={position}
+              style={resolveNormalStageAnchorStyle(normalTableLayout, position)}
+            >
+              {plays.map((entry, playIndex) => {
+                const reverseIndex = plays.length - 1 - playIndex;
+                const isWinningPlay =
+                  entry.seat === displayedTrick.currentWinner &&
+                  entry.combination.key === displayedTrick.currentCombination.key;
+
+                return (
+                  <div
+                    key={`${seat}-${entry.combination.key}-${playIndex}`}
+                    className={[
+                      "normal-trick-stage__play",
+                      isWinningPlay ? "normal-trick-stage__play--winning" : ""
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    style={{
+                      transform: `translate(${
+                        reverseIndex * -fanMetrics.groupDx
+                      }px, ${reverseIndex * -fanMetrics.groupDy}px)`,
+                      zIndex: playIndex + 1
+                    }}
+                  >
+                    {entry.combination.cardIds.map((cardId, cardIndex) => (
+                      <div
+                        key={cardId}
+                        className="normal-trick-stage__card"
+                        style={{
+                          transform: `translate(${
+                            cardIndex * fanMetrics.cardDx
+                          }px, ${cardIndex * fanMetrics.cardDy}px) rotate(${
+                            cardIndex * fanMetrics.rotationStep
+                          }deg)`,
+                          zIndex: cardIndex + 1
+                        }}
+                      >
+                        <CardFace
+                          card={resolveCard(cardId, cardLookup)}
+                          className="normal-card normal-card--trick"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+
+      {localPickupCardIds.length > 0 && (
+        <div
+          className="normal-pickup-stage"
+          data-pickup-stage={LOCAL_SEAT}
+          style={resolveNormalStageAnchorStyle(normalTableLayout, "bottom")}
+        >
+          <span className="normal-pickup-stage__label">Pickup</span>
+          <div className="normal-pickup-stage__cards">
+            {localPickupCardIds.map((cardId, cardIndex) => (
+              <div
+                key={cardId}
+                className="normal-pickup-stage__card"
+                style={{
+                  transform: `translate(${
+                    cardIndex * -Math.max(12, Math.round(trickCardWidth * 0.24))
+                  }px, ${
+                    cardIndex * -Math.max(6, Math.round(trickCardWidth * 0.1))
+                  }px) rotate(${cardIndex * -4}deg)`,
+                  zIndex: cardIndex + 1
+                }}
+              >
+                <CardFace
+                  card={resolveCard(cardId, cardLookup)}
+                  className="normal-card normal-card--pass"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {dogLeadAnimation && (
+        <NormalDogLeadTransfer
+          normalTableLayout={normalTableLayout}
+          animation={dogLeadAnimation}
+        />
+      )}
+    </div>
   );
 }
 
@@ -2836,6 +3081,21 @@ function NormalSeat({
       : isSideSeat
         ? layoutMetrics.sideCardStep
         : layoutMetrics.topCardStep;
+  const tichuMarkerLabel = getTichuMarkerLabel(seatView.callState);
+  const handCardCount = seatView.isLocalSeat
+    ? sortedLocalHand.length
+    : seatView.cards.length;
+  const handMarkerStyle = {
+    "--normal-hand-span": `${requiredFanSpan(
+      handCardCount,
+      layoutMetrics.cardWidth,
+      handStep
+    )}px`,
+    "--normal-tichu-offset": `${Math.max(
+      10,
+      Math.round(layoutMetrics.cardWidth * 0.18)
+    )}px`
+  } as CSSProperties;
   const handStyle = {
     "--normal-hand-step": `${handStep}px`
   } as CSSProperties;
@@ -2850,6 +3110,9 @@ function NormalSeat({
           {seatView.title}
         </span>
       )}
+      {isSideSeat && tichuMarkerLabel ? (
+        <NormalSeatTichuMarker label={tichuMarkerLabel} position="side" />
+      ) : null}
       <div className="normal-seat__flags">
         <SeatFlagChips
           callState={seatView.callState}
@@ -2858,6 +3121,7 @@ function NormalSeat({
           isPrimarySeat={seatView.isPrimarySeat}
           isThinkingSeat={seatView.isThinkingSeat}
           compact
+          showCallMarkers={false}
         />
       </div>
     </div>
@@ -2885,41 +3149,60 @@ function NormalSeat({
     );
   const localHand = (
     <div className="normal-seat__body normal-seat__body--local">
-      <div className="normal-seat__hand normal-seat__hand--bottom" style={handStyle}>
-        {sortedLocalHand.map((card, cardIndex) => (
-          <div
-            key={card.id}
-            className="normal-seat__card-slot"
-            data-seat-region-card={`bottom-${card.id}-${cardIndex}`}
-          >
-            <CardFace
-              card={card}
-              interactive={localCanInteract}
-              tone={localLegalCardIds.has(card.id) ? "legal" : "muted"}
-              selected={selectedCardIds.includes(card.id)}
-              className="normal-card normal-card--local"
-              onClick={() => onLocalCardClick(card.id)}
-              draggable={localPassInteractionEnabled}
-              onDragStart={(event) => {
-                event.dataTransfer.effectAllowed = "move";
-                event.dataTransfer.setData(
-                  "application/x-tichu-pass-card",
-                  card.id
-                );
-              }}
-            />
-          </div>
-        ))}
+      <div className="normal-seat__hand-shell" style={handMarkerStyle}>
+        {tichuMarkerLabel && (
+          <NormalSeatTichuMarker
+            label={tichuMarkerLabel}
+            position="bottom"
+          />
+        )}
+        <div
+          className="normal-seat__hand normal-seat__hand--bottom"
+          style={handStyle}
+        >
+          {sortedLocalHand.map((card, cardIndex) => (
+            <div
+              key={card.id}
+              className="normal-seat__card-slot"
+              data-seat-region-card={`bottom-${card.id}-${cardIndex}`}
+            >
+              <CardFace
+                card={card}
+                interactive={localCanInteract}
+                tone={localLegalCardIds.has(card.id) ? "legal" : "muted"}
+                selected={selectedCardIds.includes(card.id)}
+                className="normal-card normal-card--local"
+                onClick={() => onLocalCardClick(card.id)}
+                draggable={localPassInteractionEnabled}
+                onDragStart={(event) => {
+                  event.dataTransfer.effectAllowed = "move";
+                  event.dataTransfer.setData(
+                    "application/x-tichu-pass-card",
+                    card.id
+                  );
+                }}
+              />
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
   const remoteHand = (
     <div className="normal-seat__body">
-      <div
-        className={`normal-seat__hand normal-seat__hand--${seatView.position}`}
-        style={handStyle}
-      >
-        {seatView.cards.map(renderSeatCard)}
+      <div className="normal-seat__hand-shell" style={handMarkerStyle}>
+        {!isSideSeat && tichuMarkerLabel ? (
+          <NormalSeatTichuMarker
+            label={tichuMarkerLabel}
+            position={seatView.position === "top" ? "top" : "bottom"}
+          />
+        ) : null}
+        <div
+          className={`normal-seat__hand normal-seat__hand--${seatView.position}`}
+          style={handStyle}
+        >
+          {seatView.cards.map(renderSeatCard)}
+        </div>
       </div>
     </div>
   );
@@ -3518,6 +3801,9 @@ function ModalDialog({
 
       const first = focusables[0];
       const last = focusables[focusables.length - 1];
+      if (!first || !last) {
+        return;
+      }
       const activeElement = document.activeElement as HTMLElement | null;
 
       if (event.shiftKey && activeElement === first) {
@@ -4158,7 +4444,10 @@ export function NormalLayoutEditor({
       const nextIndex =
         (currentIndex + delta + NORMAL_LAYOUT_EDITOR_ORDER.length) %
         NORMAL_LAYOUT_EDITOR_ORDER.length;
-      setSelectedElementId(NORMAL_LAYOUT_EDITOR_ORDER[nextIndex]);
+      const nextElementId = NORMAL_LAYOUT_EDITOR_ORDER[nextIndex];
+      if (nextElementId) {
+        setSelectedElementId(nextElementId);
+      }
     },
     [selectedElementId]
   );
@@ -5025,6 +5314,16 @@ export function NormalGameTableView(props: GameTableViewProps) {
             onPassLaneCardClick={props.onPassLaneCardClick}
             onPassLaneCardDragStart={props.onPassLaneCardDragStart}
             onPassLaneCardDragEnd={props.onPassLaneCardDragEnd}
+          />
+
+          <NormalTrickStagingRegions
+            normalTableLayout={props.normalTableLayout}
+            layoutMetrics={layoutMetrics}
+            displayedTrick={props.displayedTrick}
+            seatRelativePlays={props.seatRelativePlays}
+            localPickupCardIds={props.localPickupCardIds}
+            dogLeadAnimation={props.dogLeadAnimation}
+            cardLookup={props.cardLookup}
           />
 
           {props.layoutEditorActive && (

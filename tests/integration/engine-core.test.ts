@@ -585,6 +585,27 @@ describe("engine core", () => {
     expect(result.nextState.currentTrick).toBeNull();
   });
 
+  it("falls back to the next active seat when the Dog partner is unavailable", () => {
+    const state = scenario({
+      hands: {
+        "seat-0": cardsFromIds(["dog", "jade-4"]),
+        "seat-1": cardsFromIds(["jade-6"]),
+        "seat-2": [],
+        "seat-3": cardsFromIds(["jade-9"])
+      },
+      finishedOrder: ["seat-2"]
+    });
+
+    const result = applyEngineAction(state, {
+      type: "play_cards",
+      seat: "seat-0",
+      cardIds: ["dog"]
+    });
+
+    expect(result.nextState.activeSeat).toBe("seat-3");
+    expect(result.nextState.currentTrick).toBeNull();
+  });
+
   it("keeps Small Tichu available until a seat actually plays", () => {
     const liveHand = cardsFromIds(["mahjong", "jade-7", "sword-9"]);
     const supportHand = cardsFromIds(["jade-3"]);

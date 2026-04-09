@@ -13,7 +13,9 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_NORMAL_TABLE_LAYOUT,
+  NormalTrickStagingRegions,
   TableSurface,
+  computeNormalViewportLayoutMetrics,
   getDisplayedTrickPoints,
   getNormalCenterZoneClassName,
   shouldRenderNormalCenterZoneFelt,
@@ -176,6 +178,143 @@ describe("trick UI cleanup", () => {
     expect(
       view.container.querySelectorAll(".table-trick__seat-label")
     ).toHaveLength(0);
+
+    view.unmount();
+  });
+
+  it("renders played cards in seat-local trick stages instead of the center surface", () => {
+    const lead = combo(["jade-10"]);
+    const response = combo(["dragon"]);
+    const state = createScenarioState({
+      phase: "trick_play",
+      activeSeat: "seat-0",
+      currentTrick: {
+        leader: "seat-1",
+        currentWinner: "seat-0",
+        currentCombination: response,
+        entries: [
+          { type: "play", seat: "seat-1", combination: lead },
+          { type: "play", seat: "seat-0", combination: response }
+        ],
+        passingSeats: []
+      }
+    });
+    const seatRelativePlays = createSeatRelativePlays(state.currentTrick?.entries ?? []);
+    const trickCards = cardsFromIds(["jade-10", "dragon"]);
+    const layoutMetrics = computeNormalViewportLayoutMetrics({
+      viewportWidth: 1366,
+      viewportHeight: 768,
+      topCount: 8,
+      bottomCount: 8,
+      leftCount: 8,
+      rightCount: 8,
+      hasVariantPicker: false,
+      hasWishPicker: false
+    });
+    const view = render(
+      createElement("div", { style: { position: "relative", width: "1366px", height: "768px" } }, [
+        createElement(TableSurface, {
+          key: "surface",
+          variant: "normal",
+          normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+          state,
+          derived: createDerived(state),
+          controlHint: "Play a card",
+          displayedTrick: state.currentTrick,
+          trickIsResolving: false,
+          seatRelativePlays,
+          localPickupCardIds: [],
+          dogLeadAnimation: null,
+          tablePassGroups: [],
+          cardLookup: buildCardLookup(trickCards)
+        }),
+        createElement(NormalTrickStagingRegions, {
+          key: "staging",
+          normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+          layoutMetrics,
+          displayedTrick: state.currentTrick,
+          seatRelativePlays,
+          localPickupCardIds: [],
+          dogLeadAnimation: null,
+          cardLookup: buildCardLookup(trickCards)
+        })
+      ])
+    );
+
+    expect(view.container.querySelectorAll(".normal-trick-lane")).toHaveLength(0);
+    expect(view.container.querySelector('[data-trick-stage="right"]')).not.toBeNull();
+    expect(view.container.querySelector('[data-trick-stage="bottom"]')).not.toBeNull();
+    expect(
+      view.container.querySelectorAll('[data-trick-stage] .normal-card--trick')
+    ).toHaveLength(2);
+
+    view.unmount();
+  });
+
+  it("renders received cards in the pickup stage until Pickup", () => {
+    const pickupCards = cardsFromIds(["dragon", "jade-10", "sword-5"]);
+    const layoutMetrics = computeNormalViewportLayoutMetrics({
+      viewportWidth: 1366,
+      viewportHeight: 768,
+      topCount: 8,
+      bottomCount: 8,
+      leftCount: 8,
+      rightCount: 8,
+      hasVariantPicker: false,
+      hasWishPicker: false
+    });
+    const view = render(
+      createElement("div", { style: { position: "relative", width: "1366px", height: "768px" } },
+        createElement(NormalTrickStagingRegions, {
+          normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+          layoutMetrics,
+          displayedTrick: null,
+          seatRelativePlays: [],
+          localPickupCardIds: pickupCards.map((card) => card.id),
+          dogLeadAnimation: null,
+          cardLookup: buildCardLookup(pickupCards)
+        })
+      )
+    );
+
+    expect(view.container.querySelector('[data-pickup-stage="seat-0"]')).not.toBeNull();
+    expect(
+      view.container.querySelectorAll('[data-pickup-stage="seat-0"] .normal-card--pass')
+    ).toHaveLength(3);
+
+    view.unmount();
+  });
+
+  it("renders Dog lead transfer using the engine-resolved target seat", () => {
+    const layoutMetrics = computeNormalViewportLayoutMetrics({
+      viewportWidth: 1366,
+      viewportHeight: 768,
+      topCount: 8,
+      bottomCount: 8,
+      leftCount: 8,
+      rightCount: 8,
+      hasVariantPicker: false,
+      hasWishPicker: false
+    });
+    const view = render(
+      createElement(
+        "div",
+        { style: { position: "relative", width: "1366px", height: "768px" } },
+        createElement(NormalTrickStagingRegions, {
+          normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+          layoutMetrics,
+          displayedTrick: null,
+          seatRelativePlays: [],
+          localPickupCardIds: [],
+          dogLeadAnimation: { sourceSeat: "seat-0", targetSeat: "seat-2" },
+          cardLookup: new Map()
+        })
+      )
+    );
+
+    expect(
+      view.container.querySelector('[data-dog-transfer="seat-0->seat-2"]')
+    ).not.toBeNull();
 
     view.unmount();
   });

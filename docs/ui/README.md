@@ -9,6 +9,7 @@ The game UI is designed around a single-screen, no-scroll table layout with expl
 - preserve card aspect ratio and readable fanning
 - keep pass-lane geometry aligned with the table editor layout
 - show the current trick point total centrally while a trick is active
+- keep live played cards in seat-local trick areas instead of a shared center pile
 - avoid masking overflow instead of truly fitting content
 
 ## Interaction Principles
@@ -22,6 +23,9 @@ The game UI is designed around a single-screen, no-scroll table layout with expl
 - hotkeys, menu actions, and dialogs should route through shared command handlers
 - debug and inspection UI should not leak into normal gameplay unexpectedly
 - trick lanes should present cards only; directional indicators are intentionally removed from live trick rendering
+- received exchange cards should remain staged in the pickup lane until the player explicitly clicks Pickup
+- Dog lead transfer visuals should follow the engine-resolved recipient, not a UI-only guess
+- Tichu and Grand Tichu seat markers should render as compact `T` / `GT` glyphs positioned relative to the hand band
 - play-area inset shadow is editor-only so gameplay keeps a cleaner center surface
 - the blurred center felt layer is editor-only; gameplay should not mount any duplicate glow layer there
 - active response turns must always resolve through a legal play or a legal pass, never by pausing on optional Tichu alone
