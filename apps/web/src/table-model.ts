@@ -39,6 +39,25 @@ export type ExchangeDraftValidation = {
   duplicateCardIds: string[];
   invalidCardIds: string[];
 };
+export type ExchangeCardRenderState =
+  | "inHand"
+  | "selectedForPass"
+  | "inTransit"
+  | "receivedPendingPickup"
+  | "inHandFinal";
+export type SeatExchangeRenderBuckets = Record<
+  ExchangeCardRenderState,
+  string[]
+>;
+export type ExchangeRenderModel = {
+  stagedSelectionBySeat: Record<
+    SeatId,
+    Partial<Record<PassTarget, string>> | undefined
+  >;
+  visibleHandsBySeat: Record<SeatId, Card[]>;
+  receivedPendingPickupBySeat: Record<SeatId, string[]>;
+  cardBucketsBySeat: Record<SeatId, SeatExchangeRenderBuckets>;
+};
 
 export type PlayLegalAction = Extract<LegalAction, { type: "play_cards" }>;
 export type TurnActionAvailability = {
@@ -153,6 +172,134 @@ export function getReceivedPassCardIds(
     const cardId = selection[target];
     return cardId ? [cardId] : [];
   });
+}
+
+export function collectStagedPassCardIds(
+  selection?: Partial<Record<PassTarget, string>>
+): Set<string> {
+  return new Set(
+    PASS_TARGETS.map((target) => selection?.[target]).filter(
+      (value): value is string => Boolean(value)
+    )
+  );
+}
+
+function createSeatRecord<T>(factory: () => T): Record<SeatId, T> {
+  return {
+    "seat-0": factory(),
+    "seat-1": factory(),
+    "seat-2": factory(),
+    "seat-3": factory()
+  };
+}
+
+function createEmptyExchangeBuckets(): SeatExchangeRenderBuckets {
+  return {
+    inHand: [],
+    selectedForPass: [],
+    inTransit: [],
+    receivedPendingPickup: [],
+    inHandFinal: []
+  };
+}
+
+function getDefaultHandRenderState(
+  phase: RoundPhase
+): Extract<ExchangeCardRenderState, "inHand" | "inHandFinal"> {
+  return phase === "exchange_complete" ||
+    phase === "trick_play" ||
+    phase === "round_scoring" ||
+    phase === "finished"
+    ? "inHandFinal"
+    : "inHand";
+}
+
+export function deriveExchangeRenderModel(config: {
+  state: Pick<
+    GameState,
+    "phase" | "hands" | "passSelections" | "revealedPasses"
+  >;
+  localSeat?: SeatId;
+  localPassDraft?: Partial<Record<PassTarget, string>>;
+  receivedCardsVisibleUntilPickup?: boolean;
+}): ExchangeRenderModel {
+  const localSeat = config.localSeat ?? LOCAL_SEAT;
+  const passLanesActive =
+    config.state.phase === "pass_select" || config.state.phase === "pass_reveal";
+  const receivedCardsVisible =
+    config.state.phase === "exchange_complete" &&
+    Boolean(config.receivedCardsVisibleUntilPickup);
+  const defaultHandState = getDefaultHandRenderState(config.state.phase);
+  const stagedSelectionBySeat = Object.fromEntries(
+    SEAT_IDS.map((seat) => [
+      seat,
+      config.state.revealedPasses[seat] ??
+        config.state.passSelections[seat] ??
+        (seat === localSeat ? config.localPassDraft : undefined)
+    ])
+  ) as ExchangeRenderModel["stagedSelectionBySeat"];
+  const receivedPendingPickupBySeat = createSeatRecord(() => [] as string[]);
+  const cardBucketsBySeat = createSeatRecord(createEmptyExchangeBuckets);
+
+  const hiddenFromHandsBySeat = createSeatRecord(() => new Set<string>());
+
+  for (const seat of SEAT_IDS) {
+    if (config.state.phase === "pass_select") {
+      const stagedCardIds = collectStagedPassCardIds(stagedSelectionBySeat[seat]);
+      for (const cardId of stagedCardIds) {
+        hiddenFromHandsBySeat[seat].add(cardId);
+        cardBucketsBySeat[seat].selectedForPass.push(cardId);
+      }
+      continue;
+    }
+
+    if (config.state.phase === "pass_reveal") {
+      const stagedCardIds = collectStagedPassCardIds(stagedSelectionBySeat[seat]);
+      for (const cardId of stagedCardIds) {
+        hiddenFromHandsBySeat[seat].add(cardId);
+        cardBucketsBySeat[seat].inTransit.push(cardId);
+      }
+      continue;
+    }
+
+    if (receivedCardsVisible) {
+      const receivedCardIds = getReceivedPassCardIds(config.state, seat);
+      receivedPendingPickupBySeat[seat] = receivedCardIds;
+      for (const cardId of receivedCardIds) {
+        hiddenFromHandsBySeat[seat].add(cardId);
+        cardBucketsBySeat[seat].receivedPendingPickup.push(cardId);
+      }
+    }
+  }
+
+  const visibleHandsBySeat = Object.fromEntries(
+    SEAT_IDS.map((seat) => {
+      const visibleCards = config.state.hands[seat].filter((card) => {
+        if (hiddenFromHandsBySeat[seat].has(card.id)) {
+          return false;
+        }
+
+        cardBucketsBySeat[seat][defaultHandState].push(card.id);
+        return true;
+      });
+
+      return [seat, visibleCards];
+    })
+  ) as Record<SeatId, Card[]>;
+
+  if (!passLanesActive) {
+    for (const seat of SEAT_IDS) {
+      cardBucketsBySeat[seat].selectedForPass = [];
+      cardBucketsBySeat[seat].inTransit = [];
+    }
+  }
+
+  return {
+    stagedSelectionBySeat,
+    visibleHandsBySeat,
+    receivedPendingPickupBySeat,
+    cardBucketsBySeat
+  };
 }
 
 export function isExchangePhase(phase: RoundPhase): boolean {

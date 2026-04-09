@@ -24,6 +24,7 @@ import {
   type TrickEntry
 } from "@tichuml/engine";
 import {
+  deriveExchangeRenderModel,
   LOCAL_SEAT,
   PASS_TARGETS,
   assignPassCardToDraft,
@@ -33,7 +34,6 @@ import {
   getExchangeFlowState,
   getPassTargetSeat,
   getPrimaryActorFromResult,
-  getReceivedPassCardIds,
   getTurnActions,
   isExchangePhase,
   removePassCardFromDraft,
@@ -178,16 +178,6 @@ function isPlayTrickEntry(
   entry: TrickEntry
 ): entry is Extract<TrickEntry, { type: "play" }> {
   return entry.type === "play";
-}
-
-function collectStagedPassCardIds(
-  selection?: Partial<Record<PassTarget, string>>
-) {
-  return new Set(
-    PASS_TARGETS.map((target) => selection?.[target]).filter(
-      (value): value is string => Boolean(value)
-    )
-  );
 }
 
 function getDogLeadAnimationView(
@@ -477,9 +467,6 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     primaryActor !== SYSTEM_ACTOR;
   const pickupPending =
     state.phase === "exchange_complete" && Boolean(systemAdvanceAction);
-  const localPickupCardIds = pickupPending
-    ? getReceivedPassCardIds(state, LOCAL_SEAT)
-    : [];
   const localExchangeValidation = validateExchangeDraft(
     passDraft,
     localPassSelection?.availableCardIds ?? [],
@@ -538,37 +525,14 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
                   : "Auto-advancing";
 
   const cardLookup = new Map(state.shuffledDeck.map((card) => [card.id, card]));
-  const stagedSelectionBySeat = Object.fromEntries(
-    SEAT_LAYOUT.map(({ seat }) => [
-      seat,
-      state.revealedPasses[seat] ??
-        state.passSelections[seat] ??
-        (seat === LOCAL_SEAT ? passDraft : undefined)
-    ])
-  ) as Record<SeatId, Partial<Record<PassTarget, string>> | undefined>;
-  const visibleHandsBySeat = Object.fromEntries(
-    SEAT_LAYOUT.map(({ seat }) => {
-      const stagedCardIds =
-        state.phase === "pass_select" ||
-        state.phase === "pass_reveal" ||
-        state.phase === "exchange_complete"
-          ? collectStagedPassCardIds(stagedSelectionBySeat[seat])
-          : new Set<string>();
-      const localPickupCardIdSet =
-        seat === LOCAL_SEAT && pickupPending
-          ? new Set(localPickupCardIds)
-          : new Set<string>();
-
-      return [
-        seat,
-        state.hands[seat].filter(
-          (card) =>
-            !stagedCardIds.has(card.id) &&
-            !localPickupCardIdSet.has(card.id)
-        )
-      ];
-    })
-  ) as Record<SeatId, (typeof state.hands)[SeatId]>;
+  const exchangeRenderModel = deriveExchangeRenderModel({
+    state,
+    localSeat: LOCAL_SEAT,
+    localPassDraft: passDraft,
+    receivedCardsVisibleUntilPickup: pickupPending
+  });
+  const stagedSelectionBySeat = exchangeRenderModel.stagedSelectionBySeat;
+  const visibleHandsBySeat = exchangeRenderModel.visibleHandsBySeat;
   const sortedLocalHand = sortCardsForHand(
     visibleHandsBySeat[LOCAL_SEAT],
     sortMode,
@@ -590,6 +554,14 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     isPrimarySeat: primaryActor === seat,
     isThinkingSeat: thinkingActor === seat
   }));
+  const pickupStageViews = pickupPending
+    ? SEAT_LAYOUT.map(({ seat, position, title }) => ({
+        seat,
+        position,
+        label: `${title} Pickup`,
+        cardIds: exchangeRenderModel.receivedPendingPickupBySeat[seat]
+      })).filter((group) => group.cardIds.length > 0)
+    : [];
   const seatRelativePlays = SEAT_LAYOUT.map(({ seat, position, title }) => ({
     seat,
     position,
@@ -604,8 +576,8 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
   const tablePassGroups = SEAT_LAYOUT.map(({ seat, position, title }) => {
     const selection = stagedSelectionBySeat[seat];
     const cardIds =
-      pickupPending && seat === LOCAL_SEAT
-        ? localPickupCardIds
+      pickupPending
+        ? exchangeRenderModel.receivedPendingPickupBySeat[seat]
         : PASS_TARGETS.map((target) => selection?.[target]).filter(
             (value): value is string => Boolean(value)
           );
@@ -613,14 +585,12 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     return {
       seat,
       position,
-      label: pickupPending && seat === LOCAL_SEAT ? `${title} Pickup` : title,
+      label: pickupPending ? `${title} Pickup` : title,
       cardIds
     };
   }).filter((group) => group.cardIds.length > 0);
   const passRouteViews =
-    state.phase === "pass_select" ||
-    state.phase === "pass_reveal" ||
-    state.phase === "exchange_complete"
+    state.phase === "pass_select" || state.phase === "pass_reveal"
       ? SEAT_LAYOUT.flatMap(({ seat, position }) =>
           PASS_TARGETS.map((target) => {
             const targetSeat =
@@ -1390,7 +1360,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     seatRelativePlays,
     displayedTrick,
     trickIsResolving,
-    localPickupCardIds,
+    pickupStageViews,
     dogLeadAnimation,
     tablePassGroups,
     passRouteViews,

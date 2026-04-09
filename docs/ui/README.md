@@ -24,6 +24,8 @@ The game UI is designed around a single-screen, no-scroll table layout with expl
 - debug and inspection UI should not leak into normal gameplay unexpectedly
 - trick lanes should present cards only; directional indicators are intentionally removed from live trick rendering
 - received exchange cards should remain staged in the pickup lane until the player explicitly clicks Pickup
+- pass-selection and pass-reveal cards must render in dedicated directional pass lanes only, never inside hand fans
+- exchange rendering must keep every card in exactly one visible bucket: hand, pass lane transit, or pickup staging
 - Dog lead transfer visuals should follow the engine-resolved recipient, not a UI-only guess
 - Tichu and Grand Tichu seat markers should render as compact `T` / `GT` glyphs positioned relative to the hand band
 - play-area inset shadow is editor-only so gameplay keeps a cleaner center surface

@@ -48,7 +48,6 @@ import {
 import {
   getExchangeFlowState,
   isExchangePhase,
-  LOCAL_SEAT,
   type HandSortMode,
   type PassTarget,
   type PlayLegalAction
@@ -122,7 +121,7 @@ export type GameTableViewProps = {
   seatRelativePlays: SeatPlayView[];
   displayedTrick: EngineResult["derivedView"]["currentTrick"] | null;
   trickIsResolving: boolean;
-  localPickupCardIds: string[];
+  pickupStageViews: PassSurfaceView[];
   dogLeadAnimation: DogLeadAnimationView | null;
   tablePassGroups: PassSurfaceView[];
   passRouteViews: PassRouteView[];
@@ -2713,7 +2712,7 @@ export function NormalTrickStagingRegions({
   layoutMetrics,
   displayedTrick,
   seatRelativePlays,
-  localPickupCardIds,
+  pickupStageViews,
   dogLeadAnimation,
   cardLookup
 }: Pick<
@@ -2721,7 +2720,7 @@ export function NormalTrickStagingRegions({
   | "normalTableLayout"
   | "displayedTrick"
   | "seatRelativePlays"
-  | "localPickupCardIds"
+  | "pickupStageViews"
   | "dogLeadAnimation"
   | "cardLookup"
 > & {
@@ -2729,11 +2728,7 @@ export function NormalTrickStagingRegions({
 }) {
   const trickCardWidth = getNormalTrickCardWidth(layoutMetrics);
 
-  if (
-    !displayedTrick &&
-    localPickupCardIds.length === 0 &&
-    !dogLeadAnimation
-  ) {
+  if (!displayedTrick && pickupStageViews.length === 0 && !dogLeadAnimation) {
     return null;
   }
 
@@ -2806,36 +2801,41 @@ export function NormalTrickStagingRegions({
           );
         })}
 
-      {localPickupCardIds.length > 0 && (
-        <div
-          className="normal-pickup-stage"
-          data-pickup-stage={LOCAL_SEAT}
-          style={resolveNormalStageAnchorStyle(normalTableLayout, "bottom")}
-        >
-          <span className="normal-pickup-stage__label">Pickup</span>
-          <div className="normal-pickup-stage__cards">
-            {localPickupCardIds.map((cardId, cardIndex) => (
-              <div
-                key={cardId}
-                className="normal-pickup-stage__card"
-                style={{
-                  transform: `translate(${
-                    cardIndex * -Math.max(12, Math.round(trickCardWidth * 0.24))
-                  }px, ${
-                    cardIndex * -Math.max(6, Math.round(trickCardWidth * 0.1))
-                  }px) rotate(${cardIndex * -4}deg)`,
-                  zIndex: cardIndex + 1
-                }}
-              >
-                <CardFace
-                  card={resolveCard(cardId, cardLookup)}
-                  className="normal-card normal-card--pass"
-                />
-              </div>
-            ))}
+      {pickupStageViews.map((group) => {
+        const fanMetrics = getNormalTrickFanMetrics(group.position, trickCardWidth);
+
+        return (
+          <div
+            key={`pickup-${group.seat}`}
+            className={`normal-pickup-stage normal-pickup-stage--${group.position}`}
+            data-pickup-stage={group.seat}
+            style={resolveNormalStageAnchorStyle(normalTableLayout, group.position)}
+          >
+            <span className="normal-pickup-stage__label">{group.label}</span>
+            <div className="normal-pickup-stage__cards">
+              {group.cardIds.map((cardId, cardIndex) => (
+                <div
+                  key={cardId}
+                  className="normal-pickup-stage__card"
+                  style={{
+                    transform: `translate(${
+                      cardIndex * fanMetrics.cardDx
+                    }px, ${cardIndex * fanMetrics.cardDy}px) rotate(${
+                      cardIndex * fanMetrics.rotationStep
+                    }deg)`,
+                    zIndex: cardIndex + 1
+                  }}
+                >
+                  <CardFace
+                    card={resolveCard(cardId, cardLookup)}
+                    className="normal-card normal-card--pass"
+                  />
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })}
 
       {dogLeadAnimation && (
         <NormalDogLeadTransfer
@@ -5321,7 +5321,7 @@ export function NormalGameTableView(props: GameTableViewProps) {
             layoutMetrics={layoutMetrics}
             displayedTrick={props.displayedTrick}
             seatRelativePlays={props.seatRelativePlays}
-            localPickupCardIds={props.localPickupCardIds}
+            pickupStageViews={props.pickupStageViews}
             dogLeadAnimation={props.dogLeadAnimation}
             cardLookup={props.cardLookup}
           />

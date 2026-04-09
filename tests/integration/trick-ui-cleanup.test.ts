@@ -223,7 +223,7 @@ describe("trick UI cleanup", () => {
           displayedTrick: state.currentTrick,
           trickIsResolving: false,
           seatRelativePlays,
-          localPickupCardIds: [],
+          pickupStageViews: [],
           dogLeadAnimation: null,
           tablePassGroups: [],
           cardLookup: buildCardLookup(trickCards)
@@ -234,7 +234,7 @@ describe("trick UI cleanup", () => {
           layoutMetrics,
           displayedTrick: state.currentTrick,
           seatRelativePlays,
-          localPickupCardIds: [],
+          pickupStageViews: [],
           dogLeadAnimation: null,
           cardLookup: buildCardLookup(trickCards)
         })
@@ -270,7 +270,14 @@ describe("trick UI cleanup", () => {
           layoutMetrics,
           displayedTrick: null,
           seatRelativePlays: [],
-          localPickupCardIds: pickupCards.map((card) => card.id),
+          pickupStageViews: [
+            {
+              seat: "seat-0",
+              position: "bottom",
+              label: "South Pickup",
+              cardIds: pickupCards.map((card) => card.id)
+            }
+          ],
           dogLeadAnimation: null,
           cardLookup: buildCardLookup(pickupCards)
         })
@@ -305,7 +312,7 @@ describe("trick UI cleanup", () => {
           layoutMetrics,
           displayedTrick: null,
           seatRelativePlays: [],
-          localPickupCardIds: [],
+          pickupStageViews: [],
           dogLeadAnimation: { sourceSeat: "seat-0", targetSeat: "seat-2" },
           cardLookup: new Map()
         })

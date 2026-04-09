@@ -9,6 +9,7 @@ import {
 import {
   assignPassCardToDraft,
   areAllExchangeSelectionsSubmitted,
+  deriveExchangeRenderModel,
   findMatchingPlayActions,
   getExchangeFlowState,
   getPassTargetSeat,
@@ -283,6 +284,143 @@ describe("table model helpers", () => {
         activeResponseTurn: true
       })
     ).toBe(false);
+  });
+
+  it("keeps pass-selection cards in exactly one render bucket before reveal", () => {
+    const state = createScenarioState({
+      phase: "pass_select",
+      hands: {
+        "seat-0": cardsFromIds(["jade-2", "jade-3", "jade-4", "jade-5"]),
+        "seat-1": cardsFromIds(["sword-2", "sword-3", "sword-4", "sword-5"]),
+        "seat-2": cardsFromIds(["pagoda-2", "pagoda-3", "pagoda-4", "pagoda-5"]),
+        "seat-3": cardsFromIds(["star-2", "star-3", "star-4", "star-5"])
+      },
+      passSelections: {
+        "seat-1": {
+          left: "sword-2",
+          partner: "sword-3",
+          right: "sword-4"
+        }
+      }
+    });
+
+    const renderModel = deriveExchangeRenderModel({
+      state,
+      localPassDraft: {
+        left: "jade-2",
+        partner: "jade-3"
+      }
+    });
+
+    expect(renderModel.visibleHandsBySeat["seat-0"].map((card) => card.id)).toEqual([
+      "jade-4",
+      "jade-5"
+    ]);
+    expect(renderModel.cardBucketsBySeat["seat-0"].selectedForPass).toEqual([
+      "jade-2",
+      "jade-3"
+    ]);
+    expect(renderModel.visibleHandsBySeat["seat-1"].map((card) => card.id)).toEqual([
+      "sword-5"
+    ]);
+    expect(renderModel.cardBucketsBySeat["seat-1"].selectedForPass).toEqual([
+      "sword-2",
+      "sword-3",
+      "sword-4"
+    ]);
+  });
+
+  it("stages received cards in pickup buckets for every seat until pickup", () => {
+    const state = createScenarioState({
+      phase: "exchange_complete",
+      hands: {
+        "seat-0": cardsFromIds(["jade-5", "sword-2", "pagoda-3", "star-4"]),
+        "seat-1": cardsFromIds(["sword-5", "jade-4", "pagoda-2", "star-3"]),
+        "seat-2": cardsFromIds(["pagoda-5", "jade-3", "sword-4", "star-2"]),
+        "seat-3": cardsFromIds(["star-5", "jade-2", "sword-3", "pagoda-4"])
+      },
+      passSelections: {
+        "seat-0": {
+          left: "jade-2",
+          partner: "jade-3",
+          right: "jade-4"
+        },
+        "seat-1": {
+          left: "sword-2",
+          partner: "sword-3",
+          right: "sword-4"
+        },
+        "seat-2": {
+          left: "pagoda-2",
+          partner: "pagoda-3",
+          right: "pagoda-4"
+        },
+        "seat-3": {
+          left: "star-2",
+          partner: "star-3",
+          right: "star-4"
+        }
+      },
+      revealedPasses: {
+        "seat-0": {
+          left: "jade-2",
+          partner: "jade-3",
+          right: "jade-4"
+        },
+        "seat-1": {
+          left: "sword-2",
+          partner: "sword-3",
+          right: "sword-4"
+        },
+        "seat-2": {
+          left: "pagoda-2",
+          partner: "pagoda-3",
+          right: "pagoda-4"
+        },
+        "seat-3": {
+          left: "star-2",
+          partner: "star-3",
+          right: "star-4"
+        }
+      }
+    });
+
+    const renderModel = deriveExchangeRenderModel({
+      state,
+      receivedCardsVisibleUntilPickup: true
+    });
+
+    expect(renderModel.visibleHandsBySeat["seat-0"].map((card) => card.id)).toEqual([
+      "jade-5"
+    ]);
+    expect(renderModel.receivedPendingPickupBySeat["seat-0"]).toEqual([
+      "star-4",
+      "pagoda-3",
+      "sword-2"
+    ]);
+    expect(renderModel.receivedPendingPickupBySeat["seat-1"]).toEqual([
+      "jade-4",
+      "star-3",
+      "pagoda-2"
+    ]);
+    expect(renderModel.receivedPendingPickupBySeat["seat-2"]).toEqual([
+      "sword-4",
+      "jade-3",
+      "star-2"
+    ]);
+    expect(renderModel.receivedPendingPickupBySeat["seat-3"]).toEqual([
+      "pagoda-4",
+      "sword-3",
+      "jade-2"
+    ]);
+    expect(renderModel.cardBucketsBySeat["seat-0"].receivedPendingPickup).toEqual([
+      "star-4",
+      "pagoda-3",
+      "sword-2"
+    ]);
+    expect(renderModel.cardBucketsBySeat["seat-0"].inHandFinal).toEqual([
+      "jade-5"
+    ]);
   });
 
   it("enables Pass when the local seat cannot beat an active straight", () => {
