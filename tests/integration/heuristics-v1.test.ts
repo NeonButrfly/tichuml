@@ -6,8 +6,10 @@ import {
   getCanonicalCardIdsKey,
   getLegalActions,
   listCombinationInterpretations,
+  STANDARD_RANKS,
   type Combination,
-  type GameState
+  type GameState,
+  type LegalActionMap
 } from "@tichuml/engine";
 import { heuristicsV1Policy } from "@tichuml/ai-heuristics";
 
@@ -186,6 +188,263 @@ describe("heuristics v1", () => {
     expect(passedCardIds).not.toEqual(
       expect.arrayContaining(["dragon", "phoenix", "star-14", "jade-14"])
     );
+  });
+
+  it("avoids passing point cards to opponents when junk exists", () => {
+    const state = scenario({
+      phase: "pass_select",
+      calls: {
+        "seat-0": { grandTichu: false, smallTichu: true, hasPlayedFirstCard: false },
+        "seat-1": { grandTichu: false, smallTichu: false, hasPlayedFirstCard: false },
+        "seat-2": { grandTichu: false, smallTichu: false, hasPlayedFirstCard: false },
+        "seat-3": { grandTichu: false, smallTichu: false, hasPlayedFirstCard: false }
+      },
+      hands: {
+        "seat-0": cardsFromIds([
+          "jade-2",
+          "sword-3",
+          "pagoda-4",
+          "star-6",
+          "jade-5",
+          "sword-10",
+          "pagoda-13",
+          "star-8",
+          "jade-9",
+          "sword-11",
+          "pagoda-12",
+          "star-14",
+          "dragon",
+          "dog"
+        ]),
+        "seat-1": cardsFromIds(["jade-7", "sword-8", "pagoda-9"]),
+        "seat-2": cardsFromIds(["star-7", "jade-8", "sword-9"]),
+        "seat-3": cardsFromIds(["pagoda-7", "star-8", "jade-9"])
+      }
+    });
+
+    const chosen = heuristicsV1Policy.chooseAction({
+      state,
+      legalActions: getLegalActions(state)
+    });
+
+    expect(chosen.action.type).toBe("select_pass");
+    if (chosen.action.type !== "select_pass") {
+      throw new Error("Expected a pass-selection action.");
+    }
+
+    expect([chosen.action.left, chosen.action.right]).not.toEqual(
+      expect.arrayContaining(["jade-5", "sword-10", "pagoda-13"])
+    );
+  });
+
+  it("returns the same decision for identical states", () => {
+    const state = scenario({
+      activeSeat: "seat-0",
+      currentTrick: {
+        leader: "seat-1",
+        currentWinner: "seat-1",
+        currentCombination: combo(["jade-8"]),
+        entries: [{ type: "play", seat: "seat-1", combination: combo(["jade-8"]) }],
+        passingSeats: []
+      },
+      hands: {
+        "seat-0": cardsFromIds(["jade-9", "sword-12", "pagoda-5", "star-5"]),
+        "seat-1": cardsFromIds(["jade-2"]),
+        "seat-2": cardsFromIds(["sword-2"]),
+        "seat-3": cardsFromIds(["star-2"])
+      }
+    });
+    const legalActions = getLegalActions(state);
+
+    const first = heuristicsV1Policy.chooseAction({ state, legalActions });
+    const second = heuristicsV1Policy.chooseAction({ state, legalActions });
+
+    expect(first.action).toEqual(second.action);
+    expect(first.explanation.selectedReasonSummary).toEqual(
+      second.explanation.selectedReasonSummary
+    );
+  });
+
+  it("protects a pair from being broken by a weak single lead when an isolated single exists", () => {
+    const state = scenario({
+      currentTrick: null,
+      hands: {
+        "seat-0": cardsFromIds(["jade-3", "sword-3", "pagoda-5", "star-11"]),
+        "seat-1": cardsFromIds(["jade-2"]),
+        "seat-2": cardsFromIds(["sword-2"]),
+        "seat-3": cardsFromIds(["star-2"])
+      }
+    });
+
+    const chosen = heuristicsV1Policy.chooseAction({
+      state,
+      legalActions: getLegalActions(state)
+    });
+
+    expect(chosen.action.type).toBe("play_cards");
+    if (chosen.action.type !== "play_cards") {
+      throw new Error("Expected a play action.");
+    }
+
+    expect(chosen.action.cardIds).not.toEqual(["jade-3"]);
+    expect(chosen.action.cardIds).not.toEqual(["sword-3"]);
+  });
+
+  it("protects straight potential when a higher isolated single can win instead", () => {
+    const lead = combo(["jade-8"]);
+    const state = scenario({
+      activeSeat: "seat-0",
+      calls: {
+        "seat-0": { grandTichu: false, smallTichu: true, hasPlayedFirstCard: false },
+        "seat-1": { grandTichu: false, smallTichu: false, hasPlayedFirstCard: false },
+        "seat-2": { grandTichu: false, smallTichu: false, hasPlayedFirstCard: false },
+        "seat-3": { grandTichu: false, smallTichu: false, hasPlayedFirstCard: false }
+      },
+      currentTrick: {
+        leader: "seat-1",
+        currentWinner: "seat-1",
+        currentCombination: lead,
+        entries: [{ type: "play", seat: "seat-1", combination: lead }],
+        passingSeats: []
+      },
+      hands: {
+        "seat-0": cardsFromIds([
+          "jade-5",
+          "sword-6",
+          "pagoda-7",
+          "star-8",
+          "star-9",
+          "jade-12"
+        ]),
+        "seat-1": cardsFromIds(["sword-2"]),
+        "seat-2": cardsFromIds(["pagoda-2"]),
+        "seat-3": cardsFromIds(["star-2"])
+      }
+    });
+
+    const chosen = heuristicsV1Policy.chooseAction({
+      state,
+      legalActions: getLegalActions(state)
+    });
+
+    expect(chosen.action).toEqual({
+      type: "play_cards",
+      seat: "seat-0",
+      cardIds: ["jade-12"]
+    });
+  });
+
+  it("chooses a low wish to help a partner Tichu line", () => {
+    const state = scenario({
+      activeSeat: "seat-0",
+      calls: {
+        "seat-0": { grandTichu: false, smallTichu: false, hasPlayedFirstCard: false },
+        "seat-1": { grandTichu: false, smallTichu: false, hasPlayedFirstCard: false },
+        "seat-2": { grandTichu: false, smallTichu: true, hasPlayedFirstCard: false },
+        "seat-3": { grandTichu: false, smallTichu: false, hasPlayedFirstCard: false }
+      },
+      hands: {
+        "seat-0": cardsFromIds(["mahjong", "jade-9", "sword-11", "pagoda-13"]),
+        "seat-1": cardsFromIds(["jade-2"]),
+        "seat-2": cardsFromIds(["sword-2"]),
+        "seat-3": cardsFromIds(["star-2"])
+      }
+    });
+    const legalActions = {
+      system: [],
+      "seat-0": [
+        {
+          type: "play_cards",
+          seat: "seat-0",
+          cardIds: ["mahjong"],
+          combination: combo(["mahjong"]),
+          availableWishRanks: [...STANDARD_RANKS]
+        }
+      ],
+      "seat-1": [],
+      "seat-2": [],
+      "seat-3": []
+    } satisfies LegalActionMap;
+
+    const chosen = heuristicsV1Policy.chooseAction({ state, legalActions });
+
+    expect(chosen.action).toEqual({
+      type: "play_cards",
+      seat: "seat-0",
+      cardIds: ["mahjong"],
+      wishRank: 2
+    });
+  });
+
+  it("chooses a high disruptive wish against an opponent Tichu call", () => {
+    const state = scenario({
+      activeSeat: "seat-0",
+      calls: {
+        "seat-0": { grandTichu: false, smallTichu: false, hasPlayedFirstCard: false },
+        "seat-1": { grandTichu: false, smallTichu: true, hasPlayedFirstCard: false },
+        "seat-2": { grandTichu: false, smallTichu: false, hasPlayedFirstCard: false },
+        "seat-3": { grandTichu: false, smallTichu: false, hasPlayedFirstCard: false }
+      },
+      hands: {
+        "seat-0": cardsFromIds(["mahjong", "jade-5", "sword-7", "pagoda-9"]),
+        "seat-1": cardsFromIds(["jade-2"]),
+        "seat-2": cardsFromIds(["sword-2"]),
+        "seat-3": cardsFromIds(["star-2"])
+      }
+    });
+    const legalActions = {
+      system: [],
+      "seat-0": [
+        {
+          type: "play_cards",
+          seat: "seat-0",
+          cardIds: ["mahjong"],
+          combination: combo(["mahjong"]),
+          availableWishRanks: [...STANDARD_RANKS]
+        }
+      ],
+      "seat-1": [],
+      "seat-2": [],
+      "seat-3": []
+    } satisfies LegalActionMap;
+
+    const chosen = heuristicsV1Policy.chooseAction({ state, legalActions });
+
+    expect(chosen.action).toEqual({
+      type: "play_cards",
+      seat: "seat-0",
+      cardIds: ["mahjong"],
+      wishRank: 14
+    });
+  });
+
+  it("chooses the slower opponent for Dragon gift deterministically", () => {
+    const state = scenario({
+      activeSeat: "seat-0",
+      pendingDragonGift: {
+        winner: "seat-0",
+        trickCards: cardsFromIds(["dragon"]),
+        nextLeader: "seat-2",
+        roundEndsAfterGift: false
+      },
+      hands: {
+        "seat-0": cardsFromIds(["jade-2"]),
+        "seat-1": cardsFromIds(["sword-3", "pagoda-4", "star-5", "jade-6", "sword-7"]),
+        "seat-2": cardsFromIds(["pagoda-8"]),
+        "seat-3": cardsFromIds(["star-9", "jade-10"])
+      }
+    });
+
+    const chosen = heuristicsV1Policy.chooseAction({
+      state,
+      legalActions: getLegalActions(state)
+    });
+
+    expect(chosen.action).toEqual({
+      type: "assign_dragon_trick",
+      seat: "seat-0",
+      recipient: "seat-1"
+    });
   });
 
   it("avoids overtaking partner when the trick is already safe", () => {

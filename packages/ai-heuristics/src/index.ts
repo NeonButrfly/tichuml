@@ -1,6 +1,8 @@
 import {
+  cardsFromIds,
   SEAT_IDS,
   SYSTEM_ACTOR,
+  getCanonicalCardIdsKey,
   getLegalActions,
   getOpponentSeats,
   getPartnerSeat,
@@ -103,16 +105,24 @@ type HandEvaluation = {
   strength: number;
   leadPlayActions: PlayLegalAction[];
   cardMetrics: Map<string, CardPassMetrics>;
+  rankCounts: Map<number, number>;
+  straightProtectedRanks: Set<number>;
   controlCount: number;
   bombCount: number;
   highRankCount: number;
   highClusterCount: number;
   synergyScore: number;
   fragmentation: number;
+  loserCount: number;
   expectedTrickWins: number;
   handSpeed: number;
   tichuViable: boolean;
   protectedCardIds: Set<string>;
+};
+
+type PassScoringContext = {
+  partnerCalled: boolean;
+  selfCalled: boolean;
 };
 
 function isPlayLegalAction(action: LegalAction): action is PlayLegalAction {
@@ -184,6 +194,156 @@ function handStrength(cards: Card[]): number {
   }
 
   return strength;
+}
+
+function isPointCard(card: Card): boolean {
+  if (card.kind === "special") {
+    return card.special === "dragon";
+  }
+
+  return card.rank === 5 || card.rank === 10 || card.rank === 13;
+}
+
+function getStraightProtectedRanks(cards: Card[]): Set<number> {
+  const rankCounts = getRankCounts(cards);
+  const ranks = [...rankCounts.keys()].sort((left, right) => left - right);
+  const protectedRanks = new Set<number>();
+
+  for (let index = 0; index < ranks.length; index += 1) {
+    const start = ranks[index];
+    if (
+      start === undefined ||
+      !rankCounts.has(start + 1) ||
+      !rankCounts.has(start + 2)
+    ) {
+      continue;
+    }
+
+    protectedRanks.add(start);
+    protectedRanks.add(start + 1);
+    protectedRanks.add(start + 2);
+  }
+
+  return protectedRanks;
+}
+
+function hasOpponentCalledTichu(state: GameState, seat: SeatId): boolean {
+  return getOpponentSeats(seat).some(
+    (opponent) =>
+      state.calls[opponent].smallTichu || state.calls[opponent].grandTichu
+  );
+}
+
+function getSeenRankCounts(state: GameState): Map<StandardRank, number> {
+  const counts = new Map<StandardRank, number>();
+  const appendCard = (card: Card) => {
+    if (card.kind !== "standard") {
+      return;
+    }
+
+    counts.set(card.rank, (counts.get(card.rank) ?? 0) + 1);
+  };
+
+  for (const seat of SEAT_IDS) {
+    for (const card of state.collectedCards[seat]) {
+      appendCard(card);
+    }
+  }
+
+  for (const entry of state.currentTrick?.entries ?? []) {
+    if (entry.type !== "play") {
+      continue;
+    }
+
+    for (const card of cardsFromIds(entry.combination.cardIds)) {
+      appendCard(card);
+    }
+  }
+
+  return counts;
+}
+
+function getStructurePenaltyForPlay(
+  hand: Card[],
+  legalAction: PlayLegalAction,
+  handCountAfter: number
+): number {
+  const rankCounts = getRankCounts(hand);
+  const straightProtectedRanks = getStraightProtectedRanks(hand);
+  const endgameScalar =
+    handCountAfter <= 3 ? 0.22 : handCountAfter <= 5 ? 0.48 : 1;
+  const isSingle = legalAction.cardIds.length === 1;
+  let penalty = 0;
+
+  for (const cardId of legalAction.cardIds) {
+    const card = hand.find((candidate) => candidate.id === cardId);
+    if (!card) {
+      continue;
+    }
+
+    const inProtectedStraight =
+      card.kind === "standard" && straightProtectedRanks.has(card.rank);
+    const rankCount =
+      card.kind === "standard" ? rankCounts.get(card.rank) ?? 1 : 1;
+
+    if (isSingle) {
+      if (rankCount >= 3) {
+        penalty += 28;
+      } else if (rankCount === 2) {
+        penalty += 18;
+      }
+
+      if (inProtectedStraight) {
+        penalty += 20;
+      }
+      if (
+        card.kind === "standard" &&
+        (rankCounts.has(card.rank - 1) || rankCounts.has(card.rank + 1))
+      ) {
+        penalty += 10;
+      }
+      if (card.kind === "special" && card.special === "mahjong") {
+        penalty += 6;
+      }
+    } else {
+      if (rankCount >= 2) {
+        penalty += 3;
+      }
+
+      if (inProtectedStraight) {
+        penalty += 2.5;
+      }
+    }
+  }
+
+  return penalty * endgameScalar;
+}
+
+function getConcreteActionSortKey(action: EngineAction): string {
+  switch (action.type) {
+    case "play_cards":
+      return [
+        action.type,
+        action.seat,
+        getCanonicalCardIdsKey(action.cardIds),
+        action.phoenixAsRank ?? "",
+        action.wishRank ?? ""
+      ].join("|");
+    case "select_pass":
+      return [
+        action.type,
+        action.seat,
+        action.left,
+        action.partner,
+        action.right
+      ].join("|");
+    case "assign_dragon_trick":
+      return [action.type, action.seat, action.recipient].join("|");
+    case "advance_phase":
+      return [action.type, action.actor].join("|");
+    default:
+      return [action.type, "seat" in action ? action.seat : ""].join("|");
+  }
 }
 
 function cloneStateForLeadAnalysis(state: GameState): GameState {
@@ -263,6 +423,7 @@ function buildHandEvaluation(state: GameState, seat: SeatId): HandEvaluation {
   const cards = [...state.hands[seat]];
   const leadPlayActions = getLeadPlayActions(state, seat);
   const rankCounts = getRankCounts(cards);
+  const straightProtectedRanks = getStraightProtectedRanks(cards);
   const highRankCount = cards.filter(
     (card) => card.kind === "standard" && card.rank >= 13
   ).length;
@@ -355,6 +516,14 @@ function buildHandEvaluation(state: GameState, seat: SeatId): HandEvaluation {
       !metric.isControl &&
       !metric.isDog
   ).length;
+  const loserCount = [...cardMetrics.values()].filter(
+    (metric) =>
+      metric.card.kind === "standard" &&
+      metric.card.rank <= 9 &&
+      metric.rankCount === 1 &&
+      metric.neighborCount === 0 &&
+      metric.comboCount <= 1
+  ).length;
   const handSpeed =
     [...cardMetrics.values()].reduce(
       (score, metric) => score + metric.maxComboSize,
@@ -413,12 +582,15 @@ function buildHandEvaluation(state: GameState, seat: SeatId): HandEvaluation {
     strength: handStrength(cards),
     leadPlayActions,
     cardMetrics,
+    rankCounts,
+    straightProtectedRanks,
     controlCount,
     bombCount,
     highRankCount,
     highClusterCount,
     synergyScore,
     fragmentation,
+    loserCount,
     expectedTrickWins,
     handSpeed,
     tichuViable,
@@ -428,12 +600,13 @@ function buildHandEvaluation(state: GameState, seat: SeatId): HandEvaluation {
 
 function scoreCardForOpponentPass(
   analysis: HandEvaluation,
-  metric: CardPassMetrics
+  metric: CardPassMetrics,
+  context: PassScoringContext
 ): number {
   let score = 0;
 
-  if (metric.isDog && analysis.tichuViable) {
-    score += 500;
+  if (metric.isDog && analysis.tichuViable && !context.selfCalled) {
+    score += 320;
   }
 
   if (metric.card.kind === "standard") {
@@ -459,6 +632,16 @@ function scoreCardForOpponentPass(
   if (metric.pairLikeCount === 0 && metric.straightLikeCount === 0) {
     score += 56;
   }
+  if (isPointCard(metric.card)) {
+    score -= 95;
+  }
+
+  if (context.selfCalled) {
+    score -= metric.supportScore * 1.25;
+    if (metric.isDog) {
+      score -= 180;
+    }
+  }
 
   if (analysis.protectedCardIds.has(metric.card.id)) {
     score -= 2000;
@@ -475,14 +658,15 @@ function scoreCardForOpponentPass(
 
 function scoreCardForPartnerPass(
   analysis: HandEvaluation,
-  metric: CardPassMetrics
+  metric: CardPassMetrics,
+  context: PassScoringContext
 ): number {
   let score = 0;
 
   if (metric.card.kind === "standard") {
     if (metric.card.rank >= 7 && metric.card.rank <= 10) {
       score += 90;
-    } else if (metric.card.rank >= 11 && !analysis.tichuViable) {
+    } else if (metric.card.rank >= 11 && !analysis.tichuViable && !context.selfCalled) {
       score += 34;
     } else if (metric.card.rank <= 4) {
       score -= 44;
@@ -499,6 +683,18 @@ function scoreCardForPartnerPass(
   if (metric.comboCount <= 1) {
     score -= 32;
   }
+  if (context.partnerCalled) {
+    score += metric.supportScore * 0.85;
+    if (metric.card.kind === "standard" && metric.card.rank >= 9) {
+      score += 28;
+    }
+  }
+  if (context.selfCalled) {
+    score -= metric.supportScore * 1.1;
+    if (metric.card.kind === "standard" && metric.card.rank >= 11) {
+      score -= 42;
+    }
+  }
 
   if (analysis.protectedCardIds.has(metric.card.id)) {
     score -= 1800;
@@ -514,42 +710,92 @@ function scoreCardForPartnerPass(
 }
 
 function chooseWishRank(state: GameState, seat: SeatId, selectedCardIds: string[]): StandardRank {
-  const remainingRanks = state.hands[seat]
-    .filter(
-      (card): card is Extract<(typeof state.hands)[SeatId][number], { kind: "standard" }> =>
-        !selectedCardIds.includes(card.id) && card.kind === "standard"
-    )
-    .map((card) => card.rank);
+  const remainingRanks = state.hands[seat].filter(
+    (
+      card
+    ): card is Extract<(typeof state.hands)[SeatId][number], { kind: "standard" }> =>
+      !selectedCardIds.includes(card.id) && card.kind === "standard"
+  );
+  const remainingCounts = new Map<StandardRank, number>();
+  const seenCounts = getSeenRankCounts(state);
+  const partnerCalled = partnerHasCalledTichu(state, seat);
+  const opponentCalled = hasOpponentCalledTichu(state, seat);
 
-  if (remainingRanks.length === 0) {
+  if (partnerCalled && !opponentCalled) {
+    return 2;
+  }
+
+  if (opponentCalled && !partnerCalled) {
     return 14;
   }
 
-  const counts = new Map<StandardRank, number>();
-  for (const rank of remainingRanks) {
-    counts.set(rank, (counts.get(rank) ?? 0) + 1);
+  for (const card of remainingRanks) {
+    remainingCounts.set(card.rank, (remainingCounts.get(card.rank) ?? 0) + 1);
   }
 
-  return [...counts.entries()].sort((left, right) => {
-    if (right[1] !== left[1]) {
-      return right[1] - left[1];
-    }
+  const ranked = [...Array.from({ length: 13 }, (_, index) => (index + 2) as StandardRank)]
+    .map((rank) => {
+      const seen = seenCounts.get(rank) ?? 0;
+      const held = remainingCounts.get(rank) ?? 0;
+      const remaining = Math.max(0, 4 - seen - held);
+      let score = remaining * 12;
 
-    return right[0] - left[0];
-  })[0]![0];
+      if (held >= 2) {
+        score -= 12;
+      } else if (held === 1) {
+        score += 3;
+      }
+
+      if (rank >= 6 && rank <= 12) {
+        score += 1;
+      }
+
+      if (opponentCalled && !partnerCalled && rank >= 11) {
+        score += 8;
+      }
+
+      if (partnerCalled && rank <= 5) {
+        score += 7;
+      }
+
+      return { rank, score, held, remaining };
+    })
+    .sort((left, right) => {
+      if (right.score !== left.score) {
+        return right.score - left.score;
+      }
+
+      if (right.remaining !== left.remaining) {
+        return right.remaining - left.remaining;
+      }
+
+      if (partnerCalled && !opponentCalled) {
+        return left.rank - right.rank;
+      }
+
+      return right.rank - left.rank;
+    });
+
+  return ranked[0]?.rank ?? 14;
 }
 
 function createPassSelectionAction(state: GameState, seat: SeatId): EngineAction {
   const available = [...state.hands[seat]];
   const analysis = buildHandEvaluation(state, seat);
+  const context: PassScoringContext = {
+    partnerCalled: partnerHasCalledTichu(state, seat),
+    selfCalled: state.calls[seat].smallTichu || state.calls[seat].grandTichu
+  };
   const byOpponentPriority = [...available].sort((left, right) => {
     const leftScore = scoreCardForOpponentPass(
       analysis,
-      analysis.cardMetrics.get(left.id)!
+      analysis.cardMetrics.get(left.id)!,
+      context
     );
     const rightScore = scoreCardForOpponentPass(
       analysis,
-      analysis.cardMetrics.get(right.id)!
+      analysis.cardMetrics.get(right.id)!,
+      context
     );
     if (rightScore !== leftScore) {
       return rightScore - leftScore;
@@ -570,11 +816,13 @@ function createPassSelectionAction(state: GameState, seat: SeatId): EngineAction
   const partner = [...remainingForPartner].sort((leftCard, rightCard) => {
     const leftScore = scoreCardForPartnerPass(
       analysis,
-      analysis.cardMetrics.get(leftCard.id)!
+      analysis.cardMetrics.get(leftCard.id)!,
+      context
     );
     const rightScore = scoreCardForPartnerPass(
       analysis,
-      analysis.cardMetrics.get(rightCard.id)!
+      analysis.cardMetrics.get(rightCard.id)!,
+      context
     );
     if (rightScore !== leftScore) {
       return rightScore - leftScore;
@@ -782,12 +1030,17 @@ function combinationKindBonus(action: PlayLegalAction): number {
 
 function scoreGrandTichu(state: GameState, seat: SeatId, action: EngineAction): CandidateDecision {
   const analysis = buildHandEvaluation(state, seat);
+  const hasMahjong = state.hands[seat].some(
+    (card) => card.kind === "special" && card.special === "mahjong"
+  );
   const confidence =
     analysis.expectedTrickWins * 92 +
     analysis.synergyScore * 8 +
     analysis.controlCount * 78 +
     analysis.bombCount * 118 -
-    analysis.fragmentation * 42;
+    analysis.fragmentation * 42 -
+    analysis.loserCount * 16 +
+    (hasMahjong ? 18 : 0);
   const shouldCall =
     state.hands[seat].length === 8 &&
     analysis.tichuViable &&
@@ -795,6 +1048,7 @@ function scoreGrandTichu(state: GameState, seat: SeatId, action: EngineAction): 
       analysis.bombCount > 0 ||
       analysis.highClusterCount >= 2 ||
       analysis.highRankCount >= 5) &&
+    analysis.loserCount <= 2 &&
     confidence >= 620;
 
   if (action.type === "call_grand_tichu") {
@@ -825,15 +1079,21 @@ function scoreGrandTichu(state: GameState, seat: SeatId, action: EngineAction): 
 
 function scoreTichu(state: GameState, seat: SeatId, action: EngineAction): CandidateDecision {
   const analysis = buildHandEvaluation(state, seat);
+  const hasMahjong = state.hands[seat].some(
+    (card) => card.kind === "special" && card.special === "mahjong"
+  );
   const confidence =
     analysis.expectedTrickWins * 78 +
     analysis.synergyScore * 6 +
     analysis.controlCount * 64 +
     analysis.bombCount * 96 -
     analysis.fragmentation * 34 -
-    state.hands[seat].length * 2;
+    state.hands[seat].length * 2 -
+    analysis.loserCount * 14 +
+    (hasMahjong ? 12 : 0);
   const shouldCall =
     analysis.tichuViable &&
+    analysis.loserCount <= 4 &&
     ((state.hands[seat].length <= 14 && confidence >= 520) ||
       (state.hands[seat].length <= 10 && confidence >= 440) ||
       (state.hands[seat].length <= 6 && confidence >= 340));
@@ -891,11 +1151,27 @@ function scorePassSelection(state: GameState, seat: SeatId, action: EngineAction
   }
 
   const analysis = buildHandEvaluation(state, seat);
+  const context: PassScoringContext = {
+    partnerCalled: partnerHasCalledTichu(state, seat),
+    selfCalled: state.calls[seat].smallTichu || state.calls[seat].grandTichu
+  };
   const score =
     320 +
-    scoreCardForPartnerPass(analysis, analysis.cardMetrics.get(partnerCard.id)!) +
-    scoreCardForOpponentPass(analysis, analysis.cardMetrics.get(leftCard.id)!) +
-    scoreCardForOpponentPass(analysis, analysis.cardMetrics.get(rightCard.id)!);
+    scoreCardForPartnerPass(
+      analysis,
+      analysis.cardMetrics.get(partnerCard.id)!,
+      context
+    ) +
+    scoreCardForOpponentPass(
+      analysis,
+      analysis.cardMetrics.get(leftCard.id)!,
+      context
+    ) +
+    scoreCardForOpponentPass(
+      analysis,
+      analysis.cardMetrics.get(rightCard.id)!,
+      context
+    );
 
   return {
     actor: seat,
@@ -903,10 +1179,12 @@ function scorePassSelection(state: GameState, seat: SeatId, action: EngineAction
     score,
     tags: [],
     reasons: [
-      analysis.tichuViable
-        ? "protects Tichu-grade control and combo pieces while bleeding weak cards away"
+      context.selfCalled || analysis.tichuViable
+        ? "protects Tichu-grade control, structure, and point cards while bleeding weak cards away"
         : "keeps higher-value combo pieces while distributing weaker cards",
-      "partner lane prioritizes useful connectors over premium control cards"
+      context.partnerCalled
+        ? "partner lane feeds useful structure because partner already has an active Tichu line"
+        : "partner lane prioritizes useful connectors over premium control cards"
     ]
   };
 }
@@ -918,19 +1196,32 @@ function scorePlayAction(
   action: EngineAction
 ): CandidateDecision {
   const state = ctx.state;
+  const ownHand = state.hands[actor];
   const handCountAfter = state.hands[actor].length - legalAction.cardIds.length;
   const opponentThreat = minOpponentCards(state, actor);
   const partnerWinning = currentWinnerIsPartner(state, actor);
   const opponentWinning =
     state.currentTrick !== null && getTeamForSeat(state.currentTrick.currentWinner) !== getTeamForSeat(actor);
+  const partnerCardCount = state.hands[getPartnerSeat(actor)].length;
   const selfTichuCalled =
     state.calls[actor].smallTichu || state.calls[actor].grandTichu;
+  const partnerTichuActive = partnerHasCalledTichu(state, actor);
   const reasons: string[] = [];
   const tags: PolicyTag[] = [];
   let score = 260;
+  const structurePenalty = getStructurePenaltyForPlay(
+    ownHand,
+    legalAction,
+    handCountAfter
+  );
 
   score += legalAction.cardIds.length * 36;
   score += combinationKindBonus(legalAction);
+  score -= structurePenalty;
+
+  if (structurePenalty > 0) {
+    reasons.push("preserves pairs, triples, and straight potential unless urgency justifies the damage");
+  }
 
   if (handCountAfter === 0) {
     score += 1000;
@@ -968,13 +1259,33 @@ function scorePlayAction(
       reasons.push("Mahjong lead preserves initiative and sets a wish");
     }
 
-    if (legalAction.combination.kind === "dog" && state.hands[getPartnerSeat(actor)].length > 0) {
-      score += 140;
-      reasons.push("Dog safely hands the lead to partner");
+    if (legalAction.combination.kind === "dog" && partnerCardCount > 0) {
+      const justifiedDogLead =
+        partnerTichuActive ||
+        selfTichuCalled ||
+        handCountAfter <= 3 ||
+        partnerCardCount <= 3 ||
+        opponentThreat <= 2;
+
+      score += justifiedDogLead ? 96 : -80;
+      reasons.push(
+        justifiedDogLead
+          ? "Dog lead is justified by partner support or endgame urgency"
+          : "Dog lead is deferred until partner support or endgame urgency matters"
+      );
     }
 
     score += Math.max(0, 15 - legalAction.combination.primaryRank);
     reasons.push("leading with a cheaper legal combination preserves higher control cards");
+
+    if (
+      legalAction.cardIds.length >= 4 &&
+      !legalAction.combination.isBomb &&
+      handCountAfter > 0
+    ) {
+      score += 34;
+      reasons.push("clean multi-card shedding improves hand shape on the lead");
+    }
   } else {
     if (partnerWinning) {
       score -= 520;
@@ -1001,9 +1312,7 @@ function scorePlayAction(
     reasons.push("prefers efficient beats over unnecessarily expensive overtakes");
   }
 
-  const partnerTichuActive = partnerHasCalledTichu(state, actor);
   const partnerTichuStillLive = partnerStillLiveForTichu(state, actor);
-  const partnerCardCount = state.hands[getPartnerSeat(actor)].length;
   const opponentImmediateWinRisk = hasOpponentImmediateWinRisk(state, actor);
   const partnerCurrentControl = partnerWinning;
   const partnerCannotRetainLead =
@@ -1082,6 +1391,14 @@ function scorePlayAction(
           unjustifiedPartnerBomb: bombsPartner && !teamSalvageIntervention
         })
       : undefined;
+
+  if (
+    state.currentWish !== null &&
+    legalAction.combination.actualRanks.includes(state.currentWish)
+  ) {
+    score += 90;
+    reasons.push("wish-satisfying plays are preferred when multiple legal lines exist");
+  }
 
   if (legalAction.cardIds.includes("dragon") && handCountAfter > 0) {
     score -= 130;
@@ -1259,7 +1576,9 @@ function collectCandidates(ctx: HeadlessDecisionContext): CandidateDecision[] {
       return right.score - left.score;
     }
 
-    return JSON.stringify(left.action).localeCompare(JSON.stringify(right.action));
+    return getConcreteActionSortKey(left.action).localeCompare(
+      getConcreteActionSortKey(right.action)
+    );
   });
 }
 

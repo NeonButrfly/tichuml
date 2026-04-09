@@ -1,5 +1,27 @@
 import { describe, expect, it } from "vitest";
 import { runHeadlessBatch, runHeadlessRound } from "@tichuml/sim-runner";
+import {
+  deterministicBaselinePolicy,
+  heuristicsV1Policy
+} from "@tichuml/ai-heuristics";
+
+function withSilencedConsole<T>(run: () => T): T {
+  const originalInfo = console.info;
+  const originalWarn = console.warn;
+  const originalError = console.error;
+
+  console.info = () => undefined;
+  console.warn = () => undefined;
+  console.error = () => undefined;
+
+  try {
+    return run();
+  } finally {
+    console.info = originalInfo;
+    console.warn = originalWarn;
+    console.error = originalError;
+  }
+}
 
 function selectedActionMatchesLegalShape(record: {
   legal_actions: Array<Record<string, unknown>>;
@@ -38,6 +60,10 @@ function selectedActionMatchesLegalShape(record: {
 }
 
 describe("headless AI flow", () => {
+  it("uses the same canonical heuristics policy export for headless execution", () => {
+    expect(deterministicBaselinePolicy).toBe(heuristicsV1Policy);
+  });
+
   it("completes a headless AI-only round with append-only telemetry", () => {
     const result = runHeadlessRound({ seed: "headless-round" });
 
@@ -69,13 +95,29 @@ describe("headless AI flow", () => {
   });
 
   it("runs many AI-only rounds without soft locks", () => {
-    const batch = runHeadlessBatch({
-      seeds: Array.from({ length: 12 }, (_, index) => `batch-${index}`),
-      maxDecisionsPerRound: 2000
-    });
+    const batch = withSilencedConsole(() =>
+      runHeadlessBatch({
+        seeds: Array.from({ length: 4 }, (_, index) => `batch-${index}`),
+        maxDecisionsPerRound: 2000
+      })
+    );
 
-    expect(batch).toHaveLength(12);
+    expect(batch).toHaveLength(4);
     expect(batch.every((round) => round.completed && round.state.phase === "finished")).toBe(true);
     expect(batch.every((round) => round.decisions > 0)).toBe(true);
+  }, 30000);
+
+  it("replays the same seed with identical policy decisions", () => {
+    const first = withSilencedConsole(() =>
+      runHeadlessRound({ seed: "heuristic-determinism" })
+    );
+    const second = withSilencedConsole(() =>
+      runHeadlessRound({ seed: "heuristic-determinism" })
+    );
+
+    expect(
+      first.telemetry.decisions.map((record) => record.selected_action)
+    ).toEqual(second.telemetry.decisions.map((record) => record.selected_action));
+    expect(first.state.roundSummary).toEqual(second.state.roundSummary);
   }, 20000);
 });

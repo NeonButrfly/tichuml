@@ -3,7 +3,7 @@
 TichuML is organized around a few strict boundaries:
 
 - `packages/engine` is authoritative for legality, phase flow, trick resolution, scoring, and deterministic shuffle behavior.
-- `packages/ai-heuristics` chooses actions from engine-provided legal actions and emits structured explanation output.
+- `packages/ai-heuristics` is the single canonical deterministic bot brain; it chooses actions from engine-provided legal actions and emits structured explanation output for both the web app and the simulator.
 - `packages/telemetry` records append-only decision and event data for replay, debugging, and analysis.
 - `apps/web` renders phase-aware UI, local interaction, dialogs, and editor tooling without becoming the rules authority.
 - `apps/server` owns live entropy collection and returns normalized seed-generation results to the client.
@@ -19,6 +19,8 @@ TichuML is organized around a few strict boundaries:
 ## Stable Invariants
 
 - The engine remains authoritative for rules and transitions.
+- The active bot path remains deterministic, legality-filtered, and shared between the web client and the simulator.
+- Legacy ML / inference tooling is not part of the active bot decision path.
 - The frontend remains phase-aware, not legality-authoritative.
 - Entropy collection happens before a game starts, never during shuffle or mid-round.
 - Replay determinism depends on stored seed plus deterministic engine transitions.

@@ -58,7 +58,7 @@ npm run db:migrate
 
 ## Milestone Snapshot
 
-The current repository head is Milestone `6.1.5`. The canonical milestone plan still lives in [SPEC](./spec.md), while the normalized repository history and recommended commit naming convention now live in [docs/milestones/README.md](./docs/milestones/README.md).
+The current repository head is Milestone `6.2`. The canonical milestone plan still lives in [SPEC](./spec.md), while the normalized repository history and recommended commit naming convention now live in [docs/milestones/README.md](./docs/milestones/README.md).
 
 When making new milestone commits, prefer:
 
@@ -69,7 +69,7 @@ Milestone <id>: <short scope summary>
 Example:
 
 ```text
-Milestone 6.1.5: harden pass staging and AI hand evaluation
+Milestone 6.2: port deterministic heuristics brain
 ```
 
 Use the commit body for:
@@ -78,7 +78,13 @@ Use the commit body for:
 - key engine/UI/server changes
 - tests and validation
 
-Milestone 6.1.5 currently targets:
+Milestone 6.2 currently targets:
+
+- one canonical deterministic heuristics policy shared by the web client and simulator
+- stronger hand-structure-aware play selection, passing, wish choice, Dragon gifting, and Tichu / Grand Tichu evaluation
+- explicit exclusion of legacy ML inference tooling from the active bot path
+
+Milestone 6.1.5 still targets:
 
 - shared exchange render buckets so pass-selection, in-transit, and pickup cards stay in exactly one visible state
 - pickup staging for all seats during the explicit Pickup step, without leaking cards into hands early
