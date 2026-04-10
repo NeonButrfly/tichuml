@@ -1,15 +1,16 @@
-# Local Issues
+# Issues
 
-Use this folder as the local issue tracker for repositories that do not have a hosted issue system configured.
+Issues are now tracked natively in GitHub.
 
-## Naming
+- Issues: https://github.com/NeonButrfly/tichuml/issues
 
-- Use `LOCAL-###-short-slug.md`
-- Keep titles aligned with the bug or task summary
-- Reference the local issue id in commit messages and PR descriptions when a fix lands
+Use GitHub issues for all bugs, regressions, and task tracking.
+Local markdown files are no longer a live issue tracker.
 
-## Current Issues
+## Canonical historical mappings
 
-- [LOCAL-001](./LOCAL-001-response-legality-deadlock.md) - response legality deadlock on combo turns (`resolved in working tree`)
-- [LOCAL-002](./LOCAL-002-ui-trick-display-and-play-area-cleanup.md) - trick display and play-area cleanup (`resolved in working tree`)
-- [LOCAL-003](./LOCAL-003-straight-regression-and-play-area-shadow.md) - straight-response regression and gameplay play-area shadow (`resolved in working tree`)
+- `LOCAL-001` -> GitHub issue [#1](https://github.com/NeonButrfly/tichuml/issues/1), closed in milestone `6.1.1`
+- `LOCAL-002` -> GitHub issue [#2](https://github.com/NeonButrfly/tichuml/issues/2), closed in milestone `6.1.2`
+- `LOCAL-003` -> GitHub issue [#3](https://github.com/NeonButrfly/tichuml/issues/3), closed in milestone `6.1.3`
+
+The archived markdown snapshots in [../issues-archived](../issues-archived/README.md) are preserved only as migration evidence. They are not authoritative for current state, issue status, or milestone assignment.

@@ -1,135 +1,35 @@
 # Milestones
 
-This document is the canonical reference for milestone naming, milestone history, and future commit-subject formatting.
+Milestones are now tracked natively in GitHub.
 
-## Why This Exists
+- Milestones: https://github.com/NeonButrfly/tichuml/milestones
+- Issues: https://github.com/NeonButrfly/tichuml/issues
 
-The repository started with clean milestone labels, but later commit subjects drifted into mixed formats such as `Milestone 5.9`, `4.6 addition of table editor`, and `ms 4.61 small gui fixes`. The current branch history has now been normalized so planning, documentation, and future commits stay aligned.
+Use GitHub milestones for version/release buckets.
+Use GitHub issues for bugs, regressions, and implementation tasks.
 
-## Canonical Milestone Plan
+## Current authoritative milestone set
 
-These milestone bands remain the source-of-truth plan from [SPEC](../../spec.md):
+The GitHub milestones are the only live milestone tracker.
 
-- `0` - foundation and monorepo scaffold
-- `1` - deterministic engine core
-- `2` - headless playable game and telemetry baseline
-- `3` - heuristics v1
-- `4` - mature web UI
-- `5` - match orchestration and gameplay hardening
-- `6` - replay, debug, and developer inspection tools
-- `7` - simulation harness and bulk analysis
-- `8` - polish and production-readiness
+- Historical imported release buckets retained for commit-history continuity: `0` through `5.1.3`
+- Historical checkpoint bucket retained as a release marker: `5.9`
+- Historical verified milestones with backfilled issue coverage: `6.0`, `6.1`, `6.1.1`, `6.1.2`, `6.1.3`, `6.1.4`, `6.1.5`, `6.2`, `6.3`
 
-Sub-milestones such as `4.5`, `4.6`, `5.1.3`, and `5.9` are acceptable when a bounded stream needs more than one commit or iteration. Bugfix follow-ups may use a third revision segment such as `6.1.1` when they are clearly scoped corrective work on top of an already-cut milestone.
+Recent milestone-to-issue mapping:
 
-## Normalized Repository History
+- `6.0` -> issues [#7](https://github.com/NeonButrfly/tichuml/issues/7), [#8](https://github.com/NeonButrfly/tichuml/issues/8), [#9](https://github.com/NeonButrfly/tichuml/issues/9)
+- `6.1` -> issue [#10](https://github.com/NeonButrfly/tichuml/issues/10)
+- `6.1.1` -> issue [#1](https://github.com/NeonButrfly/tichuml/issues/1)
+- `6.1.2` -> issue [#2](https://github.com/NeonButrfly/tichuml/issues/2)
+- `6.1.3` -> issue [#3](https://github.com/NeonButrfly/tichuml/issues/3)
+- `6.1.4` -> issue [#11](https://github.com/NeonButrfly/tichuml/issues/11)
+- `6.1.5` -> issue [#12](https://github.com/NeonButrfly/tichuml/issues/12)
+- `6.2` -> issue [#13](https://github.com/NeonButrfly/tichuml/issues/13)
+- `6.3` -> issue [#14](https://github.com/NeonButrfly/tichuml/issues/14)
 
-The table below reflects the normalized git history up through the Milestone `5.9` checkpoint. The current repository head is Milestone `6.1.3`, described in the snapshot section below.
+## Commit naming
 
-| Commit | Normalized subject |
-| --- | --- |
-| `1c86753` | `Milestone 0: foundation scaffold` |
-| `321afd0` | `Milestone 1: engine core` |
-| `0bfc917` | `Milestone 1: engine core follow-up` |
-| `c1115e6` | `Milestone 2: headless AI flow` |
-| `c5e5690` | `Milestone 3: heuristics v1` |
-| `ce19720` | `Milestone 4: mature web UI baseline` |
-| `e51ee67` | `Milestone 4.5: table layout refinement` |
-| `4cba36d` | `Milestone 4.5.3: visual layout refinement` |
-| `957010f` | `Milestone 4.5.4: anchor pass staging and rotate side hands` |
-| `e9b0373` | `Milestone 4.6: add table editor` |
-| `52f442a` | `Milestone 4.6.1: persist updated layout to layout.xml` |
-| `a559d25` | `Milestone 4.6.2: small UI fixes` |
-| `fd334e9` | `Milestone 5.1.3: gameplay-flow corrections` |
-| `aab58a8` | `Milestone 5.9: entropy and runtime hardening checkpoint` |
+Use:
 
-## Current Milestone Head
-
-Milestone `6.1.3` is the current repository-head milestone. Its scope is:
-
-- `LOCAL-003` straight-response regression and gameplay play-area shadow fix
-- gameplay-only removal of the center felt/shadow layer while preserving the editor visual aid
-- hardened active-response progression so live straight turns always resolve to a play or a pass
-
-Milestone `6.1.2` remains the prior repository-head milestone. Its scope is:
-
-- `LOCAL-002` trick-display and play-area cleanup
-- normalized north-stage repositioning to keep the top trick area clear of header text
-- central trick-point display plus gameplay-only removal of the play-area inset shadow
-
-Milestone `6.1.1` remains the earlier repository-head milestone. Its scope is:
-
-- `LOCAL-001` combo-response legality deadlock audit and fix
-- shared rank-first combo normalization across engine legality, selection matching, and concrete play validation
-- regression coverage across single, pair, trio, full house, straight, pair sequence, and bomb response families
-
-Milestone `6.1` remains the earlier repository-head milestone. Its scope was:
-
-- centralized turn-action availability for the local player UI
-- protection against the illegal Tichu-only progression state
-- regression coverage for straight-response and wish-fallback pass/play legality
-
-Milestone `6.0` remains the earlier repository-head milestone. Its scope was:
-
-- production-ready entropy orchestration with deterministic shuffle integration
-- Random Sources inspection UI and related seed provenance/debug surfaces
-- exchange/pickup and cumulative-score flow corrections
-- Mahjong wish hard-rule enforcement plus engine no-stall safeguards
-
-When a future milestone supersedes `6.1.3`, append its normalized subject to the history table and move the scope summary forward.
-
-## Commit Subject Convention
-
-Use a single subject style for new milestone commits:
-
-```text
 Milestone <id>: <short scope summary>
-```
-
-Examples:
-
-- `Milestone 5.1.5: fix pickup flow and cumulative scoring`
-- `Milestone 6.0: add multi-source entropy inspection dialog`
-- `Milestone 6.1.1: audit combo response legality`
-- `Milestone 6.1.2: clean up trick UI and play area visuals`
-- `Milestone 6.1.3: fix straight-response regression and gameplay play-area shadow`
-
-Avoid:
-
-- bare milestone numbers with no scope
-- inconsistent shorthand such as `ms 4.61`
-- commit subjects that hide milestone ownership entirely
-
-## Commit Body Convention
-
-For milestone commits, prefer a short body with:
-
-1. `Why` - the regression, capability gap, or milestone goal
-2. `Changes` - the main engine/UI/server/doc updates
-3. `Tests` - the validation commands or suites that passed
-
-Example:
-
-```text
-Milestone 6.0: add multi-source entropy inspection dialog
-
-Why:
-- make entropy provenance inspectable without weakening deterministic shuffle
-
-Changes:
-- move live entropy collection to the server
-- add normalized source combining and audit hashes
-- add Random Sources menu item and modal
-
-Tests:
-- npx vitest run tests/integration/seed-orchestrator.test.ts tests/integration/entropy-dialog.test.ts
-- npm run build:web
-- npm run build:server
-```
-
-## Contributor Rules
-
-- Do not rewrite old milestone commits unless the branch is explicitly being history-cleaned.
-- Keep one milestone or one tightly-related sub-milestone per commit where practical.
-- If a task spans multiple subsystems, keep the milestone id stable across the branch, PR title, and commit subject.
-- Update the relevant docs when a milestone materially changes scope.

@@ -1,15 +1,24 @@
 # LOCAL-003
 
+Legacy local issue note archived after migration to GitHub.
+
+- GitHub issue: [#3](https://github.com/NeonButrfly/tichuml/issues/3)
+- GitHub state: `Closed`
+- GitHub milestone: `6.1.3`
+- Fix evidence: commit `a77c557` (`[MILESTONE 6.1.3] Fix straight-response regression and gameplay play-area shadow (LOCAL-003)`)
+
+The remainder of this file is the original local note and is kept only for historical context.
+
 ## Title
 
 [BUG] Straight-response regression and gameplay play-area shadow
 
-## Status
+## Historical Local Status
 
 - `Resolved in working tree`
 - Created: `2026-04-06`
 - Priority: `Critical`
-- Milestone target: `6.1.3`
+- Historical milestone target: `6.1.3`
 
 ## Summary
 

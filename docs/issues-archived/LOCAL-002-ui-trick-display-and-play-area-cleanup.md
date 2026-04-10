@@ -1,15 +1,24 @@
 # LOCAL-002
 
+Legacy local issue note archived after migration to GitHub.
+
+- GitHub issue: [#2](https://github.com/NeonButrfly/tichuml/issues/2)
+- GitHub state: `Closed`
+- GitHub milestone: `6.1.2`
+- Fix evidence: commit `c48c7da` (`[MILESTONE 6.1.2] Clean up trick UI and play area visuals (LOCAL-002)`)
+
+The remainder of this file is the original local note and is kept only for historical context.
+
 ## Title
 
 [BUG] Trick display cleanup and play-area visual polish
 
-## Status
+## Historical Local Status
 
 - `Resolved in working tree`
 - Created: `2026-04-06`
 - Priority: `High`
-- Milestone target: `6.1.2`
+- Historical milestone target: `6.1.2`
 
 ## Summary
 

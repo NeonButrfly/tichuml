@@ -1,15 +1,24 @@
 # LOCAL-001
 
+Legacy local issue note archived after migration to GitHub.
+
+- GitHub issue: [#1](https://github.com/NeonButrfly/tichuml/issues/1)
+- GitHub state: `Closed`
+- GitHub milestone: `6.1.1`
+- Fix evidence: commit `2e93f9a` (`Milestone 6.1.1: audit combo response legality`)
+
+The remainder of this file is the original local note and is kept only for historical context.
+
 ## Title
 
 [BUG] Response legality deadlock on combo turns; straights confirmed, audit all combo types
 
-## Status
+## Historical Local Status
 
 - `Resolved in working tree`
 - Created: `2026-04-06`
 - Priority: `Critical`
-- Milestone target: `6.1.1`
+- Historical milestone target: `6.1.1`
 
 ## Summary
 
@@ -42,7 +51,7 @@ Suspected broader issue:
    - no active turn can deadlock
 4. Canonicalize combo normalization and ordering by rank, not suit.
 5. Update documentation with combo normalization and anti-deadlock invariants.
-6. Reference `LOCAL-001` in the commit message and PR description for the fix.
+6. Historical local workflow note: reference `LOCAL-001` in the commit message and PR description for the fix.
 
 ## Acceptance Criteria
 

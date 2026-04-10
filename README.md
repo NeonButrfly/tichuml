@@ -50,6 +50,8 @@ npm run db:migrate
 - [SPEC](./spec.md) - long-form project specification and milestone plan
 - [Docs Index](./docs/README.md) - quick navigation across architecture, UI, telemetry, and workflow notes
 - [Milestones](./docs/milestones/README.md) - normalized milestone history and commit-subject guidance
+- [GitHub Issues](https://github.com/NeonButrfly/tichuml/issues) - authoritative bug and task tracker
+- [GitHub Milestones](https://github.com/NeonButrfly/tichuml/milestones) - authoritative milestone and release buckets
 - [Architecture Notes](./docs/architecture/README.md)
 - [Product Notes](./docs/product/README.md)
 - [UI Notes](./docs/ui/README.md)
@@ -58,7 +60,7 @@ npm run db:migrate
 
 ## Milestone Snapshot
 
-The current repository head is Milestone `6.3`. The canonical milestone plan still lives in [SPEC](./spec.md), while the normalized repository history and recommended commit naming convention now live in [docs/milestones/README.md](./docs/milestones/README.md).
+The current repository head is Milestone `6.3`. GitHub milestones and GitHub issues are the authoritative project tracker. The canonical milestone plan still lives in [SPEC](./spec.md), while the normalized repository history and recent GitHub milestone-to-issue mapping now live in [docs/milestones/README.md](./docs/milestones/README.md).
 
 When making new milestone commits, prefer:
 
@@ -80,6 +82,7 @@ Use the commit body for:
 
 Milestone 6.3 currently targets:
 
+- GitHub issue [#14](https://github.com/NeonButrfly/tichuml/issues/14)
 - one canonical data-driven table layout schema in `apps/web/src/table-layout.ts`
 - shared seat anchors for labels, call badges, turn badges, out badges, trick zones, pickup zones, and pass lanes
 - per-seat trick and pickup staging driven from schema anchors instead of ad hoc component offsets
@@ -87,18 +90,21 @@ Milestone 6.3 currently targets:
 
 Milestone 6.2 still targets:
 
+- GitHub issue [#13](https://github.com/NeonButrfly/tichuml/issues/13)
 - one canonical deterministic heuristics policy shared by the web client and simulator
 - stronger hand-structure-aware play selection, passing, wish choice, Dragon gifting, and Tichu / Grand Tichu evaluation
 - explicit exclusion of legacy ML inference tooling from the active bot path
 
 Milestone 6.1.5 still targets:
 
+- GitHub issue [#12](https://github.com/NeonButrfly/tichuml/issues/12)
 - shared exchange render buckets so pass-selection, in-transit, and pickup cards stay in exactly one visible state
 - pickup staging for all seats during the explicit Pickup step, without leaking cards into hands early
 - stronger AI hand evaluation for pass selection and Tichu / Grand Tichu decisions
 
 Milestone 6.1.4 still targets:
 
+- GitHub issue [#11](https://github.com/NeonButrfly/tichuml/issues/11)
 - seat-local trick staging instead of a shared center play pile
 - visible pickup-lane staging for received exchange cards until explicit Pickup
 - engine-resolved Dog lead-transfer animation
@@ -106,30 +112,32 @@ Milestone 6.1.4 still targets:
 
 Milestone 6.1.3 currently targets:
 
-- `LOCAL-003` straight-response regression and gameplay play-area shadow fix
+- GitHub issue [#3](https://github.com/NeonButrfly/tichuml/issues/3)
 - active response turns resolving through play/pass instead of stalling on optional Tichu handling
 - editor-only center felt/shadow rendering with no gameplay glow residue
 
 Milestone 6.1.2 still targets:
 
-- `LOCAL-002` trick-display and play-area cleanup
+- GitHub issue [#2](https://github.com/NeonButrfly/tichuml/issues/2)
 - removal of directional indicators from live trick rendering
 - central current-trick point display and editor-only play-surface shadow
 
 Milestone 6.1.1 still targets:
 
-- `LOCAL-001` combo-response legality deadlock audit and fix
+- GitHub issue [#1](https://github.com/NeonButrfly/tichuml/issues/1)
 - shared rank-first combo normalization across engine legality, selection matching, and concrete play validation
 - regression coverage across all combo-response families
 
 Milestone 6.1 still adds:
 
+- GitHub issue [#10](https://github.com/NeonButrfly/tichuml/issues/10)
 - centralized human turn action availability derived from engine legal actions
 - protection against the illegal Tichu-only progression state on an active response turn
 - straight-response and wish-fallback regression coverage for play/pass legality
 
 Milestone 6.0 still covers:
 
+- GitHub issues [#7](https://github.com/NeonButrfly/tichuml/issues/7), [#8](https://github.com/NeonButrfly/tichuml/issues/8), and [#9](https://github.com/NeonButrfly/tichuml/issues/9)
 - server-backed multi-source entropy collection and deterministic shuffle seed derivation
 - Random Sources inspection UI and related debug surfaces
 - exchange / pickup / cumulative-score / score-history flow hardening
