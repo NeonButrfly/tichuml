@@ -62,7 +62,7 @@ import {
   describeAction,
   formatActorLabel,
   formatEvent,
-  parseNormalTableLayoutConfigText,
+  serializeNormalTableLayoutConfig,
   type DogLeadAnimationView,
   type NormalTableLayoutConfig,
   type NormalTableLayout,
@@ -71,7 +71,6 @@ import {
 } from "./game-table-views";
 import { generateSeedWithEntropy } from "./seed/orchestrator";
 import type { SeedDebugSnapshot } from "@tichuml/shared";
-import defaultLayoutXml from "./layout.xml?raw";
 
 const AI_STEP_DELAY_MS = 420;
 const SYSTEM_STEP_DELAY_MS = 180;
@@ -200,9 +199,7 @@ function getDogLeadAnimationView(
   };
 }
 
-const INITIAL_NORMAL_TABLE_LAYOUT_CONFIG =
-  parseNormalTableLayoutConfigText(defaultLayoutXml) ??
-  DEFAULT_NORMAL_TABLE_LAYOUT_CONFIG;
+const INITIAL_NORMAL_TABLE_LAYOUT_CONFIG = DEFAULT_NORMAL_TABLE_LAYOUT_CONFIG;
 
 type RoundSession = {
   roundIndex: number;
@@ -554,14 +551,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     isPrimarySeat: primaryActor === seat,
     isThinkingSeat: thinkingActor === seat
   }));
-  const pickupStageViews = pickupPending
-    ? SEAT_LAYOUT.map(({ seat, position, title }) => ({
-        seat,
-        position,
-        label: `${title} Pickup`,
-        cardIds: exchangeRenderModel.receivedPendingPickupBySeat[seat]
-      })).filter((group) => group.cardIds.length > 0)
-    : [];
+  const pickupStageViews = [];
   const seatRelativePlays = SEAT_LAYOUT.map(({ seat, position, title }) => ({
     seat,
     position,
@@ -593,8 +583,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     state.phase === "pass_select" || state.phase === "pass_reveal"
       ? SEAT_LAYOUT.flatMap(({ seat, position }) =>
           PASS_TARGETS.map((target) => {
-            const targetSeat =
-              getPassTargetSeat(seat, target);
+            const targetSeat = getPassTargetSeat(seat, target);
             const revealedSelection = state.revealedPasses[seat];
             const stagedSelection = stagedSelectionBySeat[seat];
             const stagedCardId = stagedSelection?.[target] ?? null;
@@ -618,7 +607,28 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
             };
           })
         )
-      : [];
+      : pickupPending
+        ? SEAT_LAYOUT.flatMap(({ seat, position }) =>
+            PASS_TARGETS.map((target) => {
+              const visibleCardId =
+                exchangeRenderModel.receivedPendingPickupByTargetBySeat[seat][
+                  target
+                ] ?? null;
+
+              return {
+                key: `pickup-${seat}-${target}`,
+                sourceSeat: seat,
+                sourcePosition: position,
+                target,
+                targetSeat: getPassTargetSeat(seat, target),
+                occupied: Boolean(visibleCardId),
+                visibleCardId,
+                faceDown: false,
+                interactive: false
+              };
+            }).filter((route) => route.occupied)
+          )
+        : [];
   const passLaneViews = PASS_TARGETS.map((target) => ({
     target,
     targetSeat: getPassTargetSeat(LOCAL_SEAT, target),
@@ -1071,7 +1081,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
       elements: normalTableLayout,
       tokens: normalTableLayoutTokens
     };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+    const blob = new Blob([serializeNormalTableLayoutConfig(payload)], {
       type: "application/json"
     });
     const url = URL.createObjectURL(blob);

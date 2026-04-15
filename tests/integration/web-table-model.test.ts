@@ -14,6 +14,7 @@ import {
   getExchangeFlowState,
   getPassTargetSeat,
   getPrimaryActor,
+  getReceivedPassCardsByTarget,
   getReceivedPassCardIds,
   getTurnActions,
   isExchangePhase,
@@ -921,6 +922,11 @@ describe("table model helpers", () => {
       "pagoda-3",
       "sword-2"
     ]);
+    expect(getReceivedPassCardsByTarget(state, LOCAL_SEAT)).toEqual({
+      left: "star-4",
+      partner: "pagoda-3",
+      right: "sword-2"
+    });
   });
 
   it("builds next-deal carry state from the finished hand without resetting the match score", () => {

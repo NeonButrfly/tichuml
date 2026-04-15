@@ -12,13 +12,14 @@ Use this folder as the canonical human-facing map of the project.
 - [./product/README.md](./product/README.md) - gameplay surfaces and user-facing flows
 - [./ui/README.md](./ui/README.md) - table layout, interaction, dialog, and responsiveness guidance
 - [./telemetry/README.md](./telemetry/README.md) - telemetry, replay, and seed provenance notes
-- [./prompts/README.md](./prompts/README.md) - contribution workflow and milestone-scoped prompt guidance
-- [./project-tracking-trueup.md](./project-tracking-trueup.md) - repository tracking audit covering GitHub issues, milestones, docs, and historical backfill decisions
+- [./prompts/README.md](./prompts/README.md) - prompt capture workflow, prompt logs, and GitHub-linked implementation guidance
+- [./project-tracking-trueup.md](./project-tracking-trueup.md) - historical reconciliation audit; live backlog state remains in GitHub
 
 ## How To Use These Docs
 
 - Start with [SPEC](../spec.md) when you need the full product contract.
 - Use [Milestones](./milestones/README.md) when planning or naming milestone work.
 - Treat GitHub Issues and GitHub Milestones as the source of truth for tracking state.
+- Capture gameplay-changing prompts in [./prompts/README.md](./prompts/README.md) and the appropriate `docs/prompts/*.md` file, but keep issue status and milestone state in GitHub only.
 - Use the discipline-specific docs before touching the engine, UI, or telemetry pipeline.
 - Keep docs synchronized with behavior when milestone scope or contributor workflow changes.

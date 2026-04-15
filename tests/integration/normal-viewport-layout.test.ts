@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   computeNormalViewportLayoutMetrics,
   DEFAULT_NORMAL_TABLE_LAYOUT,
+  getBoardBounds,
+  getNormalSeatLayout,
   NORMAL_LAYOUT_ELEMENT_SPECS,
   NORMAL_PASS_LANE_LAYOUT_IDS,
   NORMAL_PASS_STAGE_MAP,
+  resolveNormalSeatRegionStyle,
   resolveNormalPassLaneGeometry
 } from "../../apps/web/src/game-table-views";
 
@@ -128,7 +131,12 @@ describe("normal viewport table layout", () => {
       hasVariantPicker: false,
       hasWishPicker: false
     });
+    const board = getBoardBounds(metrics);
     const routeScale = metrics.routeCardWidth / 60;
+    const inwardOffset = Math.max(
+      18,
+      Math.round(Math.max(metrics.routeCardWidth, metrics.routeCardHeight) * 0.42)
+    );
 
     (["top", "right", "bottom", "left"] as const).forEach((sourcePosition) => {
       NORMAL_PASS_STAGE_MAP[sourcePosition].forEach((laneSpec) => {
@@ -150,11 +158,29 @@ describe("normal viewport table layout", () => {
         expect(geometry?.rotation).toBe(
           DEFAULT_NORMAL_TABLE_LAYOUT[elementId!].rotation
         );
+        const rawLeft =
+          board.left + board.width * DEFAULT_NORMAL_TABLE_LAYOUT[elementId!].x;
+        const rawTop =
+          board.top + board.height * DEFAULT_NORMAL_TABLE_LAYOUT[elementId!].y;
+        const expectedLeft =
+          rawLeft +
+          (sourcePosition === "left"
+            ? inwardOffset
+            : sourcePosition === "right"
+              ? -inwardOffset
+              : 0);
+        const expectedTop =
+          rawTop +
+          (sourcePosition === "top"
+            ? inwardOffset
+            : sourcePosition === "bottom"
+              ? -inwardOffset
+              : 0);
         expect(geometry?.style.left).toBe(
-          `${DEFAULT_NORMAL_TABLE_LAYOUT[elementId!].x * 100}%`
+          `${expectedLeft}px`
         );
         expect(geometry?.style.top).toBe(
-          `${DEFAULT_NORMAL_TABLE_LAYOUT[elementId!].y * 100}%`
+          `${expectedTop}px`
         );
         expect(geometry?.width).toBe(
           Math.round(NORMAL_LAYOUT_ELEMENT_SPECS[elementId!].width * routeScale)
@@ -164,5 +190,74 @@ describe("normal viewport table layout", () => {
         );
       });
     });
+  });
+
+  it("keeps east and west labels outside their hands and centers both side seat regions on the hand anchors", () => {
+    const metrics = computeNormalViewportLayoutMetrics({
+      viewportWidth: 1600,
+      viewportHeight: 900,
+      topCount: 8,
+      bottomCount: 8,
+      leftCount: 8,
+      rightCount: 8,
+      hasVariantPicker: false,
+      hasWishPicker: false
+    });
+    const board = getBoardBounds(metrics);
+    const westSeatLayout = getNormalSeatLayout({
+      position: "left",
+      normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+      layoutMetrics: metrics,
+      handCardCount: 8
+    });
+    const eastSeatLayout = getNormalSeatLayout({
+      position: "right",
+      normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+      layoutMetrics: metrics,
+      handCardCount: 8
+    });
+    const westHandAnchorX =
+      board.left + board.width * DEFAULT_NORMAL_TABLE_LAYOUT.westHand.x;
+    const eastHandAnchorX =
+      board.left + board.width * DEFAULT_NORMAL_TABLE_LAYOUT.eastHand.x;
+    const westLabelX = parseFloat(String(westSeatLayout.nameLabel.left));
+    const eastLabelX = parseFloat(String(eastSeatLayout.nameLabel.left));
+    const minimumOutsideGap = Math.round(metrics.cardWidth * 0.18);
+    const minimumEdgeInset = Math.max(20, Math.round(metrics.cardWidth * 0.28));
+
+    expect(westLabelX).toBeLessThan(westHandAnchorX - minimumOutsideGap);
+    expect(westLabelX).toBeGreaterThan(board.left + minimumEdgeInset);
+    expect(eastLabelX).toBeGreaterThan(eastHandAnchorX + minimumOutsideGap);
+    expect(eastLabelX).toBeLessThan(board.right - minimumEdgeInset);
+
+    const westRegion = resolveNormalSeatRegionStyle({
+      position: "left",
+      normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+      layoutMetrics: metrics
+    });
+    const eastRegion = resolveNormalSeatRegionStyle({
+      position: "right",
+      normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+      layoutMetrics: metrics
+    });
+    const westRegionCenterX =
+      parseFloat(String(westRegion.left)) +
+      parseFloat(String(westRegion.width)) / 2;
+    const eastRegionCenterX =
+      parseFloat(String(eastRegion.left)) +
+      parseFloat(String(eastRegion.width)) / 2;
+    const westRegionCenterY =
+      parseFloat(String(westRegion.top)) +
+      parseFloat(String(westRegion.height)) / 2;
+    const eastRegionCenterY =
+      parseFloat(String(eastRegion.top)) +
+      parseFloat(String(eastRegion.height)) / 2;
+    const sharedSideCenterY =
+      board.top + board.height * DEFAULT_NORMAL_TABLE_LAYOUT.westHand.y;
+
+    expect(westRegionCenterX).toBeCloseTo(westHandAnchorX, 5);
+    expect(eastRegionCenterX).toBeCloseTo(eastHandAnchorX, 5);
+    expect(westRegionCenterY).toBeCloseTo(sharedSideCenterY, 5);
+    expect(eastRegionCenterY).toBeCloseTo(sharedSideCenterY, 5);
   });
 });

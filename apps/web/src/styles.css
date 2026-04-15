@@ -3374,6 +3374,12 @@ body.normal-layout-locked {
   white-space: nowrap;
 }
 
+.normal-scoreboard-anchor {
+  position: absolute;
+  z-index: 8;
+  pointer-events: auto;
+}
+
 .normal-scoreboard--button {
   display: inline-flex;
   align-items: center;
@@ -3438,16 +3444,11 @@ body.normal-layout-locked {
 }
 
 .normal-grid {
-  position: relative;
+  position: absolute;
+  inset: 0;
   z-index: 2;
-  display: grid;
-  grid-template-rows:
-    var(--normal-north-height, 120px)
-    minmax(0, 1fr)
-    var(--normal-south-height, 140px)
-    var(--normal-action-height, 84px);
-  gap: var(--normal-band-gap, 8px);
-  overflow: hidden;
+  display: block;
+  overflow: visible;
 }
 
 .normal-middle-band {
@@ -3535,6 +3536,11 @@ body.normal-layout-locked {
   min-width: 0;
   padding: 10px 6px;
   letter-spacing: 0.12em;
+}
+
+.normal-seat-overlay__label--attached {
+  z-index: 4;
+  transform: translate(-50%, -50%);
 }
 
 .normal-seat-overlay__label--active {
@@ -3627,6 +3633,7 @@ body.normal-layout-locked {
   padding-inline: 0;
   grid-template-columns: var(--normal-side-label-width, 26px) minmax(0, 1fr);
   grid-template-rows: 1fr;
+  overflow: visible;
 }
 
 .normal-seat--right {

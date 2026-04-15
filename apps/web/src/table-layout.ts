@@ -1,35 +1,39 @@
 import type { CSSProperties } from "react";
+import canonicalLayoutConfigJson from "./layout.json";
 
 export type SeatVisualPosition = "top" | "right" | "bottom" | "left";
 
-export type NormalLayoutElementId =
-  | "scoreBadge"
-  | "northHand"
-  | "eastHand"
-  | "southHand"
-  | "westHand"
-  | "northStage"
-  | "eastStage"
-  | "southStage"
-  | "westStage"
-  | "northToEastLane"
-  | "northToSouthLane"
-  | "northToWestLane"
-  | "eastToNorthLane"
-  | "eastToWestLane"
-  | "eastToSouthLane"
-  | "southToWestLane"
-  | "southToNorthLane"
-  | "southToEastLane"
-  | "westToNorthLane"
-  | "westToEastLane"
-  | "westToSouthLane"
-  | "playSurface"
-  | "actionRow"
-  | "northLabel"
-  | "eastLabel"
-  | "southLabel"
-  | "westLabel";
+const NORMAL_LAYOUT_ELEMENT_IDS = [
+  "scoreBadge",
+  "northHand",
+  "eastHand",
+  "southHand",
+  "westHand",
+  "northStage",
+  "eastStage",
+  "southStage",
+  "westStage",
+  "northToEastLane",
+  "northToSouthLane",
+  "northToWestLane",
+  "eastToNorthLane",
+  "eastToWestLane",
+  "eastToSouthLane",
+  "southToWestLane",
+  "southToNorthLane",
+  "southToEastLane",
+  "westToNorthLane",
+  "westToEastLane",
+  "westToSouthLane",
+  "playSurface",
+  "actionRow",
+  "northLabel",
+  "eastLabel",
+  "southLabel",
+  "westLabel"
+] as const;
+
+export type NormalLayoutElementId = (typeof NORMAL_LAYOUT_ELEMENT_IDS)[number];
 
 export type NormalLayoutElement = {
   x: number;
@@ -141,6 +145,116 @@ export type NormalSeatLayout = {
   trickFanDirection: "down-right" | "up-left" | "left" | "right";
 };
 
+const NORMAL_LAYOUT_TOKEN_KEYS = [
+  "topHandOverlap",
+  "bottomHandOverlap",
+  "sideHandOverlap",
+  "trickLaneGap",
+  "playCardOverlap",
+  "passCardOverlap",
+  "actionAreaGap",
+  "actionButtonGap",
+  "stageCardScale"
+] as const;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function assertCanonicalLayoutElement(
+  elementId: NormalLayoutElementId,
+  value: unknown
+): NormalLayoutElement {
+  if (!isRecord(value)) {
+    throw new Error(`Canonical layout is missing a valid "${elementId}" element.`);
+  }
+
+  if (!isFiniteNumber(value.x) || !isFiniteNumber(value.y)) {
+    throw new Error(`Canonical layout element "${elementId}" must include finite x/y values.`);
+  }
+
+  if (!isFiniteNumber(value.rotation)) {
+    throw new Error(
+      `Canonical layout element "${elementId}" must include a finite rotation value.`
+    );
+  }
+
+  return {
+    x: value.x,
+    y: value.y,
+    rotation: value.rotation
+  };
+}
+
+function assertCanonicalLayoutTokens(value: unknown): NormalTableLayoutTokens {
+  if (!isRecord(value)) {
+    throw new Error("Canonical layout tokens are missing or invalid.");
+  }
+
+  const tokens = {} as NormalTableLayoutTokens;
+
+  for (const key of NORMAL_LAYOUT_TOKEN_KEYS) {
+    const tokenValue = value[key];
+    if (!isFiniteNumber(tokenValue)) {
+      throw new Error(`Canonical layout token "${key}" must be a finite number.`);
+    }
+
+    tokens[key] = tokenValue;
+  }
+
+  return tokens;
+}
+
+function assertCanonicalLayoutConfig(value: unknown): NormalTableLayoutConfig {
+  if (!isRecord(value)) {
+    throw new Error("Canonical layout config is missing or invalid.");
+  }
+
+  if (!isFiniteNumber(value.version)) {
+    throw new Error("Canonical layout config must include a numeric version.");
+  }
+
+  if (!isRecord(value.surface)) {
+    throw new Error("Canonical layout config must include a surface block.");
+  }
+
+  const surface = value.surface;
+  if (
+    surface.widthMode !== "relative" ||
+    surface.heightMode !== "relative" ||
+    !isFiniteNumber(surface.gridSize)
+  ) {
+    throw new Error("Canonical layout surface must use the supported relative sizing schema.");
+  }
+
+  if (!isRecord(value.elements)) {
+    throw new Error("Canonical layout config must include an elements block.");
+  }
+
+  const elementsRecord = value.elements;
+  const elements = Object.fromEntries(
+    NORMAL_LAYOUT_ELEMENT_IDS.map((elementId) => [
+      elementId,
+      assertCanonicalLayoutElement(elementId, elementsRecord[elementId])
+    ])
+  ) as NormalTableLayout;
+
+  return {
+    version: value.version,
+    surface: {
+      widthMode: "relative",
+      heightMode: "relative",
+      gridSize: surface.gridSize
+    },
+    elements,
+    tokens: assertCanonicalLayoutTokens(value.tokens)
+  };
+}
+
 const CARD_CANONICAL_WIDTH = 5;
 const CARD_CANONICAL_HEIGHT = 7;
 export const CARD_ASPECT = CARD_CANONICAL_WIDTH / CARD_CANONICAL_HEIGHT;
@@ -163,92 +277,21 @@ const NORMAL_MAX_CARD_HEIGHT_VIEWPORT_SHARE = 0.145;
 const NORMAL_PASS_LANE_MIN_WIDTH = 32;
 const NORMAL_PASS_LANE_MAX_WIDTH = 72;
 
-export const DEFAULT_NORMAL_TABLE_SURFACE: NormalTableSurfaceConfig = {
-  widthMode: "relative",
-  heightMode: "relative",
-  gridSize: 10
-};
+const CANONICAL_NORMAL_TABLE_LAYOUT_CONFIG = assertCanonicalLayoutConfig(
+  canonicalLayoutConfigJson
+);
 
-export const DEFAULT_NORMAL_TABLE_LAYOUT: NormalTableLayout = {
-  scoreBadge: { x: 0.5, y: 0.024, rotation: 0 },
-  northHand: { x: 0.5, y: 0.148, rotation: 0 },
-  eastHand: { x: 0.918, y: 0.494, rotation: 0 },
-  southHand: { x: 0.5, y: 0.778, rotation: 0 },
-  westHand: { x: 0.082, y: 0.494, rotation: 0 },
-  northStage: { x: 0.5, y: 0.29, rotation: 0 },
-  eastStage: { x: 0.82, y: 0.494, rotation: 0 },
-  southStage: { x: 0.5, y: 0.614, rotation: 0 },
-  westStage: { x: 0.18, y: 0.494, rotation: 0 },
-  northToEastLane: {
-    x: 0.5636070853462157,
-    y: 0.3154875532927035,
-    rotation: 90
-  },
-  northToSouthLane: {
-    x: 0.499194847020934,
-    y: 0.32982789662419004,
-    rotation: 0
-  },
-  northToWestLane: {
-    x: 0.43478260869565216,
-    y: 0.3154875532927035,
-    rotation: -90
-  },
-  eastToNorthLane: {
-    x: 0.8373590982286635,
-    y: 0.3585085832871631,
-    rotation: 270
-  },
-  eastToWestLane: { x: 0.8293075684380032, y: 0.4732313299390553, rotation: 0 },
-  eastToSouthLane: {
-    x: 0.8373590982286635,
-    y: 0.5879540765909474,
-    rotation: 90
-  },
-  southToWestLane: {
-    x: 0.4341889388303771,
-    y: 0.6527777777777778,
-    rotation: -90
-  },
-  southToNorthLane: { x: 0.499194847020934, y: 0.630975106585407, rotation: 0 },
-  southToEastLane: {
-    x: 0.5652648448923778,
-    y: 0.6527777777777778,
-    rotation: 90
-  },
-  westToNorthLane: { x: 0.1610305958132045, y: 0.3585085832871631, rotation: -90 },
-  westToEastLane: { x: 0.16908212560386474, y: 0.4732313299390553, rotation: 0 },
-  westToSouthLane: {
-    x: 0.1610305958132045,
-    y: 0.5879540765909474,
-    rotation: 90
-  },
-  playSurface: { x: 0.5, y: 0.458, rotation: 0 },
-  actionRow: { x: 0.5, y: 0.934, rotation: 0 },
-  northLabel: { x: 0.5, y: 0.055, rotation: 0 },
-  eastLabel: { x: 0.9830692954650049, y: 0.5, rotation: 0 },
-  southLabel: { x: 0.5, y: 0.852, rotation: 0 },
-  westLabel: { x: 0.01638448825775008, y: 0.5, rotation: 0 }
-};
+export const DEFAULT_NORMAL_TABLE_SURFACE: NormalTableSurfaceConfig =
+  CANONICAL_NORMAL_TABLE_LAYOUT_CONFIG.surface;
 
-export const DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS: NormalTableLayoutTokens = {
-  topHandOverlap: 34,
-  bottomHandOverlap: 16,
-  sideHandOverlap: 34,
-  trickLaneGap: 10,
-  playCardOverlap: 22,
-  passCardOverlap: 22,
-  actionAreaGap: 8,
-  actionButtonGap: 8,
-  stageCardScale: 0.86
-};
+export const DEFAULT_NORMAL_TABLE_LAYOUT: NormalTableLayout =
+  CANONICAL_NORMAL_TABLE_LAYOUT_CONFIG.elements;
 
-export const DEFAULT_NORMAL_TABLE_LAYOUT_CONFIG: NormalTableLayoutConfig = {
-  version: 1,
-  surface: DEFAULT_NORMAL_TABLE_SURFACE,
-  elements: DEFAULT_NORMAL_TABLE_LAYOUT,
-  tokens: DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS
-};
+export const DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS: NormalTableLayoutTokens =
+  CANONICAL_NORMAL_TABLE_LAYOUT_CONFIG.tokens;
+
+export const DEFAULT_NORMAL_TABLE_LAYOUT_CONFIG: NormalTableLayoutConfig =
+  CANONICAL_NORMAL_TABLE_LAYOUT_CONFIG;
 
 export const NORMAL_LAYOUT_ELEMENT_SPECS: Record<
   NormalLayoutElementId,
@@ -578,7 +621,7 @@ type BoardRect = {
   bottom: number;
 };
 
-type AnchorPoint = {
+export type AnchorPoint = {
   x: number;
   y: number;
   rotation?: number;
@@ -664,6 +707,67 @@ export function anchorStyle(element: NormalLayoutElement): CSSProperties {
   };
 }
 
+export function resolveNormalBoardAnchorStyle(
+  element: NormalLayoutElement,
+  metrics: NormalViewportLayoutMetrics
+): CSSProperties {
+  const anchor = resolveNormalBoardAnchorPoint(element, metrics);
+  return boardAnchorStyle(anchor);
+}
+
+export function resolveNormalBoardAnchorPoint(
+  element: NormalLayoutElement,
+  metrics: NormalViewportLayoutMetrics
+): AnchorPoint {
+  return elementAnchorToPixels(element, metrics);
+}
+
+function resolveBoardRectStyle(config: {
+  center: AnchorPoint;
+  width: number;
+  height: number;
+}): CSSProperties {
+  return {
+    left: `${config.center.x - config.width / 2}px`,
+    top: `${config.center.y - config.height / 2}px`,
+    width: `${config.width}px`,
+    height: `${config.height}px`
+  };
+}
+
+function offsetAnchorPoint(
+  point: AnchorPoint,
+  deltaX: number,
+  deltaY: number
+): AnchorPoint {
+  return {
+    x: point.x + deltaX,
+    y: point.y + deltaY,
+    rotation: point.rotation
+  };
+}
+
+function resolvePassLaneInwardOffset(
+  sourcePosition: SeatVisualPosition,
+  metrics: NormalViewportLayoutMetrics
+): { x: number; y: number } {
+  const inwardOffset = Math.max(
+    18,
+    Math.round(Math.max(metrics.routeCardWidth, metrics.routeCardHeight) * 0.42)
+  );
+
+  switch (sourcePosition) {
+    case "top":
+      return { x: 0, y: inwardOffset };
+    case "bottom":
+      return { x: 0, y: -inwardOffset };
+    case "left":
+      return { x: inwardOffset, y: 0 };
+    case "right":
+      return { x: -inwardOffset, y: 0 };
+  }
+}
+
 function scaleNormalLayoutElementSize(
   elementId: NormalLayoutElementId,
   scale: number
@@ -713,6 +817,11 @@ export function resolveNormalPassLaneGeometry(config: {
     config.layoutMetrics.routeCardWidth / NORMAL_ROUTE_CARD_WIDTH;
   const layoutElement = config.normalTableLayout[elementId];
   const size = scaleNormalLayoutElementSize(elementId, routeScale);
+  const anchorPoint = offsetAnchorPoint(
+    resolveNormalBoardAnchorPoint(layoutElement, config.layoutMetrics),
+    resolvePassLaneInwardOffset(config.sourcePosition, config.layoutMetrics).x,
+    resolvePassLaneInwardOffset(config.sourcePosition, config.layoutMetrics).y
+  );
 
   return {
     elementId,
@@ -721,7 +830,7 @@ export function resolveNormalPassLaneGeometry(config: {
     width: size.width,
     height: size.height,
     style: {
-      ...anchorStyle(layoutElement),
+      ...boardAnchorStyle(anchorPoint),
       width: `${size.width}px`,
       height: `${size.height}px`,
       "--normal-pass-token-rotation": `${getPassTokenRotation(config.direction) - layoutElement.rotation}deg`
@@ -982,6 +1091,86 @@ export function getBoardBounds(
   };
 }
 
+export function resolveNormalPlaySurfaceRegionStyle(config: {
+  normalTableLayout: NormalTableLayout;
+  layoutMetrics: NormalViewportLayoutMetrics;
+}): CSSProperties {
+  const center = elementAnchorToPixels(
+    config.normalTableLayout.playSurface,
+    config.layoutMetrics
+  );
+
+  return {
+    position: "absolute",
+    ...resolveBoardRectStyle({
+      center,
+      width: config.layoutMetrics.centerColumnWidth,
+      height: config.layoutMetrics.centerBandHeight
+    })
+  };
+}
+
+export function resolveNormalActionRowRegionStyle(config: {
+  normalTableLayout: NormalTableLayout;
+  layoutMetrics: NormalViewportLayoutMetrics;
+}): CSSProperties {
+  const center = elementAnchorToPixels(
+    config.normalTableLayout.actionRow,
+    config.layoutMetrics
+  );
+
+  return {
+    position: "absolute",
+    ...resolveBoardRectStyle({
+      center,
+      width: config.layoutMetrics.centerColumnWidth,
+      height: config.layoutMetrics.actionBandHeight
+    })
+  };
+}
+
+export function resolveNormalSeatRegionStyle(config: {
+  position: SeatVisualPosition;
+  normalTableLayout: NormalTableLayout;
+  layoutMetrics: NormalViewportLayoutMetrics;
+}): CSSProperties {
+  const center = elementAnchorToPixels(
+    config.normalTableLayout[NORMAL_HAND_LAYOUT_IDS[config.position]],
+    config.layoutMetrics
+  );
+
+  switch (config.position) {
+    case "top":
+      return {
+        position: "absolute",
+        ...resolveBoardRectStyle({
+          center,
+          width: config.layoutMetrics.centerColumnWidth,
+          height: config.layoutMetrics.northBandHeight
+        })
+      };
+    case "bottom":
+      return {
+        position: "absolute",
+        ...resolveBoardRectStyle({
+          center,
+          width: config.layoutMetrics.centerColumnWidth,
+          height: config.layoutMetrics.southBandHeight
+        })
+      };
+    case "left":
+    case "right":
+      return {
+        position: "absolute",
+        ...resolveBoardRectStyle({
+          center,
+          width: config.layoutMetrics.sideColumnWidth,
+          height: config.layoutMetrics.centerBandHeight
+        })
+      };
+  }
+}
+
 export function getNormalTrickFanMetrics(
   position: SeatVisualPosition,
   trickCardWidth: number
@@ -1054,6 +1243,7 @@ export function getNormalSeatLayout(config: {
     config.normalTableLayout[NORMAL_LABEL_LAYOUT_IDS[config.position]],
     config.layoutMetrics
   );
+  const boardBounds = getBoardBounds(config.layoutMetrics);
   const handMetrics = resolveHandSpan(
     config.position,
     config.handCardCount,
@@ -1063,14 +1253,14 @@ export function getNormalSeatLayout(config: {
     config.position === "left" || config.position === "right"
       ? handAnchor.x - handMetrics.depth / 2
       : handAnchor.x - handMetrics.span / 2;
+  const handRight =
+    config.position === "left" || config.position === "right"
+      ? handAnchor.x + handMetrics.depth / 2
+      : handAnchor.x + handMetrics.span / 2;
   const handTop =
     config.position === "left" || config.position === "right"
       ? handAnchor.y - handMetrics.span / 2
       : handAnchor.y - handMetrics.depth / 2;
-  const handBottom =
-    config.position === "left" || config.position === "right"
-      ? handAnchor.y + handMetrics.span / 2
-      : handAnchor.y + handMetrics.depth / 2;
   const horizontalBadgeOffset = Math.max(
     18,
     Math.round(config.layoutMetrics.cardWidth * 0.36)
@@ -1078,6 +1268,14 @@ export function getNormalSeatLayout(config: {
   const verticalBadgeOffset = Math.max(
     18,
     Math.round(config.layoutMetrics.cardHeight * 0.32)
+  );
+  const sideLabelEdgeInset = Math.max(
+    24,
+    Math.round(config.layoutMetrics.cardWidth * 0.46)
+  );
+  const sideLabelHandGap = Math.max(
+    12,
+    Math.round(config.layoutMetrics.cardWidth * 0.18)
   );
   const pickupAnchor = interpolateAnchorPoint(handAnchor, trickAnchor, 0.52);
 
@@ -1089,24 +1287,40 @@ export function getNormalSeatLayout(config: {
   switch (config.position) {
     case "bottom":
       nameLabelPoint = {
-        x: handAnchor.x,
-        y: (handBottom + (actionAnchor.y - config.layoutMetrics.actionBandHeight / 2)) / 2
+        x: labelAnchor.x,
+        y: Math.min(
+          actionAnchor.y - config.layoutMetrics.actionBandHeight / 2 - 10,
+          Math.max(
+            labelAnchor.y,
+            handTop - Math.max(14, Math.round(config.layoutMetrics.cardHeight * 0.16))
+          )
+        )
       };
       callBadgePoint = {
         x: handLeft - horizontalBadgeOffset,
         y: handAnchor.y
       };
       turnBadgePoint = {
-        x: nameLabelPoint.x + Math.max(54, Math.round(config.layoutMetrics.cardWidth * 0.75)),
-        y: nameLabelPoint.y
+        x: nameLabelPoint.x,
+        y:
+          nameLabelPoint.y -
+          Math.max(34, Math.round(config.layoutMetrics.cardHeight * 0.32))
       };
       outBadgePoint = {
-        x: nameLabelPoint.x - Math.max(54, Math.round(config.layoutMetrics.cardWidth * 0.75)),
+        x:
+          nameLabelPoint.x -
+          Math.max(58, Math.round(config.layoutMetrics.cardWidth * 0.82)),
         y: nameLabelPoint.y
       };
       break;
     case "top":
-      nameLabelPoint = labelAnchor;
+      nameLabelPoint = {
+        x: labelAnchor.x,
+        y: Math.min(
+          labelAnchor.y,
+          handTop - Math.max(14, Math.round(config.layoutMetrics.cardHeight * 0.16))
+        )
+      };
       callBadgePoint = {
         x: handLeft - horizontalBadgeOffset,
         y: handAnchor.y
@@ -1121,7 +1335,13 @@ export function getNormalSeatLayout(config: {
       };
       break;
     case "left":
-      nameLabelPoint = labelAnchor;
+      nameLabelPoint = {
+        x: Math.min(
+          handLeft - sideLabelHandGap,
+          Math.max(boardBounds.left + sideLabelEdgeInset, labelAnchor.x)
+        ),
+        y: labelAnchor.y
+      };
       callBadgePoint = {
         x: handAnchor.x,
         y: handTop - verticalBadgeOffset
@@ -1136,7 +1356,13 @@ export function getNormalSeatLayout(config: {
       };
       break;
     case "right":
-      nameLabelPoint = labelAnchor;
+      nameLabelPoint = {
+        x: Math.max(
+          handRight + sideLabelHandGap,
+          Math.min(boardBounds.right - sideLabelEdgeInset, labelAnchor.x)
+        ),
+        y: labelAnchor.y
+      };
       callBadgePoint = {
         x: handAnchor.x,
         y: handTop - verticalBadgeOffset

@@ -53,6 +53,7 @@ import {
   type PlayLegalAction
 } from "./table-model";
 export type {
+  AnchorPoint,
   NormalLayoutElement,
   NormalLayoutElementId,
   NormalPassLaneGeometry,
@@ -73,6 +74,7 @@ export {
   DEFAULT_NORMAL_TABLE_LAYOUT_CONFIG,
   DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS,
   DEFAULT_NORMAL_TABLE_SURFACE,
+  getBoardBounds,
   getNormalPassLaneLayoutId,
   getNormalSeatLayout,
   getNormalTrickFanMetrics,
@@ -87,26 +89,38 @@ export {
   NORMAL_PASS_STAGE_MAP,
   NORMAL_STAGE_LAYOUT_IDS,
   requiredFanSpan,
+  resolveNormalActionRowRegionStyle,
+  resolveNormalBoardAnchorPoint,
+  resolveNormalBoardAnchorStyle,
   resolveNormalPassLaneGeometry,
+  resolveNormalPlaySurfaceRegionStyle,
+  resolveNormalSeatRegionStyle,
   resolveNormalStageAnchorStyle
 } from "./table-layout";
 import {
-  anchorStyle,
   DEFAULT_NORMAL_TABLE_LAYOUT,
   DEFAULT_NORMAL_TABLE_LAYOUT_CONFIG,
   DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS,
   DEFAULT_NORMAL_TABLE_SURFACE,
   computeNormalViewportLayoutMetrics,
+  getBoardBounds,
   getNormalSeatLayout,
   getNormalTrickFanMetrics,
   NORMAL_HAND_LAYOUT_IDS,
   NORMAL_LAYOUT_EDITOR_ORDER,
   NORMAL_LAYOUT_ELEMENT_SPECS,
   NORMAL_LAYOUT_OPPOSING_ELEMENT_IDS,
+  NORMAL_PASS_LANE_LAYOUT_IDS,
   NORMAL_PASS_STAGE_MAP,
   NORMAL_STAGE_LAYOUT_IDS,
   requiredFanSpan,
+  resolveNormalActionRowRegionStyle,
+  resolveNormalBoardAnchorPoint,
+  resolveNormalBoardAnchorStyle,
   resolveNormalPassLaneGeometry,
+  resolveNormalPlaySurfaceRegionStyle,
+  resolveNormalSeatRegionStyle,
+  type AnchorPoint,
   type NormalLayoutElement,
   type NormalLayoutElementId,
   type NormalTableLayout,
@@ -1108,6 +1122,230 @@ function getSeatVisualPosition(seat: SeatId): SeatVisualPosition {
   }
 }
 
+function getPassLaneDescriptor(
+  elementId: NormalLayoutElementId
+):
+  | {
+      sourcePosition: SeatVisualPosition;
+      targetPosition: SeatVisualPosition;
+      direction: PassLaneDirection;
+    }
+  | null {
+  for (const sourcePosition of ["top", "right", "bottom", "left"] as const) {
+    for (const laneSpec of NORMAL_PASS_STAGE_MAP[sourcePosition]) {
+      if (
+        NORMAL_PASS_LANE_LAYOUT_IDS[sourcePosition][laneSpec.targetPosition] ===
+        elementId
+      ) {
+        return {
+          sourcePosition,
+          targetPosition: laneSpec.targetPosition,
+          direction: laneSpec.direction
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
+function anchorPointFromBoardAnchorStyle(style: CSSProperties): AnchorPoint {
+  return {
+    x: parseFloat(String(style.left ?? 0)),
+    y: parseFloat(String(style.top ?? 0))
+  };
+}
+
+function parseStyleNumber(value: CSSProperties[keyof CSSProperties]) {
+  const parsed = parseFloat(String(value ?? 0));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+type NormalEditorElementVisual = {
+  center: AnchorPoint;
+  style: CSSProperties;
+};
+
+function resolveNormalEditorElementVisual(config: {
+  elementId: NormalLayoutElementId;
+  normalTableLayout: NormalTableLayout;
+  layoutMetrics: NormalViewportLayoutMetrics;
+  seatViews: SeatView[];
+  sortedLocalHand: Card[];
+}): NormalEditorElementVisual {
+  const spec = NORMAL_LAYOUT_ELEMENT_SPECS[config.elementId];
+  const seatViewByPosition = Object.fromEntries(
+    config.seatViews.map((seatView) => [seatView.position, seatView])
+  ) as Record<SeatVisualPosition, SeatView>;
+
+  if (config.elementId === "scoreBadge") {
+    const center = resolveNormalBoardAnchorPoint(
+      config.normalTableLayout.scoreBadge,
+      config.layoutMetrics
+    );
+
+    return {
+      center,
+      style: {
+        ...resolveNormalBoardAnchorStyle(
+          config.normalTableLayout.scoreBadge,
+          config.layoutMetrics
+        ),
+        width: `${spec.width}px`,
+        height: `${spec.height}px`
+      }
+    };
+  }
+
+  if (config.elementId === "playSurface") {
+    const center = resolveNormalBoardAnchorPoint(
+      config.normalTableLayout.playSurface,
+      config.layoutMetrics
+    );
+
+    return {
+      center,
+      style: resolveNormalPlaySurfaceRegionStyle({
+        normalTableLayout: config.normalTableLayout,
+        layoutMetrics: config.layoutMetrics
+      })
+    };
+  }
+
+  if (config.elementId === "actionRow") {
+    const center = resolveNormalBoardAnchorPoint(
+      config.normalTableLayout.actionRow,
+      config.layoutMetrics
+    );
+
+    return {
+      center,
+      style: resolveNormalActionRowRegionStyle({
+        normalTableLayout: config.normalTableLayout,
+        layoutMetrics: config.layoutMetrics
+      })
+    };
+  }
+
+  const handPosition =
+    Object.entries(NORMAL_HAND_LAYOUT_IDS).find(
+      ([, layoutElementId]) => layoutElementId === config.elementId
+    )?.[0] as SeatVisualPosition | undefined;
+  if (handPosition) {
+    const center = resolveNormalBoardAnchorPoint(
+      config.normalTableLayout[config.elementId],
+      config.layoutMetrics
+    );
+
+    return {
+      center,
+      style: resolveNormalSeatRegionStyle({
+        position: handPosition,
+        normalTableLayout: config.normalTableLayout,
+        layoutMetrics: config.layoutMetrics
+      })
+    };
+  }
+
+  const labelPosition =
+    config.elementId === "northLabel"
+      ? "top"
+      : config.elementId === "eastLabel"
+        ? "right"
+        : config.elementId === "southLabel"
+          ? "bottom"
+          : config.elementId === "westLabel"
+            ? "left"
+            : null;
+  if (labelPosition) {
+    const handCardCount =
+      labelPosition === "bottom"
+        ? config.sortedLocalHand.length
+        : seatViewByPosition[labelPosition].cards.length;
+    const seatLayout = getNormalSeatLayout({
+      position: labelPosition,
+      normalTableLayout: config.normalTableLayout,
+      layoutMetrics: config.layoutMetrics,
+      handCardCount
+    });
+    const center = anchorPointFromBoardAnchorStyle(seatLayout.nameLabel);
+
+    return {
+      center,
+      style: {
+        ...seatLayout.nameLabel,
+        width: `${spec.width}px`,
+        height: `${spec.height}px`
+      }
+    };
+  }
+
+  const stagePosition =
+    config.elementId === "northStage"
+      ? "top"
+      : config.elementId === "eastStage"
+        ? "right"
+        : config.elementId === "southStage"
+          ? "bottom"
+          : config.elementId === "westStage"
+            ? "left"
+            : null;
+  if (stagePosition) {
+    const seatLayout = getNormalSeatLayout({
+      position: stagePosition,
+      normalTableLayout: config.normalTableLayout,
+      layoutMetrics: config.layoutMetrics,
+      handCardCount: 0
+    });
+    const center = anchorPointFromBoardAnchorStyle(seatLayout.trickZone);
+
+    return {
+      center,
+      style: {
+        ...seatLayout.trickZone,
+        width: `${spec.width}px`,
+        height: `${spec.height}px`
+      }
+    };
+  }
+
+  const passLaneDescriptor = getPassLaneDescriptor(config.elementId);
+  if (passLaneDescriptor) {
+    const geometry = resolveNormalPassLaneGeometry({
+      normalTableLayout: config.normalTableLayout,
+      layoutMetrics: config.layoutMetrics,
+      sourcePosition: passLaneDescriptor.sourcePosition,
+      targetPosition: passLaneDescriptor.targetPosition,
+      direction: passLaneDescriptor.direction
+    });
+    if (geometry) {
+      const center = anchorPointFromBoardAnchorStyle(geometry.style);
+
+      return {
+        center,
+        style: geometry.style
+      };
+    }
+  }
+
+  const center = resolveNormalBoardAnchorPoint(
+    config.normalTableLayout[config.elementId],
+    config.layoutMetrics
+  );
+
+  return {
+    center,
+    style: {
+      ...resolveNormalBoardAnchorStyle(
+        config.normalTableLayout[config.elementId],
+        config.layoutMetrics
+      ),
+      width: `${spec.width}px`,
+      height: `${spec.height}px`
+    }
+  };
+}
+
 function clamp01(value: number) {
   return Math.min(1, Math.max(0, value));
 }
@@ -1330,6 +1568,8 @@ export function parseNormalTableLayoutConfigText(
     return null;
   }
 
+  // Keep XML import compatibility for older exported editor files, but the
+  // shipped canonical artifact now lives in layout.json.
   if (trimmed.startsWith("<")) {
     const elements: Record<string, { x: number; y: number; rotation: number }> =
       {};
@@ -1375,6 +1615,39 @@ export function parseNormalTableLayoutText(
   text: string
 ): NormalTableLayout | null {
   return parseNormalTableLayoutConfigText(text)?.elements ?? null;
+}
+
+export function serializeNormalTableLayoutConfig(
+  config: NormalTableLayoutConfig
+): string {
+  const orderedElements = Object.fromEntries(
+    NORMAL_LAYOUT_EDITOR_ORDER.map((elementId) => [elementId, config.elements[elementId]])
+  );
+
+  return JSON.stringify(
+    {
+      version: config.version,
+      surface: {
+        widthMode: config.surface.widthMode,
+        heightMode: config.surface.heightMode,
+        gridSize: config.surface.gridSize
+      },
+      elements: orderedElements,
+      tokens: {
+        topHandOverlap: config.tokens.topHandOverlap,
+        bottomHandOverlap: config.tokens.bottomHandOverlap,
+        sideHandOverlap: config.tokens.sideHandOverlap,
+        trickLaneGap: config.tokens.trickLaneGap,
+        playCardOverlap: config.tokens.playCardOverlap,
+        passCardOverlap: config.tokens.passCardOverlap,
+        actionAreaGap: config.tokens.actionAreaGap,
+        actionButtonGap: config.tokens.actionButtonGap,
+        stageCardScale: config.tokens.stageCardScale
+      }
+    },
+    null,
+    2
+  );
 }
 
 function CardFace({
@@ -1590,18 +1863,8 @@ export function shouldRenderNormalCenterZoneFelt(layoutEditorActive: boolean): b
   return layoutEditorActive;
 }
 
-export function TableSurface({
-  variant,
-  normalTableLayout: _normalTableLayout,
-  state,
-  derived,
-  controlHint,
-  displayedTrick,
-  trickIsResolving,
-  seatRelativePlays,
-  tablePassGroups,
-  cardLookup
-}: Pick<
+export function TableSurface(
+  props: Pick<
   GameTableViewProps,
   | "normalTableLayout"
   | "state"
@@ -1614,8 +1877,19 @@ export function TableSurface({
   | "cardLookup"
 > & {
   variant: "normal" | "debug";
-}) {
-  void _normalTableLayout;
+}
+) {
+  const {
+    variant,
+    state,
+    derived,
+    controlHint,
+    displayedTrick,
+    trickIsResolving,
+    seatRelativePlays,
+    tablePassGroups,
+    cardLookup
+  } = props;
   const status = surfaceMessage({ controlHint, state, derived });
   const exchangePhaseActive = isExchangePhase(state.phase);
   const trickPoints = displayedTrick
@@ -1805,21 +2079,25 @@ function NormalSeatOverlayLayer({
           handCardCount
         });
         const tichuMarkerLabel = getTichuMarkerLabel(seatView.callState);
+        const renderInlineSideLabel =
+          seatView.position === "left" || seatView.position === "right";
 
         return (
           <div key={`overlay-${seatView.seat}`}>
-            <div
-              className={[
-                "normal-seat-overlay__label",
-                `normal-seat-overlay__label--${seatView.position}`,
-                seatView.isPrimarySeat ? "normal-seat-overlay__label--active" : ""
-              ]
-                .filter(Boolean)
-                .join(" ")}
-              style={seatLayout.nameLabel}
-            >
-              <span>{seatView.title}</span>
-            </div>
+            {!renderInlineSideLabel && (
+              <div
+                className={[
+                  "normal-seat-overlay__label",
+                  `normal-seat-overlay__label--${seatView.position}`,
+                  seatView.isPrimarySeat ? "normal-seat-overlay__label--active" : ""
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                style={seatLayout.nameLabel}
+              >
+                <span>{seatView.title}</span>
+              </div>
+            )}
 
             {tichuMarkerLabel && (
               <span
@@ -1869,16 +2147,24 @@ function NormalSeatOverlayLayer({
 
 function NormalDogLeadTransfer({
   normalTableLayout,
+  layoutMetrics,
   animation
 }: {
   normalTableLayout: NormalTableLayout;
+  layoutMetrics: NormalViewportLayoutMetrics;
   animation: DogLeadAnimationView;
 }) {
   const [active, setActive] = useState(false);
   const sourcePosition = getSeatVisualPosition(animation.sourceSeat);
   const targetPosition = getSeatVisualPosition(animation.targetSeat);
-  const sourceAnchor = normalTableLayout[NORMAL_STAGE_LAYOUT_IDS[sourcePosition]];
-  const targetAnchor = normalTableLayout[NORMAL_HAND_LAYOUT_IDS[targetPosition]];
+  const sourceAnchor = resolveNormalBoardAnchorPoint(
+    normalTableLayout[NORMAL_STAGE_LAYOUT_IDS[sourcePosition]],
+    layoutMetrics
+  );
+  const targetAnchor = resolveNormalBoardAnchorPoint(
+    normalTableLayout[NORMAL_HAND_LAYOUT_IDS[targetPosition]],
+    layoutMetrics
+  );
 
   useEffect(() => {
     const frameId = window.requestAnimationFrame(() => setActive(true));
@@ -1890,8 +2176,8 @@ function NormalDogLeadTransfer({
       className={active ? "normal-dog-transfer is-active" : "normal-dog-transfer"}
       data-dog-transfer={`${animation.sourceSeat}->${animation.targetSeat}`}
       style={{
-        left: `${(active ? targetAnchor.x : sourceAnchor.x) * 100}%`,
-        top: `${(active ? targetAnchor.y : sourceAnchor.y) * 100}%`
+        left: `${active ? targetAnchor.x : sourceAnchor.x}px`,
+        top: `${active ? targetAnchor.y : sourceAnchor.y}px`
       }}
     >
       <CardFace
@@ -2047,6 +2333,7 @@ export function NormalTrickStagingRegions({
       {dogLeadAnimation && (
         <NormalDogLeadTransfer
           normalTableLayout={normalTableLayout}
+          layoutMetrics={layoutMetrics}
           animation={dogLeadAnimation}
         />
       )}
@@ -2054,7 +2341,7 @@ export function NormalTrickStagingRegions({
   );
 }
 
-function NormalPassStagingRegions({
+export function NormalPassStagingRegions({
   normalTableLayout,
   layoutMetrics,
   passRouteViews,
@@ -2242,6 +2529,8 @@ function NormalPassStagingRegions({
 }
 
 function NormalSeat({
+  normalTableLayout,
+  regionStyle,
   layoutMetrics,
   seatView,
   sortedLocalHand,
@@ -2252,6 +2541,7 @@ function NormalSeat({
   onLocalCardClick
 }: Pick<
   GameTableViewProps,
+  | "normalTableLayout"
   | "sortedLocalHand"
   | "localCanInteract"
   | "localPassInteractionEnabled"
@@ -2259,6 +2549,7 @@ function NormalSeat({
   | "selectedCardIds"
   | "onLocalCardClick"
 > & {
+  regionStyle: CSSProperties;
   layoutMetrics: NormalViewportLayoutMetrics;
   seatView: SeatView;
 }) {
@@ -2273,6 +2564,18 @@ function NormalSeat({
   const handCardCount = seatView.isLocalSeat
     ? sortedLocalHand.length
     : seatView.cards.length;
+  const seatLayout = getNormalSeatLayout({
+    position: seatView.position,
+    normalTableLayout,
+    layoutMetrics,
+    handCardCount
+  });
+  const sideLabelStyle = isSideSeat
+    ? ({
+        left: `${parseStyleNumber(seatLayout.nameLabel.left) - parseStyleNumber(regionStyle.left)}px`,
+        top: `${parseStyleNumber(seatLayout.nameLabel.top) - parseStyleNumber(regionStyle.top)}px`
+      } as CSSProperties)
+    : null;
   const handMarkerStyle = {
     "--normal-hand-span": `${requiredFanSpan(
       handCardCount,
@@ -2375,9 +2678,26 @@ function NormalSeat({
       ]
         .filter(Boolean)
         .join(" ")}
+      style={regionStyle}
       data-seat-region={seatView.position}
       data-layout-container={`${seatView.position}-seat`}
     >
+      {isSideSeat && sideLabelStyle && (
+        <div
+          className={[
+            "normal-seat-overlay__label",
+            `normal-seat-overlay__label--${seatView.position}`,
+            "normal-seat-overlay__label--attached",
+            seatView.isPrimarySeat ? "normal-seat-overlay__label--active" : ""
+          ]
+            .filter(Boolean)
+            .join(" ")}
+          style={sideLabelStyle}
+          aria-hidden="true"
+        >
+          <span>{seatView.title}</span>
+        </div>
+      )}
       <div className="normal-seat__content">
         {seatView.position === "bottom" ? (
           <>
@@ -3497,12 +3817,16 @@ type EditorDragState = {
   elementId: NormalLayoutElementId;
   startPointerX: number;
   startPointerY: number;
-  startElement: NormalLayoutElement;
+  startCenter: AnchorPoint;
+  boardRect: ReturnType<typeof getBoardBounds>;
   surfaceRect: DOMRect;
 };
 
 export function NormalLayoutEditor({
   normalTableLayout,
+  seatViews,
+  sortedLocalHand,
+  layoutMetrics,
   onNormalTableLayoutChange,
   onNormalTableLayoutImport,
   onExportNormalTableLayout,
@@ -3510,11 +3834,15 @@ export function NormalLayoutEditor({
 }: Pick<
   GameTableViewProps,
   | "normalTableLayout"
+  | "seatViews"
+  | "sortedLocalHand"
   | "onNormalTableLayoutChange"
   | "onNormalTableLayoutImport"
   | "onExportNormalTableLayout"
   | "hotkeyDefinitions"
->) {
+> & {
+  layoutMetrics: NormalViewportLayoutMetrics;
+}) {
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const dragStateRef = useRef<EditorDragState | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -3526,7 +3854,7 @@ export function NormalLayoutEditor({
 
   function snapElementPosition(
     elementId: NormalLayoutElementId,
-    surfaceRect: DOMRect,
+    boardRect: ReturnType<typeof getBoardBounds>,
     centerX: number,
     centerY: number
   ) {
@@ -3534,42 +3862,49 @@ export function NormalLayoutEditor({
     const halfWidth = spec.width / 2;
     const halfHeight = spec.height / 2;
     const clampedX = Math.min(
-      surfaceRect.width - halfWidth,
-      Math.max(halfWidth, centerX)
+      boardRect.right - halfWidth,
+      Math.max(boardRect.left + halfWidth, centerX)
     );
     const clampedY = Math.min(
-      surfaceRect.height - halfHeight,
-      Math.max(halfHeight, centerY)
+      boardRect.bottom - halfHeight,
+      Math.max(boardRect.top + halfHeight, centerY)
     );
     const snappedX = Math.round(clampedX / 10) * 10;
     const snappedY = Math.round(clampedY / 10) * 10;
 
     return {
-      x: clamp01(snappedX / surfaceRect.width),
-      y: clamp01(snappedY / surfaceRect.height)
+      x: clamp01((snappedX - boardRect.left) / boardRect.width),
+      y: clamp01((snappedY - boardRect.top) / boardRect.height)
     };
   }
 
   const moveSelectedBy = useCallback(
     (deltaX: number, deltaY: number) => {
-      const surface = surfaceRef.current;
-      if (!surface) {
-        return;
-      }
-
-      const rect = surface.getBoundingClientRect();
-      const current = normalTableLayout[selectedElementId];
+      const selectedVisual = resolveNormalEditorElementVisual({
+        elementId: selectedElementId,
+        normalTableLayout,
+        layoutMetrics,
+        seatViews,
+        sortedLocalHand
+      });
       const next = snapElementPosition(
         selectedElementId,
-        rect,
-        current.x * rect.width + deltaX,
-        current.y * rect.height + deltaY
+        getBoardBounds(layoutMetrics),
+        selectedVisual.center.x + deltaX,
+        selectedVisual.center.y + deltaY
       );
       onNormalTableLayoutChange(
         updateLayoutElement(normalTableLayout, selectedElementId, next)
       );
     },
-    [normalTableLayout, onNormalTableLayoutChange, selectedElementId]
+    [
+      layoutMetrics,
+      normalTableLayout,
+      onNormalTableLayoutChange,
+      seatViews,
+      selectedElementId,
+      sortedLocalHand
+    ]
   );
 
   const rotateSelectedBy = useCallback(
@@ -3599,22 +3934,39 @@ export function NormalLayoutEditor({
     [selectedElementId]
   );
 
-  const selectedElement = normalTableLayout[selectedElementId];
+  const selectedElementVisual = resolveNormalEditorElementVisual({
+    elementId: selectedElementId,
+    normalTableLayout,
+    layoutMetrics,
+    seatViews,
+    sortedLocalHand
+  });
   const opposingElementId =
     NORMAL_LAYOUT_OPPOSING_ELEMENT_IDS[selectedElementId] ?? null;
   const opposingElement = opposingElementId
     ? normalTableLayout[opposingElementId]
     : null;
+  const opposingElementVisual = opposingElementId
+    ? resolveNormalEditorElementVisual({
+        elementId: opposingElementId,
+        normalTableLayout,
+        layoutMetrics,
+        seatViews,
+        sortedLocalHand
+      })
+    : null;
   const surfaceRect = surfaceRef.current?.getBoundingClientRect() ?? null;
-  const xAlignmentThreshold = surfaceRect ? 5 / surfaceRect.width : 0.0005;
-  const yAlignmentThreshold = surfaceRect ? 5 / surfaceRect.height : 0.0005;
+  const xAlignmentThreshold = surfaceRect ? 5 : 0.5;
+  const yAlignmentThreshold = surfaceRect ? 5 : 0.5;
   const hasVerticalAlignment = Boolean(
-    opposingElement &&
-    Math.abs(selectedElement.x - opposingElement.x) <= xAlignmentThreshold
+    opposingElementVisual &&
+    Math.abs(selectedElementVisual.center.x - opposingElementVisual.center.x) <=
+      xAlignmentThreshold
   );
   const hasHorizontalAlignment = Boolean(
-    opposingElement &&
-    Math.abs(selectedElement.y - opposingElement.y) <= yAlignmentThreshold
+    opposingElementVisual &&
+    Math.abs(selectedElementVisual.center.y - opposingElementVisual.center.y) <=
+      yAlignmentThreshold
   );
   const verticalGuideState = hasVerticalAlignment
     ? hasHorizontalAlignment
@@ -3638,9 +3990,9 @@ export function NormalLayoutEditor({
       const deltaY = event.clientY - dragState.startPointerY;
       const next = snapElementPosition(
         dragState.elementId,
-        dragState.surfaceRect,
-        dragState.startElement.x * dragState.surfaceRect.width + deltaX,
-        dragState.startElement.y * dragState.surfaceRect.height + deltaY
+        dragState.boardRect,
+        dragState.startCenter.x + deltaX,
+        dragState.startCenter.y + deltaY
       );
 
       onNormalTableLayoutChange(
@@ -3741,11 +4093,19 @@ export function NormalLayoutEditor({
     }
 
     setSelectedElementId(elementId);
+    const elementVisual = resolveNormalEditorElementVisual({
+      elementId,
+      normalTableLayout,
+      layoutMetrics,
+      seatViews,
+      sortedLocalHand
+    });
     dragStateRef.current = {
       elementId,
       startPointerX: event.clientX,
       startPointerY: event.clientY,
-      startElement: normalTableLayout[elementId],
+      startCenter: elementVisual.center,
+      boardRect: getBoardBounds(layoutMetrics),
       surfaceRect: surface.getBoundingClientRect()
     };
   }
@@ -3786,7 +4146,7 @@ export function NormalLayoutEditor({
               "normal-layout-editor__guideline--vertical",
               `normal-layout-editor__guideline-state--${verticalGuideState}`
             ].join(" ")}
-            style={{ left: `${selectedElement.x * 100}%` }}
+            style={{ left: `${selectedElementVisual.center.x}px` }}
           />
           <div
             className={[
@@ -3794,9 +4154,9 @@ export function NormalLayoutEditor({
               "normal-layout-editor__guideline--horizontal",
               `normal-layout-editor__guideline-state--${horizontalGuideState}`
             ].join(" ")}
-            style={{ top: `${selectedElement.y * 100}%` }}
+            style={{ top: `${selectedElementVisual.center.y}px` }}
           />
-          {opposingElement && opposingElementId && (
+          {opposingElement && opposingElementId && opposingElementVisual && (
             <>
               <div
                 className={[
@@ -3804,7 +4164,7 @@ export function NormalLayoutEditor({
                   "normal-layout-editor__guideline--vertical",
                   `normal-layout-editor__guideline-state--${verticalGuideState}`
                 ].join(" ")}
-                style={{ left: `${opposingElement.x * 100}%` }}
+                style={{ left: `${opposingElementVisual.center.x}px` }}
               />
               <div
                 className={[
@@ -3812,15 +4172,11 @@ export function NormalLayoutEditor({
                   "normal-layout-editor__guideline--horizontal",
                   `normal-layout-editor__guideline-state--${horizontalGuideState}`
                 ].join(" ")}
-                style={{ top: `${opposingElement.y * 100}%` }}
+                style={{ top: `${opposingElementVisual.center.y}px` }}
               />
               <div
                 className="normal-layout-editor__opposing"
-                style={{
-                  ...anchorStyle(opposingElement),
-                  width: `${NORMAL_LAYOUT_ELEMENT_SPECS[opposingElementId].width}px`,
-                  height: `${NORMAL_LAYOUT_ELEMENT_SPECS[opposingElementId].height}px`
-                }}
+                style={opposingElementVisual.style}
               >
                 <span className="normal-layout-editor__opposing-name">
                   Opposing:{" "}
@@ -3833,8 +4189,15 @@ export function NormalLayoutEditor({
       )}
 
       {NORMAL_LAYOUT_EDITOR_ORDER.map((elementId) => {
-        const spec = NORMAL_LAYOUT_ELEMENT_SPECS[elementId];
+        const editorElementVisual = resolveNormalEditorElementVisual({
+          elementId,
+          normalTableLayout,
+          layoutMetrics,
+          seatViews,
+          sortedLocalHand
+        });
         const isSelected = elementId === selectedElementId;
+        const spec = NORMAL_LAYOUT_ELEMENT_SPECS[elementId];
 
         return (
           <button
@@ -3845,11 +4208,7 @@ export function NormalLayoutEditor({
                 ? "normal-layout-editor__element is-selected"
                 : "normal-layout-editor__element"
             }
-            style={{
-              ...anchorStyle(normalTableLayout[elementId]),
-              width: `${spec.width}px`,
-              height: `${spec.height}px`
-            }}
+            style={editorElementVisual.style}
             onClick={() => setSelectedElementId(elementId)}
             onPointerDown={(event) => startDrag(elementId, event)}
           >
@@ -4232,6 +4591,36 @@ export function NormalGameTableView(props: GameTableViewProps) {
     hasVariantPicker: props.matchingPlayActions.length > 1,
     hasWishPicker: Boolean(props.activePlayVariant?.availableWishRanks)
   });
+  const seatRegionStyleByPosition = {
+    top: resolveNormalSeatRegionStyle({
+      position: "top",
+      normalTableLayout: props.normalTableLayout,
+      layoutMetrics
+    }),
+    right: resolveNormalSeatRegionStyle({
+      position: "right",
+      normalTableLayout: props.normalTableLayout,
+      layoutMetrics
+    }),
+    bottom: resolveNormalSeatRegionStyle({
+      position: "bottom",
+      normalTableLayout: props.normalTableLayout,
+      layoutMetrics
+    }),
+    left: resolveNormalSeatRegionStyle({
+      position: "left",
+      normalTableLayout: props.normalTableLayout,
+      layoutMetrics
+    })
+  } as const;
+  const playSurfaceRegionStyle = resolveNormalPlaySurfaceRegionStyle({
+    normalTableLayout: props.normalTableLayout,
+    layoutMetrics
+  });
+  const actionRowRegionStyle = resolveNormalActionRowRegionStyle({
+    normalTableLayout: props.normalTableLayout,
+    layoutMetrics
+  });
   const layoutStyle = {
     ...normalTableLayoutTokenStyle(props.normalTableLayoutTokens),
     "--normal-shell-pad-x": `${layoutMetrics.shellPaddingX}px`,
@@ -4293,11 +4682,18 @@ export function NormalGameTableView(props: GameTableViewProps) {
               </span>
             </div>
           )}
-          <header
+          <div
             className="normal-header-band"
             data-layout-container="header-band"
+            aria-hidden="true"
+          />
+          <div
+            className="normal-scoreboard-anchor"
+            style={resolveNormalBoardAnchorStyle(
+              props.normalTableLayout.scoreBadge,
+              layoutMetrics
+            )}
           >
-            <div className="normal-header-band__spacer" aria-hidden="true" />
             <MatchScoreboard
               state={props.state}
               derived={props.derived}
@@ -4305,11 +4701,34 @@ export function NormalGameTableView(props: GameTableViewProps) {
                 props.onUiCommand("open_score_history_dialog")
               }
             />
-            <div className="normal-header-band__spacer" aria-hidden="true" />
-          </header>
+          </div>
 
           <div className="normal-grid" data-layout-container="table-grid">
+            <section
+              className={getNormalCenterZoneClassName(props.layoutEditorActive)}
+              data-layout-container="center-zone"
+              style={playSurfaceRegionStyle}
+            >
+              {shouldRenderNormalCenterZoneFelt(props.layoutEditorActive) && (
+                <div className="normal-table__felt" />
+              )}
+              <TableSurface
+                variant="normal"
+                normalTableLayout={props.normalTableLayout}
+                state={props.state}
+                derived={props.derived}
+                controlHint={props.controlHint}
+                displayedTrick={props.displayedTrick}
+                trickIsResolving={props.trickIsResolving}
+                seatRelativePlays={props.seatRelativePlays}
+                tablePassGroups={props.tablePassGroups}
+                cardLookup={props.cardLookup}
+              />
+            </section>
+
             <NormalSeat
+              normalTableLayout={props.normalTableLayout}
+              regionStyle={seatRegionStyleByPosition.top}
               layoutMetrics={layoutMetrics}
               seatView={seatByPosition.top}
               sortedLocalHand={props.sortedLocalHand}
@@ -4320,55 +4739,35 @@ export function NormalGameTableView(props: GameTableViewProps) {
               onLocalCardClick={props.onLocalCardClick}
             />
 
-            <div
-              className="normal-middle-band"
-              data-layout-container="middle-band"
-            >
-              <NormalSeat
-                layoutMetrics={layoutMetrics}
-                seatView={seatByPosition.left}
-                sortedLocalHand={props.sortedLocalHand}
-                localCanInteract={props.localCanInteract}
-                localPassInteractionEnabled={props.localPassInteractionEnabled}
-                localLegalCardIds={props.localLegalCardIds}
-                selectedCardIds={props.selectedCardIds}
-                onLocalCardClick={props.onLocalCardClick}
-              />
-
-              <section
-                className={getNormalCenterZoneClassName(props.layoutEditorActive)}
-                data-layout-container="center-zone"
-              >
-                {shouldRenderNormalCenterZoneFelt(props.layoutEditorActive) && (
-                  <div className="normal-table__felt" />
-                )}
-                <TableSurface
-                  variant="normal"
-                  normalTableLayout={props.normalTableLayout}
-                  state={props.state}
-                  derived={props.derived}
-                  controlHint={props.controlHint}
-                  displayedTrick={props.displayedTrick}
-                  trickIsResolving={props.trickIsResolving}
-                  seatRelativePlays={props.seatRelativePlays}
-                  tablePassGroups={props.tablePassGroups}
-                  cardLookup={props.cardLookup}
-                />
-              </section>
-
-              <NormalSeat
-                layoutMetrics={layoutMetrics}
-                seatView={seatByPosition.right}
-                sortedLocalHand={props.sortedLocalHand}
-                localCanInteract={props.localCanInteract}
-                localPassInteractionEnabled={props.localPassInteractionEnabled}
-                localLegalCardIds={props.localLegalCardIds}
-                selectedCardIds={props.selectedCardIds}
-                onLocalCardClick={props.onLocalCardClick}
-              />
-            </div>
+            <NormalSeat
+              normalTableLayout={props.normalTableLayout}
+              regionStyle={seatRegionStyleByPosition.left}
+              layoutMetrics={layoutMetrics}
+              seatView={seatByPosition.left}
+              sortedLocalHand={props.sortedLocalHand}
+              localCanInteract={props.localCanInteract}
+              localPassInteractionEnabled={props.localPassInteractionEnabled}
+              localLegalCardIds={props.localLegalCardIds}
+              selectedCardIds={props.selectedCardIds}
+              onLocalCardClick={props.onLocalCardClick}
+            />
 
             <NormalSeat
+              normalTableLayout={props.normalTableLayout}
+              regionStyle={seatRegionStyleByPosition.right}
+              layoutMetrics={layoutMetrics}
+              seatView={seatByPosition.right}
+              sortedLocalHand={props.sortedLocalHand}
+              localCanInteract={props.localCanInteract}
+              localPassInteractionEnabled={props.localPassInteractionEnabled}
+              localLegalCardIds={props.localLegalCardIds}
+              selectedCardIds={props.selectedCardIds}
+              onLocalCardClick={props.onLocalCardClick}
+            />
+
+            <NormalSeat
+              normalTableLayout={props.normalTableLayout}
+              regionStyle={seatRegionStyleByPosition.bottom}
               layoutMetrics={layoutMetrics}
               seatView={seatByPosition.bottom}
               sortedLocalHand={props.sortedLocalHand}
@@ -4383,6 +4782,7 @@ export function NormalGameTableView(props: GameTableViewProps) {
               className="normal-bottom-controls"
               data-layout-container="action-band"
               data-action-row="true"
+              style={actionRowRegionStyle}
             >
               {props.matchingPlayActions.length > 1 && (
                 <div className="normal-inline-controls">
@@ -4483,6 +4883,9 @@ export function NormalGameTableView(props: GameTableViewProps) {
           {props.layoutEditorActive && (
             <NormalLayoutEditor
               normalTableLayout={props.normalTableLayout}
+              seatViews={props.seatViews}
+              sortedLocalHand={props.sortedLocalHand}
+              layoutMetrics={layoutMetrics}
               onNormalTableLayoutChange={props.onNormalTableLayoutChange}
               onNormalTableLayoutImport={props.onNormalTableLayoutImport}
               onExportNormalTableLayout={props.onExportNormalTableLayout}

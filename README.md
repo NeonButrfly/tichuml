@@ -56,11 +56,13 @@ npm run db:migrate
 - [Product Notes](./docs/product/README.md)
 - [UI Notes](./docs/ui/README.md)
 - [Telemetry Notes](./docs/telemetry/README.md)
-- [Prompt and Workflow Notes](./docs/prompts/README.md)
+- [Prompt Capture And Workflow Notes](./docs/prompts/README.md)
 
 ## Milestone Snapshot
 
-The current repository head is Milestone `6.3`. GitHub milestones and GitHub issues are the authoritative project tracker. The canonical milestone plan still lives in [SPEC](./spec.md), while the normalized repository history and recent GitHub milestone-to-issue mapping now live in [docs/milestones/README.md](./docs/milestones/README.md).
+The current repository head is Milestone `6.3`. The active open backlog now lives in GitHub milestone [`6.4 – Gameplay & UX Stabilization`](https://github.com/NeonButrfly/tichuml/milestone/23). GitHub milestones and GitHub issues are the authoritative project tracker. The canonical milestone plan still lives in [SPEC](./spec.md), while the normalized repository history and current GitHub milestone-to-issue mapping now live in [docs/milestones/README.md](./docs/milestones/README.md).
+
+Prompt-capture notes in [`docs/prompts`](./docs/prompts/README.md) preserve prompt intent and issue links only. They are not a parallel tracker; status stays in GitHub.
 
 When making new milestone commits, prefer:
 

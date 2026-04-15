@@ -56,6 +56,10 @@ export type ExchangeRenderModel = {
   >;
   visibleHandsBySeat: Record<SeatId, Card[]>;
   receivedPendingPickupBySeat: Record<SeatId, string[]>;
+  receivedPendingPickupByTargetBySeat: Record<
+    SeatId,
+    Partial<Record<PassTarget, string>>
+  >;
   cardBucketsBySeat: Record<SeatId, SeatExchangeRenderBuckets>;
 };
 
@@ -145,33 +149,49 @@ export function getReceivedPassCardIds(
   state: Pick<GameState, "passSelections" | "revealedPasses">,
   seat: SeatId
 ): string[] {
+  return PASS_TARGETS.map((target) => getReceivedPassCardByTarget(state, seat, target))
+    .filter((cardId): cardId is string => Boolean(cardId));
+}
+
+export function getReceivedPassCardByTarget(
+  state: Pick<GameState, "passSelections" | "revealedPasses">,
+  seat: SeatId,
+  target: PassTarget
+): string | null {
   const availableSelections =
     Object.keys(state.revealedPasses).length > 0
       ? state.revealedPasses
       : state.passSelections;
-  const seatIndex = SEAT_IDS.indexOf(seat);
-  const sourceOrder: SeatId[] = [
-    SEAT_IDS[(seatIndex + 3) % SEAT_IDS.length]!,
-    SEAT_IDS[(seatIndex + 2) % SEAT_IDS.length]!,
-    SEAT_IDS[(seatIndex + 1) % SEAT_IDS.length]!
-  ];
+  const sourceSeat = getPassTargetSeat(seat, target);
+  const selection = availableSelections[sourceSeat];
+  if (!selection) {
+    return null;
+  }
 
-  return sourceOrder.flatMap((sourceSeat) => {
-    const selection = availableSelections[sourceSeat];
-    if (!selection) {
-      return [];
+  const sourceTarget = PASS_TARGETS.find(
+    (candidateTarget) => getPassTargetSeat(sourceSeat, candidateTarget) === seat
+  );
+  if (!sourceTarget) {
+    return null;
+  }
+
+  return selection[sourceTarget] ?? null;
+}
+
+export function getReceivedPassCardsByTarget(
+  state: Pick<GameState, "passSelections" | "revealedPasses">,
+  seat: SeatId
+): Partial<Record<PassTarget, string>> {
+  const receivedByTarget: Partial<Record<PassTarget, string>> = {};
+
+  for (const target of PASS_TARGETS) {
+    const cardId = getReceivedPassCardByTarget(state, seat, target);
+    if (cardId) {
+      receivedByTarget[target] = cardId;
     }
+  }
 
-    const target = PASS_TARGETS.find(
-      (candidateTarget) => getPassTargetSeat(sourceSeat, candidateTarget) === seat
-    );
-    if (!target) {
-      return [];
-    }
-
-    const cardId = selection[target];
-    return cardId ? [cardId] : [];
-  });
+  return receivedByTarget;
 }
 
 export function collectStagedPassCardIds(
@@ -239,6 +259,9 @@ export function deriveExchangeRenderModel(config: {
     ])
   ) as ExchangeRenderModel["stagedSelectionBySeat"];
   const receivedPendingPickupBySeat = createSeatRecord(() => [] as string[]);
+  const receivedPendingPickupByTargetBySeat = createSeatRecord(
+    () => ({} as Partial<Record<PassTarget, string>>)
+  );
   const cardBucketsBySeat = createSeatRecord(createEmptyExchangeBuckets);
 
   const hiddenFromHandsBySeat = createSeatRecord(() => new Set<string>());
@@ -263,7 +286,12 @@ export function deriveExchangeRenderModel(config: {
     }
 
     if (receivedCardsVisible) {
+      const receivedCardIdsByTarget = getReceivedPassCardsByTarget(
+        config.state,
+        seat
+      );
       const receivedCardIds = getReceivedPassCardIds(config.state, seat);
+      receivedPendingPickupByTargetBySeat[seat] = receivedCardIdsByTarget;
       receivedPendingPickupBySeat[seat] = receivedCardIds;
       for (const cardId of receivedCardIds) {
         hiddenFromHandsBySeat[seat].add(cardId);
@@ -298,6 +326,7 @@ export function deriveExchangeRenderModel(config: {
     stagedSelectionBySeat,
     visibleHandsBySeat,
     receivedPendingPickupBySeat,
+    receivedPendingPickupByTargetBySeat,
     cardBucketsBySeat
   };
 }

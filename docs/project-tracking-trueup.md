@@ -4,6 +4,8 @@ Date: `2026-04-10`
 
 This report records the repository-wide reconciliation pass across GitHub issues, GitHub milestones, commit history, and local tracking docs.
 
+This file is historical audit evidence, not the live backlog. The active forward backlog now lives in GitHub milestone [`6.4 – Gameplay & UX Stabilization`](https://github.com/NeonButrfly/tichuml/milestone/23), and the standing governance audit issue is [#26](https://github.com/NeonButrfly/tichuml/issues/26).
+
 ## Milestones Kept
 
 - Historical imported release buckets retained for commit-history continuity:
@@ -90,9 +92,10 @@ This report records the repository-wide reconciliation pass across GitHub issues
 - [#13](https://github.com/NeonButrfly/tichuml/issues/13) `Port deterministic heuristics brain as the shared bot policy`
 - [#14](https://github.com/NeonButrfly/tichuml/issues/14) `Stabilize canonical table layout schema and Tichu-call gating`
 
-## Issues Still Open
+## Issues Open At Reconciliation Time
 
-- None. GitHub currently has no open issues after the duplicate cleanup and historical backfill pass.
+- None. The reconciliation pass ended with no open issues.
+- Forward backlog creation resumed later with milestone `6.4 – Gameplay & UX Stabilization`; see GitHub for live state.
 
 ## Documentation Fixes Performed
 
@@ -102,6 +105,12 @@ This report records the repository-wide reconciliation pass across GitHub issues
 - Added [docs/issues-archived/README.md](./issues-archived/README.md) to explain that archived local issue markdown is legacy migration evidence only.
 - Updated archived local issue files to map each one to its GitHub issue, milestone, and fix commit.
 - Updated [docs/milestones/README.md](./milestones/README.md) with the authoritative GitHub milestone set and recent milestone-to-issue mapping.
+
+## Forward Backlog After Reconciliation
+
+- Open stabilization milestone: [`6.4 – Gameplay & UX Stabilization`](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Standing governance audit issue: [#26](https://github.com/NeonButrfly/tichuml/issues/26)
+- Prompt capture now lives in [docs/prompts](./prompts/README.md) and links back to GitHub issues instead of tracking separate status locally.
 
 ## PR And Commit Reality Check
 

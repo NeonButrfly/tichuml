@@ -52,4 +52,6 @@ The game UI is designed around a single-screen, no-scroll table layout with expl
 - random-sources dialog
 - score/history surfaces
 
+Prompt-driven UI behavior changes should be captured in [../prompts/ui.md](../prompts/ui.md) and linked to the governing GitHub issue before implementation is considered complete.
+
 Update this document when layout rules or core UI interaction contracts change.

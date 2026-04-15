@@ -13,6 +13,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_NORMAL_TABLE_LAYOUT,
+  NormalPassStagingRegions,
   NormalTrickStagingRegions,
   TableSurface,
   computeNormalViewportLayoutMetrics,
@@ -186,6 +187,49 @@ describe("trick UI cleanup", () => {
     view.unmount();
   });
 
+  it("keeps the normal play-surface core centered inside its shared play-area container", () => {
+    const lead = combo(["jade-10"]);
+    const response = combo(["dragon"]);
+    const state = createScenarioState({
+      phase: "trick_play",
+      activeSeat: "seat-0",
+      currentTrick: {
+        leader: "seat-1",
+        currentWinner: "seat-0",
+        currentCombination: response,
+        entries: [
+          { type: "play", seat: "seat-1", combination: lead },
+          { type: "play", seat: "seat-0", combination: response }
+        ],
+        passingSeats: []
+      }
+    });
+    const customLayout = {
+      ...DEFAULT_NORMAL_TABLE_LAYOUT,
+      playSurface: { x: 0.41, y: 0.37, rotation: 0 }
+    };
+    const view = render(
+      createElement(TableSurface, {
+        variant: "normal",
+        normalTableLayout: customLayout,
+        state,
+        derived: createDerived(state),
+        controlHint: "Play a card",
+        displayedTrick: state.currentTrick,
+        trickIsResolving: false,
+        seatRelativePlays: createSeatRelativePlays(state.currentTrick?.entries ?? []),
+        tablePassGroups: [],
+        cardLookup: buildCardLookup(cardsFromIds(["jade-10", "dragon"]))
+      })
+    );
+
+    const core = view.container.querySelector<HTMLElement>(".normal-play-surface__core");
+    expect(core?.style.left).toBe("");
+    expect(core?.style.top).toBe("");
+
+    view.unmount();
+  });
+
   it("renders played cards in seat-local trick stages instead of the center surface", () => {
     const lead = combo(["jade-10"]);
     const response = combo(["dragon"]);
@@ -255,7 +299,7 @@ describe("trick UI cleanup", () => {
     view.unmount();
   });
 
-  it("renders received cards in the pickup stage until Pickup", () => {
+  it("renders received cards in directional pass lanes until Pickup", () => {
     const pickupCards = cardsFromIds(["dragon", "jade-10", "sword-5"]);
     const layoutMetrics = computeNormalViewportLayoutMetrics({
       viewportWidth: 1366,
@@ -269,29 +313,66 @@ describe("trick UI cleanup", () => {
     });
     const view = render(
       createElement("div", { style: { position: "relative", width: "1366px", height: "768px" } },
-        createElement(NormalTrickStagingRegions, {
+        createElement(NormalPassStagingRegions, {
           normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
           layoutMetrics,
-          displayedTrick: null,
-          seatRelativePlays: [],
-          pickupStageViews: [
+          passRouteViews: [
             {
-              seat: "seat-0",
-              position: "bottom",
-              label: "South Pickup",
-              cardIds: pickupCards.map((card) => card.id)
+              key: "pickup-seat-0-left",
+              sourceSeat: "seat-0",
+              sourcePosition: "bottom",
+              target: "left",
+              targetSeat: "seat-3",
+              occupied: true,
+              visibleCardId: pickupCards[0]!.id,
+              faceDown: false,
+              interactive: false
+            },
+            {
+              key: "pickup-seat-0-partner",
+              sourceSeat: "seat-0",
+              sourcePosition: "bottom",
+              target: "partner",
+              targetSeat: "seat-2",
+              occupied: true,
+              visibleCardId: pickupCards[1]!.id,
+              faceDown: false,
+              interactive: false
+            },
+            {
+              key: "pickup-seat-0-right",
+              sourceSeat: "seat-0",
+              sourcePosition: "bottom",
+              target: "right",
+              targetSeat: "seat-1",
+              occupied: true,
+              visibleCardId: pickupCards[2]!.id,
+              faceDown: false,
+              interactive: false
             }
           ],
-          dogLeadAnimation: null,
-          cardLookup: buildCardLookup(pickupCards)
+          selectedPassTarget: null,
+          cardLookup: buildCardLookup(pickupCards),
+          onPassTargetSelect: () => {},
+          onPassLaneDrop: () => {},
+          onPassLaneCardClick: () => {},
+          onPassLaneCardDragStart: () => {},
+          onPassLaneCardDragEnd: () => {}
         })
       )
     );
 
-    expect(view.container.querySelector('[data-pickup-stage="seat-0"]')).not.toBeNull();
     expect(
-      view.container.querySelectorAll('[data-pickup-stage="seat-0"] .normal-card--pass')
-    ).toHaveLength(3);
+      view.container.querySelector('[data-pass-lane="pickup-seat-0-left"]')
+    ).not.toBeNull();
+    expect(
+      view.container.querySelector('[data-pass-lane="pickup-seat-0-partner"]')
+    ).not.toBeNull();
+    expect(
+      view.container.querySelector('[data-pass-lane="pickup-seat-0-right"]')
+    ).not.toBeNull();
+    expect(view.container.querySelector('[data-pickup-stage="seat-0"]')).toBeNull();
+    expect(view.container.querySelectorAll(".normal-card--route")).toHaveLength(3);
 
     view.unmount();
   });
@@ -323,6 +404,7 @@ describe("trick UI cleanup", () => {
 
     expect(pickupY).toBeGreaterThan(trickY);
     expect(pickupY).toBeLessThan(southHandY);
+    expect(nameY).toBeGreaterThan(trickY);
     expect(nameY).toBeGreaterThan(southHandY);
     expect(nameY).toBeLessThan(actionY);
   });

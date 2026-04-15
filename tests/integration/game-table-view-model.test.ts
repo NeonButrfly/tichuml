@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import defaultLayoutText from "../../apps/web/src/layout.xml?raw";
+import defaultLayoutText from "../../apps/web/src/layout.json?raw";
 import {
   createNormalActionRail,
   findMatchingHotkey,
@@ -9,9 +9,11 @@ import {
 } from "../../apps/web/src/game-table-view-model";
 import {
   DEFAULT_NORMAL_TABLE_LAYOUT,
+  DEFAULT_NORMAL_TABLE_LAYOUT_CONFIG,
   DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS,
   formatEvent,
-  parseNormalTableLayoutConfigText
+  parseNormalTableLayoutConfigText,
+  serializeNormalTableLayoutConfig
 } from "../../apps/web/src/game-table-views";
 
 describe("game-table view-model helpers", () => {
@@ -217,5 +219,15 @@ describe("game-table view-model helpers", () => {
 
     expect(parsed?.elements).toEqual(DEFAULT_NORMAL_TABLE_LAYOUT);
     expect(parsed?.tokens).toEqual(DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS);
+  });
+
+  it("round-trips the canonical layout config without schema drift", () => {
+    const serialized = serializeNormalTableLayoutConfig(
+      DEFAULT_NORMAL_TABLE_LAYOUT_CONFIG
+    );
+    const parsed = parseNormalTableLayoutConfigText(serialized);
+
+    expect(parsed).toEqual(DEFAULT_NORMAL_TABLE_LAYOUT_CONFIG);
+    expect(JSON.parse(serialized)).toEqual(DEFAULT_NORMAL_TABLE_LAYOUT_CONFIG);
   });
 });

@@ -28,4 +28,6 @@ This project is a playable digital Tichu client and experimentation platform, no
 - external entropy collection lives on the server
 - telemetry and replay support remain append-only and deterministic
 
+Gameplay-changing prompts should be captured in [../prompts/gameplay.md](../prompts/gameplay.md) or [../prompts/rules.md](../prompts/rules.md) and linked to GitHub issues before implementation.
+
 Use this document as the short product-facing summary. Use [SPEC](../../spec.md) for the full contract.

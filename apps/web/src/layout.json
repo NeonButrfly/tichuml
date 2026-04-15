@@ -1,0 +1,156 @@
+{
+  "version": 1,
+  "surface": {
+    "widthMode": "relative",
+    "heightMode": "relative",
+    "gridSize": 10
+  },
+  "elements": {
+    "scoreBadge": {
+      "x": 0.5032051282051282,
+      "y": 0.01443001443001443,
+      "rotation": 0
+    },
+    "playSurface": {
+      "x": 0.5,
+      "y": 0.46,
+      "rotation": 0
+    },
+    "northHand": {
+      "x": 0.5032051282051282,
+      "y": 0.15873015873015872,
+      "rotation": 0
+    },
+    "eastHand": {
+      "x": 0.9198717948717948,
+      "y": 0.5050505050505051,
+      "rotation": 0
+    },
+    "southHand": {
+      "x": 0.5032051282051282,
+      "y": 0.7936507936507936,
+      "rotation": 0
+    },
+    "westHand": {
+      "x": 0.14262820512820512,
+      "y": 0.5050505050505051,
+      "rotation": 0
+    },
+    "northStage": {
+      "x": 0.5032051282051282,
+      "y": 0.3463203463203463,
+      "rotation": 0
+    },
+    "eastStage": {
+      "x": 0.8237179487179487,
+      "y": 0.4906204906204906,
+      "rotation": 0
+    },
+    "southStage": {
+      "x": 0.5032051282051282,
+      "y": 0.6349206349206349,
+      "rotation": 0
+    },
+    "westStage": {
+      "x": 0.18269230769230768,
+      "y": 0.4906204906204906,
+      "rotation": 0
+    },
+    "northToEastLane": {
+      "x": 0.5512820512820513,
+      "y": 0.2597402597402597,
+      "rotation": 90
+    },
+    "northToSouthLane": {
+      "x": 0.4951923076923077,
+      "y": 0.2741702741702742,
+      "rotation": 0
+    },
+    "northToWestLane": {
+      "x": 0.4391025641025641,
+      "y": 0.2597402597402597,
+      "rotation": -90
+    },
+    "eastToNorthLane": {
+      "x": 0.8557692307692307,
+      "y": 0.38961038961038963,
+      "rotation": 270
+    },
+    "eastToWestLane": {
+      "x": 0.8477564102564102,
+      "y": 0.4906204906204906,
+      "rotation": 0
+    },
+    "eastToSouthLane": {
+      "x": 0.8557692307692307,
+      "y": 0.5916305916305916,
+      "rotation": 90
+    },
+    "southToWestLane": {
+      "x": 0.4391025641025641,
+      "y": 0.7070707070707071,
+      "rotation": -90
+    },
+    "southToNorthLane": {
+      "x": 0.4951923076923077,
+      "y": 0.6926406926406926,
+      "rotation": 0
+    },
+    "southToEastLane": {
+      "x": 0.5512820512820513,
+      "y": 0.7070707070707071,
+      "rotation": 90
+    },
+    "westToNorthLane": {
+      "x": 0.14262820512820512,
+      "y": 0.38961038961038963,
+      "rotation": -90
+    },
+    "westToEastLane": {
+      "x": 0.15064102564102563,
+      "y": 0.4906204906204906,
+      "rotation": 0
+    },
+    "westToSouthLane": {
+      "x": 0.14262820512820512,
+      "y": 0.5916305916305916,
+      "rotation": 90
+    },
+    "northLabel": {
+      "x": 0.5032051282051282,
+      "y": 0.07215007215007214,
+      "rotation": 0
+    },
+    "eastLabel": {
+      "x": 0.9358974358974359,
+      "y": 0.47619047619047616,
+      "rotation": 0
+    },
+    "southLabel": {
+      "x": 0.5032051282051282,
+      "y": 0.9235209235209235,
+      "rotation": 0
+    },
+    "westLabel": {
+      "x": 0.014423076923076924,
+      "y": 0.4906204906204906,
+      "rotation": 0
+    },
+    "actionRow": {
+      "x": 0.5,
+      "y": 0.948,
+      "rotation": 0
+    }
+  },
+  "tokens": {
+    "topHandOverlap": 34,
+    "bottomHandOverlap": 16,
+    "sideHandOverlap": 34,
+    "trickLaneGap": 10,
+    "playCardOverlap": 22,
+    "passCardOverlap": 22,
+    "actionAreaGap": 8,
+    "actionButtonGap": 8,
+    "stageCardScale": 0.86
+  }
+}
