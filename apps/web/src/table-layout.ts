@@ -132,6 +132,18 @@ export type NormalTrickFanMetrics = {
   groupDy: number;
 };
 
+export type NormalTableSpacing = {
+  handToLabelGap: number;
+  labelToBadgeGap: number;
+  handToStageGap: number;
+  handToLaneGap: number;
+  laneSpacing: number;
+  laneToStageGap: number;
+  southToActionRowGap: number;
+  northToScoreGap: number;
+  edgeInset: number;
+};
+
 export type NormalSeatLayout = {
   seat: SeatVisualPosition;
   axis: "horizontal" | "vertical";
@@ -143,6 +155,36 @@ export type NormalSeatLayout = {
   pickupZone: CSSProperties;
   handFanDirection: "horizontal" | "vertical";
   trickFanDirection: "down-right" | "up-left" | "left" | "right";
+};
+
+export type NormalSeatAnchorId =
+  | "northSeat"
+  | "eastSeat"
+  | "southSeat"
+  | "westSeat";
+
+export type NormalHandBounds = {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  width: number;
+  height: number;
+  center: AnchorPoint;
+};
+
+export type NormalSeatAnchorGeometry = {
+  anchorId: NormalSeatAnchorId;
+  position: SeatVisualPosition;
+  hand: AnchorPoint;
+  handBounds: NormalHandBounds;
+  label: AnchorPoint;
+  regionStyle: CSSProperties;
+};
+
+type NormalSideLabelBorderBounds = {
+  left: number;
+  right: number;
 };
 
 const NORMAL_LAYOUT_TOKEN_KEYS = [
@@ -369,9 +411,9 @@ export const NORMAL_LAYOUT_ELEMENT_SPECS: Record<
   playSurface: { label: "Play Surface", width: 920, height: 360 },
   actionRow: { label: "Action Row", width: 340, height: 88 },
   northLabel: { label: "North Label", width: 120, height: 28 },
-  eastLabel: { label: "East Label", width: 32, height: 160 },
+  eastLabel: { label: "East Label", width: 26, height: 160 },
   southLabel: { label: "South Label", width: 120, height: 28 },
-  westLabel: { label: "West Label", width: 32, height: 160 }
+  westLabel: { label: "West Label", width: 26, height: 160 }
 };
 
 export const NORMAL_LAYOUT_EDITOR_ORDER: NormalLayoutElementId[] = [
@@ -502,13 +544,13 @@ export const NORMAL_PASS_STAGE_MAP: Record<
   ],
   left: [
     { targetPosition: "top", direction: "up" },
-    { targetPosition: "bottom", direction: "down" },
-    { targetPosition: "right", direction: "right" }
+    { targetPosition: "right", direction: "right" },
+    { targetPosition: "bottom", direction: "down" }
   ],
   right: [
     { targetPosition: "top", direction: "up" },
-    { targetPosition: "bottom", direction: "down" },
-    { targetPosition: "left", direction: "left" }
+    { targetPosition: "left", direction: "left" },
+    { targetPosition: "bottom", direction: "down" }
   ],
   bottom: [
     { targetPosition: "left", direction: "left" },
@@ -523,6 +565,22 @@ function clamp01(value: number) {
 
 function clampNumber(value: number, minimum: number, maximum: number) {
   return Math.min(maximum, Math.max(minimum, value));
+}
+
+export function getNormalTableSpacing(
+  metrics: NormalViewportLayoutMetrics
+): NormalTableSpacing {
+  return {
+    handToLabelGap: clampNumber(Math.round(metrics.cardWidth * 0.18), 12, 18),
+    labelToBadgeGap: clampNumber(Math.round(metrics.cardWidth * 0.22), 14, 22),
+    handToStageGap: clampNumber(Math.round(metrics.cardHeight * 0.28), 24, 36),
+    handToLaneGap: clampNumber(Math.round(metrics.routeCardWidth * 0.36), 18, 24),
+    laneSpacing: clampNumber(Math.round(metrics.routeCardWidth * 0.16), 8, 12),
+    laneToStageGap: clampNumber(Math.round(metrics.cardWidth * 0.24), 16, 24),
+    southToActionRowGap: clampNumber(Math.round(metrics.cardHeight * 0.26), 24, 36),
+    northToScoreGap: clampNumber(Math.round(metrics.cardHeight * 0.12), 10, 18),
+    edgeInset: clampNumber(Math.round(metrics.cardWidth * 0.32), 20, 30)
+  };
 }
 
 function cardHeightFromWidth(width: number) {
@@ -699,6 +757,93 @@ function resolveHandSpan(
   };
 }
 
+function getNormalSeatAnchorId(position: SeatVisualPosition): NormalSeatAnchorId {
+  switch (position) {
+    case "top":
+      return "northSeat";
+    case "right":
+      return "eastSeat";
+    case "bottom":
+      return "southSeat";
+    case "left":
+      return "westSeat";
+  }
+}
+
+function resolveNormalHandBounds(config: {
+  position: SeatVisualPosition;
+  handAnchor: AnchorPoint;
+  handCardCount: number;
+  layoutMetrics: NormalViewportLayoutMetrics;
+}): NormalHandBounds {
+  const handMetrics = resolveHandSpan(
+    config.position,
+    config.handCardCount,
+    config.layoutMetrics
+  );
+  const isSideSeat =
+    config.position === "left" || config.position === "right";
+  const width = isSideSeat ? handMetrics.depth : handMetrics.span;
+  const height = isSideSeat ? handMetrics.span : handMetrics.depth;
+  const left = config.handAnchor.x - width / 2;
+  const top = config.handAnchor.y - height / 2;
+
+  return {
+    left,
+    top,
+    right: left + width,
+    bottom: top + height,
+    width,
+    height,
+    center: config.handAnchor
+  };
+}
+
+function resolveNormalSeatLabelPoint(
+  position: SeatVisualPosition,
+  handBounds: NormalHandBounds,
+  metrics: NormalViewportLayoutMetrics,
+  normalTableLayout: NormalTableLayout
+): AnchorPoint {
+  const { handToLabelGap, northToScoreGap } = getNormalTableSpacing(metrics);
+  const sideLabelBorder = getNormalSideLabelBorderBounds(metrics);
+
+  switch (position) {
+    case "top": {
+      const scoreAnchor = elementAnchorToPixels(
+        normalTableLayout.scoreBadge,
+        metrics
+      );
+      return {
+        x: handBounds.center.x,
+        y:
+          scoreAnchor.y +
+          NORMAL_LAYOUT_ELEMENT_SPECS.scoreBadge.height / 2 +
+          northToScoreGap +
+          NORMAL_LAYOUT_ELEMENT_SPECS.northLabel.height / 2
+      };
+    }
+    case "bottom":
+      return {
+        x: handBounds.center.x,
+        y:
+          handBounds.bottom +
+          handToLabelGap +
+          NORMAL_LAYOUT_ELEMENT_SPECS.southLabel.height / 2
+      };
+    case "left":
+      return {
+        x: (sideLabelBorder.left + handBounds.left) / 2,
+        y: handBounds.center.y
+      };
+    case "right":
+      return {
+        x: (handBounds.right + sideLabelBorder.right) / 2,
+        y: handBounds.center.y
+      };
+  }
+}
+
 export function anchorStyle(element: NormalLayoutElement): CSSProperties {
   return {
     left: `${element.x * 100}%`,
@@ -735,39 +880,6 @@ function resolveBoardRectStyle(config: {
   };
 }
 
-function offsetAnchorPoint(
-  point: AnchorPoint,
-  deltaX: number,
-  deltaY: number
-): AnchorPoint {
-  return {
-    x: point.x + deltaX,
-    y: point.y + deltaY,
-    rotation: point.rotation
-  };
-}
-
-function resolvePassLaneInwardOffset(
-  sourcePosition: SeatVisualPosition,
-  metrics: NormalViewportLayoutMetrics
-): { x: number; y: number } {
-  const inwardOffset = Math.max(
-    18,
-    Math.round(Math.max(metrics.routeCardWidth, metrics.routeCardHeight) * 0.42)
-  );
-
-  switch (sourcePosition) {
-    case "top":
-      return { x: 0, y: inwardOffset };
-    case "bottom":
-      return { x: 0, y: -inwardOffset };
-    case "left":
-      return { x: inwardOffset, y: 0 };
-    case "right":
-      return { x: -inwardOffset, y: 0 };
-  }
-}
-
 function scaleNormalLayoutElementSize(
   elementId: NormalLayoutElementId,
   scale: number
@@ -787,15 +899,96 @@ export function getNormalPassLaneLayoutId(
   return NORMAL_PASS_LANE_LAYOUT_IDS[sourcePosition][targetPosition] ?? null;
 }
 
-function getPassTokenRotation(direction: PassLaneDirection): number {
-  switch (direction) {
-    case "right":
-      return 90;
+function getNormalPartnerLaneTargetPosition(
+  sourcePosition: SeatVisualPosition
+): SeatVisualPosition {
+  switch (sourcePosition) {
+    case "top":
+      return "bottom";
+    case "bottom":
+      return "top";
     case "left":
-      return -90;
-    default:
-      return 0;
+      return "right";
+    case "right":
+      return "left";
   }
+}
+
+function getNormalPassVisibleRotation(config: {
+  sourcePosition: SeatVisualPosition;
+  targetPosition: SeatVisualPosition;
+}): number {
+  if (
+    config.targetPosition ===
+    getNormalPartnerLaneTargetPosition(config.sourcePosition)
+  ) {
+    return 0;
+  }
+
+  if (config.sourcePosition === "top") {
+    return config.targetPosition === "right" ? -90 : 90;
+  }
+
+  if (config.sourcePosition === "bottom") {
+    return config.targetPosition === "right" ? 90 : -90;
+  }
+
+  if (config.sourcePosition === "left") {
+    return config.targetPosition === "top" ? -90 : 90;
+  }
+
+  if (config.sourcePosition === "right") {
+    return config.targetPosition === "bottom" ? 90 : -90;
+  }
+
+  return 0;
+}
+
+function isQuarterTurn(rotation: number) {
+  return Math.abs(rotation % 180) === 90;
+}
+
+function getNormalPassVisualSize(config: {
+  width: number;
+  height: number;
+  rotation: number;
+}) {
+  return isQuarterTurn(config.rotation)
+    ? { width: config.height, height: config.width }
+    : { width: config.width, height: config.height };
+}
+
+function getNormalPassLaneGapMin(
+  layoutMetrics: NormalViewportLayoutMetrics
+) {
+  return clampNumber(
+    Math.round(layoutMetrics.routeCardWidth * 0.12),
+    4,
+    8
+  );
+}
+
+function getNormalPassClusterAxisNudge(config: {
+  sourcePosition: SeatVisualPosition;
+  layoutMetrics: NormalViewportLayoutMetrics;
+}) {
+  if (config.sourcePosition === "top") {
+    return -clampNumber(
+      Math.round(config.layoutMetrics.routeCardHeight * 0.1),
+      6,
+      10
+    );
+  }
+
+  if (config.sourcePosition === "bottom") {
+    return clampNumber(
+      Math.round(config.layoutMetrics.routeCardHeight * 0.06),
+      0,
+      6
+    );
+  }
+
+  return 0;
 }
 
 export function resolveNormalPassLaneGeometry(config: {
@@ -804,6 +997,7 @@ export function resolveNormalPassLaneGeometry(config: {
   sourcePosition: SeatVisualPosition;
   targetPosition: SeatVisualPosition;
   direction: PassLaneDirection;
+  sourceHandCardCount?: number;
 }): NormalPassLaneGeometry | null {
   const elementId = getNormalPassLaneLayoutId(
     config.sourcePosition,
@@ -815,25 +1009,32 @@ export function resolveNormalPassLaneGeometry(config: {
 
   const routeScale =
     config.layoutMetrics.routeCardWidth / NORMAL_ROUTE_CARD_WIDTH;
-  const layoutElement = config.normalTableLayout[elementId];
   const size = scaleNormalLayoutElementSize(elementId, routeScale);
-  const anchorPoint = offsetAnchorPoint(
-    resolveNormalBoardAnchorPoint(layoutElement, config.layoutMetrics),
-    resolvePassLaneInwardOffset(config.sourcePosition, config.layoutMetrics).x,
-    resolvePassLaneInwardOffset(config.sourcePosition, config.layoutMetrics).y
-  );
+  const visibleRotation = getNormalPassVisibleRotation({
+    sourcePosition: config.sourcePosition,
+    targetPosition: config.targetPosition
+  });
+  const anchorPoint = resolveNormalPassLaneAnchorPoint({
+    normalTableLayout: config.normalTableLayout,
+    layoutMetrics: config.layoutMetrics,
+    sourcePosition: config.sourcePosition,
+    targetPosition: config.targetPosition,
+    laneWidth: size.width,
+    laneHeight: size.height,
+    sourceHandCardCount: config.sourceHandCardCount ?? 1
+  });
 
   return {
     elementId,
     targetPosition: config.targetPosition,
-    rotation: layoutElement.rotation,
+    rotation: visibleRotation,
     width: size.width,
     height: size.height,
     style: {
       ...boardAnchorStyle(anchorPoint),
       width: `${size.width}px`,
       height: `${size.height}px`,
-      "--normal-pass-token-rotation": `${getPassTokenRotation(config.direction) - layoutElement.rotation}deg`
+      "--normal-pass-visible-rotation": `${visibleRotation}deg`
     } as CSSProperties
   };
 }
@@ -916,7 +1117,7 @@ export function computeNormalViewportLayoutMetrics(config: {
     );
     const routeCardHeight = cardHeightFromWidth(routeCardWidth);
     const sideColumnWidth =
-      candidateHeight + sideLabelWidth + seatInsetX * 2 + 6;
+      candidateWidth + sideLabelWidth + seatInsetX * 2 + centerInset;
     const minimumMiddleWidth = Math.max(
       260,
       Math.round(candidateWidth * 3.4),
@@ -1013,7 +1214,7 @@ export function computeNormalViewportLayoutMetrics(config: {
   const fallbackNorthBandHeight = fallbackCardHeight + 28;
   const fallbackSouthBandHeight = fallbackCardHeight + 34 + fallbackSelectedLift;
   const fallbackSideColumnWidth =
-    fallbackCardHeight + 26 + seatInsetX * 2 + 6;
+    resolvedCardWidth + 26 + seatInsetX * 2 + centerInset;
   const fallbackCenterColumnWidth = Math.max(
     260,
     availableShellWidth - fallbackSideColumnWidth * 2 - bandGap * 2
@@ -1072,13 +1273,21 @@ export function computeNormalViewportLayoutMetrics(config: {
 export function getBoardBounds(
   metrics: NormalViewportLayoutMetrics
 ): BoardRect {
+  const boardViewportWidth = Math.max(
+    0,
+    metrics.viewportWidth - metrics.shellPaddingX * 2
+  );
+  const boardViewportHeight = Math.max(
+    0,
+    metrics.viewportHeight - metrics.shellPaddingY * 2
+  );
   const width = Math.max(
     0,
-    metrics.viewportWidth - NORMAL_BOARD_INSET.left - NORMAL_BOARD_INSET.right
+    boardViewportWidth - NORMAL_BOARD_INSET.left - NORMAL_BOARD_INSET.right
   );
   const height = Math.max(
     0,
-    metrics.viewportHeight - NORMAL_BOARD_INSET.top - NORMAL_BOARD_INSET.bottom
+    boardViewportHeight - NORMAL_BOARD_INSET.top - NORMAL_BOARD_INSET.bottom
   );
 
   return {
@@ -1091,21 +1300,178 @@ export function getBoardBounds(
   };
 }
 
+function getNormalSideLabelBorderBounds(
+  metrics: NormalViewportLayoutMetrics
+): NormalSideLabelBorderBounds {
+  const board = getBoardBounds(metrics);
+
+  return {
+    left: board.left - NORMAL_BOARD_INSET.left,
+    right: board.right + NORMAL_BOARD_INSET.right
+  };
+}
+
+function getNormalPlayAreaBounds(
+  normalTableLayout: NormalTableLayout,
+  metrics: NormalViewportLayoutMetrics
+): BoardRect {
+  const center = elementAnchorToPixels(normalTableLayout.playSurface, metrics);
+  const width = metrics.centerColumnWidth;
+  const height = metrics.centerBandHeight;
+  const left = center.x - width / 2;
+  const top = center.y - height / 2;
+
+  return {
+    left,
+    top,
+    width,
+    height,
+    right: left + width,
+    bottom: top + height
+  };
+}
+
+export function resolveNormalSeatAnchorGeometry(config: {
+  position: SeatVisualPosition;
+  normalTableLayout: NormalTableLayout;
+  layoutMetrics: NormalViewportLayoutMetrics;
+  handCardCount: number;
+}): NormalSeatAnchorGeometry {
+  const baseHand = elementAnchorToPixels(
+    config.normalTableLayout[NORMAL_HAND_LAYOUT_IDS[config.position]],
+    config.layoutMetrics
+  );
+  const handMetrics = resolveHandSpan(
+    config.position,
+    config.handCardCount,
+    config.layoutMetrics
+  );
+  const isSideSeat =
+    config.position === "left" || config.position === "right";
+  const hand = { ...baseHand };
+
+  if (config.position === "top") {
+    const spacing = getNormalTableSpacing(config.layoutMetrics);
+    const scoreAnchor = elementAnchorToPixels(
+      config.normalTableLayout.scoreBadge,
+      config.layoutMetrics
+    );
+    const northLabelCenterY =
+      scoreAnchor.y +
+      NORMAL_LAYOUT_ELEMENT_SPECS.scoreBadge.height / 2 +
+      spacing.northToScoreGap +
+      NORMAL_LAYOUT_ELEMENT_SPECS.northLabel.height / 2;
+    const northTightening = clampNumber(
+      Math.round(config.layoutMetrics.cardHeight * 0.08),
+      4,
+      8
+    );
+    const minimumHandCenterY =
+      northLabelCenterY +
+      NORMAL_LAYOUT_ELEMENT_SPECS.northLabel.height / 2 +
+      spacing.handToLabelGap +
+      handMetrics.depth / 2 -
+      northTightening;
+
+    hand.y = Math.max(hand.y, minimumHandCenterY);
+  }
+
+  if (isSideSeat) {
+    const spacing = getNormalTableSpacing(config.layoutMetrics);
+    const playArea = getNormalPlayAreaBounds(
+      config.normalTableLayout,
+      config.layoutMetrics
+    );
+    const sideHandWidth = handMetrics.depth;
+    const sideInset = clampNumber(
+      Math.round(config.layoutMetrics.cardWidth * 0.36),
+      24,
+      30
+    );
+
+    hand.y = playArea.top + playArea.height / 2;
+    hand.x =
+      config.position === "left"
+        ? playArea.left - spacing.handToLaneGap - sideHandWidth / 2 + sideInset
+        : playArea.right + spacing.handToLaneGap + sideHandWidth / 2 - sideInset;
+  }
+
+  const handBounds = resolveNormalHandBounds({
+    position: config.position,
+    handAnchor: hand,
+    handCardCount: config.handCardCount,
+    layoutMetrics: config.layoutMetrics
+  });
+  const label = resolveNormalSeatLabelPoint(
+    config.position,
+    handBounds,
+    config.layoutMetrics,
+    config.normalTableLayout
+  );
+
+  let regionStyle: CSSProperties;
+  switch (config.position) {
+    case "top":
+      regionStyle = {
+        position: "absolute",
+        ...resolveBoardRectStyle({
+          center: hand,
+          width: config.layoutMetrics.centerColumnWidth,
+          height: config.layoutMetrics.northBandHeight
+        })
+      };
+      break;
+    case "bottom":
+      regionStyle = {
+        position: "absolute",
+        ...resolveBoardRectStyle({
+          center: hand,
+          width: config.layoutMetrics.centerColumnWidth,
+          height: config.layoutMetrics.southBandHeight
+        })
+      };
+      break;
+    case "left":
+    case "right":
+      regionStyle = {
+        position: "absolute",
+        ...resolveBoardRectStyle({
+          center: hand,
+          width: Math.max(config.layoutMetrics.sideColumnWidth, handBounds.width),
+          height: config.layoutMetrics.centerBandHeight
+        })
+      };
+      break;
+  }
+
+  return {
+    anchorId: getNormalSeatAnchorId(config.position),
+    position: config.position,
+    hand,
+    handBounds,
+    label,
+    regionStyle
+  };
+}
+
 export function resolveNormalPlaySurfaceRegionStyle(config: {
   normalTableLayout: NormalTableLayout;
   layoutMetrics: NormalViewportLayoutMetrics;
 }): CSSProperties {
-  const center = elementAnchorToPixels(
-    config.normalTableLayout.playSurface,
+  const playArea = getNormalPlayAreaBounds(
+    config.normalTableLayout,
     config.layoutMetrics
   );
 
   return {
     position: "absolute",
     ...resolveBoardRectStyle({
-      center,
-      width: config.layoutMetrics.centerColumnWidth,
-      height: config.layoutMetrics.centerBandHeight
+      center: {
+        x: playArea.left + playArea.width / 2,
+        y: playArea.top + playArea.height / 2
+      },
+      width: playArea.width,
+      height: playArea.height
     })
   };
 }
@@ -1114,10 +1480,26 @@ export function resolveNormalActionRowRegionStyle(config: {
   normalTableLayout: NormalTableLayout;
   layoutMetrics: NormalViewportLayoutMetrics;
 }): CSSProperties {
-  const center = elementAnchorToPixels(
-    config.normalTableLayout.actionRow,
-    config.layoutMetrics
-  );
+  const board = getBoardBounds(config.layoutMetrics);
+  const southAnchor = resolveNormalSeatAnchorGeometry({
+    position: "bottom",
+    normalTableLayout: config.normalTableLayout,
+    layoutMetrics: config.layoutMetrics,
+    handCardCount: 1
+  });
+  const { southToActionRowGap } = getNormalTableSpacing(config.layoutMetrics);
+  const southLabelHeight = NORMAL_LAYOUT_ELEMENT_SPECS.southLabel.height;
+  const center = {
+    x: board.left + board.width * config.normalTableLayout.actionRow.x,
+    y: Math.min(
+      board.bottom - config.layoutMetrics.actionBandHeight / 2,
+      southAnchor.label.y +
+        southLabelHeight / 2 +
+        southToActionRowGap +
+        config.layoutMetrics.actionBandHeight / 2
+    ),
+    rotation: config.normalTableLayout.actionRow.rotation
+  };
 
   return {
     position: "absolute",
@@ -1129,91 +1511,252 @@ export function resolveNormalActionRowRegionStyle(config: {
   };
 }
 
+function resolveNormalPassLaneAnchorPoint(config: {
+  sourcePosition: SeatVisualPosition;
+  targetPosition: SeatVisualPosition;
+  normalTableLayout: NormalTableLayout;
+  layoutMetrics: NormalViewportLayoutMetrics;
+  laneWidth: number;
+  laneHeight: number;
+  sourceHandCardCount: number;
+}): AnchorPoint {
+  const rawLaneSize = {
+    width: config.laneWidth,
+    height: config.laneHeight
+  };
+  const sourceAnchor = resolveNormalSeatAnchorGeometry({
+    position: config.sourcePosition,
+    normalTableLayout: config.normalTableLayout,
+    layoutMetrics: config.layoutMetrics,
+    handCardCount: config.sourceHandCardCount
+  });
+  const playArea = getNormalPlayAreaBounds(
+    config.normalTableLayout,
+    config.layoutMetrics
+  );
+  const partnerTargetPosition = getNormalPartnerLaneTargetPosition(
+    config.sourcePosition
+  );
+  const partnerRotation = getNormalPassVisibleRotation({
+    sourcePosition: config.sourcePosition,
+    targetPosition: partnerTargetPosition
+  });
+  const partnerVisualSize = getNormalPassVisualSize({
+    ...rawLaneSize,
+    rotation: partnerRotation
+  });
+  const laneRotation = getNormalPassVisibleRotation({
+    sourcePosition: config.sourcePosition,
+    targetPosition: config.targetPosition
+  });
+  const laneVisualSize = getNormalPassVisualSize({
+    ...rawLaneSize,
+    rotation: laneRotation
+  });
+  const laneGapMin = getNormalPassLaneGapMin(config.layoutMetrics);
+  const partnerOffsetIndex =
+    config.targetPosition === partnerTargetPosition
+      ? 0
+      : NORMAL_PASS_STAGE_MAP[config.sourcePosition].findIndex(
+            (laneSpec) => laneSpec.targetPosition === config.targetPosition
+          ) < NORMAL_PASS_STAGE_MAP[config.sourcePosition].findIndex(
+            (laneSpec) => laneSpec.targetPosition === partnerTargetPosition
+          )
+        ? -1
+        : 1;
+  const { handToLaneGap } = getNormalTableSpacing(config.layoutMetrics);
+  const laneClusterStep =
+    config.sourcePosition === "top" || config.sourcePosition === "bottom"
+      ? partnerVisualSize.width / 2 +
+        laneGapMin +
+        laneVisualSize.width / 2
+      : partnerVisualSize.height / 2 +
+        laneGapMin +
+        laneVisualSize.height / 2;
+  const axisNudge = getNormalPassClusterAxisNudge({
+    sourcePosition: config.sourcePosition,
+    layoutMetrics: config.layoutMetrics
+  });
+  const partnerAnchor =
+    config.sourcePosition === "top"
+      ? {
+          x: playArea.left + playArea.width / 2,
+          y:
+            sourceAnchor.handBounds.bottom +
+            handToLaneGap +
+            partnerVisualSize.height / 2 +
+            axisNudge
+        }
+      : config.sourcePosition === "bottom"
+        ? {
+            x: playArea.left + playArea.width / 2,
+            y:
+              sourceAnchor.handBounds.top -
+              handToLaneGap -
+              partnerVisualSize.height / 2 +
+              axisNudge
+          }
+        : config.sourcePosition === "left"
+          ? {
+              x:
+                sourceAnchor.handBounds.right +
+                handToLaneGap +
+                partnerVisualSize.width / 2,
+              y: playArea.top + playArea.height / 2
+            }
+          : {
+              x:
+                sourceAnchor.handBounds.left -
+                handToLaneGap -
+                partnerVisualSize.width / 2,
+              y: playArea.top + playArea.height / 2
+            };
+
+  switch (config.sourcePosition) {
+    case "top":
+      return {
+        x: partnerAnchor.x + partnerOffsetIndex * laneClusterStep,
+        y: partnerAnchor.y
+      };
+    case "bottom":
+      return {
+        x: partnerAnchor.x + partnerOffsetIndex * laneClusterStep,
+        y: partnerAnchor.y
+      };
+    case "left":
+      return {
+        x: partnerAnchor.x,
+        y: partnerAnchor.y + partnerOffsetIndex * laneClusterStep
+      };
+    case "right":
+      return {
+        x: partnerAnchor.x,
+        y: partnerAnchor.y + partnerOffsetIndex * laneClusterStep
+      };
+  }
+}
+
 export function resolveNormalSeatRegionStyle(config: {
   position: SeatVisualPosition;
   normalTableLayout: NormalTableLayout;
   layoutMetrics: NormalViewportLayoutMetrics;
+  handCardCount?: number;
 }): CSSProperties {
-  const center = elementAnchorToPixels(
-    config.normalTableLayout[NORMAL_HAND_LAYOUT_IDS[config.position]],
-    config.layoutMetrics
-  );
-
-  switch (config.position) {
-    case "top":
-      return {
-        position: "absolute",
-        ...resolveBoardRectStyle({
-          center,
-          width: config.layoutMetrics.centerColumnWidth,
-          height: config.layoutMetrics.northBandHeight
-        })
-      };
-    case "bottom":
-      return {
-        position: "absolute",
-        ...resolveBoardRectStyle({
-          center,
-          width: config.layoutMetrics.centerColumnWidth,
-          height: config.layoutMetrics.southBandHeight
-        })
-      };
-    case "left":
-    case "right":
-      return {
-        position: "absolute",
-        ...resolveBoardRectStyle({
-          center,
-          width: config.layoutMetrics.sideColumnWidth,
-          height: config.layoutMetrics.centerBandHeight
-        })
-      };
-  }
+  return resolveNormalSeatAnchorGeometry({
+    position: config.position,
+    normalTableLayout: config.normalTableLayout,
+    layoutMetrics: config.layoutMetrics,
+    handCardCount: config.handCardCount ?? 1
+  }).regionStyle;
 }
 
 export function getNormalTrickFanMetrics(
   position: SeatVisualPosition,
   trickCardWidth: number
 ): NormalTrickFanMetrics {
-  const horizontalStep = Math.max(11, Math.round(trickCardWidth * 0.22));
-  const verticalStep = Math.max(7, Math.round(trickCardWidth * 0.12));
-  const groupHorizontal = Math.max(16, Math.round(trickCardWidth * 0.28));
-  const groupVertical = Math.max(10, Math.round(trickCardWidth * 0.18));
+  const horizontalStep = Math.max(14, Math.round(trickCardWidth * 0.3));
+  const verticalStep = Math.max(14, Math.round(trickCardWidth * 0.34));
+  const groupHorizontal = Math.max(18, Math.round(trickCardWidth * 0.34));
+  const groupVertical = Math.max(18, Math.round(trickCardWidth * 0.38));
 
   switch (position) {
     case "bottom":
+    case "top":
       return {
-        cardDx: -horizontalStep,
-        cardDy: -verticalStep,
-        rotationStep: -4,
-        groupDx: -groupHorizontal,
-        groupDy: -groupVertical
+        cardDx: horizontalStep,
+        cardDy: 0,
+        rotationStep: 0,
+        groupDx: groupHorizontal,
+        groupDy: 0
       };
     case "right":
-      return {
-        cardDx: -horizontalStep,
-        cardDy: 0,
-        rotationStep: -2,
-        groupDx: -groupHorizontal,
-        groupDy: 0
-      };
     case "left":
       return {
-        cardDx: horizontalStep,
-        cardDy: 0,
-        rotationStep: 2,
-        groupDx: groupHorizontal,
-        groupDy: 0
-      };
-    default:
-      return {
-        cardDx: horizontalStep,
+        cardDx: 0,
         cardDy: verticalStep,
-        rotationStep: 4,
-        groupDx: groupHorizontal,
+        rotationStep: 0,
+        groupDx: 0,
         groupDy: groupVertical
       };
   }
+}
+
+function getNormalStageCardSize(metrics: NormalViewportLayoutMetrics) {
+  const width = Math.min(84, Math.max(44, Math.round(metrics.cardWidth * 0.82)));
+
+  return {
+    width,
+    height: Math.round(width * CARD_HEIGHT_PER_WIDTH)
+  };
+}
+
+function resolveNormalStagePoint(
+  position: SeatVisualPosition,
+  seatAnchor: NormalSeatAnchorGeometry,
+  metrics: NormalViewportLayoutMetrics
+): AnchorPoint {
+  const spacing = getNormalTableSpacing(metrics);
+  const stageCardSize = getNormalStageCardSize(metrics);
+  const laneBandDepth = Math.max(metrics.routeCardWidth, metrics.routeCardHeight);
+  const stageGap = Math.max(
+    spacing.handToStageGap,
+    spacing.handToLaneGap + laneBandDepth + spacing.laneToStageGap
+  );
+
+  switch (position) {
+    case "top":
+      return {
+        x: seatAnchor.handBounds.center.x,
+        y: seatAnchor.handBounds.bottom + stageGap + stageCardSize.height / 2
+      };
+    case "bottom":
+      return {
+        x: seatAnchor.handBounds.center.x,
+        y: seatAnchor.handBounds.top - stageGap - stageCardSize.height / 2
+      };
+    case "left":
+      return {
+        x: seatAnchor.handBounds.right + stageGap + stageCardSize.width / 2,
+        y: seatAnchor.handBounds.center.y
+      };
+    case "right":
+      return {
+        x: seatAnchor.handBounds.left - stageGap - stageCardSize.width / 2,
+        y: seatAnchor.handBounds.center.y
+      };
+  }
+}
+
+function resolveNormalTrickPoint(
+  position: SeatVisualPosition,
+  handCardCount: number,
+  metrics: NormalViewportLayoutMetrics,
+  normalTableLayout: NormalTableLayout
+): AnchorPoint {
+  const middleLaneSpec = NORMAL_PASS_STAGE_MAP[position][1];
+  const elementId = middleLaneSpec
+    ? getNormalPassLaneLayoutId(position, middleLaneSpec.targetPosition)
+    : null;
+
+  if (!middleLaneSpec || !elementId) {
+    return elementAnchorToPixels(
+      normalTableLayout[NORMAL_STAGE_LAYOUT_IDS[position]],
+      metrics
+    );
+  }
+
+  const routeScale = metrics.routeCardWidth / NORMAL_ROUTE_CARD_WIDTH;
+  const laneSize = scaleNormalLayoutElementSize(elementId, routeScale);
+
+  return resolveNormalPassLaneAnchorPoint({
+    sourcePosition: position,
+    targetPosition: middleLaneSpec.targetPosition,
+    normalTableLayout,
+    layoutMetrics: metrics,
+    laneWidth: laneSize.width,
+    laneHeight: laneSize.height,
+    sourceHandCardCount: handCardCount
+  });
 }
 
 export function resolveNormalStageAnchorStyle(
@@ -1229,151 +1772,107 @@ export function getNormalSeatLayout(config: {
   layoutMetrics: NormalViewportLayoutMetrics;
   handCardCount: number;
 }): NormalSeatLayout {
-  const handElement =
-    config.normalTableLayout[NORMAL_HAND_LAYOUT_IDS[config.position]];
-  const trickElement =
-    config.normalTableLayout[NORMAL_STAGE_LAYOUT_IDS[config.position]];
-  const handAnchor = elementAnchorToPixels(handElement, config.layoutMetrics);
-  const trickAnchor = elementAnchorToPixels(trickElement, config.layoutMetrics);
-  const actionAnchor = elementAnchorToPixels(
-    config.normalTableLayout.actionRow,
+  const seatAnchor = resolveNormalSeatAnchorGeometry({
+    position: config.position,
+    normalTableLayout: config.normalTableLayout,
+    layoutMetrics: config.layoutMetrics,
+    handCardCount: config.handCardCount
+  });
+  const stageAnchor = resolveNormalStagePoint(
+    config.position,
+    seatAnchor,
     config.layoutMetrics
   );
-  const labelAnchor = elementAnchorToPixels(
-    config.normalTableLayout[NORMAL_LABEL_LAYOUT_IDS[config.position]],
-    config.layoutMetrics
-  );
-  const boardBounds = getBoardBounds(config.layoutMetrics);
-  const handMetrics = resolveHandSpan(
+  const trickAnchor = resolveNormalTrickPoint(
     config.position,
     config.handCardCount,
-    config.layoutMetrics
+    config.layoutMetrics,
+    config.normalTableLayout
   );
-  const handLeft =
-    config.position === "left" || config.position === "right"
-      ? handAnchor.x - handMetrics.depth / 2
-      : handAnchor.x - handMetrics.span / 2;
-  const handRight =
-    config.position === "left" || config.position === "right"
-      ? handAnchor.x + handMetrics.depth / 2
-      : handAnchor.x + handMetrics.span / 2;
-  const handTop =
-    config.position === "left" || config.position === "right"
-      ? handAnchor.y - handMetrics.span / 2
-      : handAnchor.y - handMetrics.depth / 2;
-  const horizontalBadgeOffset = Math.max(
-    18,
-    Math.round(config.layoutMetrics.cardWidth * 0.36)
-  );
-  const verticalBadgeOffset = Math.max(
-    18,
-    Math.round(config.layoutMetrics.cardHeight * 0.32)
-  );
-  const sideLabelEdgeInset = Math.max(
-    24,
-    Math.round(config.layoutMetrics.cardWidth * 0.46)
-  );
-  const sideLabelHandGap = Math.max(
-    12,
-    Math.round(config.layoutMetrics.cardWidth * 0.18)
-  );
-  const pickupAnchor = interpolateAnchorPoint(handAnchor, trickAnchor, 0.52);
+  const pickupAnchor = interpolateAnchorPoint(seatAnchor.hand, stageAnchor, 0.52);
 
-  let nameLabelPoint = labelAnchor;
-  let callBadgePoint = labelAnchor;
-  let turnBadgePoint = labelAnchor;
-  let outBadgePoint = labelAnchor;
+  const nameLabelPoint = seatAnchor.label;
+  let callBadgePoint = seatAnchor.label;
+  let turnBadgePoint = seatAnchor.label;
+  let outBadgePoint = seatAnchor.label;
+  const { labelToBadgeGap } = getNormalTableSpacing(config.layoutMetrics);
+  const badgeStep = clampNumber(
+    Math.round(config.layoutMetrics.cardWidth * 0.58),
+    38,
+    52
+  );
+  const sideBadgeY =
+    seatAnchor.handBounds.top - labelToBadgeGap;
 
   switch (config.position) {
     case "bottom":
-      nameLabelPoint = {
-        x: labelAnchor.x,
-        y: Math.min(
-          actionAnchor.y - config.layoutMetrics.actionBandHeight / 2 - 10,
-          Math.max(
-            labelAnchor.y,
-            handTop - Math.max(14, Math.round(config.layoutMetrics.cardHeight * 0.16))
-          )
-        )
-      };
       callBadgePoint = {
-        x: handLeft - horizontalBadgeOffset,
-        y: handAnchor.y
+        x:
+          nameLabelPoint.x -
+          NORMAL_LAYOUT_ELEMENT_SPECS.southLabel.width / 2 -
+          labelToBadgeGap,
+        y: nameLabelPoint.y
       };
       turnBadgePoint = {
-        x: nameLabelPoint.x,
-        y:
-          nameLabelPoint.y -
-          Math.max(34, Math.round(config.layoutMetrics.cardHeight * 0.32))
+        x:
+          nameLabelPoint.x -
+          NORMAL_LAYOUT_ELEMENT_SPECS.southLabel.width / 2 -
+          labelToBadgeGap -
+          badgeStep,
+        y: nameLabelPoint.y
       };
       outBadgePoint = {
         x:
           nameLabelPoint.x -
-          Math.max(58, Math.round(config.layoutMetrics.cardWidth * 0.82)),
+          NORMAL_LAYOUT_ELEMENT_SPECS.southLabel.width / 2 -
+          labelToBadgeGap -
+          badgeStep * 2,
         y: nameLabelPoint.y
       };
       break;
     case "top":
-      nameLabelPoint = {
-        x: labelAnchor.x,
-        y: Math.min(
-          labelAnchor.y,
-          handTop - Math.max(14, Math.round(config.layoutMetrics.cardHeight * 0.16))
-        )
-      };
       callBadgePoint = {
-        x: handLeft - horizontalBadgeOffset,
-        y: handAnchor.y
+        x:
+          nameLabelPoint.x +
+          NORMAL_LAYOUT_ELEMENT_SPECS.northLabel.width / 2 +
+          labelToBadgeGap,
+        y: nameLabelPoint.y
       };
       turnBadgePoint = {
-        x: nameLabelPoint.x + Math.max(54, Math.round(config.layoutMetrics.cardWidth * 0.75)),
+        x:
+          nameLabelPoint.x +
+          NORMAL_LAYOUT_ELEMENT_SPECS.northLabel.width / 2 +
+          labelToBadgeGap +
+          badgeStep,
         y: nameLabelPoint.y
       };
       outBadgePoint = {
-        x: nameLabelPoint.x - Math.max(54, Math.round(config.layoutMetrics.cardWidth * 0.75)),
+        x:
+          nameLabelPoint.x +
+          NORMAL_LAYOUT_ELEMENT_SPECS.northLabel.width / 2 +
+          labelToBadgeGap +
+          badgeStep * 2,
         y: nameLabelPoint.y
       };
       break;
     case "left":
-      nameLabelPoint = {
-        x: Math.min(
-          handLeft - sideLabelHandGap,
-          Math.max(boardBounds.left + sideLabelEdgeInset, labelAnchor.x)
-        ),
-        y: labelAnchor.y
-      };
       callBadgePoint = {
-        x: handAnchor.x,
-        y: handTop - verticalBadgeOffset
-      };
-      turnBadgePoint = {
-        x: nameLabelPoint.x,
-        y: nameLabelPoint.y - Math.max(42, Math.round(config.layoutMetrics.cardWidth * 0.58))
+        x: seatAnchor.hand.x - badgeStep / 2,
+        y: sideBadgeY
       };
       outBadgePoint = {
-        x: nameLabelPoint.x,
-        y: nameLabelPoint.y + Math.max(42, Math.round(config.layoutMetrics.cardWidth * 0.58))
+        x: seatAnchor.hand.x + badgeStep / 2,
+        y: sideBadgeY
       };
       break;
     case "right":
-      nameLabelPoint = {
-        x: Math.max(
-          handRight + sideLabelHandGap,
-          Math.min(boardBounds.right - sideLabelEdgeInset, labelAnchor.x)
-        ),
-        y: labelAnchor.y
-      };
       callBadgePoint = {
-        x: handAnchor.x,
-        y: handTop - verticalBadgeOffset
-      };
-      turnBadgePoint = {
-        x: nameLabelPoint.x,
-        y: nameLabelPoint.y - Math.max(42, Math.round(config.layoutMetrics.cardWidth * 0.58))
+        x: seatAnchor.hand.x - badgeStep / 2,
+        y: sideBadgeY
       };
       outBadgePoint = {
-        x: nameLabelPoint.x,
-        y: nameLabelPoint.y + Math.max(42, Math.round(config.layoutMetrics.cardWidth * 0.58))
+        x: seatAnchor.hand.x + badgeStep / 2,
+        y: sideBadgeY
       };
       break;
   }

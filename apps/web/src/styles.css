@@ -2330,7 +2330,8 @@ input {
 
 .normal-seat__hand--left,
 .normal-seat__hand--right {
-  flex-direction: column;
+  width: 100%;
+  justify-content: center;
   align-items: center;
 }
 
@@ -2400,35 +2401,10 @@ input {
 }
 
 .normal-side-card-shell {
-  width: 82px;
-  height: 60px;
+  width: var(--normal-card-width, 72px);
+  height: var(--normal-card-height, 98px);
   display: grid;
   place-items: center;
-}
-
-.normal-card--route-east,
-.normal-card--route-west,
-.normal-pass-token--east,
-.normal-pass-token--west {
-  transform-origin: center;
-}
-
-.normal-card--seat-right {
-  transform: rotate(90deg);
-}
-
-.normal-card--seat-left {
-  transform: rotate(-90deg);
-}
-
-.normal-card--route-east,
-.normal-pass-token--east {
-  transform: rotate(90deg) scale(var(--normal-stage-card-scale, 1));
-}
-
-.normal-card--route-west,
-.normal-pass-token--west {
-  transform: rotate(-90deg) scale(var(--normal-stage-card-scale, 1));
 }
 
 .normal-play-surface {
@@ -3218,8 +3194,8 @@ input {
   }
 
   .normal-side-card-shell {
-    width: 64px;
-    height: 46px;
+    width: var(--normal-card-width, 72px);
+    height: var(--normal-card-height, 98px);
   }
   .normal-bottom-controls {
     max-width: calc(100% - 28px);
@@ -3272,12 +3248,10 @@ body.normal-layout-locked {
   height: 100%;
   min-width: 0;
   min-height: 0;
-  display: grid;
-  grid-template-rows: var(--normal-header-height, 42px) minmax(0, 1fr);
-  gap: var(--normal-band-gap, 8px);
-  padding: 10px 12px 12px;
+  display: block;
+  padding: 0;
   overflow: hidden;
-  border-radius: 30px;
+  border-radius: 8px;
   background:
     radial-gradient(
       circle at 50% 38%,
@@ -3605,7 +3579,7 @@ body.normal-layout-locked {
   width: 100%;
   height: 100%;
   padding-inline: var(--normal-seat-inset-x, 8px);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .normal-seat--top {
@@ -3631,13 +3605,12 @@ body.normal-layout-locked {
   width: 100%;
   height: 100%;
   padding-inline: 0;
-  grid-template-columns: var(--normal-side-label-width, 26px) minmax(0, 1fr);
-  grid-template-rows: 1fr;
+  display: block;
   overflow: visible;
 }
 
 .normal-seat--right {
-  grid-template-columns: minmax(0, 1fr) var(--normal-side-label-width, 26px);
+  grid-template-columns: none;
 }
 
 .normal-seat__side-label {
@@ -3656,6 +3629,10 @@ body.normal-layout-locked {
   display: grid;
   gap: 8px;
   grid-template-rows: auto minmax(0, 1fr);
+}
+
+.normal-seat--top .normal-seat__content {
+  gap: 2px;
 }
 
 .normal-seat--side .normal-seat__content {
@@ -3678,6 +3655,10 @@ body.normal-layout-locked {
   justify-content: center;
   gap: 8px;
   min-height: 20px;
+}
+
+.normal-seat--top .normal-seat__meta {
+  min-height: 12px;
 }
 
 .normal-seat__meta--side {
@@ -3733,6 +3714,10 @@ body.normal-layout-locked {
   width: 100%;
   display: grid;
   place-items: center;
+}
+
+.normal-seat--side .normal-seat__hand-shell {
+  height: 100%;
 }
 
 .normal-seat__tichu-marker {
@@ -3798,14 +3783,18 @@ body.normal-layout-locked {
 
 .normal-seat__hand--left,
 .normal-seat__hand--right {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  height: auto;
+  width: var(--normal-card-width, 72px);
+  height: var(--normal-hand-span, 100%);
   flex-direction: column;
-  align-items: center;
   justify-content: flex-start;
-  transform: translateX(-50%);
+}
+
+.normal-seat__hand--left {
+  align-items: flex-start;
+}
+
+.normal-seat__hand--right {
+  align-items: flex-end;
 }
 
 .normal-seat__card-slot {
@@ -3823,10 +3812,17 @@ body.normal-layout-locked {
   );
 }
 
+.normal-seat__hand--top .normal-seat__card-slot + .normal-seat__card-slot {
+  margin-left: calc(
+    var(--normal-hand-step, var(--normal-card-width, 72px)) -
+      var(--normal-card-width, 72px) - 6px
+  );
+}
+
 .normal-side-card-shell {
   flex: 0 0 auto;
-  width: var(--normal-card-height, 98px);
-  height: var(--normal-card-width, 72px);
+  width: var(--normal-card-width, 72px);
+  height: var(--normal-card-height, 98px);
   display: grid;
   place-items: center;
 }
@@ -3834,8 +3830,8 @@ body.normal-layout-locked {
 .normal-seat__hand--left .normal-side-card-shell + .normal-side-card-shell,
 .normal-seat__hand--right .normal-side-card-shell + .normal-side-card-shell {
   margin-top: calc(
-    var(--normal-hand-step, var(--normal-card-width, 72px)) -
-      var(--normal-card-width, 72px)
+    var(--normal-hand-step, var(--normal-card-height, 98px)) -
+      var(--normal-card-height, 98px)
   );
 }
 
@@ -3856,14 +3852,6 @@ body.normal-layout-locked {
   box-shadow:
     0 12px 20px rgba(0, 0, 0, 0.18),
     inset 0 1px 0 rgba(255, 255, 255, 0.34);
-}
-
-.normal-card--seat-right {
-  transform: rotate(90deg);
-}
-
-.normal-card--seat-left {
-  transform: rotate(-90deg);
 }
 
 .normal-card--local.playing-card--selected,
@@ -3952,6 +3940,16 @@ body.normal-layout-locked {
   transform-origin: center center;
 }
 
+.normal-card--trick-left {
+  transform: rotate(-90deg);
+  transform-origin: center center;
+}
+
+.normal-card--trick-right {
+  transform: rotate(90deg);
+  transform-origin: center center;
+}
+
 .normal-trick-stage__play--winning .normal-card--trick {
   filter: brightness(1.05);
   box-shadow:
@@ -3996,7 +3994,7 @@ body.normal-layout-locked {
 }
 
 .normal-dog-transfer.is-active {
-  transform: translate(-50%, -50%) scale(0.92) rotate(10deg);
+  transform: translate(-50%, -50%) scale(0.92);
   opacity: 0.86;
 }
 
@@ -4017,6 +4015,21 @@ body.normal-layout-locked {
       var(--card-canonical-width)
   );
   padding: 0;
+}
+
+.normal-seat__hand--top .normal-card--seat {
+  transform: scale(0.88);
+  transform-origin: center bottom;
+}
+
+.normal-side-card-shell--left .normal-card--seat {
+  transform: rotate(90deg);
+  transform-origin: center center;
+}
+
+.normal-side-card-shell--right .normal-card--seat {
+  transform: rotate(-90deg);
+  transform-origin: center center;
 }
 
 .normal-play-surface__core {
@@ -4064,6 +4077,7 @@ body.normal-layout-locked {
 }
 
 .normal-pass-lane {
+  --normal-pass-visible-rotation: 0deg;
   position: absolute;
   transform: translate(-50%, -50%);
   display: grid;
@@ -4074,6 +4088,8 @@ body.normal-layout-locked {
 .normal-pass-lane__frame {
   position: absolute;
   inset: 0;
+  transform: rotate(var(--normal-pass-visible-rotation));
+  transform-origin: center center;
   border-radius: clamp(12px, calc(var(--normal-route-card-width, 60px) * 0.2), 16px);
   border: 1px solid rgba(243, 248, 245, 0.36);
   background:
@@ -4130,6 +4146,8 @@ body.normal-layout-locked {
   display: flex;
   align-items: center;
   justify-content: center;
+  transform: rotate(var(--normal-pass-visible-rotation));
+  transform-origin: center center;
   z-index: 2;
   pointer-events: none;
 }
@@ -4141,7 +4159,7 @@ body.normal-layout-locked {
 }
 
 .normal-pass-lane__slot--interactive:hover {
-  transform: translateY(-1px);
+  transform: translateY(-1px) rotate(var(--normal-pass-visible-rotation));
 }
 
 .normal-pass-lane__slot--selected .normal-pass-token,
@@ -4151,15 +4169,16 @@ body.normal-layout-locked {
     0 0 0 1px rgba(248, 229, 164, 0.34);
 }
 
-.normal-pass-lane .normal-card--route,
-.normal-pass-lane .normal-pass-token {
-  transform: rotate(var(--normal-pass-token-rotation, 0deg));
-  transform-origin: center center;
-}
-
 .normal-pass-token {
   width: var(--normal-route-card-width, 60px);
   height: var(--normal-route-card-height, 82px);
+  transform: scale(var(--normal-stage-card-scale, 1));
+  transform-origin: center center;
+}
+
+.normal-pass-lane .normal-card--route {
+  transform: none;
+  transform-origin: center center;
 }
 
 .normal-bottom-controls {

@@ -54,12 +54,16 @@ import {
 } from "./table-model";
 export type {
   AnchorPoint,
+  NormalHandBounds,
   NormalLayoutElement,
   NormalLayoutElementId,
   NormalPassLaneGeometry,
   NormalPassLaneSpec,
+  NormalSeatAnchorGeometry,
+  NormalSeatAnchorId,
   NormalTableLayout,
   NormalTableLayoutConfig,
+  NormalTableSpacing,
   NormalTableLayoutTokens,
   NormalTrickFanMetrics,
   NormalViewportLayoutMetrics,
@@ -77,6 +81,7 @@ export {
   getBoardBounds,
   getNormalPassLaneLayoutId,
   getNormalSeatLayout,
+  getNormalTableSpacing,
   getNormalTrickFanMetrics,
   NORMAL_BOARD_INSET,
   NORMAL_HAND_LAYOUT_IDS,
@@ -94,10 +99,12 @@ export {
   resolveNormalBoardAnchorStyle,
   resolveNormalPassLaneGeometry,
   resolveNormalPlaySurfaceRegionStyle,
+  resolveNormalSeatAnchorGeometry,
   resolveNormalSeatRegionStyle,
   resolveNormalStageAnchorStyle
 } from "./table-layout";
 import {
+  CARD_ASPECT,
   DEFAULT_NORMAL_TABLE_LAYOUT,
   DEFAULT_NORMAL_TABLE_LAYOUT_CONFIG,
   DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS,
@@ -105,6 +112,7 @@ import {
   computeNormalViewportLayoutMetrics,
   getBoardBounds,
   getNormalSeatLayout,
+  getNormalTableSpacing,
   getNormalTrickFanMetrics,
   NORMAL_HAND_LAYOUT_IDS,
   NORMAL_LAYOUT_EDITOR_ORDER,
@@ -119,6 +127,7 @@ import {
   resolveNormalBoardAnchorStyle,
   resolveNormalPassLaneGeometry,
   resolveNormalPlaySurfaceRegionStyle,
+  resolveNormalSeatAnchorGeometry,
   resolveNormalSeatRegionStyle,
   type AnchorPoint,
   type NormalLayoutElement,
@@ -126,6 +135,7 @@ import {
   type NormalTableLayout,
   type NormalTableLayoutConfig,
   type NormalTableLayoutTokens,
+  type NormalTrickFanMetrics,
   type NormalViewportLayoutMetrics,
   type PassLaneDirection,
   type SeatVisualPosition
@@ -1156,9 +1166,65 @@ function anchorPointFromBoardAnchorStyle(style: CSSProperties): AnchorPoint {
   };
 }
 
-function parseStyleNumber(value: CSSProperties[keyof CSSProperties]) {
-  const parsed = parseFloat(String(value ?? 0));
-  return Number.isFinite(parsed) ? parsed : 0;
+function clampInlineNumber(value: number, minimum: number, maximum: number) {
+  return Math.min(maximum, Math.max(minimum, value));
+}
+
+function resolveSideStatusBadgeStyle(config: {
+  badgeIndex: number;
+  badgeCount: number;
+  handCardCount: number;
+  layoutMetrics: NormalViewportLayoutMetrics;
+  normalTableLayout: NormalTableLayout;
+  position: SeatVisualPosition;
+  fallbackStyle: CSSProperties;
+}): CSSProperties {
+  const seatAnchor = resolveNormalSeatAnchorGeometry({
+    position: config.position,
+    normalTableLayout: config.normalTableLayout,
+    layoutMetrics: config.layoutMetrics,
+    handCardCount: config.handCardCount
+  });
+  const { labelToBadgeGap } = getNormalTableSpacing(config.layoutMetrics);
+  const badgeStep = clampInlineNumber(
+    Math.round(config.layoutMetrics.cardWidth * 0.58),
+    38,
+    52
+  );
+  const xOffset =
+    config.badgeCount <= 1
+      ? 0
+      : config.badgeIndex === 0
+        ? -badgeStep / 2
+        : badgeStep / 2;
+
+  return {
+    ...config.fallbackStyle,
+    left: `${seatAnchor.hand.x + xOffset}px`,
+    top: `${seatAnchor.handBounds.top - labelToBadgeGap}px`,
+    transform: "translate(-50%, -100%)"
+  };
+}
+
+function resolveBoundTrickZoneStyle(
+  trickZone: CSSProperties,
+  position: SeatVisualPosition,
+  layoutMetrics: NormalViewportLayoutMetrics
+): CSSProperties {
+  const relaxOffset = Math.max(3, Math.round(layoutMetrics.cardWidth * 0.05));
+  const relaxedShift =
+    position === "top"
+      ? ` translateY(${relaxOffset}px)`
+      : position === "bottom"
+        ? ` translateY(-${relaxOffset}px)`
+        : position === "left"
+          ? ` translateX(${relaxOffset}px)`
+          : ` translateX(-${relaxOffset}px)`;
+
+  return {
+    ...trickZone,
+    transform: `${String(trickZone.transform ?? "").trim()}${relaxedShift}`.trim()
+  };
 }
 
 type NormalEditorElementVisual = {
@@ -2079,8 +2145,37 @@ function NormalSeatOverlayLayer({
           handCardCount
         });
         const tichuMarkerLabel = getTichuMarkerLabel(seatView.callState);
-        const renderInlineSideLabel =
-          seatView.position === "left" || seatView.position === "right";
+        const renderInlineSideLabel = false;
+        const sideIdentityBadgeOrder = renderInlineSideLabel
+          ? ([
+              tichuMarkerLabel ? "call" : null,
+              seatView.finishIndex >= 0 ? "out" : null
+            ].filter(Boolean) as Array<"call" | "out">)
+          : [];
+        const callBadgeStyle =
+          renderInlineSideLabel && tichuMarkerLabel
+            ? resolveSideStatusBadgeStyle({
+                badgeIndex: sideIdentityBadgeOrder.indexOf("call"),
+                badgeCount: sideIdentityBadgeOrder.length,
+                handCardCount,
+                layoutMetrics,
+                normalTableLayout,
+                position: seatView.position,
+                fallbackStyle: seatLayout.callBadge
+              })
+            : seatLayout.callBadge;
+        const outBadgeStyle =
+          renderInlineSideLabel && seatView.finishIndex >= 0
+            ? resolveSideStatusBadgeStyle({
+                badgeIndex: sideIdentityBadgeOrder.indexOf("out"),
+                badgeCount: sideIdentityBadgeOrder.length,
+                handCardCount,
+                layoutMetrics,
+                normalTableLayout,
+                position: seatView.position,
+                fallbackStyle: seatLayout.outBadge
+              })
+            : seatLayout.outBadge;
 
         return (
           <div key={`overlay-${seatView.seat}`}>
@@ -2108,7 +2203,7 @@ function NormalSeatOverlayLayer({
                     ? "normal-seat-overlay__call--grand"
                     : "normal-seat-overlay__call--small"
                 ].join(" ")}
-                style={seatLayout.callBadge}
+                style={callBadgeStyle}
                 title={tichuMarkerLabel === "GT" ? "Grand Tichu" : "Tichu"}
               >
                 {tichuMarkerLabel}
@@ -2133,7 +2228,7 @@ function NormalSeatOverlayLayer({
                   "normal-seat-overlay__out",
                   `normal-seat-overlay__out--${seatView.position}`
                 ].join(" ")}
-                style={seatLayout.outBadge}
+                style={outBadgeStyle}
               >
                 {formatPlacement(seatView.finishIndex)}
               </span>
@@ -2208,6 +2303,18 @@ export function NormalTrickStagingRegions({
   layoutMetrics: NormalViewportLayoutMetrics;
 }) {
   const trickCardWidth = getNormalTrickCardWidth(layoutMetrics);
+  const trickCardHeight = Math.round(trickCardWidth / CARD_ASPECT);
+  const getStraightStageCardTransform = (
+    fanMetrics: NormalTrickFanMetrics,
+    cardIndex: number,
+    cardCount: number
+  ) => {
+    const centeredIndex = cardIndex - (cardCount - 1) / 2;
+
+    return `translate(${
+      centeredIndex * fanMetrics.cardDx - trickCardWidth / 2
+    }px, ${centeredIndex * fanMetrics.cardDy - trickCardHeight / 2}px)`;
+  };
 
   if (!displayedTrick && pickupStageViews.length === 0 && !dogLeadAnimation) {
     return null;
@@ -2238,7 +2345,11 @@ export function NormalTrickStagingRegions({
               key={seat}
               className={`normal-trick-stage normal-trick-stage--${position}`}
               data-trick-stage={position}
-              style={seatLayout.trickZone}
+              style={resolveBoundTrickZoneStyle(
+                seatLayout.trickZone,
+                position,
+                layoutMetrics
+              )}
             >
               {plays.map((entry, playIndex) => {
                 const reverseIndex = plays.length - 1 - playIndex;
@@ -2267,17 +2378,17 @@ export function NormalTrickStagingRegions({
                         key={cardId}
                         className="normal-trick-stage__card"
                         style={{
-                          transform: `translate(${
-                            cardIndex * fanMetrics.cardDx
-                          }px, ${cardIndex * fanMetrics.cardDy}px) rotate(${
-                            cardIndex * fanMetrics.rotationStep
-                          }deg)`,
+                          transform: getStraightStageCardTransform(
+                            fanMetrics,
+                            cardIndex,
+                            entry.combination.cardIds.length
+                          ),
                           zIndex: cardIndex + 1
                         }}
                       >
                         <CardFace
                           card={resolveCard(cardId, cardLookup)}
-                          className="normal-card normal-card--trick"
+                          className={`normal-card normal-card--trick normal-card--trick-${position}`}
                         />
                       </div>
                     ))}
@@ -2311,17 +2422,17 @@ export function NormalTrickStagingRegions({
                   key={cardId}
                   className="normal-pickup-stage__card"
                   style={{
-                    transform: `translate(${
-                      cardIndex * fanMetrics.cardDx
-                    }px, ${cardIndex * fanMetrics.cardDy}px) rotate(${
-                      cardIndex * fanMetrics.rotationStep
-                    }deg)`,
+                    transform: getStraightStageCardTransform(
+                      fanMetrics,
+                      cardIndex,
+                      group.cardIds.length
+                    ),
                     zIndex: cardIndex + 1
                   }}
                 >
                   <CardFace
                     card={resolveCard(cardId, cardLookup)}
-                    className="normal-card normal-card--pass"
+                    className={`normal-card normal-card--pass normal-card--pass-${group.position}`}
                   />
                 </div>
               ))}
@@ -2344,6 +2455,8 @@ export function NormalTrickStagingRegions({
 export function NormalPassStagingRegions({
   normalTableLayout,
   layoutMetrics,
+  seatViews = [],
+  sortedLocalHand = [],
   passRouteViews,
   selectedPassTarget,
   cardLookup,
@@ -2355,6 +2468,8 @@ export function NormalPassStagingRegions({
 }: Pick<
   GameTableViewProps,
   | "normalTableLayout"
+  | "seatViews"
+  | "sortedLocalHand"
   | "passRouteViews"
   | "selectedPassTarget"
   | "cardLookup"
@@ -2383,6 +2498,12 @@ export function NormalPassStagingRegions({
         if (sourceRoutes.length === 0) {
           return null;
         }
+        const sourceSeatView = seatViews.find(
+          (seatView) => seatView.position === sourcePosition
+        );
+        const sourceHandCardCount = sourceSeatView?.isLocalSeat
+          ? sortedLocalHand.length
+          : (sourceSeatView?.cards.length ?? 1);
 
         return NORMAL_PASS_STAGE_MAP[sourcePosition].map((laneSpec) => {
           const route =
@@ -2400,7 +2521,8 @@ export function NormalPassStagingRegions({
             layoutMetrics,
             sourcePosition,
             targetPosition: laneSpec.targetPosition,
-            direction: laneSpec.direction
+            direction: laneSpec.direction,
+            sourceHandCardCount
           });
           if (!laneGeometry) {
             return null;
@@ -2529,7 +2651,6 @@ export function NormalPassStagingRegions({
 }
 
 function NormalSeat({
-  normalTableLayout,
   regionStyle,
   layoutMetrics,
   seatView,
@@ -2541,7 +2662,6 @@ function NormalSeat({
   onLocalCardClick
 }: Pick<
   GameTableViewProps,
-  | "normalTableLayout"
   | "sortedLocalHand"
   | "localCanInteract"
   | "localPassInteractionEnabled"
@@ -2564,22 +2684,10 @@ function NormalSeat({
   const handCardCount = seatView.isLocalSeat
     ? sortedLocalHand.length
     : seatView.cards.length;
-  const seatLayout = getNormalSeatLayout({
-    position: seatView.position,
-    normalTableLayout,
-    layoutMetrics,
-    handCardCount
-  });
-  const sideLabelStyle = isSideSeat
-    ? ({
-        left: `${parseStyleNumber(seatLayout.nameLabel.left) - parseStyleNumber(regionStyle.left)}px`,
-        top: `${parseStyleNumber(seatLayout.nameLabel.top) - parseStyleNumber(regionStyle.top)}px`
-      } as CSSProperties)
-    : null;
   const handMarkerStyle = {
     "--normal-hand-span": `${requiredFanSpan(
       handCardCount,
-      layoutMetrics.cardWidth,
+      isSideSeat ? layoutMetrics.cardHeight : layoutMetrics.cardWidth,
       handStep
     )}px`,
     "--normal-tichu-offset": `${Math.max(
@@ -2590,6 +2698,10 @@ function NormalSeat({
   const handStyle = {
     "--normal-hand-step": `${handStep}px`
   } as CSSProperties;
+  const remoteSeatCards =
+    isSideSeat && seatView.position === "right"
+      ? [...seatView.cards].reverse()
+      : seatView.cards;
   const metaBlock = (
     <div
       className={
@@ -2616,7 +2728,10 @@ function NormalSeat({
         className="normal-seat__card-slot"
         data-seat-region-card={`${seatView.position}-${card.id}-${cardIndex}`}
       >
-        <CardFace card={card} className="normal-card normal-card--seat" />
+        <CardFace
+          card={card}
+          className={`normal-card normal-card--seat normal-card--seat-${seatView.position}`}
+        />
       </div>
     );
   const localHand = (
@@ -2637,7 +2752,7 @@ function NormalSeat({
                 interactive={localCanInteract}
                 tone={localLegalCardIds.has(card.id) ? "legal" : "muted"}
                 selected={selectedCardIds.includes(card.id)}
-                className="normal-card normal-card--local"
+                className="normal-card normal-card--local normal-card--local-bottom"
                 onClick={() => onLocalCardClick(card.id)}
                 draggable={localPassInteractionEnabled}
                 onDragStart={(event) => {
@@ -2661,7 +2776,7 @@ function NormalSeat({
           className={`normal-seat__hand normal-seat__hand--${seatView.position}`}
           style={handStyle}
         >
-          {seatView.cards.map(renderSeatCard)}
+          {remoteSeatCards.map(renderSeatCard)}
         </div>
       </div>
     </div>
@@ -2682,22 +2797,6 @@ function NormalSeat({
       data-seat-region={seatView.position}
       data-layout-container={`${seatView.position}-seat`}
     >
-      {isSideSeat && sideLabelStyle && (
-        <div
-          className={[
-            "normal-seat-overlay__label",
-            `normal-seat-overlay__label--${seatView.position}`,
-            "normal-seat-overlay__label--attached",
-            seatView.isPrimarySeat ? "normal-seat-overlay__label--active" : ""
-          ]
-            .filter(Boolean)
-            .join(" ")}
-          style={sideLabelStyle}
-          aria-hidden="true"
-        >
-          <span>{seatView.title}</span>
-        </div>
-      )}
       <div className="normal-seat__content">
         {seatView.position === "bottom" ? (
           <>
@@ -4393,6 +4492,8 @@ function useNormalLayoutDiagnostics(config: {
       for (const container of containers) {
         const containerName =
           container.dataset.layoutContainer ?? "normal-root";
+        const allowsAttachedIdentityOverflow =
+          containerName === "left-seat" || containerName === "right-seat";
 
         if (container.scrollHeight > container.clientHeight + 1) {
           nextFailures.push({
@@ -4407,7 +4508,10 @@ function useNormalLayoutDiagnostics(config: {
           });
         }
 
-        if (container.scrollWidth > container.clientWidth + 1) {
+        if (
+          !allowsAttachedIdentityOverflow &&
+          container.scrollWidth > container.clientWidth + 1
+        ) {
           nextFailures.push({
             code: `container-width-${containerName}`,
             message: "A game container is horizontally scrolling.",
@@ -4476,11 +4580,15 @@ function useNormalLayoutDiagnostics(config: {
       const centerZone = root.querySelector<HTMLElement>(
         "[data-layout-container='center-zone']"
       );
-      const referenceCard = root.querySelector<HTMLElement>(
-        ".normal-card--local, .normal-card--seat"
-      );
-      if (centerZone) {
-        const centerRect = centerZone.getBoundingClientRect();
+      const passLaneBounds =
+        root.querySelector<HTMLElement>("[data-layout-container='board']") ??
+        centerZone;
+      const referenceCard =
+        root.querySelector<HTMLElement>(".normal-card--local") ??
+        root.querySelector<HTMLElement>(".normal-seat__hand--bottom .normal-card--seat") ??
+        root.querySelector<HTMLElement>(".normal-card--seat");
+      if (passLaneBounds) {
+        const passLaneBoundsRect = passLaneBounds.getBoundingClientRect();
         const referenceCardRect = referenceCard?.getBoundingClientRect() ?? null;
 
         root.querySelectorAll<HTMLElement>("[data-pass-lane]").forEach((lane) => {
@@ -4488,14 +4596,14 @@ function useNormalLayoutDiagnostics(config: {
           const laneName = lane.dataset.passLane ?? "pass-lane";
 
           if (
-            laneRect.top < centerRect.top - 1 ||
-            laneRect.right > centerRect.right + 1 ||
-            laneRect.bottom > centerRect.bottom + 1 ||
-            laneRect.left < centerRect.left - 1
+            laneRect.top < passLaneBoundsRect.top - 1 ||
+            laneRect.right > passLaneBoundsRect.right + 1 ||
+            laneRect.bottom > passLaneBoundsRect.bottom + 1 ||
+            laneRect.left < passLaneBoundsRect.left - 1
           ) {
             nextFailures.push({
-              code: `pass-lane-center-${laneName}`,
-              message: "A pass lane escaped the center play zone.",
+              code: `pass-lane-board-${laneName}`,
+              message: "A pass lane escaped the table board.",
               metrics: {
                 viewport: viewportLabel,
                 lane: laneName,
@@ -4503,10 +4611,10 @@ function useNormalLayoutDiagnostics(config: {
                 laneRight: laneRect.right,
                 laneBottom: laneRect.bottom,
                 laneLeft: laneRect.left,
-                centerTop: centerRect.top,
-                centerRight: centerRect.right,
-                centerBottom: centerRect.bottom,
-                centerLeft: centerRect.left
+                boardTop: passLaneBoundsRect.top,
+                boardRight: passLaneBoundsRect.right,
+                boardBottom: passLaneBoundsRect.bottom,
+                boardLeft: passLaneBoundsRect.left
               }
             });
           }
@@ -4595,22 +4703,26 @@ export function NormalGameTableView(props: GameTableViewProps) {
     top: resolveNormalSeatRegionStyle({
       position: "top",
       normalTableLayout: props.normalTableLayout,
-      layoutMetrics
+      layoutMetrics,
+      handCardCount: seatByPosition.top.cards.length
     }),
     right: resolveNormalSeatRegionStyle({
       position: "right",
       normalTableLayout: props.normalTableLayout,
-      layoutMetrics
+      layoutMetrics,
+      handCardCount: seatByPosition.right.cards.length
     }),
     bottom: resolveNormalSeatRegionStyle({
       position: "bottom",
       normalTableLayout: props.normalTableLayout,
-      layoutMetrics
+      layoutMetrics,
+      handCardCount: props.sortedLocalHand.length
     }),
     left: resolveNormalSeatRegionStyle({
       position: "left",
       normalTableLayout: props.normalTableLayout,
-      layoutMetrics
+      layoutMetrics,
+      handCardCount: seatByPosition.left.cards.length
     })
   } as const;
   const playSurfaceRegionStyle = resolveNormalPlaySurfaceRegionStyle({
@@ -4683,11 +4795,6 @@ export function NormalGameTableView(props: GameTableViewProps) {
             </div>
           )}
           <div
-            className="normal-header-band"
-            data-layout-container="header-band"
-            aria-hidden="true"
-          />
-          <div
             className="normal-scoreboard-anchor"
             style={resolveNormalBoardAnchorStyle(
               props.normalTableLayout.scoreBadge,
@@ -4727,7 +4834,6 @@ export function NormalGameTableView(props: GameTableViewProps) {
             </section>
 
             <NormalSeat
-              normalTableLayout={props.normalTableLayout}
               regionStyle={seatRegionStyleByPosition.top}
               layoutMetrics={layoutMetrics}
               seatView={seatByPosition.top}
@@ -4740,7 +4846,6 @@ export function NormalGameTableView(props: GameTableViewProps) {
             />
 
             <NormalSeat
-              normalTableLayout={props.normalTableLayout}
               regionStyle={seatRegionStyleByPosition.left}
               layoutMetrics={layoutMetrics}
               seatView={seatByPosition.left}
@@ -4753,7 +4858,6 @@ export function NormalGameTableView(props: GameTableViewProps) {
             />
 
             <NormalSeat
-              normalTableLayout={props.normalTableLayout}
               regionStyle={seatRegionStyleByPosition.right}
               layoutMetrics={layoutMetrics}
               seatView={seatByPosition.right}
@@ -4766,7 +4870,6 @@ export function NormalGameTableView(props: GameTableViewProps) {
             />
 
             <NormalSeat
-              normalTableLayout={props.normalTableLayout}
               regionStyle={seatRegionStyleByPosition.bottom}
               layoutMetrics={layoutMetrics}
               seatView={seatByPosition.bottom}
@@ -4860,6 +4963,8 @@ export function NormalGameTableView(props: GameTableViewProps) {
           <NormalPassStagingRegions
             normalTableLayout={props.normalTableLayout}
             layoutMetrics={layoutMetrics}
+            seatViews={props.seatViews}
+            sortedLocalHand={props.sortedLocalHand}
             passRouteViews={props.passRouteViews}
             selectedPassTarget={props.selectedPassTarget}
             cardLookup={props.cardLookup}

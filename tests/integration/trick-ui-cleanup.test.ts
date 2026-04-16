@@ -24,7 +24,8 @@ import {
 } from "../../apps/web/src/game-table-views";
 import {
   getBoardBounds,
-  getNormalSeatLayout
+  getNormalSeatLayout,
+  resolveNormalActionRowRegionStyle
 } from "../../apps/web/src/table-layout";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
@@ -295,6 +296,28 @@ describe("trick UI cleanup", () => {
     expect(
       view.container.querySelectorAll('[data-trick-stage] .normal-card--trick')
     ).toHaveLength(2);
+    expect(
+      view.container.querySelectorAll(
+        '[data-trick-stage="right"] .normal-card--trick-right'
+      )
+    ).toHaveLength(1);
+    expect(
+      view.container.querySelectorAll(
+        '[data-trick-stage="left"] .normal-card--trick-left'
+      )
+    ).toHaveLength(0);
+    const stagedCardTransforms = Array.from(
+      view.container.querySelectorAll<HTMLElement>(
+        "[data-trick-stage] .normal-trick-stage__card"
+      )
+    ).map((card) => card.style.transform);
+
+    expect(stagedCardTransforms.every((transform) => transform.includes("translate("))).toBe(
+      true
+    );
+    expect(stagedCardTransforms.every((transform) => transform.includes("rotate("))).toBe(
+      false
+    );
 
     view.unmount();
   });
@@ -377,6 +400,81 @@ describe("trick UI cleanup", () => {
     view.unmount();
   });
 
+  it("keeps rendered trick stages slightly relaxed away from the owning seat", () => {
+    const north = combo(["jade-4"]);
+    const east = combo(["sword-6"]);
+    const south = combo(["pagoda-8"]);
+    const west = combo(["star-10"]);
+    const trickCards = cardsFromIds(["jade-4", "sword-6", "pagoda-8", "star-10"]);
+    const state = createScenarioState({
+      phase: "trick_play",
+      activeSeat: "seat-0",
+      currentTrick: {
+        leader: "seat-2",
+        currentWinner: "seat-3",
+        currentCombination: west,
+        entries: [
+          { type: "play", seat: "seat-2", combination: north },
+          { type: "play", seat: "seat-1", combination: east },
+          { type: "play", seat: "seat-0", combination: south },
+          { type: "play", seat: "seat-3", combination: west }
+        ],
+        passingSeats: []
+      }
+    });
+    const seatRelativePlays = createSeatRelativePlays(state.currentTrick?.entries ?? []);
+    const layoutMetrics = computeNormalViewportLayoutMetrics({
+      viewportWidth: 1366,
+      viewportHeight: 768,
+      topCount: 8,
+      bottomCount: 8,
+      leftCount: 8,
+      rightCount: 8,
+      hasVariantPicker: false,
+      hasWishPicker: false
+    });
+    const view = render(
+      createElement(
+        "div",
+        { style: { position: "relative", width: "1366px", height: "768px" } },
+        createElement(NormalTrickStagingRegions, {
+          normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+          layoutMetrics,
+          displayedTrick: state.currentTrick,
+          seatRelativePlays,
+          pickupStageViews: [],
+          dogLeadAnimation: null,
+          cardLookup: buildCardLookup(trickCards)
+        })
+      )
+    );
+
+    expect(
+      view.container.querySelector<HTMLElement>('[data-trick-stage="top"]')?.style.transform
+    ).toContain("translateY(");
+    expect(
+      view.container.querySelectorAll(
+        '[data-trick-stage="left"] .normal-card--trick-left'
+      )
+    ).toHaveLength(1);
+    expect(
+      view.container.querySelectorAll(
+        '[data-trick-stage="right"] .normal-card--trick-right'
+      )
+    ).toHaveLength(1);
+    expect(
+      view.container.querySelector<HTMLElement>('[data-trick-stage="bottom"]')?.style.transform
+    ).toContain("translateY(-");
+    expect(
+      view.container.querySelector<HTMLElement>('[data-trick-stage="left"]')?.style.transform
+    ).toContain("translateX(");
+    expect(
+      view.container.querySelector<HTMLElement>('[data-trick-stage="right"]')?.style.transform
+    ).toContain("translateX(-");
+
+    view.unmount();
+  });
+
   it("derives seat-local pickup and south label anchors from the shared layout schema", () => {
     const metrics = computeNormalViewportLayoutMetrics({
       viewportWidth: 1366,
@@ -400,13 +498,20 @@ describe("trick UI cleanup", () => {
     const trickY = parseFloat(String(bottomLayout.trickZone.top));
     const pickupY = parseFloat(String(bottomLayout.pickupZone.top));
     const nameY = parseFloat(String(bottomLayout.nameLabel.top));
-    const actionY = board.top + board.height * DEFAULT_NORMAL_TABLE_LAYOUT.actionRow.y;
+    const actionTop = parseFloat(
+      String(
+        resolveNormalActionRowRegionStyle({
+          normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+          layoutMetrics: metrics
+        }).top
+      )
+    );
 
-    expect(pickupY).toBeGreaterThan(trickY);
+    expect(trickY).toBeGreaterThan(pickupY);
     expect(pickupY).toBeLessThan(southHandY);
-    expect(nameY).toBeGreaterThan(trickY);
+    expect(trickY).toBeLessThan(southHandY);
     expect(nameY).toBeGreaterThan(southHandY);
-    expect(nameY).toBeLessThan(actionY);
+    expect(actionTop).toBeGreaterThan(nameY);
   });
 
   it("renders Dog lead transfer using the engine-resolved target seat", () => {
