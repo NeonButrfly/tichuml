@@ -168,7 +168,7 @@ export type PlayCardsAction = {
   seat: SeatId;
   cardIds: string[];
   phoenixAsRank?: PhoenixRank;
-  wishRank?: StandardRank;
+  wishRank?: StandardRank | null;
 };
 
 export type EngineAction =

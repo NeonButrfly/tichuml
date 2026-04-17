@@ -383,6 +383,10 @@ input {
   width: min(860px, 100%);
 }
 
+.game-dialog--wish {
+  width: min(420px, calc(100vw - 32px));
+}
+
 .game-dialog__header {
   display: flex;
   align-items: center;
@@ -406,9 +410,278 @@ input {
   cursor: pointer;
 }
 
+.game-dialog__close-placeholder {
+  width: 76px;
+  min-height: 1px;
+}
+
 .game-dialog__body {
   padding: 18px 22px 22px;
   overflow: auto;
+}
+
+.mahjong-wish-dialog {
+  display: grid;
+  gap: 18px;
+  justify-items: center;
+  text-align: center;
+}
+
+.mahjong-wish-dialog__helper {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 0.96rem;
+}
+
+.mahjong-wish-dialog__selector-frame {
+  position: relative;
+  width: min(220px, 100%);
+  padding: 18px 14px;
+  border-radius: 24px;
+  background:
+    linear-gradient(180deg, rgba(20, 39, 43, 0.94), rgba(10, 20, 23, 0.96)),
+    rgba(10, 20, 23, 0.96);
+  border: 1px solid rgba(244, 222, 179, 0.12);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 18px 36px rgba(0, 0, 0, 0.22);
+}
+
+.mahjong-wish-dialog__selector-frame::before,
+.mahjong-wish-dialog__selector-frame::after {
+  content: "";
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  height: 48px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.mahjong-wish-dialog__selector-frame::before {
+  top: 18px;
+  background: linear-gradient(180deg, rgba(10, 20, 23, 0.96), transparent);
+}
+
+.mahjong-wish-dialog__selector-frame::after {
+  bottom: 18px;
+  background: linear-gradient(0deg, rgba(10, 20, 23, 0.96), transparent);
+}
+
+.mahjong-wish-selector {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 60px 4px;
+  scrollbar-width: thin;
+  scroll-snap-type: y proximity;
+  outline: none;
+}
+
+.mahjong-wish-selector:focus-visible {
+  box-shadow: 0 0 0 2px rgba(243, 190, 120, 0.35);
+  border-radius: 18px;
+}
+
+.mahjong-wish-option {
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 18px;
+  background: rgba(22, 39, 44, 0.78);
+  color: rgba(230, 237, 232, 0.82);
+  padding: 14px 16px;
+  cursor: pointer;
+  transition:
+    transform 140ms ease,
+    border-color 140ms ease,
+    background-color 140ms ease,
+    color 140ms ease,
+    box-shadow 140ms ease;
+  scroll-snap-align: center;
+  touch-action: manipulation;
+}
+
+.mahjong-wish-option--none {
+  color: rgba(214, 224, 220, 0.72);
+  border-bottom: 1px solid rgba(228, 239, 233, 0.08);
+  margin-bottom: 6px;
+  padding-bottom: 16px;
+}
+
+.mahjong-wish-option:hover {
+  border-color: rgba(243, 190, 120, 0.24);
+  color: rgba(247, 251, 248, 0.96);
+}
+
+.mahjong-wish-option.is-selected {
+  border-color: rgba(243, 190, 120, 0.42);
+  background:
+    linear-gradient(180deg, rgba(109, 72, 32, 0.92), rgba(66, 42, 18, 0.94)),
+    rgba(66, 42, 18, 0.94);
+  color: #fff4da;
+  box-shadow:
+    0 0 0 1px rgba(243, 190, 120, 0.24),
+    0 10px 18px rgba(0, 0, 0, 0.2);
+  transform: scale(1.02);
+}
+
+.mahjong-wish-option__label {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 1.28rem;
+  letter-spacing: 0.08em;
+}
+
+.mahjong-wish-dialog__selection-ring {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  top: 50%;
+  height: 56px;
+  transform: translateY(-50%);
+  border-radius: 20px;
+  border: 1px solid rgba(243, 190, 120, 0.2);
+  background: rgba(243, 190, 120, 0.06);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.mahjong-wish-dialog__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.mahjong-wish-dialog__confirm:disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+}
+
+.game-dialog--backend-settings {
+  width: min(720px, 100%);
+}
+
+.backend-settings-dialog {
+  display: grid;
+  gap: 18px;
+}
+
+.backend-settings-dialog__helper {
+  margin: 0;
+  color: rgba(225, 235, 230, 0.78);
+  line-height: 1.5;
+}
+
+.backend-settings-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.backend-settings-field,
+.backend-settings-checkbox,
+.backend-settings-status {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(228, 239, 233, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.backend-settings-field span:first-child,
+.backend-settings-checkbox strong,
+.backend-settings-status__copy strong {
+  color: #f7fbf8;
+  font-weight: 700;
+}
+
+.backend-settings-field input,
+.backend-settings-field select {
+  width: 100%;
+  border: 1px solid rgba(228, 239, 233, 0.14);
+  border-radius: 14px;
+  background: rgba(7, 18, 14, 0.72);
+  color: #f7fbf8;
+  padding: 12px 14px;
+  font: inherit;
+}
+
+.backend-settings-checkbox {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+}
+
+.backend-settings-checkbox input {
+  margin-top: 4px;
+}
+
+.backend-settings-checkbox span,
+.backend-settings-status__copy {
+  display: grid;
+  gap: 4px;
+}
+
+.backend-settings-checkbox small,
+.backend-settings-status__copy small {
+  color: rgba(225, 235, 230, 0.72);
+  line-height: 1.45;
+}
+
+.backend-settings-status {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+}
+
+.backend-settings-status__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 108px;
+  padding: 9px 12px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  background: rgba(91, 106, 111, 0.18);
+  color: rgba(222, 232, 228, 0.82);
+}
+
+.backend-settings-status__badge.is-reachable {
+  background: rgba(83, 166, 132, 0.18);
+  color: #d7f2e4;
+}
+
+.backend-settings-status__badge.is-unreachable {
+  background: rgba(173, 86, 86, 0.18);
+  color: #ffd9d9;
+}
+
+.backend-settings-status__badge.is-checking {
+  background: rgba(193, 158, 88, 0.18);
+  color: #f8e7be;
+}
+
+.backend-settings-status__test {
+  border: 1px solid rgba(248, 229, 164, 0.18);
+  border-radius: 14px;
+  background: rgba(7, 18, 14, 0.78);
+  color: #f8f1d5;
+  padding: 12px 14px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.backend-settings-status__test:disabled {
+  opacity: 0.6;
+  cursor: progress;
 }
 
 .hotkey-groups {
@@ -3950,6 +4223,31 @@ body.normal-layout-locked {
   transform-origin: center center;
 }
 
+.normal-card--route-pickup-left {
+  transform: rotate(-90deg);
+  transform-origin: center center;
+}
+
+.normal-card--route-pickup-right {
+  transform: rotate(90deg);
+  transform-origin: center center;
+}
+
+.normal-card--route-pickup-up {
+  transform: none;
+  transform-origin: center center;
+}
+
+.normal-card--route-pickup-down {
+  transform: rotate(180deg);
+  transform-origin: center center;
+}
+
+.normal-card--route-pickup-upright {
+  transform: none;
+  transform-origin: center center;
+}
+
 .normal-trick-stage__play--winning .normal-card--trick {
   filter: brightness(1.05);
   box-shadow:
@@ -4152,6 +4450,10 @@ body.normal-layout-locked {
   pointer-events: none;
 }
 
+.normal-pass-lane__slot--pickup-filled {
+  transform: none;
+}
+
 .normal-pass-lane__slot--interactive {
   pointer-events: auto;
   cursor: pointer;
@@ -4176,7 +4478,7 @@ body.normal-layout-locked {
   transform-origin: center center;
 }
 
-.normal-pass-lane .normal-card--route {
+.normal-pass-lane__slot:not(.normal-pass-lane__slot--pickup-filled) .normal-card--route {
   transform: none;
   transform-origin: center center;
 }

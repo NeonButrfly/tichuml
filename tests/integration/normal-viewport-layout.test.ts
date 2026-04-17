@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   computeNormalViewportLayoutMetrics,
   DEFAULT_NORMAL_TABLE_LAYOUT,
+  DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS,
   getBoardBounds,
   getNormalSeatLayout,
   getNormalTableSpacing,
@@ -339,28 +340,28 @@ describe("normal viewport table layout", () => {
               laneGapMin +
               visualSize.width / 2
             : partnerVisualSize.height / 2 +
-              laneGapMin +
+              DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS.sideLaneVerticalSpacing +
               visualSize.height / 2;
         const expectedLeft =
           sourcePosition === "left"
             ? sourceAnchor.handBounds.right +
-              spacing.handToLaneGap +
-              partnerVisualSize.width / 2
+              DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS.sideLaneInsetFromHand +
+              visualSize.width / 2
             : sourcePosition === "right"
               ? sourceAnchor.handBounds.left -
-                spacing.handToLaneGap -
-                partnerVisualSize.width / 2
+                DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS.sideLaneInsetFromHand -
+                visualSize.width / 2
               : playSurfaceCenter.x + partnerRelativeIndex * laneClusterStep;
         const expectedTop =
           sourcePosition === "top"
             ? sourceAnchor.handBounds.bottom +
               spacing.handToLaneGap +
-              partnerVisualSize.height / 2 -
+              visualSize.height / 2 -
               topAcrossLaneNudge
             : sourcePosition === "bottom"
               ? sourceAnchor.handBounds.top -
                 spacing.handToLaneGap -
-                partnerVisualSize.height / 2 +
+                visualSize.height / 2 +
                 bottomAcrossLaneNudge
               : playSurfaceCenter.y + partnerRelativeIndex * laneClusterStep;
         expect(geometry?.style.left).toBe(
@@ -442,12 +443,9 @@ describe("normal viewport table layout", () => {
         });
 
         if (sourcePosition === "top") {
-          const alignedCenterY = centerLane.y;
+          const alignedTop = laneRects[1]!.top;
           laneRects.forEach((laneRect) => {
-            expect(laneRect.top + laneRect.height / 2).toBeCloseTo(
-              alignedCenterY,
-              5
-            );
+            expect(laneRect.top).toBeCloseTo(alignedTop, 5);
             expect(laneRect.top).toBeGreaterThanOrEqual(
               sourceAnchor.handBounds.bottom + spacing.handToLaneGap - 12
             );
@@ -462,12 +460,9 @@ describe("normal viewport table layout", () => {
         }
 
         if (sourcePosition === "bottom") {
-          const alignedCenterY = centerLane.y;
+          const alignedBottom = laneRects[1]!.bottom;
           laneRects.forEach((laneRect) => {
-            expect(laneRect.top + laneRect.height / 2).toBeCloseTo(
-              alignedCenterY,
-              5
-            );
+            expect(laneRect.bottom).toBeCloseTo(alignedBottom, 5);
             expect(laneRect.bottom).toBeLessThanOrEqual(
               sourceAnchor.handBounds.top - spacing.handToLaneGap + 8
             );
@@ -482,14 +477,12 @@ describe("normal viewport table layout", () => {
         }
 
         if (sourcePosition === "left") {
-          const alignedCenterX = centerLane.x;
+          const alignedLeft = laneRects[1]!.left;
           laneRects.forEach((laneRect) => {
-            expect(laneRect.left + laneRect.width / 2).toBeCloseTo(
-              alignedCenterX,
-              5
-            );
+            expect(laneRect.left).toBeCloseTo(alignedLeft, 5);
             expect(laneRect.left).toBeGreaterThanOrEqual(
-              sourceAnchor.handBounds.right + spacing.handToLaneGap
+              sourceAnchor.handBounds.right +
+                DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS.sideLaneInsetFromHand
             );
           });
           expect(centerLane.y).toBeCloseTo(playSurfaceCenter.y, 5);
@@ -497,24 +490,38 @@ describe("normal viewport table layout", () => {
             rightOrBottomLane.y - centerLane.y,
             5
           );
+          expect(leftOrTopLane.y - centerLane.y).toBeCloseTo(
+            -(
+              laneRects[0]!.height / 2 +
+              DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS.sideLaneVerticalSpacing +
+              laneRects[1]!.height / 2
+            ),
+            5
+          );
           expect(Math.abs(stageCenter.x - centerLane.x)).toBeLessThanOrEqual(6);
           expect(Math.abs(stageCenter.y - centerLane.y)).toBeLessThanOrEqual(6);
         }
 
         if (sourcePosition === "right") {
-          const alignedCenterX = centerLane.x;
+          const alignedRight = laneRects[1]!.right;
           laneRects.forEach((laneRect) => {
-            expect(laneRect.left + laneRect.width / 2).toBeCloseTo(
-              alignedCenterX,
-              5
-            );
+            expect(laneRect.right).toBeCloseTo(alignedRight, 5);
             expect(laneRect.right).toBeLessThanOrEqual(
-              sourceAnchor.handBounds.left - spacing.handToLaneGap
+              sourceAnchor.handBounds.left -
+                DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS.sideLaneInsetFromHand
             );
           });
           expect(centerLane.y).toBeCloseTo(playSurfaceCenter.y, 5);
           expect(centerLane.y - leftOrTopLane.y).toBeCloseTo(
             rightOrBottomLane.y - centerLane.y,
+            5
+          );
+          expect(leftOrTopLane.y - centerLane.y).toBeCloseTo(
+            -(
+              laneRects[0]!.height / 2 +
+              DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS.sideLaneVerticalSpacing +
+              laneRects[1]!.height / 2
+            ),
             5
           );
           expect(Math.abs(stageCenter.x - centerLane.x)).toBeLessThanOrEqual(6);
@@ -825,5 +832,154 @@ describe("normal viewport table layout", () => {
       cardDx: 0,
       rotationStep: 0
     });
+  });
+
+  it("keeps east and west pass-lane stacks mirrored with schema-driven hand clearance", () => {
+    const metrics = computeNormalViewportLayoutMetrics({
+      viewportWidth: 1600,
+      viewportHeight: 900,
+      topCount: 8,
+      bottomCount: 8,
+      leftCount: 8,
+      rightCount: 8,
+      hasVariantPicker: false,
+      hasWishPicker: false
+    });
+    const westAnchor = resolveNormalSeatAnchorGeometry({
+      position: "left",
+      normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+      layoutMetrics: metrics,
+      handCardCount: 8
+    });
+    const eastAnchor = resolveNormalSeatAnchorGeometry({
+      position: "right",
+      normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+      layoutMetrics: metrics,
+      handCardCount: 8
+    });
+    const westLanes = NORMAL_PASS_STAGE_MAP.left.map((laneSpec) =>
+      laneVisualRect(
+        resolveNormalPassLaneGeometry({
+          normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+          layoutMetrics: metrics,
+          sourcePosition: "left",
+          targetPosition: laneSpec.targetPosition,
+          direction: laneSpec.direction,
+          sourceHandCardCount: 8
+        })!
+      )
+    );
+    const eastLanes = NORMAL_PASS_STAGE_MAP.right.map((laneSpec) =>
+      laneVisualRect(
+        resolveNormalPassLaneGeometry({
+          normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+          layoutMetrics: metrics,
+          sourcePosition: "right",
+          targetPosition: laneSpec.targetPosition,
+          direction: laneSpec.direction,
+          sourceHandCardCount: 8
+        })!
+      )
+    );
+
+    expect(westLanes[1]!.left - westAnchor.handBounds.right).toBeCloseTo(
+      DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS.sideLaneInsetFromHand,
+      5
+    );
+    expect(eastAnchor.handBounds.left - eastLanes[1]!.right).toBeCloseTo(
+      DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS.sideLaneInsetFromHand,
+      5
+    );
+    expect(westLanes[0]!.left).toBeCloseTo(westLanes[1]!.left, 5);
+    expect(westLanes[1]!.left).toBeCloseTo(westLanes[2]!.left, 5);
+    expect(eastLanes[0]!.right).toBeCloseTo(eastLanes[1]!.right, 5);
+    expect(eastLanes[1]!.right).toBeCloseTo(eastLanes[2]!.right, 5);
+    expect(westLanes[1]!.left - westAnchor.handBounds.right).toBeCloseTo(
+      eastAnchor.handBounds.left - eastLanes[1]!.right,
+      5
+    );
+  });
+
+  it("centers east and west pickup lanes on one side-seat centerline", () => {
+    const metrics = computeNormalViewportLayoutMetrics({
+      viewportWidth: 1600,
+      viewportHeight: 900,
+      topCount: 8,
+      bottomCount: 8,
+      leftCount: 8,
+      rightCount: 8,
+      hasVariantPicker: false,
+      hasWishPicker: false
+    });
+
+    const westCenters = NORMAL_PASS_STAGE_MAP.left.map((laneSpec) =>
+      styleCenter(
+        resolveNormalPassLaneGeometry({
+          normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+          layoutMetrics: metrics,
+          sourcePosition: "left",
+          targetPosition: laneSpec.targetPosition,
+          direction: laneSpec.direction,
+          sourceHandCardCount: 8,
+          displayMode: "pickup",
+          stackAlignment: "centerline"
+        })!.style
+      )
+    );
+    const eastCenters = NORMAL_PASS_STAGE_MAP.right.map((laneSpec) =>
+      styleCenter(
+        resolveNormalPassLaneGeometry({
+          normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+          layoutMetrics: metrics,
+          sourcePosition: "right",
+          targetPosition: laneSpec.targetPosition,
+          direction: laneSpec.direction,
+          sourceHandCardCount: 8,
+          displayMode: "pickup",
+          stackAlignment: "centerline"
+        })!.style
+      )
+    );
+    const westRotations = NORMAL_PASS_STAGE_MAP.left.map(
+      (laneSpec) =>
+        resolveNormalPassLaneGeometry({
+          normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+          layoutMetrics: metrics,
+          sourcePosition: "left",
+          targetPosition: laneSpec.targetPosition,
+          direction: laneSpec.direction,
+          sourceHandCardCount: 8,
+          displayMode: "pickup",
+          stackAlignment: "centerline"
+        })!.rotation
+    );
+    const eastRotations = NORMAL_PASS_STAGE_MAP.right.map(
+      (laneSpec) =>
+        resolveNormalPassLaneGeometry({
+          normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+          layoutMetrics: metrics,
+          sourcePosition: "right",
+          targetPosition: laneSpec.targetPosition,
+          direction: laneSpec.direction,
+          sourceHandCardCount: 8,
+          displayMode: "pickup",
+          stackAlignment: "centerline"
+        })!.rotation
+    );
+
+    expect(westCenters[0]!.x).toBeCloseTo(westCenters[1]!.x, 5);
+    expect(westCenters[1]!.x).toBeCloseTo(westCenters[2]!.x, 5);
+    expect(eastCenters[0]!.x).toBeCloseTo(eastCenters[1]!.x, 5);
+    expect(eastCenters[1]!.x).toBeCloseTo(eastCenters[2]!.x, 5);
+    expect(westCenters[1]!.y - westCenters[0]!.y).toBeCloseTo(
+      westCenters[2]!.y - westCenters[1]!.y,
+      5
+    );
+    expect(eastCenters[1]!.y - eastCenters[0]!.y).toBeCloseTo(
+      eastCenters[2]!.y - eastCenters[1]!.y,
+      5
+    );
+    expect(westRotations).toEqual([-90, 0, 90]);
+    expect(eastRotations).toEqual([-90, 0, 90]);
   });
 });

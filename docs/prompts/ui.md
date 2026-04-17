@@ -166,3 +166,57 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 - Linked GitHub Issue: [#28](https://github.com/NeonButrfly/tichuml/issues/28)
 - Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
 - Status Source: GitHub issue state only.
+
+### 2026-04-16 - Passing-lane shared-edge alignment correction
+
+- Prompt Signal: The latest passing-lane prompt tightened the cluster contract by requiring the partner lane to stay edge-aligned with both outer lanes: north shares the top edge, south shares the bottom edge, east shares the right edge, and west shares the left edge.
+- Interpreted Requirement: Keep gameplay, hands, stage cards, and the broader table layout fixed. Compute the partner lane first from the seat-local anchor, keep its seat-specific orientation, then derive the outer lanes with symmetric post-rotation spacing while enforcing the shared edge line so each three-lane cluster reads as one anchored unit instead of three independently centered boxes.
+- Affected Systems: `apps/web/src/table-layout.ts`, `tests/integration/normal-viewport-layout.test.ts`, targeted pass-lane validation.
+- Linked GitHub Issue: [#28](https://github.com/NeonButrfly/tichuml/issues/28)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.
+
+### 2026-04-16 - Side-seat exchange lane spacing and schema correction
+
+- Prompt Signal: The latest prompt narrowed the work to east and west exchange lanes, calling out cramped hand-to-lane spacing, misaligned side stacks, and the need to move those side-lane anchors into the canonical layout schema instead of render-time nudges.
+- Interpreted Requirement: Keep gameplay, buttons, phases, hand sizing, and the rest of the table layout fixed. Add schema-backed side-lane spacing tokens to the canonical layout config, derive east and west pass-lane anchors from the side hand bounds using that larger hand-to-lane gap, keep the side stacks vertically centered and mirrored, and preserve the existing seat-relative side-lane orientation rules through the canonical lane geometry path.
+- Affected Systems: `apps/web/src/layout.json`, `apps/web/src/table-layout.ts`, `apps/web/src/game-table-views.tsx`, `tests/integration/normal-viewport-layout.test.ts`, exchange-view validation.
+- Linked GitHub Issue: [#28](https://github.com/NeonButrfly/tichuml/issues/28)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.
+
+### 2026-04-17 - Centered Mahjong wish modal selector
+
+- Prompt Signal: The local Mahjong wish flow must stop using inline/manual entry UI and instead open a centered blocking modal with a vertical rolling selector and confirm-first submission.
+- Interpreted Requirement: When the local human player must make a Mahjong wish, the table should open a centered modal dialog titled `Make a Wish`, present only the legal standard ranks (`2` through `A`) in a vertical selector, block table interaction behind a scrim, and submit the selected rank through the existing wish flow only after explicit confirmation.
+- Affected Systems: `apps/web/src/App.tsx`, `apps/web/src/game-table-views.tsx`, `apps/web/src/styles.css`, `tests/integration/mahjong-wish-dialog.test.ts`.
+- Linked GitHub Issue: [#29](https://github.com/NeonButrfly/tichuml/issues/29)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.
+
+### 2026-04-17 - Mahjong wish selector no-wish default
+
+- Prompt Signal: The Mahjong wish modal must expose an explicit `No Wish` choice as the first rolling-selector item, select it by default, and allow immediate confirmation without choosing a rank.
+- Interpreted Requirement: Keep the centered modal interaction and rank choices intact, but treat `No Wish` as an explicit selectable value in the same vertical picker. The UI should submit `null` as the chosen wish, leave future trick play unconstrained by a wished rank, and preserve existing ranked-wish enforcement when a rank is selected.
+- Affected Systems: `packages/engine/src/types.ts`, `packages/engine/src/engine.ts`, `apps/web/src/App.tsx`, `apps/web/src/game-table-views.tsx`, `apps/web/src/styles.css`, `tests/integration/mahjong-wish-dialog.test.ts`, `tests/integration/engine-core.test.ts`.
+- Linked GitHub Issue: [#29](https://github.com/NeonButrfly/tichuml/issues/29)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.
+
+### 2026-04-17 - East/west received-card pickup lane centering
+
+- Prompt Signal: The exchange-complete pickup view still showed east and west received cards offset within their directional pass lanes instead of reading as clean centered side stacks.
+- Interpreted Requirement: Keep the existing directional lane system and hand clearance, but during `exchange_complete` the east and west received-card lanes must use each lane container's own center as the card placement reference so the three side lanes form an even vertical stack and each card stays centered inside its lane frame until Pickup.
+- Affected Systems: `apps/web/src/App.tsx`, `apps/web/src/game-table-views.tsx`, `apps/web/src/table-layout.ts`, `tests/integration/normal-viewport-layout.test.ts`, `tests/integration/trick-ui-cleanup.test.ts`.
+- Linked GitHub Issue: [#28](https://github.com/NeonButrfly/tichuml/issues/28)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.
+
+### 2026-04-17 - East/west filled pickup-lane orientation correction
+
+- Prompt Signal: The follow-up screenshot showed that east and west received cards were still using mixed filled-lane orientations during `exchange_complete`, even after the side stacks were centered.
+- Interpreted Requirement: Keep the centered pickup stacks intact, but rotate filled `exchange_complete` pickup cards by the rendered lane arrow, once and only once. North/south rows use `left / upright / right`; west uses `up / right / down`; east uses `up / left / down`. Normal pass-lane states keep their existing route-based lane rotation behavior.
+- Affected Systems: `apps/web/src/game-table-views.tsx`, `apps/web/src/styles.css`, `tests/integration/trick-ui-cleanup.test.ts`, `tests/integration/normal-viewport-layout.test.ts`.
+- Linked GitHub Issue: [#28](https://github.com/NeonButrfly/tichuml/issues/28)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.

@@ -5,10 +5,7 @@ import {
   useRef,
   useState
 } from "react";
-import {
-  heuristicsV1Policy,
-  type ChosenDecision
-} from "@tichuml/ai-heuristics";
+import { type ChosenDecision } from "@tichuml/ai-heuristics";
 import {
   applyEngineAction,
   createInitialGameState,
@@ -19,8 +16,8 @@ import {
   type GameState,
   type InitialGameSeedConfig,
   type LegalAction,
+  type LegalActionMap,
   type SeatId,
-  type StandardRank,
   type TrickEntry
 } from "@tichuml/engine";
 import {
@@ -58,6 +55,7 @@ import {
 import {
   DEFAULT_NORMAL_TABLE_LAYOUT_CONFIG,
   DebugGameTableView,
+  MAHJONG_WISH_RANKS,
   NormalGameTableView,
   describeAction,
   formatActorLabel,
@@ -67,10 +65,29 @@ import {
   type NormalTableLayoutConfig,
   type NormalTableLayout,
   type NormalTableLayoutTokens,
-  type SeatVisualPosition
+  type SeatVisualPosition,
+  type WishSelectionValue
 } from "./game-table-views";
 import { generateSeedWithEntropy } from "./seed/orchestrator";
-import type { SeedDebugSnapshot } from "@tichuml/shared";
+import {
+  type BackendRuntimeSettings,
+  type DecisionRequestPayload,
+  type SeedDebugSnapshot
+} from "@tichuml/shared";
+import {
+  createUnknownBackendReachability,
+  loadBackendSettings,
+  persistBackendSettings,
+  type BackendReachability
+} from "./backend/settings";
+import { resolveDecisionWithProvider } from "./backend/decision-provider";
+import { emitDecisionTelemetry, emitEventTelemetry } from "./backend/telemetry";
+import { testBackendHealth } from "./backend/client";
+import {
+  TELEMETRY_ENGINE_VERSION,
+  TELEMETRY_SCHEMA_VERSION,
+  TELEMETRY_SIM_VERSION
+} from "@tichuml/telemetry";
 
 const AI_STEP_DELAY_MS = 420;
 const SYSTEM_STEP_DELAY_MS = 180;
@@ -109,6 +126,36 @@ function createActorPlayOnlyLegalActions(result: EngineResult, actor: SeatId) {
     (action): action is PlayLegalAction => action.type === "play_cards"
   );
   return actorOnly;
+}
+
+function getCurrentHandId(state: GameState): string {
+  return `hand-${state.matchHistory.length + 1}`;
+}
+
+function buildDecisionRequestPayload(config: {
+  matchId: string;
+  state: EngineResult["nextState"];
+  derived: EngineResult["derivedView"];
+  legalActions: LegalActionMap;
+  actorSeat: SeatId;
+  decisionIndex: number;
+}): DecisionRequestPayload {
+  return {
+    game_id: config.matchId,
+    hand_id: getCurrentHandId(config.state),
+    phase: config.state.phase,
+    actor_seat: config.actorSeat,
+    schema_version: TELEMETRY_SCHEMA_VERSION,
+    engine_version: TELEMETRY_ENGINE_VERSION,
+    sim_version: TELEMETRY_SIM_VERSION,
+    state_raw: config.state as unknown as Record<string, unknown>,
+    state_norm: config.derived as unknown as Record<string, unknown>,
+    legal_actions: config.legalActions as unknown as Record<string, unknown>,
+    requested_provider: "server_heuristic",
+    metadata: {
+      decision_index: config.decisionIndex
+    }
+  };
 }
 
 export function isMandatoryOpeningLead(
@@ -337,7 +384,13 @@ export function App() {
 function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
   const [seedIndex, setSeedIndex] = useState(initialSession.roundIndex);
   const [round, setRound] = useState<EngineResult>(initialSession.round);
+  const [matchId, setMatchId] = useState(initialSession.entropyDebug.gameId);
   const [decisionCount, setDecisionCount] = useState(0);
+  const [backendSettings, setBackendSettings] =
+    useState<BackendRuntimeSettings>(loadBackendSettings);
+  const [backendStatus, setBackendStatus] = useState<BackendReachability>(
+    createUnknownBackendReachability
+  );
   const [uiMode, setUiMode] = useState<UiMode>("normal");
   const [layoutEditorActive, setLayoutEditorActive] = useState(false);
   const [mainMenuOpen, setMainMenuOpen] = useState(false);
@@ -362,9 +415,9 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
   const [selectedVariantKey, setSelectedVariantKey] = useState<string | null>(
     null
   );
-  const [selectedWishRank, setSelectedWishRank] = useState<StandardRank | null>(
-    null
-  );
+  const [selectedWishRank, setSelectedWishRank] =
+    useState<WishSelectionValue>(null);
+  const [wishSubmissionPending, setWishSubmissionPending] = useState(false);
   const [selectedPassTarget, setSelectedPassTarget] =
     useState<PassTarget>("left");
   const [passDraft, setPassDraft] = useState<
@@ -390,6 +443,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
 
   const state = round.nextState;
   const derived = round.derivedView;
+  const handId = getCurrentHandId(state);
   const primaryActor = getPrimaryActorFromResult(round);
   const roundSeed = state.seed;
   const localActions = round.legalActions[LOCAL_SEAT] ?? [];
@@ -442,12 +496,26 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     ) ??
     matchingPlayActions[0] ??
     null;
+  const wishSelectionOptions: WishSelectionValue[] =
+    activePlayVariant?.availableWishRanks
+      ? [
+          null,
+          ...MAHJONG_WISH_RANKS.filter((rank) =>
+            activePlayVariant.availableWishRanks?.includes(rank)
+          )
+        ]
+      : [];
   const resolvedWishRank =
-    selectedWishRank !== null &&
-    activePlayVariant?.availableWishRanks?.includes(selectedWishRank)
+    (selectedWishRank === null ||
+      wishSelectionOptions.includes(selectedWishRank))
       ? selectedWishRank
-      : (activePlayVariant?.availableWishRanks?.at(-1) ?? null);
+      : null;
   const localIsPrimaryActor = primaryActor === LOCAL_SEAT;
+  const wishDialogOpen =
+    !roundGenerationPending &&
+    !autoplayLocal &&
+    localIsPrimaryActor &&
+    Boolean(activePlayVariant?.availableWishRanks);
   const localHasOptionalAction =
     primaryActor !== LOCAL_SEAT && localActions.length > 0;
   const exchangePhaseActive = isExchangePhase(state.phase);
@@ -597,6 +665,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
               sourcePosition: position,
               target,
               targetSeat,
+              displayMode: "passing" as const,
               occupied: Boolean(stagedCardId),
               visibleCardId,
               faceDown: Boolean(stagedCardId) && !visibleCardId,
@@ -621,6 +690,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
                 sourcePosition: position,
                 target,
                 targetSeat: getPassTargetSeat(seat, target),
+                displayMode: "pickup" as const,
                 occupied: Boolean(visibleCardId),
                 visibleCardId,
                 faceDown: false,
@@ -652,6 +722,43 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
   });
   const executeUiHotkeyCommand = useEffectEvent((commandId: UiCommandId) => {
     executeUiCommand(commandId);
+  });
+
+  useEffect(() => {
+    persistBackendSettings(backendSettings);
+  }, [backendSettings]);
+
+  const handleBackendSettingsChange = useEffectEvent(
+    (nextSettings: BackendRuntimeSettings) => {
+      setBackendSettings(nextSettings);
+      setBackendStatus(createUnknownBackendReachability());
+    }
+  );
+
+  const testBackendConnection = useEffectEvent(async () => {
+    setBackendStatus({
+      state: "checking",
+      detail: "Checking server health and database reachability.",
+      checkedAt: null
+    });
+
+    try {
+      const result = await testBackendHealth(backendSettings.backendBaseUrl);
+      setBackendStatus({
+        state: "reachable",
+        detail: result.database
+          ? `Health endpoint responded successfully and database reported '${result.database}'.`
+          : "Health endpoint responded successfully.",
+        checkedAt: new Date().toISOString()
+      });
+    } catch (error) {
+      setBackendStatus({
+        state: "unreachable",
+        detail:
+          error instanceof Error ? error.message : "Backend health check failed.",
+        checkedAt: new Date().toISOString()
+      });
+    }
   });
 
   useEffect(() => {
@@ -704,6 +811,10 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
         return;
       }
 
+      if (wishDialogOpen) {
+        return;
+      }
+
       if (mainMenuOpen || activeDialog) {
         const overlayHotkey = findMatchingHotkey(event, ["dialogs"]);
         if (!overlayHotkey?.commandId) {
@@ -730,7 +841,13 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activeDialog, executeUiHotkeyCommand, layoutEditorActive, mainMenuOpen]);
+  }, [
+    activeDialog,
+    executeUiHotkeyCommand,
+    layoutEditorActive,
+    mainMenuOpen,
+    wishDialogOpen
+  ]);
 
   useEffect(() => {
     if (roundGenerationPending) {
@@ -773,83 +890,224 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     setThinkingActor(primaryActor);
 
     const timeout = window.setTimeout(() => {
-      const chosen = autoplayLocal
-        ? heuristicsV1Policy.chooseAction({
+      void (async () => {
+        const legalActions = autoplayLocal
+          ? round.legalActions
+          : createActorOnlyLegalActions(round, primaryActor);
+        const initialResolution = await resolveDecisionWithProvider({
+          context: {
             state: round.nextState,
-            legalActions: round.legalActions
-          })
-        : heuristicsV1Policy.chooseAction({
-            state: round.nextState,
-            legalActions: createActorOnlyLegalActions(round, primaryActor)
+            legalActions
+          },
+          actor: primaryActor,
+          settings: backendSettings,
+          requestPayload:
+            primaryActor === SYSTEM_ACTOR
+              ? buildDecisionRequestPayload({
+                  matchId,
+                  state: round.nextState,
+                  derived: round.derivedView,
+                  legalActions,
+                  actorSeat: LOCAL_SEAT,
+                  decisionIndex: decisionCount
+                })
+              : buildDecisionRequestPayload({
+                  matchId,
+                  state: round.nextState,
+                  derived: round.derivedView,
+                  legalActions,
+                  actorSeat: primaryActor,
+                  decisionIndex: decisionCount
+                })
+        });
+
+        setBackendStatus((current) => ({
+          state:
+            initialResolution.providerUsed === "server_heuristic"
+              ? "reachable"
+              : initialResolution.usedFallback
+                ? "unreachable"
+                : current.state,
+          detail: initialResolution.providerReason,
+          checkedAt: new Date().toISOString()
+        }));
+
+        if (!initialResolution.handledByServerTelemetry) {
+          emitDecisionTelemetry({
+            settings: backendSettings,
+            action: initialResolution.chosen.action,
+            phase: round.nextState.phase,
+            gameId: matchId,
+            handId,
+            decisionIndex: decisionCount,
+            stateRaw: round.nextState,
+            stateNorm: round.derivedView,
+            legalActions,
+            policyName: initialResolution.chosen.explanation.policy,
+            policySource: initialResolution.providerUsed,
+            metadata: {
+              provider_reason: initialResolution.providerReason
+            }
           });
+        }
 
-      let nextResult = applyEngineAction(round.nextState, chosen.action);
-      let decisionDelta = 1;
-      let recordedDecision: ChosenDecision | null =
-        chosen.actor !== SYSTEM_ACTOR ? chosen : null;
-      const nextEvents = [...nextResult.events];
-      let dogAnimation = getDogLeadAnimationView(chosen.action, nextResult);
+        let nextResult = applyEngineAction(
+          round.nextState,
+          initialResolution.chosen.action
+        );
+        emitEventTelemetry({
+          settings: backendSettings,
+          events: nextResult.events,
+          phase: round.nextState.phase,
+          actorSeat:
+            initialResolution.chosen.actor === SYSTEM_ACTOR
+              ? SYSTEM_ACTOR
+              : initialResolution.chosen.actor,
+          gameId: matchId,
+          handId,
+          metadata: {
+            action_type: initialResolution.chosen.action.type,
+            provider_used: initialResolution.providerUsed
+          }
+        });
 
-      if (
-        isMandatoryOpeningLead(round.nextState, primaryActor) &&
-        isMandatoryOpeningLead(nextResult.nextState, primaryActor)
-      ) {
-        const playOnlyLegalActions = createActorPlayOnlyLegalActions(
-          nextResult,
-          primaryActor
+        let decisionDelta = 1;
+        let recordedDecision: ChosenDecision | null =
+          initialResolution.chosen.actor !== SYSTEM_ACTOR
+            ? initialResolution.chosen
+            : null;
+        const nextEvents = [...nextResult.events];
+        let dogAnimation = getDogLeadAnimationView(
+          initialResolution.chosen.action,
+          nextResult
         );
 
-        if ((playOnlyLegalActions[primaryActor] ?? []).length > 0) {
-          const forcedOpeningPlay = heuristicsV1Policy.chooseAction({
-            state: nextResult.nextState,
-            legalActions: playOnlyLegalActions
-          });
-
-          nextResult = applyEngineAction(
-            nextResult.nextState,
-            forcedOpeningPlay.action
+        if (
+          isMandatoryOpeningLead(round.nextState, primaryActor) &&
+          isMandatoryOpeningLead(nextResult.nextState, primaryActor)
+        ) {
+          const playOnlyLegalActions = createActorPlayOnlyLegalActions(
+            nextResult,
+            primaryActor
           );
-          nextEvents.push(...nextResult.events);
-          decisionDelta += 1;
-          dogAnimation =
-            getDogLeadAnimationView(forcedOpeningPlay.action, nextResult) ??
-            dogAnimation;
-          recordedDecision =
-            forcedOpeningPlay.actor !== SYSTEM_ACTOR
-              ? forcedOpeningPlay
-              : recordedDecision;
-        }
-      }
 
-      startTransition(() => {
-        setRound(nextResult);
-        setDecisionCount((current) => current + decisionDelta);
-        setRecentEvents((current) =>
-          [...current, ...nextEvents.map(formatEvent)].slice(-14)
-        );
-        setSelectedCardIds([]);
-        setSelectedVariantKey(null);
-        setSelectedWishRank(null);
-        if (recordedDecision) {
-          setLastAiDecision(recordedDecision);
+          if ((playOnlyLegalActions[primaryActor] ?? []).length > 0) {
+            const forcedResolution = await resolveDecisionWithProvider({
+              context: {
+                state: nextResult.nextState,
+                legalActions: playOnlyLegalActions
+              },
+              actor: primaryActor,
+              settings: backendSettings,
+              requestPayload: buildDecisionRequestPayload({
+                matchId,
+                state: nextResult.nextState,
+                derived: nextResult.derivedView,
+                legalActions: playOnlyLegalActions,
+                actorSeat: primaryActor,
+                decisionIndex: decisionCount + 1
+              })
+            });
+
+            if (!forcedResolution.handledByServerTelemetry) {
+              emitDecisionTelemetry({
+                settings: backendSettings,
+                action: forcedResolution.chosen.action,
+                phase: nextResult.nextState.phase,
+                gameId: matchId,
+                handId,
+                decisionIndex: decisionCount + 1,
+                stateRaw: nextResult.nextState,
+                stateNorm: nextResult.derivedView,
+                legalActions: playOnlyLegalActions,
+                policyName: forcedResolution.chosen.explanation.policy,
+                policySource: forcedResolution.providerUsed,
+                metadata: {
+                  provider_reason: forcedResolution.providerReason,
+                  forced_opening_play: true
+                }
+              });
+            }
+
+            nextResult = applyEngineAction(
+              nextResult.nextState,
+              forcedResolution.chosen.action
+            );
+            emitEventTelemetry({
+              settings: backendSettings,
+              events: nextResult.events,
+              phase: round.nextState.phase,
+              actorSeat:
+                forcedResolution.chosen.actor === SYSTEM_ACTOR
+                  ? SYSTEM_ACTOR
+                  : forcedResolution.chosen.actor,
+              gameId: matchId,
+              handId,
+              metadata: {
+                action_type: forcedResolution.chosen.action.type,
+                provider_used: forcedResolution.providerUsed,
+                forced_opening_play: true
+              }
+            });
+            nextEvents.push(...nextResult.events);
+            decisionDelta += 1;
+            dogAnimation =
+              getDogLeadAnimationView(forcedResolution.chosen.action, nextResult) ??
+              dogAnimation;
+            recordedDecision =
+              forcedResolution.chosen.actor !== SYSTEM_ACTOR
+                ? forcedResolution.chosen
+                : recordedDecision;
+          }
         }
-        if (dogAnimation) {
-          setDogLeadAnimation(dogAnimation);
-        }
-        if (nextResult.nextState.phase !== "pass_select") {
-          setPassDraft({});
-          setSelectedPassTarget("left");
-        }
+
+        startTransition(() => {
+          setRound(nextResult);
+          setDecisionCount((current) => current + decisionDelta);
+          setRecentEvents((current) =>
+            [...current, ...nextEvents.map(formatEvent)].slice(-14)
+          );
+          setSelectedCardIds([]);
+          setSelectedVariantKey(null);
+          setSelectedWishRank(null);
+          setWishSubmissionPending(false);
+          if (recordedDecision) {
+            setLastAiDecision(recordedDecision);
+          }
+          if (dogAnimation) {
+            setDogLeadAnimation(dogAnimation);
+          }
+          if (nextResult.nextState.phase !== "pass_select") {
+            setPassDraft({});
+            setSelectedPassTarget("left");
+          }
+        });
+      })().catch((error) => {
+        console.error("[decision-provider] failed to resolve automated action", {
+          error: error instanceof Error ? error.message : String(error),
+          actor: primaryActor,
+          phase: round.nextState.phase
+        });
+        setBackendStatus({
+          state: "unreachable",
+          detail:
+            error instanceof Error ? error.message : "Decision provider failed.",
+          checkedAt: new Date().toISOString()
+        });
       });
     }, delay);
 
     return () => window.clearTimeout(timeout);
   }, [
     autoplayLocal,
+    backendSettings,
+    decisionCount,
     exchangePhaseActive,
     forceAiEndgameContinuation,
+    handId,
     localHasOptionalAction,
     localIsPrimaryActor,
+    matchId,
     activeResponseTurn,
     openingLeadPending,
     pickupPending,
@@ -991,18 +1249,59 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     setSelectedCardIds([]);
     setSelectedVariantKey(null);
     setSelectedWishRank(null);
+    setWishSubmissionPending(false);
     setPassDraft({});
     setSelectedPassTarget("left");
     localPassDragRef.current = null;
   }
 
-  function applyClientAction(action: EngineAction, chosen?: ChosenDecision) {
+  function applyClientAction(
+    action: EngineAction,
+    chosen?: ChosenDecision,
+    options?: { skipDecisionTelemetry?: boolean }
+  ) {
     if (roundGenerationPending) {
       return;
     }
 
+    if (!options?.skipDecisionTelemetry) {
+      emitDecisionTelemetry({
+        settings: backendSettings,
+        action,
+        phase: state.phase,
+        gameId: matchId,
+        handId,
+        decisionIndex: decisionCount,
+        stateRaw: state,
+        stateNorm: derived,
+        legalActions: round.legalActions,
+        policyName: chosen?.explanation.policy ?? "human-ui",
+        policySource:
+          chosen?.actor === SYSTEM_ACTOR
+            ? "local_system"
+            : chosen
+              ? "local_heuristic"
+              : "human_ui",
+        metadata: {
+          source: chosen ? "resolved-client-provider" : "direct-ui"
+        }
+      });
+    }
+
     const nextResult = applyEngineAction(state, action);
     const dogAnimation = getDogLeadAnimationView(action, nextResult);
+    emitEventTelemetry({
+      settings: backendSettings,
+      events: nextResult.events,
+      phase: state.phase,
+      actorSeat:
+        "seat" in action ? action.seat : "actor" in action ? action.actor : null,
+      gameId: matchId,
+      handId,
+      metadata: {
+        action_type: action.type
+      }
+    });
 
     startTransition(() => {
       setRound(nextResult);
@@ -1034,6 +1333,9 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
         const nextSession = await createRoundSession(nextSeedIndex, carryState);
 
         startTransition(() => {
+          if (!carryState) {
+            setMatchId(nextSession.entropyDebug.gameId);
+          }
           setSeedIndex(nextSession.roundIndex);
           setRound(nextSession.round);
           setLatestEntropyDebug(nextSession.entropyDebug);
@@ -1124,6 +1426,10 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
         setLayoutEditorActive(false);
         setUiMode((current) => (current === "normal" ? "debug" : "normal"));
         break;
+      case "open_backend_settings_dialog":
+        setMainMenuOpen(false);
+        setActiveDialog("backend_settings");
+        break;
       case "open_hotkeys_dialog":
         setMainMenuOpen(false);
         setActiveDialog("hotkeys");
@@ -1156,17 +1462,89 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
       return;
     }
 
-    const chosen = heuristicsV1Policy.chooseAction({
-      state,
-      legalActions: createActorOnlyLegalActions(round, primaryActor)
-    });
+    const legalActions = createActorOnlyLegalActions(round, primaryActor);
+    void resolveDecisionWithProvider({
+      context: {
+        state,
+        legalActions
+      },
+      actor: primaryActor,
+      settings: backendSettings,
+      requestPayload:
+        primaryActor === SYSTEM_ACTOR
+          ? buildDecisionRequestPayload({
+              matchId,
+              state,
+              derived,
+              legalActions,
+              actorSeat: LOCAL_SEAT,
+              decisionIndex: decisionCount
+            })
+          : buildDecisionRequestPayload({
+              matchId,
+              state,
+              derived,
+              legalActions,
+              actorSeat: primaryActor,
+              decisionIndex: decisionCount
+            })
+    })
+      .then((resolution) => {
+        setBackendStatus({
+          state:
+            resolution.providerUsed === "server_heuristic"
+              ? "reachable"
+              : resolution.usedFallback
+                ? "unreachable"
+                : "unknown",
+          detail: resolution.providerReason,
+          checkedAt: new Date().toISOString()
+        });
 
-    applyClientAction(chosen.action, chosen);
+        if (!resolution.handledByServerTelemetry) {
+          emitDecisionTelemetry({
+            settings: backendSettings,
+            action: resolution.chosen.action,
+            phase: state.phase,
+            gameId: matchId,
+            handId,
+            decisionIndex: decisionCount,
+            stateRaw: state,
+            stateNorm: derived,
+            legalActions,
+            policyName: resolution.chosen.explanation.policy,
+            policySource: resolution.providerUsed,
+            metadata: {
+              provider_reason: resolution.providerReason
+            }
+          });
+        }
+
+        applyClientAction(resolution.chosen.action, resolution.chosen, {
+          skipDecisionTelemetry: true
+        });
+      })
+      .catch((error) => {
+        setBackendStatus({
+          state: "unreachable",
+          detail:
+            error instanceof Error ? error.message : "Decision provider failed.",
+          checkedAt: new Date().toISOString()
+        });
+      });
   }
 
   function playSelectedCards() {
     if (roundGenerationPending || !localTurnActions.canPlay || !activePlayVariant) {
       return;
+    }
+
+    if (wishSelectionOptions.length > 0) {
+      if (wishSubmissionPending) {
+        return;
+      }
+
+      setWishSubmissionPending(true);
     }
 
     applyClientAction({
@@ -1176,8 +1554,19 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
       ...(activePlayVariant.phoenixAsRank !== undefined
         ? { phoenixAsRank: activePlayVariant.phoenixAsRank }
         : {}),
-      ...(resolvedWishRank !== null ? { wishRank: resolvedWishRank } : {})
+      ...(wishSelectionOptions.length > 0 ? { wishRank: resolvedWishRank } : {})
     });
+  }
+
+  function cancelWishSelection() {
+    if (wishSubmissionPending) {
+      return;
+    }
+
+    setSelectedCardIds([]);
+    setSelectedVariantKey(null);
+    setSelectedWishRank(null);
+    setWishSubmissionPending(false);
   }
 
   function confirmPassSelection() {
@@ -1386,6 +1775,10 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     matchingPlayActions,
     activePlayVariant,
     resolvedWishRank,
+    wishDialogOpen,
+    wishSelectionOptions,
+    wishConfirmDisabled: false,
+    wishSubmissionPending,
     normalActionRail,
     sortMode,
     autoplayLocal,
@@ -1403,6 +1796,8 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     mainMenuOpen,
     activeDialog,
     latestEntropyDebug,
+    backendSettings,
+    backendStatus,
     hotkeyDefinitions: UI_HOTKEYS,
     cardLookup,
     onAutoplayChange: setAutoplayLocal,
@@ -1416,11 +1811,17 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     onPassLaneCardDragEnd: handlePassLaneCardDragEnd,
     onVariantSelect: setSelectedVariantKey,
     onWishRankSelect: setSelectedWishRank,
+    onWishConfirm: playSelectedCards,
+    onWishCancel: cancelWishSelection,
     onDragonRecipientSelect: handleDragonRecipientSelect,
     onNormalAction: handleNormalAction,
     onNormalTableLayoutChange: setNormalTableLayout,
     onNormalTableLayoutImport: handleNormalTableLayoutImport,
     onExportNormalTableLayout: exportCurrentNormalTableLayout,
+    onBackendSettingsChange: handleBackendSettingsChange,
+    onTestBackend: () => {
+      void testBackendConnection();
+    },
     onUiCommand: executeUiCommand,
     onMainMenuOpenChange: setMainMenuOpen
   };

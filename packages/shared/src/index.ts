@@ -1,4 +1,5 @@
 export const FOUNDATION_MILESTONE = "milestone-0";
+export * from "./backend.js";
 export * from "./seed.js";
 
 export type WorkspacePackage =

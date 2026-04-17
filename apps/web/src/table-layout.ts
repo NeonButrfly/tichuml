@@ -59,6 +59,8 @@ export type NormalTableLayoutTokens = {
   trickLaneGap: number;
   playCardOverlap: number;
   passCardOverlap: number;
+  sideLaneInsetFromHand: number;
+  sideLaneVerticalSpacing: number;
   actionAreaGap: number;
   actionButtonGap: number;
   stageCardScale: number;
@@ -137,6 +139,8 @@ export type NormalTableSpacing = {
   labelToBadgeGap: number;
   handToStageGap: number;
   handToLaneGap: number;
+  sideLaneInsetFromHand: number;
+  sideLaneVerticalSpacing: number;
   laneSpacing: number;
   laneToStageGap: number;
   southToActionRowGap: number;
@@ -194,6 +198,8 @@ const NORMAL_LAYOUT_TOKEN_KEYS = [
   "trickLaneGap",
   "playCardOverlap",
   "passCardOverlap",
+  "sideLaneInsetFromHand",
+  "sideLaneVerticalSpacing",
   "actionAreaGap",
   "actionButtonGap",
   "stageCardScale"
@@ -568,13 +574,19 @@ function clampNumber(value: number, minimum: number, maximum: number) {
 }
 
 export function getNormalTableSpacing(
-  metrics: NormalViewportLayoutMetrics
+  metrics: NormalViewportLayoutMetrics,
+  tokens: NormalTableLayoutTokens = DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS
 ): NormalTableSpacing {
   return {
     handToLabelGap: clampNumber(Math.round(metrics.cardWidth * 0.18), 12, 18),
     labelToBadgeGap: clampNumber(Math.round(metrics.cardWidth * 0.22), 14, 22),
     handToStageGap: clampNumber(Math.round(metrics.cardHeight * 0.28), 24, 36),
     handToLaneGap: clampNumber(Math.round(metrics.routeCardWidth * 0.36), 18, 24),
+    sideLaneInsetFromHand: Math.max(0, Math.round(tokens.sideLaneInsetFromHand)),
+    sideLaneVerticalSpacing: Math.max(
+      0,
+      Math.round(tokens.sideLaneVerticalSpacing)
+    ),
     laneSpacing: clampNumber(Math.round(metrics.routeCardWidth * 0.16), 8, 12),
     laneToStageGap: clampNumber(Math.round(metrics.cardWidth * 0.24), 16, 24),
     southToActionRowGap: clampNumber(Math.round(metrics.cardHeight * 0.26), 24, 36),
@@ -917,6 +929,7 @@ function getNormalPartnerLaneTargetPosition(
 function getNormalPassVisibleRotation(config: {
   sourcePosition: SeatVisualPosition;
   targetPosition: SeatVisualPosition;
+  displayMode?: "passing" | "pickup";
 }): number {
   if (
     config.targetPosition ===
@@ -998,6 +1011,8 @@ export function resolveNormalPassLaneGeometry(config: {
   targetPosition: SeatVisualPosition;
   direction: PassLaneDirection;
   sourceHandCardCount?: number;
+  displayMode?: "passing" | "pickup";
+  stackAlignment?: "shared-edge" | "centerline";
 }): NormalPassLaneGeometry | null {
   const elementId = getNormalPassLaneLayoutId(
     config.sourcePosition,
@@ -1012,7 +1027,8 @@ export function resolveNormalPassLaneGeometry(config: {
   const size = scaleNormalLayoutElementSize(elementId, routeScale);
   const visibleRotation = getNormalPassVisibleRotation({
     sourcePosition: config.sourcePosition,
-    targetPosition: config.targetPosition
+    targetPosition: config.targetPosition,
+    displayMode: config.displayMode
   });
   const anchorPoint = resolveNormalPassLaneAnchorPoint({
     normalTableLayout: config.normalTableLayout,
@@ -1021,7 +1037,9 @@ export function resolveNormalPassLaneGeometry(config: {
     targetPosition: config.targetPosition,
     laneWidth: size.width,
     laneHeight: size.height,
-    sourceHandCardCount: config.sourceHandCardCount ?? 1
+    sourceHandCardCount: config.sourceHandCardCount ?? 1,
+    displayMode: config.displayMode ?? "passing",
+    stackAlignment: config.stackAlignment ?? "shared-edge"
   });
 
   return {
@@ -1519,6 +1537,8 @@ function resolveNormalPassLaneAnchorPoint(config: {
   laneWidth: number;
   laneHeight: number;
   sourceHandCardCount: number;
+  displayMode: "passing" | "pickup";
+  stackAlignment?: "shared-edge" | "centerline";
 }): AnchorPoint {
   const rawLaneSize = {
     width: config.laneWidth,
@@ -1539,7 +1559,8 @@ function resolveNormalPassLaneAnchorPoint(config: {
   );
   const partnerRotation = getNormalPassVisibleRotation({
     sourcePosition: config.sourcePosition,
-    targetPosition: partnerTargetPosition
+    targetPosition: partnerTargetPosition,
+    displayMode: config.displayMode
   });
   const partnerVisualSize = getNormalPassVisualSize({
     ...rawLaneSize,
@@ -1547,7 +1568,8 @@ function resolveNormalPassLaneAnchorPoint(config: {
   });
   const laneRotation = getNormalPassVisibleRotation({
     sourcePosition: config.sourcePosition,
-    targetPosition: config.targetPosition
+    targetPosition: config.targetPosition,
+    displayMode: config.displayMode
   });
   const laneVisualSize = getNormalPassVisualSize({
     ...rawLaneSize,
@@ -1564,14 +1586,15 @@ function resolveNormalPassLaneAnchorPoint(config: {
           )
         ? -1
         : 1;
-  const { handToLaneGap } = getNormalTableSpacing(config.layoutMetrics);
+  const { handToLaneGap, sideLaneInsetFromHand, sideLaneVerticalSpacing } =
+    getNormalTableSpacing(config.layoutMetrics);
   const laneClusterStep =
     config.sourcePosition === "top" || config.sourcePosition === "bottom"
       ? partnerVisualSize.width / 2 +
         laneGapMin +
         laneVisualSize.width / 2
       : partnerVisualSize.height / 2 +
-        laneGapMin +
+        sideLaneVerticalSpacing +
         laneVisualSize.height / 2;
   const axisNudge = getNormalPassClusterAxisNudge({
     sourcePosition: config.sourcePosition,
@@ -1600,14 +1623,14 @@ function resolveNormalPassLaneAnchorPoint(config: {
           ? {
               x:
                 sourceAnchor.handBounds.right +
-                handToLaneGap +
+                sideLaneInsetFromHand +
                 partnerVisualSize.width / 2,
               y: playArea.top + playArea.height / 2
             }
           : {
               x:
                 sourceAnchor.handBounds.left -
-                handToLaneGap -
+                sideLaneInsetFromHand -
                 partnerVisualSize.width / 2,
               y: playArea.top + playArea.height / 2
             };
@@ -1616,21 +1639,33 @@ function resolveNormalPassLaneAnchorPoint(config: {
     case "top":
       return {
         x: partnerAnchor.x + partnerOffsetIndex * laneClusterStep,
-        y: partnerAnchor.y
+        y:
+          partnerAnchor.y +
+          (laneVisualSize.height - partnerVisualSize.height) / 2
       };
     case "bottom":
       return {
         x: partnerAnchor.x + partnerOffsetIndex * laneClusterStep,
-        y: partnerAnchor.y
+        y:
+          partnerAnchor.y +
+          (partnerVisualSize.height - laneVisualSize.height) / 2
       };
     case "left":
       return {
-        x: partnerAnchor.x,
+        x:
+          config.stackAlignment === "centerline"
+            ? partnerAnchor.x
+            : partnerAnchor.x +
+              (laneVisualSize.width - partnerVisualSize.width) / 2,
         y: partnerAnchor.y + partnerOffsetIndex * laneClusterStep
       };
     case "right":
       return {
-        x: partnerAnchor.x,
+        x:
+          config.stackAlignment === "centerline"
+            ? partnerAnchor.x
+            : partnerAnchor.x +
+              (partnerVisualSize.width - laneVisualSize.width) / 2,
         y: partnerAnchor.y + partnerOffsetIndex * laneClusterStep
       };
   }

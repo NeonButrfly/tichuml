@@ -54,6 +54,7 @@ describe("game-table view-model helpers", () => {
       "New Game",
       "Table Editor",
       "Debug Mode",
+      "Backend Settings",
       "Hot Keys",
       "Random Sources",
       "How To Play Tichu"

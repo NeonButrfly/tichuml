@@ -7,7 +7,8 @@ import {
   getLegalActions,
   listCombinationInterpretations,
   type Combination,
-  type GameState
+  type GameState,
+  type LegalAction
 } from "@tichuml/engine";
 
 function combo(
@@ -262,6 +263,41 @@ describe("engine core", () => {
     expect(afterMahjong.nextState.currentWish).toBe(8);
     expect(nextSeat).toBe("seat-1");
     expect((getLegalActions(afterMahjong.nextState)[nextSeat!] ?? []).length).toBeGreaterThan(0);
+  });
+
+  it("treats an explicit null Mahjong wish as no active wish", () => {
+    const initial = scenario({
+      currentWish: null,
+      activeSeat: "seat-0",
+      currentTrick: null,
+      hands: {
+        "seat-0": cardsFromIds(["mahjong"]),
+        "seat-1": cardsFromIds(["jade-8", "jade-9"]),
+        "seat-2": cardsFromIds(["dragon"]),
+        "seat-3": cardsFromIds(["jade-10"])
+      }
+    });
+
+    const afterMahjong = applyEngineAction(initial, {
+      type: "play_cards",
+      seat: "seat-0",
+      cardIds: ["mahjong"],
+      wishRank: null
+    });
+    const nextSeat = afterMahjong.nextState.activeSeat;
+    const seat1Actions = (getLegalActions(afterMahjong.nextState)[nextSeat!] ?? []).filter(
+      (action): action is Extract<LegalAction, { type: "play_cards" }> =>
+        action.type === "play_cards"
+    );
+
+    expect(afterMahjong.nextState.currentWish).toBeNull();
+    expect(nextSeat).toBe("seat-1");
+    expect(
+      seat1Actions.some((action) => action.cardIds[0] === "jade-8")
+    ).toBe(true);
+    expect(
+      seat1Actions.some((action) => action.cardIds[0] === "jade-9")
+    ).toBe(true);
   });
 
   it("clears the active wish immediately after a legal fulfilling play", () => {

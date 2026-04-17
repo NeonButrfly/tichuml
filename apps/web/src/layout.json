@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "surface": {
     "widthMode": "relative",
     "heightMode": "relative",
@@ -149,6 +149,8 @@
     "trickLaneGap": 10,
     "playCardOverlap": 22,
     "passCardOverlap": 22,
+    "sideLaneInsetFromHand": 34,
+    "sideLaneVerticalSpacing": 10,
     "actionAreaGap": 8,
     "actionButtonGap": 8,
     "stageCardScale": 0.86

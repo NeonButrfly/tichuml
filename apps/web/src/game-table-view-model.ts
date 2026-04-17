@@ -6,12 +6,14 @@ export type UiDialogId =
   | "hotkeys"
   | "how_to_play"
   | "random_sources"
-  | "score_history";
+  | "score_history"
+  | "backend_settings";
 export type HotkeyContextId = "global" | "table_editor" | "dialogs";
 export type UiCommandId =
   | "new_game"
   | "toggle_table_editor"
   | "toggle_debug_mode"
+  | "open_backend_settings_dialog"
   | "open_score_history_dialog"
   | "open_random_sources_dialog"
   | "open_hotkeys_dialog"
@@ -108,6 +110,12 @@ export const GAME_MENU_ITEMS: readonly GameMenuItemDefinition[] = [
     label: "Debug Mode",
     description: "Toggle the debug table view on or off.",
     commandId: "toggle_debug_mode"
+  },
+  {
+    id: "backend_settings",
+    label: "Backend Settings",
+    description: "Change decision mode, telemetry, fallback, and backend URL at runtime.",
+    commandId: "open_backend_settings_dialog"
   },
   {
     id: "hot_keys",

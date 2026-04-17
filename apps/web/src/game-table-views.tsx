@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type {
   CSSProperties,
   ChangeEvent as ReactChangeEvent,
@@ -36,8 +36,10 @@ import type {
 } from "./game-table-view-model";
 import type {
   SeedDebugSnapshot,
-  SeedJsonValue
+  SeedJsonValue,
+  type BackendRuntimeSettings
 } from "@tichuml/shared";
+import type { BackendReachability } from "./backend/settings";
 import {
   findMatchingHotkey,
   GAME_MENU_ITEMS,
@@ -191,6 +193,7 @@ export type PassRouteView = {
   sourcePosition: SeatVisualPosition;
   target: PassTarget;
   targetSeat: SeatId;
+  displayMode: "passing" | "pickup";
   occupied: boolean;
   visibleCardId: string | null;
   faceDown: boolean;
@@ -221,7 +224,11 @@ export type GameTableViewProps = {
   passSelectionReady: boolean;
   matchingPlayActions: PlayLegalAction[];
   activePlayVariant: PlayLegalAction | null;
-  resolvedWishRank: StandardRank | null;
+  resolvedWishRank: WishSelectionValue;
+  wishDialogOpen: boolean;
+  wishSelectionOptions: WishSelectionValue[];
+  wishConfirmDisabled: boolean;
+  wishSubmissionPending: boolean;
   normalActionRail: NormalActionSlot[];
   sortMode: HandSortMode;
   autoplayLocal: boolean;
@@ -238,6 +245,8 @@ export type GameTableViewProps = {
   mainMenuOpen: boolean;
   activeDialog: UiDialogId | null;
   latestEntropyDebug: SeedDebugSnapshot | null;
+  backendSettings: BackendRuntimeSettings;
+  backendStatus: BackendReachability;
   hotkeyDefinitions: readonly HotkeyDefinition[];
   cardLookup: ReadonlyMap<string, Card>;
   onAutoplayChange: (checked: boolean) => void;
@@ -250,15 +259,37 @@ export type GameTableViewProps = {
   onPassLaneCardDragStart: (target: PassTarget, cardId: string) => void;
   onPassLaneCardDragEnd: (target: PassTarget, cardId: string) => void;
   onVariantSelect: (key: string) => void;
-  onWishRankSelect: (rank: StandardRank) => void;
+  onWishRankSelect: (rank: WishSelectionValue) => void;
+  onWishConfirm: () => void;
+  onWishCancel: () => void;
   onDragonRecipientSelect: (recipient: SeatId) => void;
   onNormalAction: (slotId: NormalActionSlotId) => void;
   onNormalTableLayoutChange: (nextLayout: NormalTableLayout) => void;
   onNormalTableLayoutImport: (nextConfig: NormalTableLayoutConfig) => void;
   onExportNormalTableLayout: () => void;
+  onBackendSettingsChange: (nextSettings: BackendRuntimeSettings) => void;
+  onTestBackend: () => void;
   onUiCommand: (commandId: UiCommandId) => void;
   onMainMenuOpenChange: (open: boolean) => void;
 };
+
+export type WishSelectionValue = StandardRank | null;
+
+export const MAHJONG_WISH_RANKS: StandardRank[] = [
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10,
+  11,
+  12,
+  13,
+  14
+];
 
 export function formatRank(rank: number): string {
   switch (rank) {
@@ -1518,6 +1549,12 @@ function normalizeLoadedLayoutTokens(
     passCardOverlap: isFiniteNumber(payloadRecord.passCardOverlap)
       ? Math.max(0, payloadRecord.passCardOverlap)
       : DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS.passCardOverlap,
+    sideLaneInsetFromHand: isFiniteNumber(payloadRecord.sideLaneInsetFromHand)
+      ? Math.max(0, payloadRecord.sideLaneInsetFromHand)
+      : DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS.sideLaneInsetFromHand,
+    sideLaneVerticalSpacing: isFiniteNumber(payloadRecord.sideLaneVerticalSpacing)
+      ? Math.max(0, payloadRecord.sideLaneVerticalSpacing)
+      : DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS.sideLaneVerticalSpacing,
     actionAreaGap: isFiniteNumber(payloadRecord.actionAreaGap)
       ? Math.max(0, payloadRecord.actionAreaGap)
       : DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS.actionAreaGap,
@@ -1620,6 +1657,8 @@ export function normalTableLayoutTokenStyle(
     "--normal-trick-lane-gap": `${tokens.trickLaneGap}px`,
     "--normal-play-card-overlap": `-${tokens.playCardOverlap}px`,
     "--normal-pass-card-overlap": `-${tokens.passCardOverlap}px`,
+    "--normal-side-lane-inset-from-hand": `${tokens.sideLaneInsetFromHand}px`,
+    "--normal-side-lane-vertical-spacing": `${tokens.sideLaneVerticalSpacing}px`,
     "--normal-action-area-gap": `${tokens.actionAreaGap}px`,
     "--normal-action-button-gap": `${tokens.actionButtonGap}px`,
     "--normal-stage-card-scale": String(tokens.stageCardScale)
@@ -1706,6 +1745,8 @@ export function serializeNormalTableLayoutConfig(
         trickLaneGap: config.tokens.trickLaneGap,
         playCardOverlap: config.tokens.playCardOverlap,
         passCardOverlap: config.tokens.passCardOverlap,
+        sideLaneInsetFromHand: config.tokens.sideLaneInsetFromHand,
+        sideLaneVerticalSpacing: config.tokens.sideLaneVerticalSpacing,
         actionAreaGap: config.tokens.actionAreaGap,
         actionButtonGap: config.tokens.actionButtonGap,
         stageCardScale: config.tokens.stageCardScale
@@ -1798,6 +1839,7 @@ function SeatCountPreview({ count }: { count: number }) {
 
 function PassRouteToken({
   route,
+  laneDirection,
   cardLookup,
   interactive = false,
   onCardClick,
@@ -1805,6 +1847,7 @@ function PassRouteToken({
   onCardDragEnd
 }: {
   route: PassRouteView;
+  laneDirection: PassLaneDirection;
   cardLookup: ReadonlyMap<string, Card>;
   interactive?: boolean;
   onCardClick?: () => void;
@@ -1812,6 +1855,22 @@ function PassRouteToken({
   onCardDragEnd?: (cardId: string) => void;
 }) {
   if (route.visibleCardId) {
+    const pickupCardClassName =
+      route.displayMode === "pickup"
+        ? route.sourcePosition === "top" || route.sourcePosition === "bottom"
+          ? route.target === "left"
+            ? "normal-card--route-pickup normal-card--route-pickup-left"
+            : route.target === "right"
+              ? "normal-card--route-pickup normal-card--route-pickup-right"
+              : "normal-card--route-pickup normal-card--route-pickup-upright"
+          : laneDirection === "up"
+            ? "normal-card--route-pickup normal-card--route-pickup-up"
+            : laneDirection === "down"
+              ? "normal-card--route-pickup normal-card--route-pickup-down"
+              : laneDirection === "left"
+                ? "normal-card--route-pickup normal-card--route-pickup-left"
+                : "normal-card--route-pickup normal-card--route-pickup-right"
+        : "";
     const interactiveProps = interactive
       ? {
           interactive: true as const,
@@ -1832,7 +1891,13 @@ function PassRouteToken({
     return (
       <CardFace
         card={resolveCard(route.visibleCardId, cardLookup)}
-        className="normal-card normal-card--route"
+        className={[
+          "normal-card",
+          "normal-card--route",
+          pickupCardClassName
+        ]
+          .filter(Boolean)
+          .join(" ")}
         {...interactiveProps}
       />
     );
@@ -2522,7 +2587,13 @@ export function NormalPassStagingRegions({
             sourcePosition,
             targetPosition: laneSpec.targetPosition,
             direction: laneSpec.direction,
-            sourceHandCardCount
+            sourceHandCardCount,
+            displayMode: route.displayMode,
+            stackAlignment:
+              route.displayMode === "pickup" &&
+              (sourcePosition === "left" || sourcePosition === "right")
+                ? "centerline"
+                : "shared-edge"
           });
           if (!laneGeometry) {
             return null;
@@ -2533,6 +2604,7 @@ export function NormalPassStagingRegions({
           const slotContents = (
             <PassRouteToken
               route={route}
+              laneDirection={laneSpec.direction}
               cardLookup={cardLookup}
               interactive={tokenInteractive}
               onCardClick={() => onPassLaneCardClick(route.target)}
@@ -2547,6 +2619,7 @@ export function NormalPassStagingRegions({
           const laneClassName = [
             "normal-pass-lane",
             `normal-pass-lane--${laneSpec.direction}`,
+            `normal-pass-lane--${route.displayMode}`,
             route.occupied ? "normal-pass-lane--occupied" : ""
           ]
             .filter(Boolean)
@@ -2554,6 +2627,9 @@ export function NormalPassStagingRegions({
           const slotClassName = [
             "normal-pass-lane__slot",
             `normal-pass-lane__slot--${laneSpec.direction}`,
+            route.displayMode === "pickup" && Boolean(route.visibleCardId)
+              ? "normal-pass-lane__slot--pickup-filled"
+              : "",
             route.faceDown ? "normal-pass-lane__slot--back" : "",
             route.occupied ? "normal-pass-lane__slot--occupied" : "",
             route.target === selectedPassTarget && isInteractive
@@ -3329,12 +3405,16 @@ function ModalDialog({
   title,
   onClose,
   children,
-  className
+  className,
+  showCloseButton = true,
+  dismissOnBackdrop = true
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
   className?: string;
+  showCloseButton?: boolean;
+  dismissOnBackdrop?: boolean;
 }) {
   const panelRef = useRef<HTMLDivElement | null>(null);
 
@@ -3393,7 +3473,7 @@ function ModalDialog({
     <div
       className="game-dialog-backdrop"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) {
+        if (dismissOnBackdrop && event.target === event.currentTarget) {
           onClose();
         }
       }}
@@ -3408,18 +3488,208 @@ function ModalDialog({
       >
         <div className="game-dialog__header">
           <h2>{title}</h2>
-          <button
-            type="button"
-            className="game-dialog__close"
-            aria-label={`Close ${title}`}
-            onClick={onClose}
-          >
-            Close
-          </button>
+          {showCloseButton ? (
+            <button
+              type="button"
+              className="game-dialog__close"
+              aria-label={`Close ${title}`}
+              onClick={onClose}
+            >
+              Close
+            </button>
+          ) : (
+            <div
+              aria-hidden="true"
+              className="game-dialog__close-placeholder"
+            />
+          )}
         </div>
         <div className="game-dialog__body">{children}</div>
       </div>
     </div>
+  );
+}
+
+export function MahjongWishDialog({
+  resolvedWishRank,
+  wishSelectionOptions,
+  wishConfirmDisabled,
+  wishSubmissionPending,
+  onWishRankSelect,
+  onWishConfirm,
+  onWishCancel
+}: Pick<
+  GameTableViewProps,
+  | "resolvedWishRank"
+  | "wishSelectionOptions"
+  | "wishConfirmDisabled"
+  | "wishSubmissionPending"
+  | "onWishRankSelect"
+  | "onWishConfirm"
+  | "onWishCancel"
+>) {
+  const helperId = useId();
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const optionRefs = useRef(new Map<WishSelectionValue, HTMLButtonElement>());
+  const selectedIndex = wishSelectionOptions.indexOf(resolvedWishRank);
+
+  const focusList = useCallback(() => {
+    listRef.current?.focus();
+  }, []);
+
+  const moveSelection = useCallback(
+    (delta: number) => {
+      if (wishSelectionOptions.length === 0) {
+        return;
+      }
+
+      const fallbackIndex = delta >= 0 ? 0 : wishSelectionOptions.length - 1;
+      const nextIndex =
+        selectedIndex === -1
+          ? fallbackIndex
+          : Math.min(
+              Math.max(selectedIndex + delta, 0),
+              wishSelectionOptions.length - 1
+            );
+      const nextRank = wishSelectionOptions[nextIndex];
+      if (nextRank !== undefined) {
+        onWishRankSelect(nextRank);
+      }
+    },
+    [onWishRankSelect, selectedIndex, wishSelectionOptions]
+  );
+
+  useEffect(() => {
+    if (resolvedWishRank === null) {
+      return;
+    }
+
+    optionRefs.current.get(resolvedWishRank)?.scrollIntoView({
+      block: "center",
+      behavior: "smooth"
+    });
+  }, [resolvedWishRank]);
+
+  return (
+    <ModalDialog
+      title="Make a Wish"
+      className="game-dialog--wish"
+      showCloseButton={false}
+      dismissOnBackdrop={false}
+      onClose={onWishCancel}
+    >
+      <div className="mahjong-wish-dialog">
+        <p id={helperId} className="mahjong-wish-dialog__helper">
+          Choose the rank you wish for, or select No Wish.
+        </p>
+
+        <div className="mahjong-wish-dialog__selector-frame">
+          <div
+            ref={listRef}
+            className="mahjong-wish-selector"
+            role="listbox"
+            aria-label="Wish rank"
+            aria-describedby={helperId}
+            aria-activedescendant={
+              `mahjong-wish-option-${resolvedWishRank === null ? "none" : resolvedWishRank}`
+            }
+            tabIndex={0}
+            onKeyDown={(event) => {
+              switch (event.key) {
+                case "ArrowDown":
+                  event.preventDefault();
+                  moveSelection(1);
+                  break;
+                case "ArrowUp":
+                  event.preventDefault();
+                  moveSelection(-1);
+                  break;
+                case "Enter":
+                  if (!wishConfirmDisabled && !wishSubmissionPending) {
+                    event.preventDefault();
+                    onWishConfirm();
+                  }
+                  break;
+                case "Escape":
+                  event.preventDefault();
+                  onWishCancel();
+                  break;
+              }
+            }}
+            onWheel={(event) => {
+              if (event.deltaY === 0) {
+                return;
+              }
+
+              event.preventDefault();
+              moveSelection(event.deltaY > 0 ? 1 : -1);
+            }}
+          >
+            {wishSelectionOptions.map((rank) => {
+              const selected = rank === resolvedWishRank;
+              return (
+                <button
+                  key={rank}
+                  id={`mahjong-wish-option-${rank === null ? "none" : rank}`}
+                  ref={(element) => {
+                    if (element) {
+                      optionRefs.current.set(rank, element);
+                    } else {
+                      optionRefs.current.delete(rank);
+                    }
+                  }}
+                  type="button"
+                  role="option"
+                  tabIndex={-1}
+                  aria-selected={selected}
+                  className={
+                    [
+                      rank === null
+                        ? "mahjong-wish-option mahjong-wish-option--none"
+                        : "mahjong-wish-option",
+                      selected ? "is-selected" : ""
+                    ]
+                      .filter(Boolean)
+                      .join(" ")
+                  }
+                  onClick={() => {
+                    onWishRankSelect(rank);
+                    focusList();
+                  }}
+                >
+                  <span className="mahjong-wish-option__label">
+                    {rank === null ? "No Wish" : formatRank(rank)}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <div
+            aria-hidden="true"
+            className="mahjong-wish-dialog__selection-ring"
+          />
+        </div>
+
+        <div className="mahjong-wish-dialog__actions">
+          <button
+            type="button"
+            className="utility-button"
+            onClick={onWishCancel}
+            disabled={wishSubmissionPending}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="utility-button utility-button--primary mahjong-wish-dialog__confirm"
+            disabled={wishConfirmDisabled || wishSubmissionPending}
+            onClick={onWishConfirm}
+          >
+            Confirm Wish
+          </button>
+        </div>
+      </div>
+    </ModalDialog>
   );
 }
 
@@ -3859,18 +4129,159 @@ function HowToPlayDialogContent() {
   );
 }
 
+function formatBackendStatusLabel(status: BackendReachability): string {
+  switch (status.state) {
+    case "checking":
+      return "Checking";
+    case "reachable":
+      return "Reachable";
+    case "unreachable":
+      return "Unavailable";
+    default:
+      return "Not checked";
+  }
+}
+
+function BackendSettingsDialogContent({
+  backendSettings,
+  backendStatus,
+  onBackendSettingsChange,
+  onTestBackend
+}: Pick<
+  GameTableViewProps,
+  | "backendSettings"
+  | "backendStatus"
+  | "onBackendSettingsChange"
+  | "onTestBackend"
+>) {
+  return (
+    <div className="backend-settings-dialog">
+      <p className="backend-settings-dialog__helper">
+        Switch between local and server decisions, choose the backend URL, and
+        control telemetry and fallback at runtime.
+      </p>
+
+      <div className="backend-settings-grid">
+        <label className="backend-settings-field">
+          <span>Decision Mode</span>
+          <select
+            value={backendSettings.decisionMode}
+            onChange={(event) =>
+              onBackendSettingsChange({
+                ...backendSettings,
+                decisionMode:
+                  event.target.value === "server" ? "server" : "local"
+              })
+            }
+          >
+            <option value="local">Local heuristic</option>
+            <option value="server">Server heuristic</option>
+          </select>
+        </label>
+
+        <label className="backend-settings-field">
+          <span>Backend Base URL</span>
+          <input
+            type="url"
+            value={backendSettings.backendBaseUrl}
+            onChange={(event) =>
+              onBackendSettingsChange({
+                ...backendSettings,
+                backendBaseUrl: event.target.value
+              })
+            }
+            spellCheck={false}
+            placeholder="http://localhost:4310"
+          />
+        </label>
+
+        <label className="backend-settings-checkbox">
+          <input
+            type="checkbox"
+            checked={backendSettings.serverFallbackEnabled}
+            onChange={(event) =>
+              onBackendSettingsChange({
+                ...backendSettings,
+                serverFallbackEnabled: event.target.checked
+              })
+            }
+          />
+          <span>
+            <strong>Server Fallback</strong>
+            <small>Use the local heuristic automatically if the backend fails.</small>
+          </span>
+        </label>
+
+        <label className="backend-settings-checkbox">
+          <input
+            type="checkbox"
+            checked={backendSettings.telemetryEnabled}
+            onChange={(event) =>
+              onBackendSettingsChange({
+                ...backendSettings,
+                telemetryEnabled: event.target.checked
+              })
+            }
+          />
+          <span>
+            <strong>Telemetry Enabled</strong>
+            <small>Upload decision and event telemetry to the backend.</small>
+          </span>
+        </label>
+      </div>
+
+      <div className="backend-settings-status">
+        <div
+          className={[
+            "backend-settings-status__badge",
+            `is-${backendStatus.state}`
+          ].join(" ")}
+        >
+          {formatBackendStatusLabel(backendStatus)}
+        </div>
+        <div className="backend-settings-status__copy">
+          <strong>Backend status</strong>
+          <small>
+            {backendStatus.detail ??
+              "Use Test Backend to confirm health and database reachability."}
+          </small>
+          {backendStatus.checkedAt ? (
+            <small>Last checked {new Date(backendStatus.checkedAt).toLocaleString()}</small>
+          ) : null}
+        </div>
+        <button
+          type="button"
+          className="backend-settings-status__test"
+          onClick={onTestBackend}
+          disabled={backendStatus.state === "checking"}
+        >
+          {backendStatus.state === "checking" ? "Testing..." : "Test Backend"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function GameDialogLayer({
   activeDialog,
   state,
   latestEntropyDebug,
+  backendSettings,
+  backendStatus,
   hotkeyDefinitions,
+  onBackendSettingsChange,
+  onTestBackend,
   onUiCommand
 }: Pick<
   GameTableViewProps,
   | "activeDialog"
   | "state"
   | "latestEntropyDebug"
+  | "backendSettings"
+  | "backendStatus"
   | "hotkeyDefinitions"
+  | "onBackendSettingsChange"
+  | "onTestBackend"
   | "onUiCommand"
 >) {
   if (!activeDialog) {
@@ -3900,6 +4311,19 @@ function GameDialogLayer({
       onClose={() => onUiCommand("close_active_overlay")}
     >
       <ScoreHistoryDialogContent state={state} />
+    </ModalDialog>
+  ) : activeDialog === "backend_settings" ? (
+    <ModalDialog
+      title="Backend Settings"
+      className="game-dialog--backend-settings"
+      onClose={() => onUiCommand("close_active_overlay")}
+    >
+      <BackendSettingsDialogContent
+        backendSettings={backendSettings}
+        backendStatus={backendStatus}
+        onBackendSettingsChange={onBackendSettingsChange}
+        onTestBackend={onTestBackend}
+      />
     </ModalDialog>
   ) : (
     <ModalDialog
@@ -4918,32 +5342,6 @@ export function NormalGameTableView(props: GameTableViewProps) {
                 </div>
               )}
 
-              {props.activePlayVariant?.availableWishRanks && (
-                <div className="normal-inline-controls">
-                  <div className="wish-picker wish-picker--normal">
-                    <p>Wish</p>
-                    <div className="wish-picker__options">
-                      {props.activePlayVariant.availableWishRanks.map(
-                        (rank) => (
-                          <button
-                            key={rank}
-                            type="button"
-                            className={
-                              rank === props.resolvedWishRank
-                                ? "wish-chip wish-chip--active"
-                                : "wish-chip"
-                            }
-                            onClick={() => props.onWishRankSelect(rank)}
-                          >
-                            {formatRank(rank)}
-                          </button>
-                        )
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-
               <NormalActionStrip
                 normalActionRail={props.normalActionRail}
                 localDragonRecipients={props.localDragonRecipients}
@@ -5002,9 +5400,24 @@ export function NormalGameTableView(props: GameTableViewProps) {
             activeDialog={props.activeDialog}
             state={props.state}
             latestEntropyDebug={props.latestEntropyDebug}
+            backendSettings={props.backendSettings}
+            backendStatus={props.backendStatus}
             hotkeyDefinitions={props.hotkeyDefinitions}
+            onBackendSettingsChange={props.onBackendSettingsChange}
+            onTestBackend={props.onTestBackend}
             onUiCommand={props.onUiCommand}
           />
+          {props.wishDialogOpen ? (
+            <MahjongWishDialog
+              resolvedWishRank={props.resolvedWishRank}
+              wishSelectionOptions={props.wishSelectionOptions}
+              wishConfirmDisabled={props.wishConfirmDisabled}
+              wishSubmissionPending={props.wishSubmissionPending}
+              onWishRankSelect={props.onWishRankSelect}
+              onWishConfirm={props.onWishConfirm}
+              onWishCancel={props.onWishCancel}
+            />
+          ) : null}
         </div>
       </section>
     </main>
@@ -5178,28 +5591,6 @@ export function DebugGameTableView(props: GameTableViewProps) {
               </div>
             )}
 
-            {props.activePlayVariant?.availableWishRanks && (
-              <div className="wish-picker">
-                <p>Mahjong wish</p>
-                <div className="wish-picker__options">
-                  {props.activePlayVariant.availableWishRanks.map((rank) => (
-                    <button
-                      key={rank}
-                      type="button"
-                      className={
-                        rank === props.resolvedWishRank
-                          ? "wish-chip wish-chip--active"
-                          : "wish-chip"
-                      }
-                      onClick={() => props.onWishRankSelect(rank)}
-                    >
-                      {formatRank(rank)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
             <DebugActionStrip
               normalActionRail={props.normalActionRail}
               localDragonRecipients={props.localDragonRecipients}
@@ -5324,9 +5715,24 @@ export function DebugGameTableView(props: GameTableViewProps) {
         activeDialog={props.activeDialog}
         state={props.state}
         latestEntropyDebug={props.latestEntropyDebug}
+        backendSettings={props.backendSettings}
+        backendStatus={props.backendStatus}
         hotkeyDefinitions={props.hotkeyDefinitions}
+        onBackendSettingsChange={props.onBackendSettingsChange}
+        onTestBackend={props.onTestBackend}
         onUiCommand={props.onUiCommand}
       />
+      {props.wishDialogOpen ? (
+        <MahjongWishDialog
+          resolvedWishRank={props.resolvedWishRank}
+          wishSelectionOptions={props.wishSelectionOptions}
+          wishConfirmDisabled={props.wishConfirmDisabled}
+          wishSubmissionPending={props.wishSubmissionPending}
+          onWishRankSelect={props.onWishRankSelect}
+          onWishConfirm={props.onWishConfirm}
+          onWishCancel={props.onWishCancel}
+        />
+      ) : null}
     </main>
   );
 }

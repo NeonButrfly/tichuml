@@ -21,6 +21,7 @@ The game UI is designed around a single-screen, no-scroll table layout with expl
 - the engine decides legality; the UI decides presentation
 - exchange, pickup, and trick-play states should render different controls
 - active Mahjong wishes should remain visible in normal gameplay chrome without obscuring the table
+- when the local player must choose a Mahjong wish, the UI should open a centered modal dialog with a vertical rank selector, default to `No Wish`, keep `No Wish` as the first in-list option, and expose no freeform text input path
 - Play, Pass, and Tichu button states should come from one shared turn-action helper derived from engine legal actions
 - selected cards must match legal play variants through the engine's shared canonical combo-card ordering, never through ad hoc UI sorting
 - no active response turn may leave Tichu as the only progression action because of legality or matching drift
@@ -35,6 +36,8 @@ The game UI is designed around a single-screen, no-scroll table layout with expl
 - debug and inspection UI should not leak into normal gameplay unexpectedly
 - trick lanes should present cards only; directional indicators are intentionally removed from live trick rendering
 - received exchange cards should remain staged in the pickup lane until the player explicitly clicks Pickup
+- during `exchange_complete`, east and west received-card lanes should stack on one shared side-seat centerline so each lane frame and its card stay visually centered while the cards remain attached to the directional pass lanes
+- during `exchange_complete`, pickup stacks remain centerlined, but the filled pickup cards rotate by rendered lane arrow only: north/south rows use `left / upright / right`, west uses `up / right / down`, and east uses `up / left / down`
 - pass-selection and pass-reveal cards must render in dedicated directional pass lanes only, never inside hand fans
 - directional pass lanes should preserve a stable alignment pattern: south lanes form a bottom-aligned `< ^ >` row above the south hand, north lanes form a top-aligned `< v >` row below the north hand, east lanes form a right-aligned `^ < v` column left of the east hand, and west lanes form a left-aligned `^ > v` column right of the west hand
 - the visible pass-slot surfaces should rotate at the element level while the lane groups stay fixed: north-facing and west-facing destinations use `-90deg`, south-facing and east-facing destinations use `+90deg`, with source-target overrides for the top row preserved by the canonical pass mapping
@@ -52,6 +55,8 @@ The game UI is designed around a single-screen, no-scroll table layout with expl
 - east and west live trick cards may rotate at the card element only, while the trick-stage stack itself stays a straight vertical column
 - trick-stage relaxation should be a small outward seat-axis nudge only, preserving the same seat-local anchor region and avoiding any global recentering
 - the partner passing lane is the cluster anchor for every seat: north/south partner lanes sit on `playArea.centerX`, east/west partner lanes sit on `playArea.centerY`, partner-lane orientation is fixed per seat, and the two outer lanes derive from that anchor with symmetric post-rotation spacing
+- pass-lane clusters behave as shared-edge units after rotation: north lanes share a top edge, south lanes share a bottom edge, east lanes share a right edge, and west lanes share a left edge while keeping the partner lane as the anchor
+- east and west exchange lane stacks must derive their hand clearance and vertical stack spacing from canonical layout tokens so both side stacks sit farther off the hands, stay mirrored, and remain vertically centered in the side seat zones
 - east and west side labels sit at the exact horizontal midpoint between the live side-label border span and the corresponding hand edge, while side Tichu-family and out-order markers form a separate badge row centered above the corresponding hand
 - play-area inset shadow is editor-only so gameplay keeps a cleaner center surface
 - the blurred center felt layer is editor-only; gameplay should not mount any duplicate glow layer there
@@ -64,6 +69,7 @@ The game UI is designed around a single-screen, no-scroll table layout with expl
 - opening a menu or modal must not introduce page scrolling
 - debug surfaces should show bounded values and concise metadata
 - copyable values should use monospace fields with reliable full-value access
+- backend runtime controls should live in one discoverable menu/dialog surface instead of being scattered across gameplay chrome; the current home is hamburger menu -> `Backend Settings`
 
 ## Related Surfaces
 
@@ -72,6 +78,7 @@ The game UI is designed around a single-screen, no-scroll table layout with expl
 - how-to-play dialog
 - random-sources dialog
 - score/history surfaces
+- backend settings dialog
 
 Prompt-driven UI behavior changes should be captured in [../prompts/ui.md](../prompts/ui.md) and linked to the governing GitHub issue before implementation is considered complete.
 

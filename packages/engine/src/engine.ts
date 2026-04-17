@@ -677,7 +677,14 @@ function matchConcretePlayAction(
     return true;
   }
 
-  return legalAction.availableWishRanks?.includes(action.wishRank) ?? false;
+  if (!legalAction.availableWishRanks) {
+    return false;
+  }
+
+  return (
+    action.wishRank === null ||
+    legalAction.availableWishRanks.includes(action.wishRank)
+  );
 }
 
 function assertConcreteActionIsLegal(
