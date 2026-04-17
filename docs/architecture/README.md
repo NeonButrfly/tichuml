@@ -4,9 +4,9 @@ TichuML is organized around a few strict boundaries:
 
 - `packages/engine` is authoritative for legality, phase flow, trick resolution, scoring, and deterministic shuffle behavior.
 - `packages/ai-heuristics` is the single canonical deterministic bot brain; it chooses actions from engine-provided legal actions and emits structured explanation output for both the web app and the simulator.
-- `packages/telemetry` records append-only decision and event data for replay, debugging, and analysis.
+- `packages/telemetry` records append-only decision and event data for replay, debugging, and analysis, and shares stable schema/version constants with the backend ingest path.
 - `apps/web` renders phase-aware UI, local interaction, dialogs, and editor tooling without becoming the rules authority.
-- `apps/server` owns live entropy collection and returns normalized seed-generation results to the client.
+- `apps/server` owns live entropy collection, Postgres-backed telemetry ingest, replay/read APIs, and server-side heuristic decision routing.
 - `apps/web/src/table-layout.ts` is the canonical normal-table geometry schema; components should consume seat/global anchors from it instead of inventing seat-local offsets.
 
 ## Runtime Data Flow
@@ -15,14 +15,18 @@ TichuML is organized around a few strict boundaries:
 2. The server collects external and local entropy, normalizes the results, and derives a deterministic final seed.
 3. The web app starts a new game with that final seed.
 4. The engine creates deterministic round state from the seed.
-5. Heuristic AI, telemetry, and UI all work from engine state instead of inventing parallel legality.
+5. Automated decision acquisition flows through one provider abstraction: local heuristics or server heuristics with optional client fallback.
+6. The backend validates and persists telemetry decisions and events in Postgres, and exposes ordered replay/read endpoints.
+7. Heuristic AI, telemetry, and UI all work from engine state instead of inventing parallel legality.
 
 ## Stable Invariants
 
 - The engine remains authoritative for rules and transitions.
 - The active bot path remains deterministic, legality-filtered, and shared between the web client and the simulator.
 - Legacy ML / inference tooling is not part of the active bot decision path.
+- Server decision routing currently proves plumbing by running the shared `heuristics-v1` policy, not a new ML model.
 - The frontend remains phase-aware, not legality-authoritative.
+- Backend unavailability must not block gameplay; the local heuristic fallback remains available when enabled.
 - Entropy collection happens before a game starts, never during shuffle or mid-round.
 - Replay determinism depends on stored seed plus deterministic engine transitions.
 - Active Mahjong wishes are hard legality constraints when fulfillable, but the engine must still guarantee at least one legal action for the active seat.
@@ -39,3 +43,4 @@ TichuML is organized around a few strict boundaries:
 - [../milestones/README.md](../milestones/README.md) for milestone history and naming
 - [../telemetry/README.md](../telemetry/README.md) for telemetry and provenance details
 - [../ui/README.md](../ui/README.md) for table-layout and dialog constraints
+- [../prompts/backend.md](../prompts/backend.md) for backend-foundation prompt capture linked to issue [#30](https://github.com/NeonButrfly/tichuml/issues/30)

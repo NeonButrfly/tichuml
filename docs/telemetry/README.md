@@ -10,6 +10,36 @@ Telemetry remains append-only, versioned, and replay-oriented.
 - normalized legal-action snapshots
 - raw and derived state payloads
 - seed provenance and entropy metadata attached to game state
+- Postgres-backed `/api/telemetry/decision` and `/api/telemetry/event` ingest on the backend foundation path from issue [#30](https://github.com/NeonButrfly/tichuml/issues/30)
+
+## Backend Storage
+
+The backend foundation stores append-only records in:
+
+- `decisions`
+- `events`
+
+The server read path exposes:
+
+- `GET /api/games/:gameId/decisions`
+- `GET /api/games/:gameId/events`
+- `GET /api/games/:gameId/replay`
+
+`/api/games/:gameId/replay` returns ordered decisions, ordered events, and one combined timeline sorted by timestamp then insertion id.
+
+## Web Runtime Wiring
+
+The web client can now emit backend telemetry for:
+
+- Grand Tichu calls
+- Tichu calls
+- pass selection
+- pickup
+- pass turns
+- plays
+- engine events produced by those actions, including end-of-hand style events when emitted
+
+Telemetry upload is runtime-configurable in the `Backend Settings` dialog. Disabling telemetry there stops client uploads without requiring rebuilds.
 
 ## Versioning
 

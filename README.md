@@ -5,7 +5,7 @@ TichuML is a deterministic Tichu platform monorepo with:
 - an authoritative TypeScript rules engine
 - headless AI round execution and telemetry capture
 - a responsive React table UI with table-editor tooling
-- server-side entropy collection for seed generation
+- a local backend for entropy, telemetry ingest, decision routing, and replay reads
 - replay, debugging, and simulation foundations
 
 The repository no longer reflects a Milestone 0-only scaffold. Historical milestone labels still exist in a few runtime constants and tests for compatibility, but the working project has advanced well beyond the bootstrap stage.
@@ -13,7 +13,7 @@ The repository no longer reflects a Milestone 0-only scaffold. Historical milest
 ## Current Workspace
 
 - `apps/web` - live game client, responsive table UI, table editor, dialogs, and local app state
-- `apps/server` - HTTP server, entropy collection endpoint, and server-side seed generation
+- `apps/server` - HTTP JSON API for health, entropy, telemetry, replay reads, and server-side heuristic routing
 - `apps/sim-runner` - deterministic headless round execution for batch and integration flows
 - `packages/engine` - authoritative rules engine, deterministic shuffle, trick resolution, scoring
 - `packages/ai-heuristics` - heuristic AI decision policy and explanation output
@@ -35,6 +35,119 @@ The repository no longer reflects a Milestone 0-only scaffold. Historical milest
 - `npm run dev:server`
 - `npm run db:up`
 - `npm run db:migrate`
+- `npm run bootstrap:windows`
+- `npm run bootstrap:unix`
+
+## Backend Foundation
+
+GitHub issue [#30](https://github.com/NeonButrfly/tichuml/issues/30) tracks the backend foundation work. It intentionally sits outside the active gameplay/UI stabilization milestone stream because it is a cross-cutting backend/platform foundation rather than another table-layout bugfix.
+
+### One-command local backend startup
+
+Windows PowerShell:
+
+```powershell
+npm run bootstrap:windows
+```
+
+Windows watch mode:
+
+```powershell
+npm run bootstrap:windows -- -Dev
+```
+
+macOS / Linux:
+
+```sh
+npm run bootstrap:unix
+```
+
+macOS / Linux watch mode:
+
+```sh
+npm run bootstrap:unix -- --dev
+```
+
+Those scripts:
+
+- create `.env` from `.env.example` when missing
+- install workspace dependencies
+- start Postgres through Docker Compose
+- wait for DB readiness
+- run SQL migrations
+- start the backend server
+
+### Backend env defaults
+
+The root `.env.example` now includes:
+
+- `DATABASE_URL`
+- `PG_BOOTSTRAP_URL`
+- `PORT`
+- `BACKEND_BASE_URL`
+- `AUTO_BOOTSTRAP_DATABASE`
+- `AUTO_MIGRATE`
+- `VITE_DECISION_MODE`
+- `VITE_BACKEND_BASE_URL`
+- `VITE_SERVER_FALLBACK_ENABLED`
+- `VITE_TELEMETRY_ENABLED`
+
+`apps/server/.env.example` mirrors the server-specific defaults when you want a backend-only env reference.
+
+### Runtime decision and telemetry settings
+
+The web client now exposes backend runtime settings in the hamburger menu under `Backend Settings`.
+
+That dialog lets you change, at runtime and without rebuild:
+
+- `Decision Mode` (`local` or `server`)
+- `Backend Base URL`
+- `Server Fallback`
+- `Telemetry Enabled`
+- backend health test/status
+
+Env values provide first-run defaults. After the first UI change, the client persists the effective values in `localStorage` and uses those persisted settings on later runs.
+
+### Manual verification
+
+Health:
+
+```powershell
+Invoke-RestMethod http://localhost:4310/health
+```
+
+```sh
+curl http://localhost:4310/health
+```
+
+Replay reads:
+
+```powershell
+Invoke-RestMethod http://localhost:4310/api/games/<game-id>/replay
+```
+
+Server decision request example:
+
+```powershell
+$body = @{
+  game_id = "manual-test"
+  hand_id = "hand-1"
+  phase = "grand_tichu_window"
+  actor_seat = "seat-0"
+  schema_version = 2
+  engine_version = "milestone-1"
+  sim_version = "milestone-2"
+  state_raw = @{ phase = "grand_tichu_window" }
+  state_norm = @{ phase = "grand_tichu_window" }
+  legal_actions = @{ "seat-0" = @(@{ type = "decline_grand_tichu"; seat = "seat-0" }) }
+  requested_provider = "server_heuristic"
+  metadata = @{ decision_index = 0 }
+} | ConvertTo-Json -Depth 8
+
+Invoke-RestMethod http://localhost:4310/api/decision/request -Method Post -ContentType "application/json" -Body $body
+```
+
+Telemetry lands in Postgres `decisions` and `events` as append-only records. Replay reads combine those ordered streams for timeline reconstruction.
 
 If local port `5432` is already in use, override it for the session before booting Postgres:
 

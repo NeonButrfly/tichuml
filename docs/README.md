@@ -13,6 +13,7 @@ Use this folder as the canonical human-facing map of the project.
 - [./ui/README.md](./ui/README.md) - table layout, interaction, dialog, and responsiveness guidance
 - [./telemetry/README.md](./telemetry/README.md) - telemetry, replay, and seed provenance notes
 - [./prompts/README.md](./prompts/README.md) - prompt capture workflow, prompt logs, and GitHub-linked implementation guidance
+- [./prompts/backend.md](./prompts/backend.md) - backend/platform prompt capture linked to issue [#30](https://github.com/NeonButrfly/tichuml/issues/30)
 - [./project-tracking-trueup.md](./project-tracking-trueup.md) - historical reconciliation audit; live backlog state remains in GitHub
 
 ## How To Use These Docs

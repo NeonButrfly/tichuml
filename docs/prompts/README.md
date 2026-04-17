@@ -17,6 +17,7 @@ Prompt logs:
 - [./ui.md](./ui.md)
 - [./ai.md](./ai.md)
 - [./rules.md](./rules.md)
+- [./backend.md](./backend.md)
 
 Each prompt entry should record:
 
