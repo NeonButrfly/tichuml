@@ -226,6 +226,9 @@ describe("heuristics v1", () => {
     expect(passedCardIds).not.toEqual(
       expect.arrayContaining(["dragon", "phoenix", "star-14", "jade-14"])
     );
+    expect(chosen.explanation.selectedTags).toEqual(
+      expect.arrayContaining(["GIFT_PARTNER", "DUMP_LOW_IMPACT"])
+    );
   });
 
   it("avoids passing point cards to opponents when junk exists", () => {
@@ -483,6 +486,7 @@ describe("heuristics v1", () => {
       seat: "seat-0",
       recipient: "seat-1"
     });
+    expect(chosen.explanation.selectedTags).toContain("DRAGON_SAFE_TARGET");
   });
 
   it("avoids overtaking partner when the trick is already safe", () => {
@@ -510,6 +514,7 @@ describe("heuristics v1", () => {
 
     expect(chosen.action).toEqual({ type: "pass_turn", seat: "seat-0" });
     expect(chosen.explanation.selectedReasonSummary.some((reason) => reason.includes("partner"))).toBe(true);
+    expect(chosen.explanation.selectedTags).toContain("YIELD_TO_PARTNER");
   });
 
   it("still overtakes partner when the play goes out immediately", () => {
@@ -791,5 +796,200 @@ describe("heuristics v1", () => {
     });
 
     expect(["play_cards", "pass_turn"]).toContain(chosen.action.type);
+  });
+
+  it("tags forced wish decisions when a satisfying play exists", () => {
+    const lead = combo(["jade-8"]);
+    const state = scenario({
+      activeSeat: "seat-0",
+      currentWish: 12,
+      currentTrick: {
+        leader: "seat-1",
+        currentWinner: "seat-1",
+        currentCombination: lead,
+        entries: [{ type: "play", seat: "seat-1", combination: lead }],
+        passingSeats: []
+      },
+      hands: {
+        "seat-0": cardsFromIds(["jade-12", "sword-13"]),
+        "seat-1": cardsFromIds(["jade-2"]),
+        "seat-2": cardsFromIds(["sword-2"]),
+        "seat-3": cardsFromIds(["star-2"])
+      }
+    });
+
+    const chosen = heuristicsV1Policy.chooseAction({
+      state,
+      legalActions: getLegalActions(state)
+    });
+
+    expect(chosen.action).toEqual({
+      type: "play_cards",
+      seat: "seat-0",
+      cardIds: ["jade-12"]
+    });
+    expect(chosen.explanation.selectedTags).toEqual(
+      expect.arrayContaining(["FORCED_WISH", "CHEAPEST_WIN"])
+    );
+  });
+
+  it("uses an endgame shedding lead that leaves a cleaner finish", () => {
+    const state = scenario({
+      currentTrick: null,
+      hands: {
+        "seat-0": cardsFromIds(["jade-9", "sword-9", "pagoda-5"]),
+        "seat-1": cardsFromIds(["jade-2"]),
+        "seat-2": cardsFromIds(["sword-2"]),
+        "seat-3": cardsFromIds(["star-2"])
+      }
+    });
+
+    const chosen = heuristicsV1Policy.chooseAction({
+      state,
+      legalActions: getLegalActions(state)
+    });
+
+    expect(chosen.action).toEqual({
+      type: "play_cards",
+      seat: "seat-0",
+      cardIds: ["jade-9", "sword-9"]
+    });
+    expect(chosen.explanation.selectedTags).toEqual(
+      expect.arrayContaining(["SHED_FOR_FINISH", "ENDGAME_COMMIT"])
+    );
+  });
+
+  it("leads Dog when partner is best positioned to convert initiative", () => {
+    const state = scenario({
+      currentTrick: null,
+      hands: {
+        "seat-0": cardsFromIds(["dog", "jade-4", "sword-11"]),
+        "seat-1": cardsFromIds(["jade-2", "sword-3", "pagoda-4", "star-5", "jade-6"]),
+        "seat-2": cardsFromIds(["sword-12"]),
+        "seat-3": cardsFromIds(["star-2", "pagoda-3", "jade-8", "sword-9", "star-10"])
+      }
+    });
+
+    const chosen = heuristicsV1Policy.chooseAction({
+      state,
+      legalActions: getLegalActions(state)
+    });
+
+    expect(chosen.action).toEqual({
+      type: "play_cards",
+      seat: "seat-0",
+      cardIds: ["dog"]
+    });
+    expect(chosen.explanation.selectedTags).toEqual(
+      expect.arrayContaining(["DOG_TO_PARTNER", "PARTNER_SUPPORT"])
+    );
+  });
+
+  it("preserves Phoenix when a standard card can win cleanly", () => {
+    const lead = combo(["jade-9"]);
+    const state = scenario({
+      activeSeat: "seat-0",
+      currentTrick: {
+        leader: "seat-1",
+        currentWinner: "seat-1",
+        currentCombination: lead,
+        entries: [{ type: "play", seat: "seat-1", combination: lead }],
+        passingSeats: []
+      },
+      hands: {
+        "seat-0": cardsFromIds(["phoenix", "jade-10", "sword-4"]),
+        "seat-1": cardsFromIds(["jade-2"]),
+        "seat-2": cardsFromIds(["sword-2"]),
+        "seat-3": cardsFromIds(["star-2"])
+      }
+    });
+
+    const chosen = heuristicsV1Policy.chooseAction({
+      state,
+      legalActions: getLegalActions(state)
+    });
+
+    expect(chosen.action).toEqual({
+      type: "play_cards",
+      seat: "seat-0",
+      cardIds: ["jade-10"]
+    });
+    expect(chosen.explanation.selectedTags).toContain("PHOENIX_FLEX_PRESERVE");
+  });
+
+  it("avoids gifting Dragon to the opponent with the strongest conversion lane", () => {
+    const state = scenario({
+      activeSeat: "seat-0",
+      pendingDragonGift: {
+        winner: "seat-0",
+        trickCards: cardsFromIds(["dragon"]),
+        nextLeader: "seat-1",
+        roundEndsAfterGift: false
+      },
+      hands: {
+        "seat-0": cardsFromIds(["jade-2"]),
+        "seat-1": cardsFromIds(["sword-3", "pagoda-4", "star-5", "jade-6"]),
+        "seat-2": cardsFromIds(["pagoda-8"]),
+        "seat-3": cardsFromIds(["star-9", "jade-10", "sword-11"])
+      }
+    });
+
+    const chosen = heuristicsV1Policy.chooseAction({
+      state,
+      legalActions: getLegalActions(state)
+    });
+
+    expect(chosen.action).toEqual({
+      type: "assign_dragon_trick",
+      seat: "seat-0",
+      recipient: "seat-3"
+    });
+    expect(chosen.explanation.selectedTags).toEqual(
+      expect.arrayContaining(["DRAGON_GIFT_LOWEST_THREAT", "DRAGON_SAFE_TARGET"])
+    );
+  });
+
+  it("preserves a straight core during passing when clean dumps exist", () => {
+    const state = scenario({
+      phase: "pass_select",
+      hands: {
+        "seat-0": cardsFromIds([
+          "jade-3",
+          "sword-4",
+          "pagoda-5",
+          "star-6",
+          "jade-7",
+          "sword-11",
+          "pagoda-12",
+          "dog",
+          "star-14",
+          "jade-9",
+          "sword-9",
+          "pagoda-10",
+          "star-13",
+          "jade-2"
+        ]),
+        "seat-1": cardsFromIds(["jade-8", "sword-8", "pagoda-8"]),
+        "seat-2": cardsFromIds(["star-3", "jade-4", "sword-5"]),
+        "seat-3": cardsFromIds(["pagoda-6", "star-7", "jade-11"])
+      }
+    });
+
+    const chosen = heuristicsV1Policy.chooseAction({
+      state,
+      legalActions: getLegalActions(state)
+    });
+
+    expect(chosen.action.type).toBe("select_pass");
+    if (chosen.action.type !== "select_pass") {
+      throw new Error("Expected a pass-selection action.");
+    }
+
+    expect([chosen.action.left, chosen.action.partner, chosen.action.right]).not.toEqual(
+      expect.arrayContaining(["jade-3", "sword-4", "pagoda-5", "star-6", "jade-7"])
+    );
+    expect(chosen.explanation.selectedTags).toEqual(
+      expect.arrayContaining(["PASS_GIFT_PARTNER", "PASS_DUMP_LOW_IMPACT"])
+    );
   });
 });

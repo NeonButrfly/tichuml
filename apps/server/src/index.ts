@@ -5,6 +5,45 @@ import { ensureDatabaseReady } from "./db/bootstrap.js";
 import { createDatabaseClient } from "./db/postgres.js";
 import { PostgresTelemetryRepository } from "./services/telemetry-repository.js";
 
+function serializeStartupError(error: unknown): Record<string, unknown> {
+  if (error instanceof AggregateError) {
+    const aggregateCode =
+      typeof (error as unknown as { code?: unknown }).code === "string"
+        ? (error as unknown as { code: string }).code
+        : undefined;
+    return {
+      name: error.name,
+      message: error.message,
+      ...(aggregateCode ? { code: aggregateCode } : {}),
+      causes: error.errors.map((cause) => serializeStartupError(cause))
+    };
+  }
+
+  if (error instanceof Error) {
+    const maybeCode =
+      typeof (error as unknown as { code?: unknown }).code === "string"
+        ? (error as unknown as { code: string }).code
+        : undefined;
+    return {
+      name: error.name,
+      message: error.message,
+      ...(maybeCode ? { code: maybeCode } : {}),
+      ...(error.stack ? { stack: error.stack } : {})
+    };
+  }
+
+  if (typeof error === "object" && error !== null) {
+    return {
+      value: String(error),
+      ...error
+    };
+  }
+
+  return {
+    value: String(error)
+  };
+}
+
 export async function startServer() {
   const serverConfig = loadServerConfig();
   await ensureDatabaseReady({
@@ -60,9 +99,7 @@ const isEntrypoint =
 
 if (isEntrypoint) {
   startServer().catch((error: unknown) => {
-    console.error("[server] failed to start", {
-      error: error instanceof Error ? error.message : String(error)
-    });
+    console.error("[server] failed to start", serializeStartupError(error));
     process.exitCode = 1;
   });
 }

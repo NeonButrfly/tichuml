@@ -37,7 +37,7 @@ import type {
 import type {
   SeedDebugSnapshot,
   SeedJsonValue,
-  type BackendRuntimeSettings
+  BackendRuntimeSettings
 } from "@tichuml/shared";
 import type { BackendReachability } from "./backend/settings";
 import {
