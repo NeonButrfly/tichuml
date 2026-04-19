@@ -15,7 +15,15 @@ export type BackendReachability = {
 };
 
 function readDecisionMode(value: string | undefined): DecisionMode {
-  return value === "server" ? "server" : "local";
+  if (value === "lightgbm_model") {
+    return "lightgbm_model";
+  }
+
+  if (value === "server" || value === "server_heuristic") {
+    return "server_heuristic";
+  }
+
+  return "local";
 }
 
 export function getBackendSettingsDefaults(): BackendRuntimeSettings {
@@ -51,7 +59,11 @@ export function loadBackendSettings(): BackendRuntimeSettings {
     const parsed = JSON.parse(raw) as Partial<BackendRuntimeSettings>;
     return {
       decisionMode:
-        parsed.decisionMode === "server" ? parsed.decisionMode : defaults.decisionMode,
+        parsed.decisionMode === "lightgbm_model" ||
+        parsed.decisionMode === "server_heuristic" ||
+        parsed.decisionMode === "server"
+          ? readDecisionMode(parsed.decisionMode)
+          : defaults.decisionMode,
       backendBaseUrl: normalizeBackendBaseUrl(
         typeof parsed.backendBaseUrl === "string"
           ? parsed.backendBaseUrl

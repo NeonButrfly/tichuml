@@ -68,9 +68,8 @@ async function canConnect(databaseUrl: string): Promise<boolean> {
 
 async function startDockerPostgres(): Promise<void> {
   const repoRoot = getRepoRoot();
-  const composeFile = path.join(repoRoot, "infra/docker/docker-compose.yml");
   const envFile = path.join(repoRoot, ".env");
-  const args = ["compose", "-f", composeFile];
+  const args = ["compose"];
 
   if (fs.existsSync(envFile)) {
     args.push("--env-file", envFile);

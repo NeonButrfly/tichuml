@@ -4170,12 +4170,17 @@ function BackendSettingsDialogContent({
               onBackendSettingsChange({
                 ...backendSettings,
                 decisionMode:
-                  event.target.value === "server" ? "server" : "local"
+                  event.target.value === "lightgbm_model"
+                    ? "lightgbm_model"
+                    : event.target.value === "server_heuristic"
+                      ? "server_heuristic"
+                      : "local"
               })
             }
           >
             <option value="local">Local heuristic</option>
-            <option value="server">Server heuristic</option>
+            <option value="server_heuristic">Server heuristic</option>
+            <option value="lightgbm_model">LightGBM model</option>
           </select>
         </label>
 

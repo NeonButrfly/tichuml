@@ -21,7 +21,8 @@ The repository no longer reflects a Milestone 0-only scaffold. Historical milest
 - `packages/shared` - shared metadata, seed provenance types, and cross-package helpers
 - `packages/ui-kit` - reusable UI primitives
 - `infra/db` - migrations and migration runner
-- `infra/docker` - local Postgres compose stack
+- `docker-compose.yml` - local Postgres compose stack
+- `ml` - LightGBM feature building, export, training, and inference scripts
 - `docs` - architecture, milestone history, telemetry, product, UI, and workflow notes
 - `tests` - integration and replay-oriented validation
 
@@ -72,6 +73,7 @@ Those scripts:
 
 - create `.env` from `.env.example` when missing
 - install workspace dependencies
+- create `.venv` when missing and install `ml/requirements.txt`
 - start Postgres through Docker Compose
 - wait for DB readiness
 - run SQL migrations
@@ -83,10 +85,18 @@ The root `.env.example` now includes:
 
 - `DATABASE_URL`
 - `PG_BOOTSTRAP_URL`
+- `POSTGRES_DB`
+- `POSTGRES_USER`
+- `POSTGRES_PASSWORD`
+- `POSTGRES_PORT`
 - `PORT`
 - `BACKEND_BASE_URL`
 - `AUTO_BOOTSTRAP_DATABASE`
 - `AUTO_MIGRATE`
+- `PYTHON_EXECUTABLE`
+- `LIGHTGBM_INFER_SCRIPT`
+- `LIGHTGBM_MODEL_PATH`
+- `LIGHTGBM_MODEL_META_PATH`
 - `VITE_DECISION_MODE`
 - `VITE_BACKEND_BASE_URL`
 - `VITE_SERVER_FALLBACK_ENABLED`
@@ -100,13 +110,52 @@ The web client now exposes backend runtime settings in the hamburger menu under 
 
 That dialog lets you change, at runtime and without rebuild:
 
-- `Decision Mode` (`local` or `server`)
+- `Decision Mode` (`local`, `server_heuristic`, or `lightgbm_model`)
 - `Backend Base URL`
 - `Server Fallback`
 - `Telemetry Enabled`
 - backend health test/status
 
 Env values provide first-run defaults. After the first UI change, the client persists the effective values in `localStorage` and uses those persisted settings on later runs.
+
+### LightGBM workflow
+
+Export action rows from Postgres:
+
+```powershell
+.\.venv\Scripts\python.exe ml/export_training_rows.py
+```
+
+```sh
+./.venv/bin/python ml/export_training_rows.py
+```
+
+Train the LightGBM action model:
+
+```powershell
+.\.venv\Scripts\python.exe ml/train_lightgbm.py
+```
+
+```sh
+./.venv/bin/python ml/train_lightgbm.py
+```
+
+The training path writes:
+
+- `ml/model_registry/lightgbm_action_model.txt`
+- `ml/model_registry/lightgbm_action_model.meta.json`
+
+Switch to the model at runtime from hamburger menu -> `Backend Settings` -> `Decision Mode` -> `LightGBM model`.
+
+### Exchange telemetry
+
+Issue [#31](https://github.com/NeonButrfly/tichuml/issues/31) keeps exchange telemetry phase-specific. The client now records:
+
+- `pass_select` decisions for pass-card submission
+- `pass_reveal` advancement decisions when exchange resolution occurs
+- `exchange_complete` pickup decisions before trick play resumes
+
+Replay reads preserve those phases instead of collapsing exchange into trick play.
 
 ### Manual verification
 
@@ -140,7 +189,7 @@ $body = @{
   state_raw = @{ phase = "grand_tichu_window" }
   state_norm = @{ phase = "grand_tichu_window" }
   legal_actions = @{ "seat-0" = @(@{ type = "decline_grand_tichu"; seat = "seat-0" }) }
-  requested_provider = "server_heuristic"
+  requested_provider = "lightgbm_model"
   metadata = @{ decision_index = 0 }
 } | ConvertTo-Json -Depth 8
 
@@ -148,15 +197,6 @@ Invoke-RestMethod http://localhost:4310/api/decision/request -Method Post -Conte
 ```
 
 Telemetry lands in Postgres `decisions` and `events` as append-only records. Replay reads combine those ordered streams for timeline reconstruction.
-
-If local port `5432` is already in use, override it for the session before booting Postgres:
-
-```powershell
-$env:POSTGRES_PORT='5433'
-npm run db:up
-$env:DATABASE_URL='postgres://postgres:postgres@localhost:5433/tichuml'
-npm run db:migrate
-```
 
 ## Documentation Map
 
@@ -173,7 +213,7 @@ npm run db:migrate
 
 ## Milestone Snapshot
 
-The current repository head is Milestone `6.3`. The active open backlog now lives in GitHub milestone [`6.4 – Gameplay & UX Stabilization`](https://github.com/NeonButrfly/tichuml/milestone/23). GitHub milestones and GitHub issues are the authoritative project tracker. The canonical milestone plan still lives in [SPEC](./spec.md), while the normalized repository history and current GitHub milestone-to-issue mapping now live in [docs/milestones/README.md](./docs/milestones/README.md).
+The current major backend/platform stream now lives in GitHub milestone [`6.5 – Local ML Integration & Reproducible Backend`](https://github.com/NeonButrfly/tichuml/milestone/24), while the open gameplay/UI stabilization stream remains [`6.4 – Gameplay & UX Stabilization`](https://github.com/NeonButrfly/tichuml/milestone/23). GitHub milestones and GitHub issues are the authoritative project tracker. The canonical milestone plan still lives in [SPEC](./spec.md), while the normalized repository history and current GitHub milestone-to-issue mapping now live in [docs/milestones/README.md](./docs/milestones/README.md).
 
 Prompt-capture notes in [`docs/prompts`](./docs/prompts/README.md) preserve prompt intent and issue links only. They are not a parallel tracker; status stays in GitHub.
 

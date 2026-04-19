@@ -25,10 +25,12 @@
     "build:server": "npm run build -w @tichuml/server",
     "build:sim-runner": "npm run build -w @tichuml/sim-runner",
     "build:web": "npm run build -w @tichuml/web",
-    "db:up": "docker compose -f infra/docker/docker-compose.yml up -d postgres",
-    "db:down": "docker compose -f infra/docker/docker-compose.yml down",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
     "db:migrate": "tsx infra/db/scripts/migrate.ts",
-    "db:migrate:status": "tsx infra/db/scripts/migrate.ts status"
+    "db:migrate:status": "tsx infra/db/scripts/migrate.ts status",
+    "ml:export": "python ml/export_training_rows.py",
+    "ml:train": "python ml/train_lightgbm.py"
   },
   "devDependencies": {
     "@eslint/js": "^9.24.0",

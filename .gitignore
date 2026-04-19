@@ -4,4 +4,10 @@ coverage/
 .env
 .DS_Store
 *.log
-
+.venv/
+__pycache__/
+*.pyc
+ml/data/*
+!ml/data/.gitkeep
+ml/model_registry/*
+!ml/model_registry/.gitkeep

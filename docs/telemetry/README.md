@@ -34,10 +34,13 @@ The web client can now emit backend telemetry for:
 - Grand Tichu calls
 - Tichu calls
 - pass selection
-- pickup
+- pass reveal advancement
+- pickup / exchange completion
 - pass turns
 - plays
 - engine events produced by those actions, including end-of-hand style events when emitted
+
+Issue [#31](https://github.com/NeonButrfly/tichuml/issues/31) keeps exchange telemetry phase-specific. `pass_select`, `pass_reveal`, and `exchange_complete` remain distinct in persisted replay data instead of being merged into trick play.
 
 Telemetry upload is runtime-configurable in the `Backend Settings` dialog. Disabling telemetry there stops client uploads without requiring rebuilds.
 

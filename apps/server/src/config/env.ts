@@ -17,6 +17,11 @@ export type ServerConfig = {
   autoBootstrapDatabase: boolean;
   autoMigrate: boolean;
   backendBaseUrl: string;
+  repoRoot: string;
+  pythonExecutable: string;
+  lightgbmInferScript: string;
+  lightgbmModelPath: string;
+  lightgbmModelMetaPath: string;
 };
 
 export function getRepoRoot(): string {
@@ -69,6 +74,41 @@ function withDatabaseName(connectionString: string, databaseName: string): strin
   return url.toString();
 }
 
+function resolveRepoPath(
+  repoRoot: string,
+  candidate: string | undefined,
+  fallbackRelativePath: string
+): string {
+  const rawValue = candidate?.trim();
+  if (!rawValue) {
+    return path.join(repoRoot, fallbackRelativePath);
+  }
+
+  return path.isAbsolute(rawValue) ? rawValue : path.join(repoRoot, rawValue);
+}
+
+function resolvePythonExecutable(
+  repoRoot: string,
+  envValue: string | undefined
+): string {
+  const rawValue = envValue?.trim();
+  if (rawValue) {
+    return rawValue;
+  }
+
+  const windowsVenvPython = path.join(repoRoot, ".venv", "Scripts", "python.exe");
+  if (fs.existsSync(windowsVenvPython)) {
+    return windowsVenvPython;
+  }
+
+  const unixVenvPython = path.join(repoRoot, ".venv", "bin", "python");
+  if (fs.existsSync(unixVenvPython)) {
+    return unixVenvPython;
+  }
+
+  return "python";
+}
+
 export function loadServerConfig(
   env: NodeJS.ProcessEnv = process.env,
   options: {
@@ -82,9 +122,10 @@ export function loadServerConfig(
   };
   const portValue = Number(mergedEnv.PORT ?? DEFAULT_SERVER_PORT);
   const databaseUrl = mergedEnv.DATABASE_URL ?? defaultDatabaseUrl;
+  const port = Number.isFinite(portValue) ? portValue : DEFAULT_SERVER_PORT;
 
   return {
-    port: Number.isFinite(portValue) ? portValue : DEFAULT_SERVER_PORT,
+    port,
     host: mergedEnv.HOST?.trim() || "0.0.0.0",
     databaseUrl,
     pgBootstrapUrl:
@@ -97,7 +138,24 @@ export function loadServerConfig(
     ),
     autoMigrate: parseBooleanEnv(mergedEnv.AUTO_MIGRATE, true),
     backendBaseUrl: normalizeBackendBaseUrl(
-      mergedEnv.BACKEND_BASE_URL ?? `http://localhost:${portValue}`
+      mergedEnv.BACKEND_BASE_URL ?? `http://localhost:${port}`
+    ),
+    repoRoot,
+    pythonExecutable: resolvePythonExecutable(repoRoot, mergedEnv.PYTHON_EXECUTABLE),
+    lightgbmInferScript: resolveRepoPath(
+      repoRoot,
+      mergedEnv.LIGHTGBM_INFER_SCRIPT,
+      path.join("ml", "infer.py")
+    ),
+    lightgbmModelPath: resolveRepoPath(
+      repoRoot,
+      mergedEnv.LIGHTGBM_MODEL_PATH,
+      path.join("ml", "model_registry", "lightgbm_action_model.txt")
+    ),
+    lightgbmModelMetaPath: resolveRepoPath(
+      repoRoot,
+      mergedEnv.LIGHTGBM_MODEL_META_PATH,
+      path.join("ml", "model_registry", "lightgbm_action_model.meta.json")
     )
   };
 }

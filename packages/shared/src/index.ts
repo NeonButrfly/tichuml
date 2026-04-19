@@ -47,4 +47,5 @@ const runtimeEnv =
   typeof process !== "undefined" ? process.env : undefined;
 
 export const defaultDatabaseUrl =
-  runtimeEnv?.DATABASE_URL ?? "postgres://postgres:postgres@localhost:5432/tichuml";
+  runtimeEnv?.DATABASE_URL ??
+  "postgres://tichu:tichu_dev_password@localhost:54329/tichu";

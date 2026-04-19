@@ -3,6 +3,7 @@ import { createAppServer } from "./app.js";
 import { loadServerConfig } from "./config/env.js";
 import { ensureDatabaseReady } from "./db/bootstrap.js";
 import { createDatabaseClient } from "./db/postgres.js";
+import { createLightgbmScorer } from "./ml/lightgbm-scorer.js";
 import { PostgresTelemetryRepository } from "./services/telemetry-repository.js";
 
 function serializeStartupError(error: unknown): Record<string, unknown> {
@@ -55,7 +56,12 @@ export async function startServer() {
 
   const sql = createDatabaseClient(serverConfig.databaseUrl);
   const repository = new PostgresTelemetryRepository(sql);
-  const server = createAppServer({ serverConfig, repository });
+  const lightgbmScorer = createLightgbmScorer(serverConfig);
+  const server = createAppServer({
+    serverConfig,
+    repository,
+    lightgbmScorer
+  });
 
   await new Promise<void>((resolve) => {
     server.listen(serverConfig.port, serverConfig.host, () => {
@@ -81,6 +87,7 @@ export async function startServer() {
       });
     });
     await sql.end();
+    await lightgbmScorer.close();
   };
 
   process.once("SIGINT", () => {

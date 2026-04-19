@@ -72,6 +72,7 @@ import { generateSeedWithEntropy } from "./seed/orchestrator";
 import {
   type BackendRuntimeSettings,
   type DecisionRequestPayload,
+  type RequestedDecisionProvider,
   type SeedDebugSnapshot
 } from "@tichuml/shared";
 import {
@@ -139,6 +140,7 @@ function buildDecisionRequestPayload(config: {
   legalActions: LegalActionMap;
   actorSeat: SeatId;
   decisionIndex: number;
+  requestedProvider: RequestedDecisionProvider;
 }): DecisionRequestPayload {
   return {
     game_id: config.matchId,
@@ -151,10 +153,30 @@ function buildDecisionRequestPayload(config: {
     state_raw: config.state as unknown as Record<string, unknown>,
     state_norm: config.derived as unknown as Record<string, unknown>,
     legal_actions: config.legalActions as unknown as Record<string, unknown>,
-    requested_provider: "server_heuristic",
+    requested_provider: config.requestedProvider,
     metadata: {
       decision_index: config.decisionIndex
     }
+  };
+}
+
+function buildTelemetryActionMetadata(
+  action: EngineAction,
+  state: EngineResult["nextState"],
+  extras: Record<string, unknown> = {}
+): Record<string, unknown> {
+  const selectedCards =
+    action.type === "play_cards"
+      ? action.cardIds
+      : action.type === "select_pass"
+        ? [action.left, action.partner, action.right]
+        : [];
+
+  return {
+    action_type: action.type,
+    selected_cards: selectedCards,
+    state_raw: state as unknown as Record<string, unknown>,
+    ...extras
   };
 }
 
@@ -909,7 +931,11 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
                   derived: round.derivedView,
                   legalActions,
                   actorSeat: LOCAL_SEAT,
-                  decisionIndex: decisionCount
+                  decisionIndex: decisionCount,
+                  requestedProvider:
+                    backendSettings.decisionMode === "lightgbm_model"
+                      ? "lightgbm_model"
+                      : "server_heuristic"
                 })
               : buildDecisionRequestPayload({
                   matchId,
@@ -917,13 +943,18 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
                   derived: round.derivedView,
                   legalActions,
                   actorSeat: primaryActor,
-                  decisionIndex: decisionCount
+                  decisionIndex: decisionCount,
+                  requestedProvider:
+                    backendSettings.decisionMode === "lightgbm_model"
+                      ? "lightgbm_model"
+                      : "server_heuristic"
                 })
         });
 
         setBackendStatus((current) => ({
           state:
-            initialResolution.providerUsed === "server_heuristic"
+            !initialResolution.usedFallback &&
+            backendSettings.decisionMode !== "local"
               ? "reachable"
               : initialResolution.usedFallback
                 ? "unreachable"
@@ -966,8 +997,13 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
           gameId: matchId,
           handId,
           metadata: {
-            action_type: initialResolution.chosen.action.type,
-            provider_used: initialResolution.providerUsed
+            ...buildTelemetryActionMetadata(
+              initialResolution.chosen.action,
+              round.nextState,
+              {
+                provider_used: initialResolution.providerUsed
+              }
+            )
           }
         });
 
@@ -1005,7 +1041,11 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
                 derived: nextResult.derivedView,
                 legalActions: playOnlyLegalActions,
                 actorSeat: primaryActor,
-                decisionIndex: decisionCount + 1
+                decisionIndex: decisionCount + 1,
+                requestedProvider:
+                  backendSettings.decisionMode === "lightgbm_model"
+                    ? "lightgbm_model"
+                    : "server_heuristic"
               })
             });
 
@@ -1044,9 +1084,14 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
               gameId: matchId,
               handId,
               metadata: {
-                action_type: forcedResolution.chosen.action.type,
-                provider_used: forcedResolution.providerUsed,
-                forced_opening_play: true
+                ...buildTelemetryActionMetadata(
+                  forcedResolution.chosen.action,
+                  nextResult.nextState,
+                  {
+                    provider_used: forcedResolution.providerUsed,
+                    forced_opening_play: true
+                  }
+                )
               }
             });
             nextEvents.push(...nextResult.events);
@@ -1299,7 +1344,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
       gameId: matchId,
       handId,
       metadata: {
-        action_type: action.type
+        ...buildTelemetryActionMetadata(action, state)
       }
     });
 
@@ -1478,7 +1523,11 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
               derived,
               legalActions,
               actorSeat: LOCAL_SEAT,
-              decisionIndex: decisionCount
+              decisionIndex: decisionCount,
+              requestedProvider:
+                backendSettings.decisionMode === "lightgbm_model"
+                  ? "lightgbm_model"
+                  : "server_heuristic"
             })
           : buildDecisionRequestPayload({
               matchId,
@@ -1486,13 +1535,17 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
               derived,
               legalActions,
               actorSeat: primaryActor,
-              decisionIndex: decisionCount
+              decisionIndex: decisionCount,
+              requestedProvider:
+                backendSettings.decisionMode === "lightgbm_model"
+                  ? "lightgbm_model"
+                  : "server_heuristic"
             })
     })
       .then((resolution) => {
         setBackendStatus({
           state:
-            resolution.providerUsed === "server_heuristic"
+            !resolution.usedFallback && backendSettings.decisionMode !== "local"
               ? "reachable"
               : resolution.usedFallback
                 ? "unreachable"

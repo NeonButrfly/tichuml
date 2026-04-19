@@ -22,13 +22,19 @@ export type DecisionResolution = {
 function createSyntheticDecision(
   actor: ActorId,
   action: EngineAction,
-  providerReason: string
+  providerReason: string,
+  providerUsed: DecisionProviderUsed
 ): ChosenDecision {
   return {
     actor,
     action,
     explanation: {
-      policy: "server-heuristic",
+      policy:
+        providerUsed === "lightgbm_model"
+          ? "lightgbm-model"
+          : providerUsed === "server_heuristic"
+            ? "server-heuristic"
+            : "local-heuristic",
       actor,
       candidateScores: [],
       selectedReasonSummary: [providerReason],
@@ -76,7 +82,8 @@ export async function resolveDecisionWithProvider(config: {
         actor,
         response.chosen_action as unknown as EngineAction,
         response.provider_reason ??
-          "Resolved through the shared heuristics-v1 provider on the backend."
+          "Resolved through the shared heuristics-v1 provider on the backend.",
+        response.provider_used ?? "server_heuristic"
       ),
       providerUsed: response.provider_used ?? "server_heuristic",
       providerReason:

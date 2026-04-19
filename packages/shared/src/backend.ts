@@ -19,8 +19,8 @@ export type ValidationResult<T> =
   | { ok: true; value: T }
   | { ok: false; issues: ValidationIssue[] };
 
-export type DecisionMode = "local" | "server";
-export type RequestedDecisionProvider = "server_heuristic";
+export type DecisionMode = "local" | "server_heuristic" | "lightgbm_model";
+export type RequestedDecisionProvider = "server_heuristic" | "lightgbm_model";
 export type DecisionProviderUsed = RequestedDecisionProvider | "local_heuristic";
 export type BackendReachabilityState =
   | "unknown"
@@ -89,6 +89,7 @@ export type DecisionResponsePayload = {
   chosen_action: JsonObject | null;
   provider_used: DecisionProviderUsed | null;
   provider_reason?: string;
+  metadata?: JsonObject;
   validation_errors?: ValidationIssue[];
   telemetry_id?: number;
 };
@@ -268,8 +269,8 @@ function expectRequestedProvider(
   key: string
 ): RequestedDecisionProvider | null {
   const value = input[key];
-  if (value !== "server_heuristic") {
-    pushIssue(context, key, "Expected 'server_heuristic'.");
+  if (value !== "server_heuristic" && value !== "lightgbm_model") {
+    pushIssue(context, key, "Expected 'server_heuristic' or 'lightgbm_model'.");
     return null;
   }
 

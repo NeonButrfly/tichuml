@@ -15,6 +15,7 @@ import type {
 } from "@tichuml/shared";
 import { createAppServer } from "../../apps/server/src/app";
 import type { ServerConfig } from "../../apps/server/src/config/env";
+import type { LightgbmScorer } from "../../apps/server/src/ml/lightgbm-scorer";
 import type { TelemetryRepository } from "../../apps/server/src/services/telemetry-repository";
 
 class InMemoryTelemetryRepository implements TelemetryRepository {
@@ -100,16 +101,25 @@ const TEST_SERVER_CONFIG: ServerConfig = {
   allowedOrigin: "*",
   autoBootstrapDatabase: false,
   autoMigrate: false,
-  backendBaseUrl: "http://127.0.0.1"
+  backendBaseUrl: "http://127.0.0.1",
+  repoRoot: "C:/tichu/tichuml",
+  pythonExecutable: "python",
+  lightgbmInferScript: "ml/infer.py",
+  lightgbmModelPath: "ml/model_registry/lightgbm_action_model.txt",
+  lightgbmModelMetaPath: "ml/model_registry/lightgbm_action_model.meta.json"
 };
 
 async function withServer<T>(
-  callback: (config: { baseUrl: string; repository: InMemoryTelemetryRepository }) => Promise<T>
+  callback: (config: { baseUrl: string; repository: InMemoryTelemetryRepository }) => Promise<T>,
+  options: {
+    lightgbmScorer?: LightgbmScorer;
+  } = {}
 ) {
   const repository = new InMemoryTelemetryRepository();
   const server = createAppServer({
     serverConfig: TEST_SERVER_CONFIG,
-    repository
+    repository,
+    lightgbmScorer: options.lightgbmScorer
   });
 
   await new Promise<void>((resolve) => {
@@ -273,6 +283,47 @@ describe("backend foundation server routes", () => {
       expect(repository.decisions).toHaveLength(1);
       expect(repository.decisions[0]?.policy_source).toBe("server_heuristic");
     });
+  });
+
+  it("returns LightGBM provider metadata when the model scorer is available", async () => {
+    const scorer: LightgbmScorer = {
+      async score(request) {
+        return {
+          scores: request.legalActions.map((_, index) => (index === 0 ? 0.9 : 0.1)),
+          modelMetadata: {
+            model_type: "lightgbm_action_model",
+            feature_names: ["phase_trick_play"]
+          }
+        };
+      },
+      async close() {}
+    };
+
+    await withServer(
+      async ({ baseUrl, repository }) => {
+        const response = await fetch(`${baseUrl}/api/decision/request`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...createDecisionRequestBody(),
+            requested_provider: "lightgbm_model"
+          })
+        });
+
+        expect(response.status).toBe(200);
+        const payload = (await response.json()) as {
+          accepted: boolean;
+          provider_used: string;
+          metadata?: { scores?: Array<{ score: number }> };
+        };
+        expect(payload.accepted).toBe(true);
+        expect(payload.provider_used).toBe("lightgbm_model");
+        expect(payload.metadata?.scores?.[0]?.score).toBe(0.9);
+        expect(repository.decisions).toHaveLength(1);
+        expect(repository.decisions[0]?.policy_source).toBe("lightgbm_model");
+      },
+      { lightgbmScorer: scorer }
+    );
   });
 
   it("orders replay data by timestamp and id", async () => {

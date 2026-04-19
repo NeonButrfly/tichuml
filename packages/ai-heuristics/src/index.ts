@@ -30,6 +30,7 @@ export type {
   PolicyTag,
   TeamplaySnapshot
 } from "./types.js";
+export { chooseWishRank } from "./HandAnalysis.js";
 
 function filterWishLockedActions(
   actions: LegalAction[],

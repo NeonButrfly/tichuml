@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: tichu-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tichu
+      POSTGRES_PASSWORD: tichu_dev_password
+      POSTGRES_DB: tichu
+    ports:
+      - "54329:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:

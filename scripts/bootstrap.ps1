@@ -16,6 +16,42 @@ function Require-Command([string]$Name) {
   }
 }
 
+function Wait-ForDocker {
+  for ($attempt = 0; $attempt -lt 60; $attempt += 1) {
+    try {
+      docker info | Out-Null
+      if ($LASTEXITCODE -eq 0) {
+        return
+      }
+    } catch {
+      Start-Sleep -Seconds 2
+    }
+  }
+
+  throw "Docker did not become ready within the timeout window."
+}
+
+function Ensure-DockerRunning {
+  try {
+    docker info | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+      return
+    }
+  } catch {
+    $dockerDesktopCandidates = @(
+      "$Env:ProgramFiles\\Docker\\Docker\\Docker Desktop.exe",
+      "$Env:LocalAppData\\Docker\\Docker Desktop.exe"
+    )
+    $dockerDesktop = $dockerDesktopCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if ($dockerDesktop) {
+      Write-Step "Starting Docker Desktop"
+      Start-Process -FilePath $dockerDesktop | Out-Null
+    }
+  }
+
+  Wait-ForDocker
+}
+
 function Import-EnvFile([string]$Path) {
   Get-Content $Path | ForEach-Object {
     if ([string]::IsNullOrWhiteSpace($_) -or $_.Trim().StartsWith("#")) {
@@ -40,6 +76,7 @@ Write-Step "Checking prerequisites"
 Require-Command "node"
 Require-Command "npm"
 Require-Command "docker"
+Require-Command "python"
 
 if (-not (Test-Path ".env")) {
   Write-Step "Creating .env from .env.example"
@@ -48,13 +85,14 @@ if (-not (Test-Path ".env")) {
 
 Import-EnvFile ".env"
 
+Write-Step "Ensuring Docker is running"
+Ensure-DockerRunning
+
 Write-Step "Installing workspace dependencies"
 npm install
 
 $composeArgs = @(
   "compose",
-  "-f",
-  "infra/docker/docker-compose.yml",
   "--env-file",
   ".env"
 )
@@ -95,6 +133,20 @@ if (-not $ready) {
 
 Write-Step "Running database migrations"
 npm run db:migrate
+
+Write-Step "Preparing Python virtual environment"
+if (-not (Test-Path ".venv")) {
+  python -m venv .venv
+}
+
+$venvPython = Join-Path $repoRoot ".venv\\Scripts\\python.exe"
+if (-not (Test-Path $venvPython)) {
+  throw "Expected Python virtual environment interpreter at $venvPython."
+}
+
+Write-Step "Installing ML dependencies"
+& $venvPython -m pip install --upgrade pip
+& $venvPython -m pip install -r "ml/requirements.txt"
 
 if ($Dev) {
   Write-Step "Starting backend server in watch mode"

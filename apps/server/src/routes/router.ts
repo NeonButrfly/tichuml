@@ -13,6 +13,7 @@ import {
   serializeEntropyGenerationResult
 } from "../entropy/index.js";
 import type { ServerConfig } from "../config/env.js";
+import type { LightgbmScorer } from "../ml/lightgbm-scorer.js";
 import { handleDecisionRequest } from "../services/decision-service.js";
 import type { TelemetryRepository } from "../services/telemetry-repository.js";
 import {
@@ -26,6 +27,7 @@ import {
 type RouterDependencies = {
   config: ServerConfig;
   repository: TelemetryRepository;
+  lightgbmScorer?: LightgbmScorer;
 };
 
 function createServerManifest(config: ServerConfig) {
@@ -52,7 +54,8 @@ function extractGameId(pathname: string, suffix: string): string | null {
 
 export function createRouter({
   config,
-  repository
+  repository,
+  lightgbmScorer
 }: RouterDependencies): http.RequestListener {
   return async (request, response) => {
     if (!request.url) {
@@ -177,7 +180,8 @@ export function createRouter({
 
         const decisionResponse = await handleDecisionRequest(
           repository,
-          parsed.value
+          parsed.value,
+          lightgbmScorer ? { lightgbmScorer } : {}
         );
         writeJson(response, 200, decisionResponse, config.allowedOrigin);
         return;

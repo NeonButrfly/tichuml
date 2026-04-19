@@ -20,7 +20,8 @@ function isTrackedDecisionAction(action: EngineAction, phase: string): boolean {
     action.type === "select_pass" ||
     action.type === "pass_turn" ||
     action.type === "play_cards" ||
-    (action.type === "advance_phase" && phase === "exchange_complete")
+    (action.type === "advance_phase" &&
+      (phase === "pass_reveal" || phase === "exchange_complete"))
   );
 }
 
