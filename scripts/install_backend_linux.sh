@@ -195,8 +195,9 @@ main() {
   repo_root="$(resolve_repo_root)"
   clone_or_update_repo "$repo_root"
 
+  export BACKEND_REPO_ROOT="$repo_root"
   # shellcheck disable=SC1090
-  BACKEND_REPO_ROOT="$repo_root" . "$repo_root/scripts/backend-linux-common.sh"
+  . "$repo_root/scripts/backend-linux-common.sh"
 
   log_step "Preparing repository runtime stack"
   prepare_runtime_stack

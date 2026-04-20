@@ -1,21 +1,20 @@
 #!/usr/bin/env bash
 
-set -u
-
 backend_script_dir() {
   CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd
 }
 
-backend_repo_root() {
-  if [ -n "${BACKEND_REPO_ROOT:-}" ]; then
-    printf '%s\n' "$BACKEND_REPO_ROOT"
-    return
-  fi
-
+backend_repo_root_default() {
   CDPATH= cd -- "$(backend_script_dir)/.." && pwd
 }
 
-BACKEND_REPO_ROOT="${BACKEND_REPO_ROOT:-$(backend_repo_root)}"
+BACKEND_REPO_ROOT="${BACKEND_REPO_ROOT-}"
+if [ -z "$BACKEND_REPO_ROOT" ]; then
+  BACKEND_REPO_ROOT="$(backend_repo_root_default)"
+fi
+
+set -u
+
 BACKEND_RUNTIME_DIR="${BACKEND_RUNTIME_DIR:-$BACKEND_REPO_ROOT/.runtime}"
 BACKEND_PID_FILE="${BACKEND_PID_FILE:-$BACKEND_RUNTIME_DIR/backend.pid}"
 BACKEND_LOG_FILE="${BACKEND_LOG_FILE:-$BACKEND_RUNTIME_DIR/backend.log}"
