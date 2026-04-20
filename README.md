@@ -127,7 +127,7 @@ Linux install/bootstrap:
 bash scripts/install_backend_linux.sh
 ```
 
-The installer is idempotent and only installs missing system dependencies. If Docker or Node.js are already present from another package source, it will reuse them instead of forcing distro `docker.io`/`npm` packages over the top.
+The installer is idempotent and only installs missing system dependencies. If Docker or Node.js are already present from another package source, it will reuse them instead of forcing distro `docker.io`/`npm` packages over the top. On Ubuntu hosts that already have Docker's `containerd.io` / `docker-ce` package family, the installer now detects that and avoids the conflicting `docker.io` path.
 
 Linux start/update flow:
 

@@ -20,6 +20,42 @@ has_command() {
   command -v "$1" >/dev/null 2>&1
 }
 
+dpkg_package_installed() {
+  dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q "install ok installed"
+}
+
+apt_package_available() {
+  local candidate
+  candidate="$(apt-cache policy "$1" 2>/dev/null | awk '/Candidate:/ { print $2; exit }')"
+  [ -n "$candidate" ] && [ "$candidate" != "(none)" ]
+}
+
+append_apt_docker_packages() {
+  local -n target_packages=$1
+
+  if has_command docker; then
+    if ! docker compose version >/dev/null 2>&1 && apt_package_available docker-compose-plugin; then
+      target_packages+=(docker-compose-plugin)
+    fi
+    return
+  fi
+
+  if dpkg_package_installed containerd.io || dpkg_package_installed docker-ce-cli || dpkg_package_installed docker-ce; then
+    if apt_package_available docker-ce && apt_package_available docker-ce-cli; then
+      target_packages+=(docker-ce docker-ce-cli)
+      apt_package_available docker-buildx-plugin && target_packages+=(docker-buildx-plugin)
+      apt_package_available docker-compose-plugin && target_packages+=(docker-compose-plugin)
+      return
+    fi
+
+    printf "%s\n" "[WARN] Docker CE packages appear partially installed (for example containerd.io), but apt cannot see docker-ce/docker-ce-cli candidates. Skipping distro docker.io install to avoid conflicts. Configure Docker's apt repository or install Docker manually, then rerun the script."
+    return
+  fi
+
+  target_packages+=(docker.io)
+  apt_package_available docker-compose-plugin && target_packages+=(docker-compose-plugin)
+}
+
 log_step() {
   printf '\n==> %s\n' "$1"
 }
@@ -35,7 +71,7 @@ install_packages_apt() {
   else
     packages+=(python3 python3-venv python3-pip)
   fi
-  has_command docker || packages+=(docker.io docker-compose-plugin)
+  append_apt_docker_packages packages
   has_command node || packages+=(nodejs)
 
   if ! has_command npm; then
