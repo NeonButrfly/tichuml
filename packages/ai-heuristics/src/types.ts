@@ -59,19 +59,96 @@ export type TeamplaySnapshot = {
   unjustifiedPartnerBomb: boolean;
 };
 
+export type UrgencyMode =
+  | "normal"
+  | "opponent_near_out"
+  | "self_near_out"
+  | "partner_support"
+  | "endgame";
+
+export type TacticalFeatureSnapshot = {
+  seat: SeatId;
+  hand_size: number;
+  hand_quality_score: number;
+  finishability_score: number;
+  singles_count: number;
+  dead_singles_count: number;
+  pairs_count: number;
+  triples_count: number;
+  straights_count: number;
+  pair_runs_count: number;
+  bombs_count: number;
+  control_cards_count: number;
+  isolated_high_singles_count: number;
+  isolated_low_singles_count: number;
+  combo_count: number;
+  control_value_score: number;
+  partner_advantage_estimate: number;
+  opponent_threat_estimate: number;
+  urgency_mode: UrgencyMode;
+  endgame_pressure: number;
+  bomb_count_in_hand: number;
+  dragon_in_hand: boolean;
+  phoenix_in_hand: boolean;
+  dog_in_hand: boolean;
+  mahjong_in_hand: boolean;
+  premium_resource_pressure: number;
+};
+
+export type CandidateActionFeatureSnapshot = {
+  state: TacticalFeatureSnapshot;
+  projected_state: TacticalFeatureSnapshot | null;
+  future_hand_quality_delta: number;
+  structure_preservation_score: number;
+  dead_singles_count_before: number;
+  dead_singles_count_after: number | null;
+  dead_singles_reduction: number;
+  combo_count_before: number;
+  combo_count_after: number | null;
+  shed_value_score: number;
+  resource_cost_score: number;
+  control_retention_estimate: number;
+  control_value_score: number;
+  partner_advantage_estimate: number;
+  opponent_threat_estimate: number;
+  urgency_mode: UrgencyMode;
+  endgame_pressure: number;
+  bomb_count_in_hand: number;
+  dragon_in_hand: boolean;
+  phoenix_in_hand: boolean;
+  dog_in_hand: boolean;
+  mahjong_in_hand: boolean;
+  premium_resource_pressure: number;
+  satisfies_wish: boolean;
+  overtakes_partner: boolean;
+  likely_wins_current_trick: boolean;
+  uses_bomb: boolean;
+  uses_dragon: boolean;
+  uses_phoenix: boolean;
+  uses_dog: boolean;
+  uses_mahjong: boolean;
+  cards_used_count: number;
+  combo_type: string | null;
+  combo_rank: number | null;
+  combo_length: number | null;
+};
+
 export type PolicyExplanation = {
   policy: string;
   actor: SeatId | typeof SYSTEM_ACTOR;
+  stateFeatures?: TacticalFeatureSnapshot;
   candidateScores: Array<{
     action: EngineAction;
     score: number;
     reasons: string[];
     tags: PolicyTag[];
     teamplay?: TeamplaySnapshot;
+    features?: CandidateActionFeatureSnapshot;
   }>;
   selectedReasonSummary: string[];
   selectedTags: PolicyTag[];
   selectedTeamplay?: TeamplaySnapshot;
+  selectedFeatures?: CandidateActionFeatureSnapshot;
 };
 
 export type HeadlessDecisionContext = {
@@ -97,6 +174,7 @@ export type CandidateDecision = {
   reasons: string[];
   tags: PolicyTag[];
   teamplay?: TeamplaySnapshot;
+  features?: CandidateActionFeatureSnapshot;
 };
 
 export type PlayLegalAction = Extract<LegalAction, { type: "play_cards" }>;
@@ -135,12 +213,19 @@ export type HandEvaluation = {
   deadSingleCount: number;
   expectedTrickWins: number;
   handSpeed: number;
+  singlesCount: number;
   pairCount: number;
   trioCount: number;
   nearBombCount: number;
+  straightsCount: number;
+  pairRunsCount: number;
+  comboCount: number;
   longestStraightLength: number;
   longestPairSequenceLength: number;
   finishPlanScore: number;
+  handQualityScore: number;
+  isolatedHighSinglesCount: number;
+  isolatedLowSinglesCount: number;
   phoenixAvailable: boolean;
   dragonAvailable: boolean;
   dogAvailable: boolean;

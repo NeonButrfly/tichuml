@@ -13,6 +13,18 @@ import {
 import type { BackendRuntimeSettings } from "@tichuml/shared";
 import { postTelemetryDecision, postTelemetryEvent } from "./client";
 
+export type TelemetryDecisionWriteResult = {
+  kind: "decision";
+  payload: ReturnType<typeof buildDecisionPayload>;
+  telemetryId: number | null;
+};
+
+export type TelemetryEventWriteResult = {
+  kind: "event";
+  payloads: ReturnType<typeof buildEventPayload>[];
+  telemetryIds: number[];
+};
+
 function isTrackedDecisionAction(action: EngineAction, phase: string): boolean {
   return (
     action.type === "call_grand_tichu" ||
@@ -50,16 +62,46 @@ export function emitDecisionTelemetry(config: {
   policyName: string;
   policySource: string;
   metadata?: Record<string, unknown>;
-}): void {
+}): Promise<TelemetryDecisionWriteResult | null> {
   if (!config.settings.telemetryEnabled) {
-    return;
+    return Promise.resolve(null);
   }
 
   if (!isTrackedDecisionAction(config.action, config.phase)) {
-    return;
+    return Promise.resolve(null);
   }
 
-  void postTelemetryDecision(config.settings.backendBaseUrl, {
+  const payload = buildDecisionPayload(config);
+
+  return postTelemetryDecision(config.settings.backendBaseUrl, payload)
+    .then((response) => ({
+      kind: "decision" as const,
+      payload,
+      telemetryId: response.telemetry_id ?? null
+    }))
+    .catch((error) => {
+      console.warn("[telemetry] decision upload failed", {
+        error: error instanceof Error ? error.message : String(error),
+        action: config.action.type
+      });
+      throw error;
+    });
+}
+
+function buildDecisionPayload(config: {
+  action: EngineAction;
+  phase: string;
+  gameId: string;
+  handId: string;
+  decisionIndex: number;
+  stateRaw: EngineResult["nextState"];
+  stateNorm: EngineResult["derivedView"];
+  legalActions: EngineResult["legalActions"];
+  policyName: string;
+  policySource: string;
+  metadata?: Record<string, unknown>;
+}) {
+  return {
     ts: new Date().toISOString(),
     game_id: config.gameId,
     hand_id: config.handId,
@@ -82,12 +124,7 @@ export function emitDecisionTelemetry(config: {
     chosen_action: config.action as unknown as Record<string, unknown>,
     metadata: (config.metadata ?? {}) as Record<string, unknown>,
     antipattern_tags: []
-  }).catch((error) => {
-    console.warn("[telemetry] decision upload failed", {
-      error: error instanceof Error ? error.message : String(error),
-      action: config.action.type
-    });
-  });
+  };
 }
 
 export function emitEventTelemetry(config: {
@@ -98,29 +135,55 @@ export function emitEventTelemetry(config: {
   gameId: string;
   handId: string;
   metadata?: Record<string, unknown>;
-}): void {
+}): Promise<TelemetryEventWriteResult | null> {
   if (!config.settings.telemetryEnabled || config.events.length === 0) {
-    return;
+    return Promise.resolve(null);
   }
 
-  for (const event of config.events) {
-    void postTelemetryEvent(config.settings.backendBaseUrl, {
-      ts: new Date().toISOString(),
-      game_id: config.gameId,
-      hand_id: config.handId,
-      phase: config.phase,
-      event_type: event.type,
-      actor_seat: config.actorSeat,
-      schema_version: TELEMETRY_SCHEMA_VERSION,
-      engine_version: TELEMETRY_ENGINE_VERSION,
-      sim_version: TELEMETRY_SIM_VERSION,
-      payload: event as unknown as Record<string, unknown>,
-      metadata: (config.metadata ?? {}) as Record<string, unknown>
-    }).catch((error) => {
+  const payloads = config.events.map((event) => buildEventPayload(config, event));
+
+  return Promise.all(
+    payloads.map((payload) =>
+      postTelemetryEvent(config.settings.backendBaseUrl, payload)
+    )
+  )
+    .then((responses) => ({
+      kind: "event" as const,
+      payloads,
+      telemetryIds: responses.flatMap((response) =>
+        typeof response.telemetry_id === "number" ? [response.telemetry_id] : []
+      )
+    }))
+    .catch((error) => {
       console.warn("[telemetry] event upload failed", {
         error: error instanceof Error ? error.message : String(error),
-        eventType: event.type
+        eventTypes: config.events.map((event) => event.type)
       });
+      throw error;
     });
-  }
+}
+
+function buildEventPayload(
+  config: {
+    phase: string;
+    actorSeat: string | null;
+    gameId: string;
+    handId: string;
+    metadata?: Record<string, unknown>;
+  },
+  event: EngineEvent
+) {
+  return {
+    ts: new Date().toISOString(),
+    game_id: config.gameId,
+    hand_id: config.handId,
+    phase: config.phase,
+    event_type: event.type,
+    actor_seat: config.actorSeat,
+    schema_version: TELEMETRY_SCHEMA_VERSION,
+    engine_version: TELEMETRY_ENGINE_VERSION,
+    sim_version: TELEMETRY_SIM_VERSION,
+    payload: event as unknown as Record<string, unknown>,
+    metadata: (config.metadata ?? {}) as Record<string, unknown>
+  };
 }

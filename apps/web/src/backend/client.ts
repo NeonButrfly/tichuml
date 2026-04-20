@@ -15,24 +15,93 @@ import {
 
 type FetchLike = typeof fetch;
 
+export type TelemetryWriteResponse = {
+  accepted: boolean;
+  telemetry_id?: number;
+};
+
+export type BackendRequestErrorKind =
+  | "network"
+  | "validation"
+  | "client_validation"
+  | "server";
+
+export class BackendRequestError extends Error {
+  endpoint: string;
+  kind: BackendRequestErrorKind;
+  reachable: boolean | null;
+  statusCode: number | null;
+  validationErrors: Array<{ path: string; message: string }> | null;
+
+  constructor(config: {
+    message: string;
+    endpoint: string;
+    kind: BackendRequestErrorKind;
+    reachable: boolean | null;
+    statusCode?: number | null;
+    validationErrors?: Array<{ path: string; message: string }> | null;
+  }) {
+    super(config.message);
+    this.name = "BackendRequestError";
+    this.endpoint = config.endpoint;
+    this.kind = config.kind;
+    this.reachable = config.reachable;
+    this.statusCode = config.statusCode ?? null;
+    this.validationErrors = config.validationErrors ?? null;
+  }
+}
+
+export function isBackendRequestError(
+  error: unknown
+): error is BackendRequestError {
+  return error instanceof BackendRequestError;
+}
+
 async function fetchJson<T>(
   url: string,
   init: RequestInit,
-  fetchImpl: FetchLike
+  fetchImpl: FetchLike,
+  endpoint: string
 ): Promise<T> {
-  const response = await fetchImpl(url, init);
+  let response: Response;
+  try {
+    response = await fetchImpl(url, init);
+  } catch (error) {
+    throw new BackendRequestError({
+      message:
+        error instanceof Error ? error.message : "Network request failed.",
+      endpoint,
+      kind: "network",
+      reachable: false,
+      statusCode: null
+    });
+  }
+
   const text = await response.text();
   const payload = text.length > 0 ? (JSON.parse(text) as unknown) : null;
 
   if (!response.ok) {
-    throw new Error(
+    const validationErrors =
       typeof payload === "object" &&
+      payload !== null &&
+      "validation_errors" in payload &&
+      Array.isArray(payload.validation_errors)
+        ? (payload.validation_errors as Array<{ path: string; message: string }>)
+        : null;
+    throw new BackendRequestError({
+      message:
+        typeof payload === "object" &&
         payload !== null &&
         "error" in payload &&
         typeof payload.error === "string"
-        ? payload.error
-        : `Request failed with HTTP ${response.status}.`
-    );
+          ? payload.error
+          : `Request failed with HTTP ${response.status}.`,
+      endpoint,
+      kind: response.status === 400 ? "validation" : "server",
+      reachable: true,
+      statusCode: response.status,
+      validationErrors
+    });
   }
 
   return payload as T;
@@ -51,7 +120,8 @@ export async function testBackendHealth(
     {
       method: "GET"
     },
-    fetchImpl
+    fetchImpl,
+    BACKEND_HEALTH_PATH
   );
 }
 
@@ -62,12 +132,13 @@ export async function postDecisionRequest(
 ): Promise<DecisionResponsePayload> {
   const parsed = validateDecisionRequestPayload(payload);
   if (!parsed.ok) {
-    return {
-      accepted: false,
-      chosen_action: null,
-      provider_used: null,
-      validation_errors: parsed.issues
-    };
+    throw new BackendRequestError({
+      message: "Local decision payload failed validation before request.",
+      endpoint: DECISION_REQUEST_PATH,
+      kind: "client_validation",
+      reachable: null,
+      validationErrors: parsed.issues
+    });
   }
 
   return fetchJson<DecisionResponsePayload>(
@@ -79,7 +150,8 @@ export async function postDecisionRequest(
       },
       body: JSON.stringify(parsed.value)
     },
-    fetchImpl
+    fetchImpl,
+    DECISION_REQUEST_PATH
   );
 }
 
@@ -87,13 +159,19 @@ export async function postTelemetryDecision(
   baseUrl: string,
   payload: TelemetryDecisionPayload,
   fetchImpl: FetchLike = globalThis.fetch
-): Promise<void> {
+): Promise<TelemetryWriteResponse> {
   const parsed = validateTelemetryDecisionPayload(payload);
   if (!parsed.ok) {
-    throw new Error("Local telemetry payload failed validation before upload.");
+    throw new BackendRequestError({
+      message: "Local telemetry decision payload failed validation before upload.",
+      endpoint: TELEMETRY_DECISION_PATH,
+      kind: "client_validation",
+      reachable: null,
+      validationErrors: parsed.issues
+    });
   }
 
-  await fetchJson<{ accepted: boolean }>(
+  return fetchJson<TelemetryWriteResponse>(
     buildUrl(baseUrl, TELEMETRY_DECISION_PATH),
     {
       method: "POST",
@@ -102,7 +180,8 @@ export async function postTelemetryDecision(
       },
       body: JSON.stringify(parsed.value)
     },
-    fetchImpl
+    fetchImpl,
+    TELEMETRY_DECISION_PATH
   );
 }
 
@@ -110,13 +189,19 @@ export async function postTelemetryEvent(
   baseUrl: string,
   payload: TelemetryEventPayload,
   fetchImpl: FetchLike = globalThis.fetch
-): Promise<void> {
+): Promise<TelemetryWriteResponse> {
   const parsed = validateTelemetryEventPayload(payload);
   if (!parsed.ok) {
-    throw new Error("Local event telemetry payload failed validation before upload.");
+    throw new BackendRequestError({
+      message: "Local event telemetry payload failed validation before upload.",
+      endpoint: TELEMETRY_EVENT_PATH,
+      kind: "client_validation",
+      reachable: null,
+      validationErrors: parsed.issues
+    });
   }
 
-  await fetchJson<{ accepted: boolean }>(
+  return fetchJson<TelemetryWriteResponse>(
     buildUrl(baseUrl, TELEMETRY_EVENT_PATH),
     {
       method: "POST",
@@ -125,6 +210,7 @@ export async function postTelemetryEvent(
       },
       body: JSON.stringify(parsed.value)
     },
-    fetchImpl
+    fetchImpl,
+    TELEMETRY_EVENT_PATH
   );
 }

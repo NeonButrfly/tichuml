@@ -47,6 +47,14 @@ function playCandidateByCards(
   );
 }
 
+function expectSelectedFeatures(
+  chosen: ReturnType<typeof heuristicsV1Policy.chooseAction>
+) {
+  expect(chosen.explanation.stateFeatures).toBeDefined();
+  expect(chosen.explanation.selectedFeatures).toBeDefined();
+  return chosen.explanation.selectedFeatures!;
+}
+
 describe("heuristics v1", () => {
   it("calls Grand Tichu with a clearly strong opening hand", () => {
     const state = scenario({
@@ -329,6 +337,8 @@ describe("heuristics v1", () => {
 
     expect(chosen.action.cardIds).not.toEqual(["jade-3"]);
     expect(chosen.action.cardIds).not.toEqual(["sword-3"]);
+    const selectedFeatures = expectSelectedFeatures(chosen);
+    expect(selectedFeatures.structure_preservation_score).toBeGreaterThanOrEqual(0);
   });
 
   it("protects straight potential when a higher isolated single can win instead", () => {
@@ -373,6 +383,13 @@ describe("heuristics v1", () => {
       seat: "seat-0",
       cardIds: ["jade-12"]
     });
+
+    const selectedFeatures = expectSelectedFeatures(chosen);
+    const straightBreakCandidate = playCandidateByCards(chosen, ["star-9"]);
+    expect(selectedFeatures.future_hand_quality_delta).toBeGreaterThan(0);
+    expect(straightBreakCandidate?.features?.structure_preservation_score).toBeLessThan(
+      selectedFeatures.structure_preservation_score
+    );
   });
 
   it("chooses a low wish to help a partner Tichu line", () => {
@@ -515,6 +532,8 @@ describe("heuristics v1", () => {
     expect(chosen.action).toEqual({ type: "pass_turn", seat: "seat-0" });
     expect(chosen.explanation.selectedReasonSummary.some((reason) => reason.includes("partner"))).toBe(true);
     expect(chosen.explanation.selectedTags).toContain("YIELD_TO_PARTNER");
+    const selectedFeatures = expectSelectedFeatures(chosen);
+    expect(selectedFeatures.partner_advantage_estimate).toBeGreaterThan(0);
   });
 
   it("still overtakes partner when the play goes out immediately", () => {
@@ -857,6 +876,38 @@ describe("heuristics v1", () => {
     expect(chosen.explanation.selectedTags).toEqual(
       expect.arrayContaining(["SHED_FOR_FINISH", "ENDGAME_COMMIT"])
     );
+    const selectedFeatures = expectSelectedFeatures(chosen);
+    expect(selectedFeatures.urgency_mode).toBe("endgame");
+    expect(selectedFeatures.dead_singles_reduction).toBeGreaterThanOrEqual(0);
+  });
+
+  it("marks opponent near-out urgency in the shared tactical snapshot", () => {
+    const lead = combo(["jade-9"]);
+    const state = scenario({
+      activeSeat: "seat-0",
+      currentTrick: {
+        leader: "seat-1",
+        currentWinner: "seat-1",
+        currentCombination: lead,
+        entries: [{ type: "play", seat: "seat-1", combination: lead }],
+        passingSeats: []
+      },
+      hands: {
+        "seat-0": cardsFromIds(["jade-10", "sword-12", "pagoda-4", "star-6"]),
+        "seat-1": cardsFromIds(["jade-2"]),
+        "seat-2": cardsFromIds(["sword-14"]),
+        "seat-3": cardsFromIds(["star-2", "star-3"])
+      }
+    });
+
+    const chosen = heuristicsV1Policy.chooseAction({
+      state,
+      legalActions: getLegalActions(state)
+    });
+
+    const selectedFeatures = expectSelectedFeatures(chosen);
+    expect(selectedFeatures.state.urgency_mode).toBe("opponent_near_out");
+    expect(selectedFeatures.opponent_threat_estimate).toBeGreaterThan(70);
   });
 
   it("leads Dog when partner is best positioned to convert initiative", () => {

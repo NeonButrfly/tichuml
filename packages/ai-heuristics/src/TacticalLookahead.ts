@@ -1,13 +1,10 @@
 import {
-  applyEngineAction,
   getCanonicalCardIdsKey,
-  getOpponentSeats,
-  getPartnerSeat,
   type EngineAction,
   type SeatId
 } from "@tichuml/engine";
-import { buildUrgencyProfile, canOpponentBeatCombination, currentWinnerIsPartner } from "./HeuristicContext.js";
-import { buildHandEvaluation } from "./HandAnalysis.js";
+import type { HeuristicFeatureAnalyzer } from "./HeuristicFeatureAnalyzer.js";
+import { buildUrgencyProfile, currentWinnerIsPartner } from "./HeuristicContext.js";
 import { HEURISTIC_WEIGHTS } from "./HeuristicScorer.js";
 import type {
   CandidateDecision,
@@ -131,22 +128,15 @@ function classifyCandidateBucket(
 function scoreControlRetention(
   ctx: HeadlessDecisionContext,
   actor: SeatId,
-  candidate: CandidateDecision
+  candidate: CandidateDecision,
+  analyzer: HeuristicFeatureAnalyzer
 ): {
   score: number;
   reasons: string[];
   tags: PolicyTag[];
 } {
-  const { action } = candidate;
-  let projection;
-  let beforeEval;
-  let afterEval;
-
-  try {
-    projection = applyEngineAction(ctx.state, action);
-    beforeEval = buildHandEvaluation(ctx.state, actor);
-    afterEval = buildHandEvaluation(projection.nextState, actor);
-  } catch {
+  const features = candidate.features ?? analyzer.getCandidateFeatures(actor, candidate.action);
+  if (!features || !features.projected_state) {
     return {
       score: 0,
       reasons: [],
@@ -154,16 +144,15 @@ function scoreControlRetention(
     };
   }
 
-  const nextState = projection.nextState;
   const weights = HEURISTIC_WEIGHTS.tactical;
   const tags: PolicyTag[] = [];
   const reasons: string[] = [];
   let score = 0;
-  const cardsShed = ctx.state.hands[actor].length - nextState.hands[actor].length;
+  const cardsShed = features.cards_used_count;
 
   score += cardsShed * weights.shedProgress;
 
-  const finishDelta = afterEval.finishPlanScore - beforeEval.finishPlanScore;
+  const finishDelta = features.projected_state.finishability_score - features.state.finishability_score;
   score += finishDelta * weights.finishPlanDelta;
   if (finishDelta > 0) {
     reasons.push("projected hand shape improves after the move");
@@ -171,90 +160,68 @@ function scoreControlRetention(
     reasons.push("projected leftovers become less clean after the move");
   }
 
-  const deadSingleDelta = beforeEval.deadSingleCount - afterEval.deadSingleCount;
+  const deadSingleDelta = features.dead_singles_reduction;
   score += deadSingleDelta * weights.deadSingleReduction;
   if (deadSingleDelta > 0) {
     reasons.push("reduces dead singles in the projected hand");
   }
 
-  const structureDelta =
-    (afterEval.longestStraightLength - beforeEval.longestStraightLength) *
-      weights.straightPlanGain +
-    (afterEval.longestPairSequenceLength - beforeEval.longestPairSequenceLength) *
-      weights.pairSequencePlanGain +
-    (afterEval.pairCount - beforeEval.pairCount) * weights.pairPlanGain +
-    (afterEval.trioCount - beforeEval.trioCount) * weights.trioPlanGain;
+  const structureDelta = features.structure_preservation_score;
   score += structureDelta;
   if (structureDelta >= 0) {
     appendUniqueTags(tags, "PRESERVE_STRUCTURE");
   }
 
-  if (nextState.hands[actor].length <= 2 && afterEval.finishPlanScore >= beforeEval.finishPlanScore) {
+  if (
+    features.projected_state.hand_size <= 2 &&
+    features.projected_state.finishability_score >= features.state.finishability_score
+  ) {
     score += weights.cleanEndgameCommit;
     reasons.push("commits to a cleaner endgame finish line");
     appendUniqueTags(tags, "ENDGAME_COMMIT", "SHED_FOR_FINISH");
   }
 
-  if (nextState.hands[actor].length === 1) {
+  if (features.projected_state.hand_size === 1) {
     score += weights.oneCardFinishSetup;
     reasons.push("sets up a one-card finish on the next turn");
     appendUniqueTags(tags, "ENDGAME_COMMIT", "SHED_FOR_FINISH");
   }
 
-  let liveBeatCount = 0;
-  if (
-    action.type === "play_cards" &&
-    nextState.currentTrick &&
-    nextState.currentTrick.currentWinner === actor
-  ) {
-    liveBeatCount = getOpponentSeats(actor).filter((opponent) =>
-      canOpponentBeatCombination(nextState, opponent, actor)
-    ).length;
-    score +=
-      liveBeatCount === 0
-        ? weights.perfectControlRetention
-        : liveBeatCount === 1
-          ? weights.partialControlRetention
-          : -weights.controlLeakPenaltyPerBeat * liveBeatCount;
-    if (liveBeatCount === 0) {
-      reasons.push("projection suggests the move is hard to overtake immediately");
-      appendUniqueTags(
-        tags,
-        ctx.state.currentTrick === null ? "CONTROL_LEAD" : "TEMPO_WIN"
-      );
-    } else if (liveBeatCount === 1) {
-      reasons.push("projection suggests the move keeps decent tempo pressure");
-      appendUniqueTags(tags, "TEMPO_WIN");
-    } else {
-      reasons.push("projection suggests opponents can retake control quickly");
-    }
+  const controlRetention = features.control_retention_estimate;
+  score +=
+    controlRetention >= 90
+      ? weights.perfectControlRetention
+      : controlRetention >= 60
+        ? weights.partialControlRetention
+        : controlRetention <= 20
+          ? -weights.controlLeakPenaltyPerBeat
+          : 0;
+  if (controlRetention >= 90) {
+    reasons.push("projection suggests the move is hard to overtake immediately");
+    appendUniqueTags(tags, ctx.state.currentTrick === null ? "CONTROL_LEAD" : "TEMPO_WIN");
+  } else if (controlRetention >= 60) {
+    reasons.push("projection suggests the move keeps decent tempo pressure");
+    appendUniqueTags(tags, "TEMPO_WIN");
+  } else if (controlRetention <= 20 && features.likely_wins_current_trick) {
+    reasons.push("projection suggests opponents can retake control quickly");
   }
 
-  const partner = getPartnerSeat(actor);
-  const partnerControlsNext = currentWinnerIsPartner(nextState, actor);
-  const partnerBeatCount =
-    partnerControlsNext && nextState.currentTrick
-      ? getOpponentSeats(actor).filter((opponent) =>
-          canOpponentBeatCombination(nextState, opponent, partner)
-        ).length
-      : 0;
-
-  if (nextState.activeSeat === partner || (partnerControlsNext && partnerBeatCount === 0)) {
+  if (features.partner_advantage_estimate >= 5) {
     score += weights.partnerTempoSupport;
     reasons.push("projection leaves the partner in a favorable tempo position");
     appendUniqueTags(tags, "PARTNER_SUPPORT");
-  } else if (action.type === "pass_turn" && partnerControlsNext && partnerBeatCount > 0) {
-    score -= partnerBeatCount * weights.passiveControlLeakPenaltyPerBeat;
+  } else if (candidate.action.type === "pass_turn" && currentWinnerIsPartner(ctx.state, actor)) {
+    score -= weights.passiveControlLeakPenaltyPerBeat;
     reasons.push("projection shows partner control is fragile after a passive line");
   }
 
   const urgency = buildUrgencyProfile(ctx.state, actor);
   if (urgency.opponentOutUrgent) {
-    if (action.type === "play_cards" && nextState.currentTrick?.currentWinner === actor) {
+    if (features.likely_wins_current_trick) {
       score += weights.urgentStopRetention;
       reasons.push("projection actively stops an opponent-out threat");
       appendUniqueTags(tags, "OPPONENT_STOP");
-    } else if (action.type === "pass_turn") {
+    } else if (candidate.action.type === "pass_turn") {
       score -= weights.urgentPassPenalty;
     }
   }
@@ -265,8 +232,8 @@ function scoreControlRetention(
     appendUniqueTags(tags, "BOMB_PIVOT", "OPPONENT_STOP");
   }
 
-  if (action.type === "play_cards" && action.cardIds.includes("dragon")) {
-    if (nextState.hands[actor].length === 0 || score > 80) {
+  if (features.uses_dragon) {
+    if (features.projected_state.hand_size === 0 || score > 80) {
       score += weights.dragonDecisive;
       appendUniqueTags(tags, "DRAGON_DECISIVE");
     } else {
@@ -274,19 +241,19 @@ function scoreControlRetention(
     }
   }
 
-  if (action.type === "play_cards" && action.cardIds.includes("phoenix")) {
+  if (features.uses_phoenix) {
     if (deadSingleDelta > 0 || finishDelta > 0) {
       score += weights.phoenixShapeGain;
     } else {
       score -= weights.phoenixWastePenalty;
       reasons.push("projection suggests Phoenix is being spent without enough shape gain");
     }
-  } else if (beforeEval.phoenixAvailable && afterEval.phoenixAvailable) {
+  } else if (features.state.phoenix_in_hand && features.projected_state.phoenix_in_hand) {
     score += weights.phoenixPreserveBonus;
     appendUniqueTags(tags, "PHOENIX_FLEX_PRESERVE");
   }
 
-  if (action.type === "play_cards" && projection.nextState.finishedOrder[0] === actor) {
+  if (features.projected_state.hand_size === 0) {
     score += weights.finishNowBonus;
   }
 
@@ -345,7 +312,8 @@ function chooseCandidatesForDeepening(
 
 export function deepenTacticalCandidates(
   ctx: HeadlessDecisionContext,
-  candidates: CandidateDecision[]
+  candidates: CandidateDecision[],
+  analyzer: HeuristicFeatureAnalyzer
 ): CandidateDecision[] {
   const actor = ctx.state.activeSeat;
   if (!actor || ctx.state.phase !== "trick_play") {
@@ -366,7 +334,7 @@ export function deepenTacticalCandidates(
       return candidate;
     }
 
-    const projection = scoreControlRetention(ctx, actor, candidate);
+    const projection = scoreControlRetention(ctx, actor, candidate, analyzer);
     if (projection.reasons.length === 0 && projection.tags.length === 0 && projection.score === 0) {
       return candidate;
     }

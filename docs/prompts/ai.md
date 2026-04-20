@@ -49,3 +49,21 @@ Use this file to preserve AI and bot-behavior prompt intent and link it to GitHu
 - Linked GitHub Issue: [#23](https://github.com/NeonButrfly/tichuml/issues/23)
 - Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
 - Status Source: GitHub issue state only.
+
+### 2026-04-19 - Shared tactical feature layer for local/server heuristic parity
+
+- Prompt Signal: The latest AI architecture request required a shared tactical feature-analysis layer that both local and server heuristic providers use, with stable typed snapshots that can later feed LightGBM export/inference and the master control panel.
+- Interpreted Requirement: `heuristics-v1` must compute one reusable tactical feature snapshot per acting seat and per candidate action, use those features in both local and server-backed heuristic scoring, surface them in policy explanations for debug/dashboard visibility, and avoid duplicate local/server interpretations of the same game state.
+- Affected Systems: `packages/ai-heuristics/src/*`, `apps/server/src/providers/heuristic-provider.ts`, `apps/web/src/App.tsx`, `tests/integration/heuristics-v1.test.ts`, `tests/integration/headless-ai-round.test.ts`.
+- Linked GitHub Issue: [#23](https://github.com/NeonButrfly/tichuml/issues/23)
+- Milestone: [6.5 – Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status Source: GitHub issue state only.
+
+### 2026-04-19 - Self-play training-data pipeline and LightGBM bootstrap
+
+- Prompt Signal: The latest ML pipeline request required a complete self-play batch runner, exchange-safe decision/event recording, action-row export, shared feature building for training and inference, and simple commands to simulate, export, and train.
+- Interpreted Requirement: Milestone `#31` must produce an end-to-end data engine where deterministic self-play writes raw telemetry into Postgres, exchange/pass phases remain recorded, action-row exports explode one decision into scored legal-action candidates using the shared tactical snapshot schema, and the LightGBM training/inference path reuses that same feature definition instead of rebuilding features separately.
+- Affected Systems: `apps/sim-runner/src/*`, `apps/server/src/providers/*.ts`, `apps/server/src/ml/lightgbm-scorer.ts`, `ml/*`, `package.json`, `README.md`.
+- Linked GitHub Issue: [#31](https://github.com/NeonButrfly/tichuml/issues/31)
+- Milestone: [6.5 – Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status Source: GitHub issue state only.

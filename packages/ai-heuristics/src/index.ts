@@ -7,6 +7,7 @@ import {
   type StandardRank
 } from "@tichuml/engine";
 import { engineFoundation } from "@tichuml/engine";
+import { createHeuristicFeatureAnalyzer } from "./HeuristicFeatureAnalyzer.js";
 import { chooseWishRank } from "./HandAnalysis.js";
 import { createPassSelectionAction, scorePassSelection } from "./PassHeuristicEngine.js";
 import { scorePlayAction, scorePassTurn } from "./PlayHeuristicEngine.js";
@@ -18,7 +19,8 @@ import type {
   HeadlessDecisionContext,
   HeuristicPolicy,
   PassLegalAction,
-  PlayLegalAction
+  PlayLegalAction,
+  TacticalFeatureSnapshot
 } from "./types.js";
 import { getConcreteActionSortKey, isPassLegalAction, isPlayLegalAction } from "./utils.js";
 
@@ -26,11 +28,21 @@ export type {
   ChosenDecision,
   HeadlessDecisionContext,
   HeuristicPolicy,
+  HandEvaluation,
+  TacticalFeatureSnapshot,
+  CandidateActionFeatureSnapshot,
   PolicyExplanation,
   PolicyTag,
+  UrgencyProfile,
   TeamplaySnapshot
 } from "./types.js";
-export { chooseWishRank } from "./HandAnalysis.js";
+export {
+  buildHandEvaluation,
+  buildHandEvaluationAfterRemovingCards,
+  chooseWishRank
+} from "./HandAnalysis.js";
+export { buildUrgencyProfile } from "./HeuristicContext.js";
+export { createHeuristicFeatureAnalyzer } from "./HeuristicFeatureAnalyzer.js";
 
 function filterWishLockedActions(
   actions: LegalAction[],
@@ -96,10 +108,20 @@ function toConcreteAction(
 
 function scoreConcreteAction(
   ctx: HeadlessDecisionContext,
+  analyzer: ReturnType<typeof createHeuristicFeatureAnalyzer>,
   actor: SeatId | typeof SYSTEM_ACTOR,
   legalAction: LegalAction,
   action: EngineAction
 ): CandidateDecision {
+  const withSharedFeatures = (candidate: CandidateDecision): CandidateDecision => {
+    if (candidate.actor === SYSTEM_ACTOR || candidate.features) {
+      return candidate;
+    }
+
+    const features = analyzer.getCandidateFeatures(candidate.actor, candidate.action, legalAction);
+    return features ? { ...candidate, features } : candidate;
+  };
+
   if (actor === SYSTEM_ACTOR || action.type === "advance_phase") {
     return {
       actor,
@@ -111,41 +133,42 @@ function scoreConcreteAction(
   }
 
   if (action.type === "call_grand_tichu" || action.type === "decline_grand_tichu") {
-    return scoreGrandTichu(ctx.state, actor, action);
+    return withSharedFeatures(scoreGrandTichu(ctx.state, actor, action, analyzer));
   }
 
   if (action.type === "call_tichu") {
-    return scoreTichu(ctx.state, actor, action);
+    return withSharedFeatures(scoreTichu(ctx.state, actor, action, analyzer));
   }
 
   if (action.type === "assign_dragon_trick") {
-    return scoreDragonGift(ctx.state, actor, action);
+    return withSharedFeatures(scoreDragonGift(ctx.state, actor, action));
   }
 
   if (action.type === "select_pass") {
-    return scorePassSelection(ctx.state, actor, action);
+    return withSharedFeatures(scorePassSelection(ctx.state, actor, action, analyzer));
   }
 
   if (action.type === "pass_turn") {
-    return scorePassTurn(ctx, actor, action);
+    return withSharedFeatures(scorePassTurn(ctx, actor, action, analyzer));
   }
 
   if (isPlayLegalAction(legalAction) && action.type === "play_cards") {
-    return scorePlayAction(ctx, actor, legalAction, action);
+    return withSharedFeatures(scorePlayAction(ctx, actor, legalAction, action, analyzer));
   }
 
-  return {
+  return withSharedFeatures({
     actor,
     action,
     score: 0,
     reasons: ["fallback candidate"],
     tags: []
-  };
+  });
 }
 
 function collectCandidates(ctx: HeadlessDecisionContext): CandidateDecision[] {
   const actors: Array<SeatId | typeof SYSTEM_ACTOR> = [SYSTEM_ACTOR, ...SEAT_IDS];
   const candidates: CandidateDecision[] = [];
+  const analyzer = createHeuristicFeatureAnalyzer(ctx);
 
   for (const actor of actors) {
     const rawLegalActions = ctx.legalActions[actor] ?? [];
@@ -156,11 +179,11 @@ function collectCandidates(ctx: HeadlessDecisionContext): CandidateDecision[] {
 
     for (const legalAction of legalActions) {
       const action = toConcreteAction(ctx.state, actor, legalAction);
-      candidates.push(scoreConcreteAction(ctx, actor, legalAction, action));
+      candidates.push(scoreConcreteAction(ctx, analyzer, actor, legalAction, action));
     }
   }
 
-  const deepened = deepenTacticalCandidates(ctx, candidates);
+  const deepened = deepenTacticalCandidates(ctx, candidates, analyzer);
 
   return deepened.sort((left, right) => {
     if (right.score !== left.score) {
@@ -281,7 +304,8 @@ function selectProgressionCandidateForActiveTurn(
 
 function toChosenDecision(
   selected: CandidateDecision,
-  candidates: CandidateDecision[]
+  candidates: CandidateDecision[],
+  stateFeatures?: TacticalFeatureSnapshot | null
 ): ChosenDecision {
   return {
     actor: selected.actor,
@@ -289,16 +313,19 @@ function toChosenDecision(
     explanation: {
       policy: "heuristics-v1",
       actor: selected.actor,
+      ...(stateFeatures ? { stateFeatures } : {}),
       candidateScores: candidates.map((candidate) => ({
         action: candidate.action,
         score: candidate.score,
         reasons: candidate.reasons,
         tags: candidate.tags,
-        ...(candidate.teamplay ? { teamplay: candidate.teamplay } : {})
+        ...(candidate.teamplay ? { teamplay: candidate.teamplay } : {}),
+        ...(candidate.features ? { features: candidate.features } : {})
       })),
       selectedReasonSummary: selected.reasons,
       selectedTags: selected.tags,
-      ...(selected.teamplay ? { selectedTeamplay: selected.teamplay } : {})
+      ...(selected.teamplay ? { selectedTeamplay: selected.teamplay } : {}),
+      ...(selected.features ? { selectedFeatures: selected.features } : {})
     }
   };
 }
@@ -311,6 +338,11 @@ export const heuristicsV1Policy: HeuristicPolicy = {
       const progressionSelected = selectProgressionCandidateForActiveTurn(ctx, candidates);
       const selected =
         progressionSelected ?? candidates[0] ?? selectEmergencyPassCandidate(ctx);
+      const analyzer = createHeuristicFeatureAnalyzer(ctx);
+      const selectedStateFeatures =
+        selected && selected.actor !== SYSTEM_ACTOR
+          ? analyzer.getStateFeatures(selected.actor)
+          : null;
 
       if (!selected) {
         throw new Error("No legal action candidates available for heuristics-v1.");
@@ -329,7 +361,7 @@ export const heuristicsV1Policy: HeuristicPolicy = {
         );
       }
 
-      return toChosenDecision(selected, candidates);
+      return toChosenDecision(selected, candidates, selectedStateFeatures);
     } catch (error) {
       const activeSeatFallback =
         ctx.state.activeSeat && ctx.state.phase === "trick_play"
@@ -363,7 +395,10 @@ export const heuristicsV1Policy: HeuristicPolicy = {
         });
       }
 
-      return toChosenDecision(fallback, []);
+      const analyzer = createHeuristicFeatureAnalyzer(ctx);
+      const fallbackStateFeatures =
+        fallback.actor !== SYSTEM_ACTOR ? analyzer.getStateFeatures(fallback.actor) : null;
+      return toChosenDecision(fallback, [], fallbackStateFeatures);
     }
   }
 };

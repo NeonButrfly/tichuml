@@ -1,4 +1,5 @@
-import type { LegalAction, SeatId } from "@tichuml/engine";
+import { createHeuristicFeatureAnalyzer } from "@tichuml/ai-heuristics";
+import type { GameState, LegalAction, SeatId } from "@tichuml/engine";
 import type { DecisionRequestPayload, JsonObject } from "@tichuml/shared";
 import type { LightgbmScorer } from "../ml/lightgbm-scorer.js";
 import {
@@ -13,22 +14,18 @@ import {
 import { routeHeuristicDecision } from "./heuristic-provider.js";
 
 function toLegalActionKey(
-  stateRaw: DecisionRequestPayload["state_raw"],
+  stateRaw: GameState,
   action: LegalAction
 ): string {
-  return toActionSortKey(
-    toConcreteActionForLegalAction(
-      stateRaw as unknown as Parameters<typeof toConcreteActionForLegalAction>[0],
-      action
-    )
-  );
+  return toActionSortKey(toConcreteActionForLegalAction(stateRaw, action));
 }
 
 export async function routeLightgbmDecision(
   payload: DecisionRequestPayload,
   scorer: LightgbmScorer
 ): Promise<RoutedDecision> {
-  if (!isUsableState(payload.state_raw)) {
+  const stateRaw = payload.state_raw;
+  if (!isUsableState(stateRaw)) {
     throw new Error(
       "Decision requests for the LightGBM provider require a full state_raw payload."
     );
@@ -42,11 +39,26 @@ export async function routeLightgbmDecision(
   }
 
   try {
+    const analyzer = createHeuristicFeatureAnalyzer({
+      state: stateRaw,
+      legalActions: payload.legal_actions as never
+    });
+    const actorSeat = payload.actor_seat as SeatId;
+    const stateFeatures = analyzer.getStateFeatures(actorSeat);
+    const candidateFeatures = actorLegalActions.map((legalAction) =>
+      analyzer.getCandidateFeatures(
+        actorSeat,
+        toConcreteActionForLegalAction(stateRaw, legalAction),
+        legalAction
+      )
+    );
     const scored = await scorer.score({
-      stateRaw: payload.state_raw,
+      stateRaw,
       actorSeat: payload.actor_seat,
       phase: payload.phase,
-      legalActions: actorLegalActions
+      legalActions: actorLegalActions,
+      stateFeatures,
+      candidateFeatures
     });
 
     if (scored.scores.length !== actorLegalActions.length) {
@@ -58,7 +70,9 @@ export async function routeLightgbmDecision(
     const ranked = actorLegalActions.map((legalAction, index) => ({
       legalAction,
       score: scored.scores[index] ?? 0,
-      actionKey: toLegalActionKey(payload.state_raw, legalAction)
+      concreteAction: toConcreteActionForLegalAction(stateRaw, legalAction),
+      actionKey: toLegalActionKey(stateRaw, legalAction),
+      features: candidateFeatures[index] ?? null
     }));
 
     ranked.sort((left, right) => {
@@ -74,10 +88,7 @@ export async function routeLightgbmDecision(
       throw new Error("LightGBM provider did not produce a ranked legal action.");
     }
 
-    const concreteAction = toConcreteActionForLegalAction(
-      payload.state_raw,
-      selected.legalAction
-    );
+    const concreteAction = selected.concreteAction;
     const providerReason = "Resolved by the LightGBM action model on the backend.";
 
     return {
@@ -101,18 +112,35 @@ export async function routeLightgbmDecision(
         chosenAction: concreteAction,
         metadata: {
           model_metadata: scored.modelMetadata,
+          state_features: stateFeatures,
+          candidate_features: ranked.map((entry) => ({
+            action_key: entry.actionKey,
+            action: entry.concreteAction,
+            features: entry.features
+          })),
           scores: ranked.map((entry) => ({
             action_key: entry.actionKey,
             score: entry.score
-          }))
+          })),
+          provider_used: "lightgbm_model",
+          fallback_used: false
         } as JsonObject
       }),
       responseMetadata: {
         scores: ranked.map((entry) => ({
           action_key: entry.actionKey,
-          score: entry.score
+          score: entry.score,
+          action: entry.concreteAction
         })),
-        model_metadata: scored.modelMetadata
+        model_metadata: scored.modelMetadata,
+        state_features: stateFeatures,
+        candidate_features: ranked.map((entry) => ({
+          action_key: entry.actionKey,
+          action: entry.concreteAction,
+          features: entry.features
+        })),
+        chosen_action: concreteAction,
+        requested_provider: "lightgbm_model"
       } as JsonObject
     };
   } catch (error) {
@@ -121,7 +149,8 @@ export async function routeLightgbmDecision(
       providerReason: `LightGBM inference failed; fell back to the backend heuristic: ${message}`,
       metadata: {
         requested_provider: "lightgbm_model",
-        lightgbm_error: message
+        lightgbm_error: message,
+        fallback_used: true
       }
     });
 

@@ -52,9 +52,18 @@ export function routeHeuristicDecision(
         chosen.explanation.selectedTags.length > 0
           ? chosen.explanation.selectedTags
           : [],
-      ...(options.metadata
-        ? { metadata: options.metadata as JsonObject }
-        : {})
-    })
+      metadata: {
+        requested_provider: payload.requested_provider,
+        provider_used: "server_heuristic",
+        fallback_used: options.providerReason !== undefined,
+        explanation: chosen.explanation,
+        ...(options.metadata ?? {})
+      } as JsonObject
+    }),
+    responseMetadata: {
+      explanation: chosen.explanation,
+      chosen_action: chosen.action,
+      requested_provider: payload.requested_provider
+    } as JsonObject
   };
 }

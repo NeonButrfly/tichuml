@@ -13,7 +13,11 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from feature_builder import FEATURE_ORDER, build_feature_row, extract_actor_legal_actions
+from feature_builder import (
+    FEATURE_ORDER,
+    build_feature_row,
+    extract_actor_legal_actions,
+)
 
 
 class ModelRuntime:
@@ -39,10 +43,30 @@ class ModelRuntime:
         actor_seat = str(payload.get("actor_seat", ""))
         phase = str(payload.get("phase", ""))
         legal_actions = extract_actor_legal_actions(payload.get("legal_actions"), actor_seat)
-        rows = [
-            build_feature_row(payload.get("state_raw"), phase, actor_seat, action)
-            for action in legal_actions
-        ]
+        state_features = payload.get("state_features")
+        candidate_features = payload.get("candidate_features")
+        candidate_feature_rows = (
+            candidate_features if isinstance(candidate_features, list) else []
+        )
+        rows = []
+
+        for index, action in enumerate(legal_actions):
+            rows.append(
+                build_feature_row(
+                    payload.get("state_raw"),
+                    phase,
+                    actor_seat,
+                    action,
+                    state_features=state_features if isinstance(state_features, dict) else None,
+                    candidate_features=(
+                        candidate_feature_rows[index]
+                        if index < len(candidate_feature_rows)
+                        and isinstance(candidate_feature_rows[index], dict)
+                        else None
+                    ),
+                )
+            )
+
         frame = pd.DataFrame(rows)
         for feature_name in self.feature_names:
             if feature_name not in frame.columns:
@@ -70,7 +94,7 @@ def serve(runtime: ModelRuntime) -> None:
         try:
             response = runtime.score_request(request)
             emit_response(str(request_id) if request_id is not None else None, response)
-        except Exception as error:  # pragma: no cover - surfaced to TS bridge tests instead
+        except Exception as error:  # pragma: no cover
             emit_response(
                 str(request_id) if request_id is not None else None,
                 {"error": str(error)},

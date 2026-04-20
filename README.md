@@ -38,6 +38,10 @@ The repository no longer reflects a Milestone 0-only scaffold. Historical milest
 - `npm run db:migrate`
 - `npm run bootstrap:windows`
 - `npm run bootstrap:unix`
+- `npm run sim -- --games 100 --provider local`
+- `npm run ml:export -- --phase play`
+- `npm run ml:train -- --phase play`
+- `npm run ml:bootstrap -- --games 1000 --provider server_heuristic`
 
 ## Backend Foundation
 
@@ -118,32 +122,72 @@ That dialog lets you change, at runtime and without rebuild:
 
 Env values provide first-run defaults. After the first UI change, the client persists the effective values in `localStorage` and uses those persisted settings on later runs.
 
-### LightGBM workflow
+### Self-play and LightGBM workflow
+
+Run a local self-play batch:
+
+```powershell
+npm run sim -- --games 100 --provider local --telemetry false
+```
+
+```powershell
+npm run sim -- --games 1000 --provider server_heuristic --progress
+```
+
+The simulator:
+
+- plays complete hands from the current engine
+- supports `local`, `server_heuristic`, and `lightgbm_model`
+- records pass/exchange/pickup/play telemetry when telemetry is enabled
+- prints a summary with games, hands, decisions by phase, provider usage, fallbacks, and exchange/pass coverage
+
+The combined end-to-end bootstrap is:
+
+```powershell
+npm run ml:bootstrap -- --games 5000 --provider server_heuristic
+```
+
+That runs self-play, exports training rows, and trains the first model in sequence.
 
 Export action rows from Postgres:
 
 ```powershell
-.\.venv\Scripts\python.exe ml/export_training_rows.py
+npm run ml:export -- --phase play
 ```
 
 ```sh
-./.venv/bin/python ml/export_training_rows.py
+npm run ml:export -- --phase play
 ```
+
+That export reads raw decision telemetry from Postgres; make sure the backend/database bootstrap is running first.
 
 Train the LightGBM action model:
 
 ```powershell
-.\.venv\Scripts\python.exe ml/train_lightgbm.py
+npm run ml:train -- --phase play
 ```
 
 ```sh
-./.venv/bin/python ml/train_lightgbm.py
+npm run ml:train -- --phase play
 ```
+
+Both commands prefer the repo `.venv` automatically when it exists, so they use the same Python environment created by the bootstrap scripts.
+
+Export supports optional filters such as:
+
+```powershell
+npm run ml:export -- --phase play --provider server_heuristic --limit 50000
+```
+
+Training writes:
 
 The training path writes:
 
 - `ml/model_registry/lightgbm_action_model.txt`
 - `ml/model_registry/lightgbm_action_model.meta.json`
+- `ml/feature_schema.json`
+
+The first training phase is `play` (`trick_play` in stored telemetry). Exchange and pass phases are still recorded in raw telemetry and replay, but the initial supervised export defaults to trick-play decisions.
 
 Switch to the model at runtime from hamburger menu -> `Backend Settings` -> `Decision Mode` -> `LightGBM model`.
 

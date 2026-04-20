@@ -220,3 +220,21 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 - Linked GitHub Issue: [#28](https://github.com/NeonButrfly/tichuml/issues/28)
 - Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
 - Status Source: GitHub issue state only.
+
+### 2026-04-18 - Master control panel observability dashboard
+
+- Prompt Signal: The debug screen must be upgraded into a full master control panel that unifies live gameplay state, provider transparency, heuristic and shallow-lookahead reasoning, telemetry completeness, backend connectivity, ML model status, exchange visibility, and collection readiness.
+- Interpreted Requirement: Keep gameplay functional, but make debug mode the primary system observability surface. The dashboard must expose a fast-read status strip, structured game-state and seat metrics, provider-requested versus provider-used transparency, top candidate reasoning, heuristic and lookahead metrics, telemetry completeness including exchange coverage, backend and ML status, visible pass/exchange staging, a hand-structure inspector, a recent-event timeline, runtime backend controls, and collapsible raw payload drawers with snapshot freezing.
+- Affected Systems: `apps/web/src/App.tsx`, `apps/web/src/game-table-views.tsx`, `apps/web/src/master-control-model.ts`, `apps/web/src/styles.css`, `apps/web/src/backend/client.ts`, `apps/web/src/backend/decision-provider.ts`, `apps/web/src/backend/telemetry.ts`, `apps/server/src/providers/heuristic-provider.ts`, `apps/server/src/providers/lightgbm-provider.ts`, `packages/ai-heuristics/src/index.ts`, `tests/integration/master-control-model.test.ts`.
+- Linked GitHub Issue: [#32](https://github.com/NeonButrfly/tichuml/issues/32)
+- Milestone: [6.5 – Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status Source: GitHub issue state only.
+
+### 2026-04-18 - Backend reachability versus payload-validity diagnostics
+
+- Prompt Signal: Live backend integration showed that `/health`, `/api/decision/request`, and `/api/telemetry/event` were reachable even while some live decision and telemetry payloads were failing validation, so the master control panel must stop presenting those as backend-outage states.
+- Interpreted Requirement: Backend status must be endpoint-reachability based, not success-only based. The dashboard must distinguish reachable endpoints from invalid live payloads, track `/health`, `/api/decision/request`, and `/api/telemetry/event` separately, surface last success and validation-failure reasons, keep server-mode decision requests on full live `state_raw`, ensure telemetry payloads include required fields like `ts`, and compute collection readiness only when backend reachability, valid live decision payloads, valid telemetry payloads, and exchange recording are all satisfied.
+- Affected Systems: `apps/web/src/backend/client.ts`, `apps/web/src/backend/decision-provider.ts`, `apps/web/src/backend/telemetry.ts`, `apps/web/src/App.tsx`, `apps/web/src/game-table-views.tsx`, `apps/web/src/master-control-model.ts`, `tests/integration/backend-client.test.ts`, `tests/integration/master-control-model.test.ts`.
+- Linked GitHub Issue: [#32](https://github.com/NeonButrfly/tichuml/issues/32)
+- Milestone: [6.5 – Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status Source: GitHub issue state only.

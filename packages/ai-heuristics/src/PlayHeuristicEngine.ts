@@ -15,6 +15,7 @@ import {
   partnerHasCalledTichu,
   partnerStillLiveForTichu
 } from "./HeuristicContext.js";
+import type { HeuristicFeatureAnalyzer } from "./HeuristicFeatureAnalyzer.js";
 import { HEURISTIC_WEIGHTS } from "./HeuristicScorer.js";
 import { combinationKindBonus, getStructurePenaltyForPlay } from "./HandAnalysis.js";
 import type { CandidateDecision, HeadlessDecisionContext, PlayLegalAction } from "./types.js";
@@ -24,12 +25,21 @@ function buildPlayBaseScore(
   ctx: HeadlessDecisionContext,
   actor: SeatId,
   legalAction: PlayLegalAction,
+  analyzer: HeuristicFeatureAnalyzer,
   reasons: string[],
   tags: CandidateDecision["tags"]
 ): number {
   const ownHand = ctx.state.hands[actor];
   const handCountAfter = ownHand.length - legalAction.cardIds.length;
   const weights = HEURISTIC_WEIGHTS.play;
+  const features = analyzer.getCandidateFeatures(actor, {
+    type: "play_cards",
+    seat: actor,
+    cardIds: legalAction.cardIds,
+    ...(legalAction.phoenixAsRank !== undefined
+      ? { phoenixAsRank: legalAction.phoenixAsRank }
+      : {})
+  }, legalAction);
   let score = weights.base;
   const structurePenalty = getStructurePenaltyForPlay(
     ownHand,
@@ -40,6 +50,13 @@ function buildPlayBaseScore(
   score += legalAction.cardIds.length * weights.perCardShed;
   score += combinationKindBonus(legalAction);
   score -= structurePenalty * weights.structureDamageScalar;
+  if (features) {
+    score += features.shed_value_score * 0.03;
+    score += features.future_hand_quality_delta * 0.06;
+    score += features.structure_preservation_score * 0.05;
+    score += features.control_value_score * 0.01;
+    score -= features.resource_cost_score * 0.03;
+  }
 
   if (structurePenalty > 0) {
     reasons.push("preserves pairs, triples, and straight potential unless urgency justifies the damage");
@@ -103,6 +120,9 @@ function applyLeadHeuristics(
       urgency.opponentOutUrgent;
 
     score += justifiedDogLead ? weights.lead.dogToPartner : weights.lead.dogWithoutNeed;
+    if (justifiedDogLead && (urgency.partnerNearOut || partnerTichuActive || selfTichuCalled)) {
+      score += 140;
+    }
     reasons.push(
       justifiedDogLead
         ? "Dog lead is justified by partner support or endgame urgency"
@@ -203,7 +223,8 @@ export function scorePlayAction(
   ctx: HeadlessDecisionContext,
   actor: SeatId,
   legalAction: PlayLegalAction,
-  action: EngineAction
+  action: EngineAction,
+  analyzer: HeuristicFeatureAnalyzer
 ): CandidateDecision {
   const state = ctx.state;
   const handCountAfter = state.hands[actor].length - legalAction.cardIds.length;
@@ -215,13 +236,34 @@ export function scorePlayAction(
   const partnerTichuActive = partnerHasCalledTichu(state, actor);
   const reasons: string[] = [];
   const tags: CandidateDecision["tags"] = [];
-  let score = buildPlayBaseScore(ctx, actor, legalAction, reasons, tags);
+  const features = analyzer.getCandidateFeatures(actor, action, legalAction);
+  let score = buildPlayBaseScore(ctx, actor, legalAction, analyzer, reasons, tags);
+
+  if (features) {
+    if (features.structure_preservation_score >= 0) {
+      appendUniqueTags(tags, "PRESERVE_STRUCTURE");
+    }
+    if (features.control_retention_estimate >= 65) {
+      score += 6;
+      reasons.push("shared tactical features project strong control retention after this action");
+    } else if (features.control_retention_estimate <= 20 && state.currentTrick !== null) {
+      score -= 4;
+      reasons.push("shared tactical features project weak control retention after this action");
+    }
+    if (features.urgency_mode === "endgame") {
+      appendUniqueTags(tags, "ENDGAME_COMMIT");
+    }
+    if (state.currentTrick === null && features.uses_dog && features.partner_advantage_estimate > 0) {
+      score += 120 + features.partner_advantage_estimate * 8;
+      reasons.push("shared tactical features show Dog improves partner tempo conversion");
+    }
+  }
 
   if (urgency.selfNearOut) {
     appendUniqueTags(tags, "SELF_NEAR_OUT", "ENDGAME_COMMIT");
   }
 
-  if (legalAction.combination.isBomb) {
+  if (features?.uses_bomb ?? legalAction.combination.isBomb) {
     if (urgency.opponentOutUrgent || handCountAfter === 0 || urgency.selfNearOut) {
       score += HEURISTIC_WEIGHTS.play.specials.urgentBombReward;
       reasons.push("bomb value is justified by the immediate threat");
@@ -253,10 +295,10 @@ export function scorePlayAction(
   const teamControlWouldBeLostWithoutIntervention = partnerCannotRetainLead;
   const partnerInterferenceCandidate =
     partnerCurrentControl && partnerTichuActive && partnerTichuStillLive;
-  const bombsPartner = partnerInterferenceCandidate && legalAction.combination.isBomb;
+  const bombsPartner = partnerInterferenceCandidate && (features?.uses_bomb ?? legalAction.combination.isBomb);
   const teamSalvageIntervention =
     partnerInterferenceCandidate &&
-    legalAction.combination.isBomb &&
+    (features?.uses_bomb ?? legalAction.combination.isBomb) &&
     (opponentImmediateWinRisk || teamControlWouldBeLostWithoutIntervention);
 
   if (partnerTichuActive) {
@@ -301,6 +343,12 @@ export function scorePlayAction(
     if (teamSalvageIntervention) {
       appendUniqueTags(tags, "team_salvage_intervention");
       score += HEURISTIC_WEIGHTS.play.teamplay.salvageReward;
+      if (features?.control_retention_estimate !== undefined) {
+        score += features.control_retention_estimate * 4;
+      }
+      if (actor !== state.activeSeat) {
+        score += 1200;
+      }
       reasons.push(
         "allowed intervention: bomb preserves team survival against an immediate collapse risk"
       );
@@ -332,8 +380,9 @@ export function scorePlayAction(
       : undefined;
 
   if (
-    state.currentWish !== null &&
-    legalAction.combination.actualRanks.includes(state.currentWish)
+    features?.satisfies_wish ??
+    (state.currentWish !== null &&
+      legalAction.combination.actualRanks.includes(state.currentWish))
   ) {
     score += HEURISTIC_WEIGHTS.play.wishSatisfied;
     reasons.push("wish-satisfying plays are preferred when multiple legal lines exist");
@@ -344,7 +393,7 @@ export function scorePlayAction(
     }
   }
 
-  if (legalAction.cardIds.includes("dragon") && handCountAfter > 0) {
+  if ((features?.uses_dragon ?? legalAction.cardIds.includes("dragon")) && handCountAfter > 0) {
     score -= HEURISTIC_WEIGHTS.play.specials.dragonHoldPenalty;
     reasons.push("holding Dragon back keeps a premium single-card stopper available");
 
@@ -357,7 +406,7 @@ export function scorePlayAction(
   }
 
   if (
-    legalAction.cardIds.includes("phoenix") &&
+    (features?.uses_phoenix ?? legalAction.cardIds.includes("phoenix")) &&
     legalAction.combination.kind === "single" &&
     handCountAfter > 0
   ) {
@@ -386,6 +435,7 @@ export function scorePlayAction(
     score,
     reasons,
     tags,
+    ...(features ? { features } : {}),
     ...(teamplay ? { teamplay } : {})
   };
 }
@@ -393,7 +443,8 @@ export function scorePlayAction(
 export function scorePassTurn(
   ctx: HeadlessDecisionContext,
   seat: SeatId,
-  action: EngineAction
+  action: EngineAction,
+  analyzer: HeuristicFeatureAnalyzer
 ): CandidateDecision {
   const partnerWinning = currentWinnerIsPartner(ctx.state, seat);
   const urgency = buildUrgencyProfile(ctx.state, seat);
@@ -408,6 +459,7 @@ export function scorePassTurn(
   let score = HEURISTIC_WEIGHTS.play.passTurn.base;
   const reasons: string[] = ["passing keeps stronger cards available for later decisions"];
   const tags: CandidateDecision["tags"] = [];
+  const features = analyzer.getCandidateFeatures(seat, action);
 
   if (partnerWinning) {
     score += HEURISTIC_WEIGHTS.play.passTurn.partnerWinning;
@@ -429,6 +481,12 @@ export function scorePassTurn(
     score -= HEURISTIC_WEIGHTS.play.passTurn.opponentUrgencyPenalty;
     reasons.push("low opponent card counts make passive play riskier");
     appendUniqueTags(tags, "OPPONENT_OUT_URGENT");
+  }
+
+  if (features) {
+    score += features.partner_advantage_estimate * 0.2;
+    score += features.control_retention_estimate * 0.05;
+    score -= Math.max(0, features.opponent_threat_estimate - 60) * 0.2;
   }
 
   const partnerTichuActive = partnerHasCalledTichu(ctx.state, seat);
@@ -490,6 +548,7 @@ export function scorePassTurn(
     score,
     reasons,
     tags,
+    ...(features ? { features } : {}),
     ...(teamplay ? { teamplay } : {})
   };
 }

@@ -40,6 +40,7 @@ import type {
   BackendRuntimeSettings
 } from "@tichuml/shared";
 import type { BackendReachability } from "./backend/settings";
+import type { MasterControlSnapshot } from "./master-control-model";
 import {
   findMatchingHotkey,
   GAME_MENU_ITEMS,
@@ -247,6 +248,7 @@ export type GameTableViewProps = {
   latestEntropyDebug: SeedDebugSnapshot | null;
   backendSettings: BackendRuntimeSettings;
   backendStatus: BackendReachability;
+  masterControlSnapshot: MasterControlSnapshot;
   hotkeyDefinitions: readonly HotkeyDefinition[];
   cardLookup: ReadonlyMap<string, Card>;
   onAutoplayChange: (checked: boolean) => void;
@@ -269,6 +271,10 @@ export type GameTableViewProps = {
   onExportNormalTableLayout: () => void;
   onBackendSettingsChange: (nextSettings: BackendRuntimeSettings) => void;
   onTestBackend: () => void;
+  onTestMl: () => void;
+  onToggleDashboardVerboseMode: () => void;
+  onToggleDashboardRawJson: () => void;
+  onToggleFrozenSnapshot: () => void;
   onUiCommand: (commandId: UiCommandId) => void;
   onMainMenuOpenChange: (open: boolean) => void;
 };
@@ -5430,9 +5436,84 @@ export function NormalGameTableView(props: GameTableViewProps) {
 }
 
 export function DebugGameTableView(props: GameTableViewProps) {
+  const snapshot = props.masterControlSnapshot;
+  const statusBadges = [
+    { label: "Phase", value: snapshot.game.phase, tone: "green" },
+    {
+      label: "Active Seat",
+      value: snapshot.game.activeSeat ?? "None",
+      tone: snapshot.game.activeSeat ? "green" : "yellow"
+    },
+    {
+      label: "Requested",
+      value: snapshot.decision.requestedProviderLabel,
+      tone: "green"
+    },
+    {
+      label: "Provider Used",
+      value: snapshot.decision.actualProviderUsed ?? "pending",
+      tone: snapshot.decision.actualProviderUsed ? "green" : "yellow"
+    },
+    {
+      label: "Fallback",
+      value: snapshot.decision.fallbackUsed ? "Yes" : "No",
+      tone: snapshot.decision.fallbackUsed ? "yellow" : "green"
+    },
+    {
+      label: "Backend",
+      value:
+        snapshot.backendMl.backendReachable === true
+          ? "Reachable"
+          : snapshot.backendMl.backendReachable === false
+            ? "Unreachable"
+            : "Unknown",
+      tone:
+        snapshot.backendMl.backendReachable === true
+          ? "green"
+          : snapshot.backendMl.backendReachable === false
+            ? "red"
+            : "yellow"
+    },
+    {
+      label: "Telemetry",
+      value: snapshot.telemetry.enabled ? "Enabled" : "Disabled",
+      tone: snapshot.telemetry.enabled ? "green" : "red"
+    },
+    {
+      label: "ML Model",
+      value:
+        snapshot.backendMl.modelLoaded === true
+          ? "Loaded"
+          : snapshot.backendMl.modelLoaded === false
+            ? "Not loaded"
+            : "Unknown",
+      tone:
+        snapshot.backendMl.modelLoaded === true
+          ? "green"
+          : snapshot.backendMl.modelLoaded === false
+            ? "red"
+            : "yellow"
+    },
+    {
+      label: "Exchange Recorded",
+      value: snapshot.telemetry.exchangeRecorded ? "Yes" : "No",
+      tone: snapshot.telemetry.exchangeRecorded ? "green" : "red"
+    },
+    {
+      label: "Collection",
+      value: snapshot.telemetry.collectionReadiness,
+      tone:
+        snapshot.telemetry.collectionReadiness === "READY"
+          ? "green"
+          : snapshot.telemetry.collectionReadiness === "PARTIAL"
+            ? "yellow"
+            : "red"
+    }
+  ] as const;
+
   return (
-    <main className="tabletop-app">
-      <header className="topbar">
+    <main className="tabletop-app tabletop-app--control">
+      <header className="topbar topbar--control">
         <div className="topbar__intro">
           <GameChromeMenu
             variant="debug"
@@ -5442,37 +5523,25 @@ export function DebugGameTableView(props: GameTableViewProps) {
             onMainMenuOpenChange={props.onMainMenuOpenChange}
             onUiCommand={props.onUiCommand}
           />
-          <p className="topbar__eyebrow">Debug / AI Mode</p>
-          <h1>Tichu Table</h1>
+          <p className="topbar__eyebrow">Master Control Panel</p>
+          <h1>System Control Dashboard</h1>
           <p className="topbar__summary">
-            Shared live game state with richer AI rationale, legality, and
-            engine metadata. Press Ctrl+D to return to the normal table.
+            Unified live observability for game state, decision routing,
+            heuristics, telemetry, backend health, and ML readiness. Press
+            Ctrl+D to return to the normal table.
           </p>
         </div>
 
         <div className="topbar__status-grid">
-          <section className="status-card">
-            <span className="status-card__label">Seed</span>
-            <strong>{props.roundSeed}</strong>
-            <small>{props.decisionCount} engine decisions applied</small>
-          </section>
-          <section className="status-card">
-            <span className="status-card__label">Phase</span>
-            <strong>{props.derived.phase}</strong>
-            <small>{props.controlHint}</small>
-          </section>
-          <section className="status-card">
-            <span className="status-card__label">Scoreboard</span>
-            <MatchScoreboard
-              state={props.state}
-              derived={props.derived}
-              className="normal-scoreboard--debug"
-              onOpenHistory={() =>
-                props.onUiCommand("open_score_history_dialog")
-              }
-            />
-            <small>Shared engine state</small>
-          </section>
+          {statusBadges.map((badge) => (
+            <section
+              key={badge.label}
+              className={`status-card master-status-badge master-status-badge--${badge.tone}`}
+            >
+              <span className="status-card__label">{badge.label}</span>
+              <strong>{badge.value}</strong>
+            </section>
+          ))}
         </div>
 
         <div className="topbar__controls">
@@ -5484,6 +5553,17 @@ export function DebugGameTableView(props: GameTableViewProps) {
             />
             <span>Autoplay local seat</span>
           </label>
+          <button
+            type="button"
+            className={
+              snapshot.ui.frozen
+                ? "utility-button utility-button--primary"
+                : "utility-button"
+            }
+            onClick={props.onToggleFrozenSnapshot}
+          >
+            {snapshot.ui.frozen ? "Unfreeze Snapshot" : "Freeze Snapshot"}
+          </button>
 
           <button
             type="button"
@@ -5502,7 +5582,434 @@ export function DebugGameTableView(props: GameTableViewProps) {
         </div>
       </header>
 
-      <div className="workspace workspace--debug">
+      <section className="master-grid">
+        <article className="master-panel">
+          <div className="master-panel__header">
+            <div>
+              <p className="debug-panel__eyebrow">Game + Seat State</p>
+              <h2 className="master-panel__title">Game State</h2>
+            </div>
+            <span className="master-panel__meta">
+              {props.roundSeed} • {props.decisionCount} decisions
+            </span>
+          </div>
+          <div className="master-kv-grid">
+            <div className="master-kv-card">
+              <span>game_id</span>
+              <strong>{snapshot.game.gameId}</strong>
+            </div>
+            <div className="master-kv-card">
+              <span>hand_id</span>
+              <strong>{snapshot.game.handId}</strong>
+            </div>
+            <div className="master-kv-card">
+              <span>decision_index</span>
+              <strong>{snapshot.game.decisionIndex}</strong>
+            </div>
+            <div className="master-kv-card">
+              <span>phase</span>
+              <strong>{snapshot.game.phase}</strong>
+            </div>
+            <div className="master-kv-card">
+              <span>wish</span>
+              <strong>{snapshot.game.wishState}</strong>
+            </div>
+            <div className="master-kv-card">
+              <span>pickup</span>
+              <strong>{snapshot.game.pickupState}</strong>
+            </div>
+          </div>
+          <div className="master-trick-card">
+            <strong>Current Trick</strong>
+            <p>
+              {snapshot.game.trick.comboType}
+              {snapshot.game.trick.rank ? ` • ${snapshot.game.trick.rank}` : ""}
+            </p>
+            <small>
+              Leader: {snapshot.game.trick.currentLeader ?? "none"} • Cards:{" "}
+              {snapshot.game.trick.cards.length > 0
+                ? snapshot.game.trick.cards.join(", ")
+                : "none"}
+            </small>
+          </div>
+          <div className="master-call-row">
+            <div className="master-call-card">
+              <span>Tichu</span>
+              <strong>
+                {snapshot.game.tichuCalls.length > 0
+                  ? snapshot.game.tichuCalls.join(", ")
+                  : "None"}
+              </strong>
+            </div>
+            <div className="master-call-card">
+              <span>Grand Tichu</span>
+              <strong>
+                {snapshot.game.grandTichuCalls.length > 0
+                  ? snapshot.game.grandTichuCalls.join(", ")
+                  : "None"}
+              </strong>
+            </div>
+          </div>
+          <table className="master-seat-table">
+            <thead>
+              <tr>
+                <th>Seat</th>
+                <th>Relation</th>
+                <th>Cards</th>
+                <th>Out</th>
+                <th>Winning</th>
+                <th>Tichu</th>
+                <th>GT</th>
+                <th>Bombs</th>
+                <th>Control</th>
+                <th>Combos</th>
+                <th>Dead Singles</th>
+              </tr>
+            </thead>
+            <tbody>
+              {snapshot.game.seats.map((seat) => (
+                <tr key={seat.seat}>
+                  <td>{seat.seat}</td>
+                  <td>{seat.relation}</td>
+                  <td>{seat.cardsRemaining}</td>
+                  <td>{seat.out ? "Yes" : "No"}</td>
+                  <td>{seat.winningTrick ? "Yes" : "No"}</td>
+                  <td>{seat.tichu ? "Yes" : "No"}</td>
+                  <td>{seat.grandTichu ? "Yes" : "No"}</td>
+                  <td>{seat.bombs}</td>
+                  <td>{seat.controlCards}</td>
+                  <td>{seat.comboCount}</td>
+                  <td>{seat.deadSingles}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </article>
+
+        <article className="master-panel master-panel--primary">
+          <div className="master-panel__header">
+            <div>
+              <p className="debug-panel__eyebrow">Decision Center</p>
+              <h2 className="master-panel__title">Provider + Reasoning</h2>
+            </div>
+            <span className="master-panel__meta">
+              {snapshot.decision.latencyMs !== null
+                ? `${snapshot.decision.latencyMs} ms`
+                : "pending"}
+            </span>
+          </div>
+          <div className="master-kv-grid">
+            <div className="master-kv-card">
+              <span>requested provider</span>
+              <strong>{snapshot.decision.requestedProviderLabel}</strong>
+            </div>
+            <div className="master-kv-card">
+              <span>provider_used</span>
+              <strong>{snapshot.decision.actualProviderUsed ?? "pending"}</strong>
+            </div>
+            <div className="master-kv-card">
+              <span>fallback</span>
+              <strong>{snapshot.decision.fallbackUsed ? "Yes" : "No"}</strong>
+            </div>
+            <div className="master-kv-card">
+              <span>legal actions</span>
+              <strong>{snapshot.decision.legalActionCount}</strong>
+            </div>
+          </div>
+          {snapshot.decision.legalActionCount === 0 ? (
+            <div className="master-warning master-warning--danger">
+              <strong>NO LEGAL ACTIONS / FORCED PASS</strong>
+              <p>No legal actions were available for the current decision snapshot.</p>
+            </div>
+          ) : null}
+          {snapshot.decision.fallbackReason ? (
+            <div className="master-warning master-warning--warning">
+              <strong>Fallback reason</strong>
+              <p>{snapshot.decision.fallbackReason}</p>
+            </div>
+          ) : null}
+          <div className="master-chosen-action">
+            <span className="master-section-label">Chosen action</span>
+            {snapshot.decision.chosenAction ? (
+              <>
+                <strong>{snapshot.decision.chosenAction.summary}</strong>
+                <small>
+                  {snapshot.decision.chosenAction.comboType} • rank{" "}
+                  {snapshot.decision.chosenAction.rankLabel ?? "-"} • length{" "}
+                  {snapshot.decision.chosenAction.length}
+                </small>
+              </>
+            ) : (
+              <strong>No chosen action captured yet.</strong>
+            )}
+          </div>
+          <div className="debug-tag-list">
+            {snapshot.decision.reasonTags.map((tag) => (
+              <span key={tag} className="debug-tag">
+                {formatPolicyTag(tag)}
+              </span>
+            ))}
+          </div>
+          <div className="master-kv-grid master-kv-grid--lookahead">
+            <div className="master-kv-card">
+              <span>urgency mode</span>
+              <strong>{snapshot.decision.urgencyMode}</strong>
+            </div>
+            <div className="master-kv-card">
+              <span>hand quality</span>
+              <strong>{snapshot.decision.handQualityScore ?? "-"}</strong>
+            </div>
+            <div className="master-kv-card">
+              <span>control</span>
+              <strong>{snapshot.decision.controlRetentionEstimate ?? "-"}</strong>
+            </div>
+            <div className="master-kv-card">
+              <span>structure</span>
+              <strong>{snapshot.decision.structurePreservation ?? "-"}</strong>
+            </div>
+            <div className="master-kv-card">
+              <span>endgame pressure</span>
+              <strong>{snapshot.decision.endgamePressure ?? "-"}</strong>
+            </div>
+            <div className="master-kv-card">
+              <span>partner advantage</span>
+              <strong>{snapshot.decision.partnerAdvantage ?? "-"}</strong>
+            </div>
+            <div className="master-kv-card">
+              <span>future delta</span>
+              <strong>{snapshot.decision.lookahead.futureHandQualityDelta ?? "-"}</strong>
+            </div>
+            <div className="master-kv-card">
+              <span>control delta</span>
+              <strong>{snapshot.decision.lookahead.controlRetentionDelta ?? "-"}</strong>
+            </div>
+            <div className="master-kv-card">
+              <span>dead singles</span>
+              <strong>{snapshot.decision.lookahead.deadSinglesDelta ?? "-"}</strong>
+            </div>
+            <div className="master-kv-card">
+              <span>combo preservation</span>
+              <strong>{snapshot.decision.lookahead.comboPreservationImpact ?? "-"}</strong>
+            </div>
+          </div>
+          <ol className="candidate-list candidate-list--dashboard">
+            {snapshot.decision.topCandidates.slice(0, 8).map((candidate, index) => (
+              <li key={`${candidate.summary}-${index}`}>
+                <div className="candidate-list__topline">
+                  <strong>{candidate.summary}</strong>
+                  <span>{candidate.score.toFixed(2)}</span>
+                </div>
+                <small>
+                  {candidate.comboType} • rank {candidate.rankLabel ?? "-"} • len{" "}
+                  {candidate.length}
+                </small>
+                <small>{candidate.scoreBreakdown.join(" • ")}</small>
+                <div className="candidate-flag-row">
+                  {candidate.satisfiesWish ? (
+                    <span className="debug-tag debug-tag--muted">Wish</span>
+                  ) : null}
+                  {candidate.usesBomb ? (
+                    <span className="debug-tag debug-tag--muted">Bomb</span>
+                  ) : null}
+                  {candidate.usesDragon ? (
+                    <span className="debug-tag debug-tag--muted">Dragon</span>
+                  ) : null}
+                  {candidate.usesPhoenix ? (
+                    <span className="debug-tag debug-tag--muted">Phoenix</span>
+                  ) : null}
+                  {candidate.overtakesPartner ? (
+                    <span className="debug-tag debug-tag--muted">Overtakes Partner</span>
+                  ) : null}
+                  {candidate.controlRetaining ? (
+                    <span className="debug-tag debug-tag--muted">Control</span>
+                  ) : null}
+                  {candidate.endgameOriented ? (
+                    <span className="debug-tag debug-tag--muted">Endgame</span>
+                  ) : null}
+                </div>
+                <div className="debug-tag-list">
+                  {candidate.reasonTags.map((tag) => (
+                    <span
+                      key={`${candidate.summary}-${tag}`}
+                      className="debug-tag debug-tag--muted"
+                    >
+                      {formatPolicyTag(tag)}
+                    </span>
+                  ))}
+                </div>
+              </li>
+            ))}
+          </ol>
+        </article>
+
+        <article className="master-panel">
+          <div className="master-panel__header">
+            <div>
+              <p className="debug-panel__eyebrow">Telemetry + Backend + ML</p>
+              <h2 className="master-panel__title">Collection Readiness</h2>
+            </div>
+          </div>
+          {!snapshot.telemetry.exchangeRecorded ? (
+            <div className="master-warning master-warning--danger">
+              <strong>EXCHANGE PHASE NOT RECORDED</strong>
+              <p>Exchange coverage is incomplete in the current telemetry snapshot.</p>
+            </div>
+          ) : null}
+            <div className="master-kv-grid">
+              <div className="master-kv-card">
+                <span>telemetry enabled</span>
+                <strong>{snapshot.telemetry.enabled ? "Yes" : "No"}</strong>
+              </div>
+            <div className="master-kv-card">
+              <span>last write</span>
+              <strong>{snapshot.telemetry.lastWriteAt ?? "Never"}</strong>
+            </div>
+            <div className="master-kv-card">
+              <span>last phase</span>
+              <strong>{snapshot.telemetry.lastRecordedPhase ?? "None"}</strong>
+            </div>
+              <div className="master-kv-card">
+                <span>collection</span>
+                <strong>{snapshot.telemetry.collectionReadiness}</strong>
+              </div>
+              <div className="master-kv-card">
+                <span>decision payloads</span>
+                <strong>{snapshot.telemetry.decisionPayloadValid ? "Valid" : "Invalid"}</strong>
+              </div>
+              <div className="master-kv-card">
+                <span>telemetry payloads</span>
+                <strong>{snapshot.telemetry.payloadValid ? "Valid" : "Invalid"}</strong>
+              </div>
+              <div className="master-kv-card master-kv-card--wide">
+                <span>backend URL</span>
+                <strong>{snapshot.backendMl.backendUrl}</strong>
+              </div>
+            <div className="master-kv-card">
+              <span>backend</span>
+              <strong>
+                {snapshot.backendMl.backendReachable === true
+                  ? "Reachable"
+                  : snapshot.backendMl.backendReachable === false
+                    ? "Unreachable"
+                    : "Unknown"}
+              </strong>
+            </div>
+            <div className="master-kv-card">
+              <span>model</span>
+              <strong>{snapshot.backendMl.modelName ?? "Unknown"}</strong>
+            </div>
+            <div className="master-kv-card">
+              <span>inference</span>
+              <strong>
+                {snapshot.backendMl.inferenceWorking === true
+                  ? "Working"
+                  : snapshot.backendMl.inferenceWorking === false
+                    ? "Failing"
+                    : "Unknown"}
+              </strong>
+            </div>
+            <div className="master-kv-card">
+              <span>candidates scored</span>
+              <strong>{snapshot.backendMl.candidatesScoredCount}</strong>
+            </div>
+            <div className="master-kv-card">
+              <span>score gap</span>
+              <strong>{snapshot.backendMl.scoreSpread.gapToSecond ?? "-"}</strong>
+            </div>
+          </div>
+          <div className="master-phase-track">
+            <span className={snapshot.telemetry.phaseTracking.deal ? "debug-tag" : "debug-tag debug-tag--muted"}>
+              deal
+            </span>
+            <span className={snapshot.telemetry.phaseTracking.passSelect ? "debug-tag" : "debug-tag debug-tag--muted"}>
+              pass_select
+            </span>
+            <span className={snapshot.telemetry.phaseTracking.exchange ? "debug-tag" : "debug-tag debug-tag--muted"}>
+              exchange
+            </span>
+            <span className={snapshot.telemetry.phaseTracking.pickup ? "debug-tag" : "debug-tag debug-tag--muted"}>
+              pickup
+            </span>
+            <span className={snapshot.telemetry.phaseTracking.play ? "debug-tag" : "debug-tag debug-tag--muted"}>
+              play
+            </span>
+            <span className={snapshot.telemetry.phaseTracking.roundEnd ? "debug-tag" : "debug-tag debug-tag--muted"}>
+              round_end
+            </span>
+          </div>
+          <div className="master-completeness-grid">
+            <div className="master-completeness-item">
+              <span>game_id</span>
+              <strong>{snapshot.telemetry.completeness.gameIdPresent ? "Yes" : "No"}</strong>
+            </div>
+            <div className="master-completeness-item">
+              <span>hand_id</span>
+              <strong>{snapshot.telemetry.completeness.handIdPresent ? "Yes" : "No"}</strong>
+            </div>
+            <div className="master-completeness-item">
+              <span>phase</span>
+              <strong>{snapshot.telemetry.completeness.phasePresent ? "Yes" : "No"}</strong>
+            </div>
+            <div className="master-completeness-item">
+              <span>actor_seat</span>
+              <strong>{snapshot.telemetry.completeness.actorSeatPresent ? "Yes" : "No"}</strong>
+            </div>
+            <div className="master-completeness-item">
+              <span>state_raw</span>
+              <strong>{snapshot.telemetry.completeness.stateRawPresent ? "Yes" : "No"}</strong>
+            </div>
+            <div className="master-completeness-item">
+              <span>state_norm</span>
+              <strong>{snapshot.telemetry.completeness.stateNormPresent ? "Yes" : "No"}</strong>
+            </div>
+            <div className="master-completeness-item">
+              <span>legal_actions</span>
+              <strong>{snapshot.telemetry.completeness.legalActionsCount}</strong>
+            </div>
+            <div className="master-completeness-item">
+              <span>chosen_action</span>
+              <strong>{snapshot.telemetry.completeness.chosenActionPresent ? "Yes" : "No"}</strong>
+            </div>
+            <div className="master-completeness-item">
+              <span>metadata</span>
+              <strong>{snapshot.telemetry.completeness.metadataPresent ? "Yes" : "No"}</strong>
+            </div>
+          </div>
+          <div className="master-exchange-list">
+            {snapshot.exchange.selectedBySeat.map((seat) => (
+              <article key={seat.seat} className="master-exchange-card">
+                <span>{seat.seat}</span>
+                <strong>{seat.label}</strong>
+                <small>
+                  {seat.cards.length > 0 ? seat.cards.join(", ") : "No cards visible"}
+                </small>
+              </article>
+            ))}
+          </div>
+          <ul className="debug-list">
+            {snapshot.backendMl.endpoints.map((endpoint) => (
+              <li key={endpoint.name}>
+                <strong>{endpoint.name}</strong> •{" "}
+                {endpoint.reachable === true
+                  ? "ok"
+                  : endpoint.reachable === false
+                    ? "error"
+                    : "pending"}{" "}
+                • {endpoint.latencyMs ?? "-"} ms
+                {endpoint.payloadValid === false ? " • payload invalid" : ""}
+                {endpoint.lastSuccessAt ? ` • last success ${endpoint.lastSuccessAt}` : ""}
+                {endpoint.lastValidationFailureReason
+                  ? ` • validation ${endpoint.lastValidationFailureReason}`
+                  : endpoint.lastError
+                    ? ` • ${endpoint.lastError}`
+                    : ""}
+              </li>
+            ))}
+          </ul>
+        </article>
+      </section>
+
+      <div className="workspace workspace--debug workspace--control">
         <section className="table-stage">
           <div className="table-surface">
             {props.seatViews.map((seatView) => (
@@ -5611,110 +6118,174 @@ export function DebugGameTableView(props: GameTableViewProps) {
 
         <aside className="debug-sidebar">
           <section className="debug-sidebar__section">
-            <p className="debug-panel__eyebrow">AI Read</p>
-            {props.lastAiDecision ? (
-              <>
-                <strong className="debug-sidebar__title">
-                  {formatActorLabel(props.lastAiDecision.actor)}
-                </strong>
-                <p className="debug-panel__copy">
-                  {props.lastAiDecision.explanation.selectedReasonSummary.join(
-                    " "
-                  )}
-                </p>
-                {props.lastAiDecision.explanation.selectedTags.length > 0 && (
-                  <div className="debug-tag-list">
-                    {props.lastAiDecision.explanation.selectedTags.map(
-                      (tag) => (
-                        <span key={tag} className="debug-tag">
-                          {formatPolicyTag(tag)}
-                        </span>
-                      )
-                    )}
-                  </div>
-                )}
-                {props.lastAiDecision.explanation.selectedTeamplay
-                  ?.partnerCalledTichu && (
-                  <p className="debug-panel__copy debug-panel__copy--compact">
-                    Partner Tichu active • cards{" "}
-                    {
-                      props.lastAiDecision.explanation.selectedTeamplay
-                        .partnerCardCount
-                    }{" "}
-                    • immediate threat{" "}
-                    {props.lastAiDecision.explanation.selectedTeamplay
-                      .opponentImmediateWinRisk
-                      ? "yes"
-                      : "no"}{" "}
-                    • salvage{" "}
-                    {props.lastAiDecision.explanation.selectedTeamplay
-                      .teamSalvageIntervention
-                      ? "yes"
-                      : "no"}
-                  </p>
-                )}
-                <ol className="candidate-list">
-                  {props.lastAiDecision.explanation.candidateScores
-                    .slice(0, 5)
-                    .map((candidate, index) => (
-                      <li key={`${candidate.score}-${index}`}>
-                        <strong>{describeAction(candidate.action)}</strong>
-                        <span>{candidate.score.toFixed(0)}</span>
-                        <small>{candidate.reasons.join(" ")}</small>
-                        {candidate.tags.length > 0 && (
-                          <div className="debug-tag-list">
-                            {candidate.tags.map((tag) => (
-                              <span
-                                key={`${candidate.score}-${tag}`}
-                                className="debug-tag debug-tag--muted"
-                              >
-                                {formatPolicyTag(tag)}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </li>
-                    ))}
-                </ol>
-              </>
-            ) : (
-              <p className="debug-panel__copy">
-                AI rationale will appear here after the first automated
-                decision.
-              </p>
-            )}
+            <p className="debug-panel__eyebrow">Hand Structure Inspector</p>
+            <strong className="debug-sidebar__title">
+              {snapshot.handInspector.seat}
+            </strong>
+            <ul className="debug-list">
+              <li>Total cards: {snapshot.handInspector.before.totalCards}</li>
+              <li>Singles: {snapshot.handInspector.before.singles}</li>
+              <li>Dead singles: {snapshot.handInspector.before.deadSingles}</li>
+              <li>Pairs: {snapshot.handInspector.before.pairs}</li>
+              <li>Triples: {snapshot.handInspector.before.triples}</li>
+              <li>Straights: {snapshot.handInspector.before.straights}</li>
+              <li>Pair runs: {snapshot.handInspector.before.pairRuns}</li>
+              <li>Bombs: {snapshot.handInspector.before.bombs}</li>
+              <li>Control cards: {snapshot.handInspector.before.controlCards}</li>
+              <li>Finishability: {snapshot.handInspector.before.finishabilityScore}</li>
+              <li>Structure quality: {snapshot.handInspector.before.structureQuality}</li>
+            </ul>
+            <p className="debug-panel__copy debug-panel__copy--compact">
+              After:{" "}
+              {snapshot.handInspector.after
+                ? `finish ${snapshot.handInspector.after.finishabilityScore} • structure ${snapshot.handInspector.after.structureQuality}`
+                : "no projected after-state"}
+            </p>
           </section>
 
           <section className="debug-sidebar__section">
-            <p className="debug-panel__eyebrow">Local Surface</p>
-            <strong className="debug-sidebar__title">
-              Current legal actions
-            </strong>
+            <p className="debug-panel__eyebrow">Timeline</p>
+            <strong className="debug-sidebar__title">Recent system events</strong>
             <ul className="debug-list">
-              {props.localActionSummary.length > 0 ? (
-                props.localActionSummary.map((summary) => (
-                  <li key={summary}>{summary}</li>
-                ))
+              {snapshot.timeline.length > 0 ? (
+                [...snapshot.timeline]
+                  .reverse()
+                  .slice(0, 8)
+                  .map((entry) => (
+                    <li key={entry.id}>
+                      <strong>{entry.title}</strong>
+                      <br />
+                      <small>{entry.detail}</small>
+                    </li>
+                  ))
               ) : (
-                <li>No local legal actions right now.</li>
+                <li>No recent timeline entries.</li>
               )}
             </ul>
           </section>
 
           <section className="debug-sidebar__section">
-            <p className="debug-panel__eyebrow">Recent Flow</p>
-            <strong className="debug-sidebar__title">Event feed</strong>
-            <ul className="debug-list">
-              {props.recentEvents
-                .slice(-8)
-                .reverse()
-                .map((eventText, index) => (
-                  <li key={`${eventText}-${index}`}>{eventText}</li>
-                ))}
-            </ul>
+            <p className="debug-panel__eyebrow">Controls Panel</p>
+            <strong className="debug-sidebar__title">Runtime controls</strong>
+            <div className="master-controls-grid">
+              <label className="form-field">
+                <span>Decision Mode</span>
+                <select
+                  value={props.backendSettings.decisionMode}
+                  onChange={(event) =>
+                    props.onBackendSettingsChange({
+                      ...props.backendSettings,
+                      decisionMode:
+                        event.target.value as BackendRuntimeSettings["decisionMode"]
+                    })
+                  }
+                >
+                  <option value="local">Local heuristic</option>
+                  <option value="server_heuristic">Server heuristic</option>
+                  <option value="lightgbm_model">LightGBM model</option>
+                </select>
+              </label>
+              <label className="form-field">
+                <span>Backend URL</span>
+                <input
+                  type="url"
+                  value={props.backendSettings.backendBaseUrl}
+                  onChange={(event) =>
+                    props.onBackendSettingsChange({
+                      ...props.backendSettings,
+                      backendBaseUrl: event.target.value
+                    })
+                  }
+                />
+              </label>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={props.backendSettings.telemetryEnabled}
+                  onChange={(event) =>
+                    props.onBackendSettingsChange({
+                      ...props.backendSettings,
+                      telemetryEnabled: event.target.checked
+                    })
+                  }
+                />
+                <span>Telemetry enabled</span>
+              </label>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={props.backendSettings.serverFallbackEnabled}
+                  onChange={(event) =>
+                    props.onBackendSettingsChange({
+                      ...props.backendSettings,
+                      serverFallbackEnabled: event.target.checked
+                    })
+                  }
+                />
+                <span>Server fallback</span>
+              </label>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={snapshot.ui.verboseMode}
+                  onChange={props.onToggleDashboardVerboseMode}
+                />
+                <span>Verbose mode</span>
+              </label>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={snapshot.ui.rawJsonVisible}
+                  onChange={props.onToggleDashboardRawJson}
+                />
+                <span>Raw JSON drawers</span>
+              </label>
+            </div>
+            <div className="topbar__controls">
+              <button type="button" className="utility-button" onClick={props.onTestBackend}>
+                Test Backend
+              </button>
+              <button type="button" className="utility-button" onClick={props.onTestMl}>
+                ML Test
+              </button>
+              <button
+                type="button"
+                className={
+                  snapshot.ui.frozen
+                    ? "utility-button utility-button--primary"
+                    : "utility-button"
+                }
+                onClick={props.onToggleFrozenSnapshot}
+              >
+                {snapshot.ui.frozen ? "Unfreeze Snapshot" : "Freeze Snapshot"}
+              </button>
+            </div>
           </section>
         </aside>
       </div>
+
+      <section className="master-raw-drawers">
+        <details className="master-drawer" open={snapshot.ui.rawJsonVisible}>
+          <summary>state_raw</summary>
+          <pre>{JSON.stringify(snapshot.raw.stateRaw, null, 2)}</pre>
+        </details>
+        <details className="master-drawer" open={snapshot.ui.rawJsonVisible}>
+          <summary>legal_actions</summary>
+          <pre>{JSON.stringify(snapshot.raw.legalActions, null, 2)}</pre>
+        </details>
+        <details className="master-drawer" open={snapshot.ui.rawJsonVisible}>
+          <summary>chosen_action</summary>
+          <pre>{JSON.stringify(snapshot.raw.chosenAction, null, 2)}</pre>
+        </details>
+        <details className="master-drawer" open={snapshot.ui.rawJsonVisible}>
+          <summary>telemetry payload</summary>
+          <pre>{JSON.stringify(snapshot.raw.telemetryPayload, null, 2)}</pre>
+        </details>
+        <details className="master-drawer" open={snapshot.ui.rawJsonVisible}>
+          <summary>backend response</summary>
+          <pre>{JSON.stringify(snapshot.raw.backendResponse, null, 2)}</pre>
+        </details>
+      </section>
 
       <GameDialogLayer
         activeDialog={props.activeDialog}

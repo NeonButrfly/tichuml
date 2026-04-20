@@ -46,6 +46,14 @@ export type HeadlessBatchOptions = {
   policy?: HeuristicPolicy;
 };
 
+export type {
+  SelfPlayBatchOptions,
+  SelfPlayBatchSummary,
+  SelfPlayGameResult,
+  SeatProviderOverrides
+} from "./self-play-batch.js";
+export { runSelfPlayBatch } from "./self-play-batch.js";
+
 function appendEngineEvents(
   telemetry: TelemetrySession,
   result: EngineResult,

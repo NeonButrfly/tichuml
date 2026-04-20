@@ -11,3 +11,4 @@ ml/data/*
 !ml/data/.gitkeep
 ml/model_registry/*
 !ml/model_registry/.gitkeep
+ml/feature_schema.json

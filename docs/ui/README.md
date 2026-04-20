@@ -70,6 +70,7 @@ The game UI is designed around a single-screen, no-scroll table layout with expl
 - debug surfaces should show bounded values and concise metadata
 - copyable values should use monospace fields with reliable full-value access
 - backend runtime controls should live in one discoverable menu/dialog surface instead of being scattered across gameplay chrome; the current home is hamburger menu -> `Backend Settings`, which now exposes `local`, `server_heuristic`, and `lightgbm_model` decision modes plus fallback, URL, telemetry, and backend health
+- debug mode is now the master control panel: it surfaces provider transparency, heuristic and shallow-lookahead signals, telemetry completeness, exchange visibility, backend/ML health, runtime backend controls, timeline inspection, and raw payload drawers from one snapshot-driven dashboard
 
 ## Related Surfaces
 

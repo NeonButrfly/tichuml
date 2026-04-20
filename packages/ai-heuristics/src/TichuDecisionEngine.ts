@@ -1,4 +1,5 @@
 import { getOpponentSeats, type EngineAction, type GameState, type SeatId } from "@tichuml/engine";
+import type { HeuristicFeatureAnalyzer } from "./HeuristicFeatureAnalyzer.js";
 import { HEURISTIC_WEIGHTS } from "./HeuristicScorer.js";
 import { buildHandEvaluation } from "./HandAnalysis.js";
 import { partnerHasCalledTichu } from "./HeuristicContext.js";
@@ -8,9 +9,11 @@ import { appendUniqueTags } from "./utils.js";
 export function scoreGrandTichu(
   state: GameState,
   seat: SeatId,
-  action: EngineAction
+  action: EngineAction,
+  analyzer?: HeuristicFeatureAnalyzer
 ): CandidateDecision {
-  const analysis = buildHandEvaluation(state, seat);
+  const analysis = analyzer?.getHandEvaluation(seat) ?? buildHandEvaluation(state, seat);
+  const stateFeatures = analyzer?.getStateFeatures(seat);
   const hasMahjong = state.hands[seat].some(
     (card) => card.kind === "special" && card.special === "mahjong"
   );
@@ -24,6 +27,7 @@ export function scoreGrandTichu(
     analysis.loserCount * 16 +
     analysis.finishPlanScore * 1.6 -
     analysis.deadSingleCount * 22 +
+    (stateFeatures?.hand_quality_score ?? 0) * 0.004 +
     (hasMahjong ? 18 : 0);
   const shouldCall =
     state.hands[seat].length === 8 &&
@@ -65,7 +69,8 @@ export function scoreGrandTichu(
 export function scoreTichu(
   state: GameState,
   seat: SeatId,
-  action: EngineAction
+  action: EngineAction,
+  analyzer?: HeuristicFeatureAnalyzer
 ): CandidateDecision {
   if (partnerHasCalledTichu(state, seat)) {
     return {
@@ -77,7 +82,8 @@ export function scoreTichu(
     };
   }
 
-  const analysis = buildHandEvaluation(state, seat);
+  const analysis = analyzer?.getHandEvaluation(seat) ?? buildHandEvaluation(state, seat);
+  const stateFeatures = analyzer?.getStateFeatures(seat);
   const hasMahjong = state.hands[seat].some(
     (card) => card.kind === "special" && card.special === "mahjong"
   );
@@ -92,6 +98,8 @@ export function scoreTichu(
     analysis.loserCount * 14 +
     analysis.finishPlanScore * 1.35 -
     analysis.deadSingleCount * 18 +
+    (stateFeatures?.hand_quality_score ?? 0) * 0.003 -
+    (stateFeatures?.premium_resource_pressure ?? 0) * 0.005 +
     (hasMahjong ? 12 : 0);
   const callThreshold =
     state.hands[seat].length <= 6

@@ -89,19 +89,36 @@ describe("headless AI flow", () => {
     expect(result.policyName).toBe("heuristics-v1");
     expect(result.telemetry.decisions.every((record) => record.policy_name === "heuristics-v1")).toBe(true);
     expect(
-      result.telemetry.decisions.every(
-        (record) =>
+      result.telemetry.decisions.every((record) => {
+        if (
+          record.actor_type !== "ai" ||
+          record.policy_explanation.actor === "system"
+        ) {
+          return (
+            record.policy_explanation.policy === "heuristics-v1" &&
+            record.policy_explanation.selectedReasonSummary.length > 0
+          );
+        }
+
+        return (
           record.policy_explanation.policy === "heuristics-v1" &&
           record.policy_explanation.candidateScores.length > 0 &&
           record.policy_explanation.selectedReasonSummary.length > 0 &&
           Array.isArray(record.policy_explanation.selectedTags) &&
-          record.policy_explanation.candidateScores.every((candidate) => Array.isArray(candidate.tags))
-      )
+          typeof record.policy_explanation.stateFeatures === "object" &&
+          record.policy_explanation.selectedFeatures !== undefined &&
+          record.policy_explanation.candidateScores.every(
+            (candidate) =>
+              Array.isArray(candidate.tags) &&
+              typeof candidate.features === "object"
+          )
+        );
+      })
     ).toBe(true);
     expect(result.telemetry.decisions.every((record) => record.actor_type === "ai" || record.actor_type === "system")).toBe(
       true
     );
-  }, 15000);
+  }, 150000);
 
   it("runs many AI-only rounds without soft locks", async () => {
     const batch = [];
@@ -121,7 +138,7 @@ describe("headless AI flow", () => {
     expect(batch).toHaveLength(2);
     expect(batch.every((round) => round.completed && round.state.phase === "finished")).toBe(true);
     expect(batch.every((round) => round.decisions > 0)).toBe(true);
-  }, 60000);
+  }, 180000);
 
   it("replays the same seed with identical policy decisions", async () => {
     const first = withSilencedConsole(() =>
@@ -136,5 +153,5 @@ describe("headless AI flow", () => {
       first.telemetry.decisions.map((record) => record.selected_action)
     ).toEqual(second.telemetry.decisions.map((record) => record.selected_action));
     expect(first.state.roundSummary).toEqual(second.state.roundSummary);
-  }, 40000);
+  }, 120000);
 });

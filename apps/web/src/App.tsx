@@ -2,13 +2,24 @@ import {
   startTransition,
   useEffect,
   useEffectEvent,
+  useMemo,
   useRef,
   useState
 } from "react";
-import { type ChosenDecision } from "@tichuml/ai-heuristics";
+import {
+  buildHandEvaluation,
+  buildHandEvaluationAfterRemovingCards,
+  buildUrgencyProfile,
+  type CandidateActionFeatureSnapshot,
+  type ChosenDecision,
+  type HandEvaluation,
+  type PolicyTag
+} from "@tichuml/ai-heuristics";
 import {
   applyEngineAction,
+  SEAT_IDS,
   createInitialGameState,
+  getPartnerSeat,
   SYSTEM_ACTOR,
   type ActorId,
   type EngineAction,
@@ -72,8 +83,11 @@ import { generateSeedWithEntropy } from "./seed/orchestrator";
 import {
   type BackendRuntimeSettings,
   type DecisionRequestPayload,
+  type JsonObject,
   type RequestedDecisionProvider,
-  type SeedDebugSnapshot
+  type SeedDebugSnapshot,
+  type TelemetryDecisionPayload,
+  type TelemetryEventPayload
 } from "@tichuml/shared";
 import {
   createUnknownBackendReachability,
@@ -83,12 +97,32 @@ import {
 } from "./backend/settings";
 import { resolveDecisionWithProvider } from "./backend/decision-provider";
 import { emitDecisionTelemetry, emitEventTelemetry } from "./backend/telemetry";
-import { testBackendHealth } from "./backend/client";
+import { postDecisionRequest, testBackendHealth } from "./backend/client";
+import { isBackendRequestError } from "./backend/client";
 import {
   TELEMETRY_ENGINE_VERSION,
   TELEMETRY_SCHEMA_VERSION,
   TELEMETRY_SIM_VERSION
 } from "@tichuml/telemetry";
+import {
+  buildCollectionReadiness,
+  buildHandMetricDelta,
+  buildHandMetricSnapshot,
+  buildPhaseTracking,
+  buildProviderModeLabel,
+  buildSeatDashboardRows,
+  buildTelemetryCompleteness,
+  buildUrgencyModeLabel,
+  getTelemetryEventPhaseList,
+  relationLabel,
+  summarizeActionDescriptor,
+  summarizeMlScores,
+  type DashboardUiState,
+  type EndpointDiagnostics,
+  type ExchangePanelSnapshot,
+  type MasterControlSnapshot,
+  type TimelineEntry
+} from "./master-control-model";
 
 const AI_STEP_DELAY_MS = 420;
 const SYSTEM_STEP_DELAY_MS = 180;
@@ -284,6 +318,151 @@ type AppSessionProps = {
   ) => Promise<RoundSession>;
 };
 
+type DecisionDiagnosticsState = {
+  requestedProvider: RequestedDecisionProvider | "local";
+  providerUsed: "local_heuristic" | RequestedDecisionProvider | null;
+  fallbackUsed: boolean;
+  fallbackReason: string | null;
+  latencyMs: number | null;
+  lastResolutionAt: string | null;
+  lastRequestPayload: DecisionRequestPayload | null;
+  lastResponseMetadata: JsonObject | null;
+  lastChosenAction: EngineAction | null;
+  lastLegalActions: EngineResult["legalActions"] | null;
+};
+
+type TelemetryDiagnosticsState = {
+  lastWriteAt: string | null;
+  lastRecordedPhase: string | null;
+  lastDecisionIndex: number | null;
+  lastDecisionPayload: TelemetryDecisionPayload | null;
+  lastEventPayload: TelemetryEventPayload | null;
+  phaseHistory: string[];
+  lastError: string | null;
+  lastTelemetryIds: number[];
+  payloadValid: boolean;
+  decisionPayloadValid: boolean;
+};
+
+type MlDiagnosticsState = {
+  modelLoaded: boolean | null;
+  modelName: string | null;
+  inferenceWorking: boolean | null;
+  inferenceLatencyMs: number | null;
+  candidatesScoredCount: number;
+  scoreSpread: {
+    max: number | null;
+    min: number | null;
+    chosen: number | null;
+    gapToSecond: number | null;
+  };
+  lastError: string | null;
+};
+
+type EndpointKey = "health" | "decision" | "telemetry";
+
+function createInitialEndpointDiagnostics(): Record<EndpointKey, EndpointDiagnostics> {
+  return {
+    health: {
+      name: "/health",
+      reachable: null,
+      payloadValid: null,
+      latencyMs: null,
+      lastStatus: null,
+      lastError: null,
+      checkedAt: null,
+      lastSuccessAt: null,
+      lastValidationFailureReason: null
+    },
+    decision: {
+      name: "/api/decision/request",
+      reachable: null,
+      payloadValid: null,
+      latencyMs: null,
+      lastStatus: null,
+      lastError: null,
+      checkedAt: null,
+      lastSuccessAt: null,
+      lastValidationFailureReason: null
+    },
+    telemetry: {
+      name: "/api/telemetry/event",
+      reachable: null,
+      payloadValid: null,
+      latencyMs: null,
+      lastStatus: null,
+      lastError: null,
+      checkedAt: null,
+      lastSuccessAt: null,
+      lastValidationFailureReason: null
+    }
+  };
+}
+
+function createInitialDecisionDiagnostics(): DecisionDiagnosticsState {
+  return {
+    requestedProvider: "local",
+    providerUsed: null,
+    fallbackUsed: false,
+    fallbackReason: null,
+    latencyMs: null,
+    lastResolutionAt: null,
+    lastRequestPayload: null,
+    lastResponseMetadata: null,
+    lastChosenAction: null,
+    lastLegalActions: null
+  };
+}
+
+function createInitialTelemetryDiagnostics(): TelemetryDiagnosticsState {
+  return {
+    lastWriteAt: null,
+    lastRecordedPhase: null,
+    lastDecisionIndex: null,
+    lastDecisionPayload: null,
+    lastEventPayload: null,
+    phaseHistory: [],
+    lastError: null,
+    lastTelemetryIds: [],
+    payloadValid: false,
+    decisionPayloadValid: false
+  };
+}
+
+function createInitialMlDiagnostics(): MlDiagnosticsState {
+  return {
+    modelLoaded: null,
+    modelName: null,
+    inferenceWorking: null,
+    inferenceLatencyMs: null,
+    candidatesScoredCount: 0,
+    scoreSpread: {
+      max: null,
+      min: null,
+      chosen: null,
+      gapToSecond: null
+    },
+    lastError: null
+  };
+}
+
+function createTimelineEntry(
+  kind: TimelineEntry["kind"],
+  tone: TimelineEntry["tone"],
+  title: string,
+  detail: string
+): TimelineEntry {
+  const ts = new Date().toISOString();
+  return {
+    id: `${kind}-${ts}-${title.replace(/\s+/g, "-").toLowerCase()}`,
+    ts,
+    kind,
+    tone,
+    title,
+    detail
+  };
+}
+
 function AppLoadingScreen({
   message,
   error,
@@ -412,6 +591,26 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     useState<BackendRuntimeSettings>(loadBackendSettings);
   const [backendStatus, setBackendStatus] = useState<BackendReachability>(
     createUnknownBackendReachability
+  );
+  const [endpointDiagnostics, setEndpointDiagnostics] = useState<
+    Record<EndpointKey, EndpointDiagnostics>
+  >(createInitialEndpointDiagnostics);
+  const [decisionDiagnostics, setDecisionDiagnostics] =
+    useState<DecisionDiagnosticsState>(createInitialDecisionDiagnostics);
+  const [telemetryDiagnostics, setTelemetryDiagnostics] =
+    useState<TelemetryDiagnosticsState>(createInitialTelemetryDiagnostics);
+  const [mlDiagnostics, setMlDiagnostics] = useState<MlDiagnosticsState>(
+    createInitialMlDiagnostics
+  );
+  const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
+  const [dashboardUi, setDashboardUi] = useState<DashboardUiState>({
+    verboseMode: false,
+    rawJsonVisible: false,
+    frozen: false,
+    frozenAt: null
+  });
+  const [frozenSnapshot, setFrozenSnapshot] = useState<MasterControlSnapshot | null>(
+    null
   );
   const [uiMode, setUiMode] = useState<UiMode>("normal");
   const [layoutEditorActive, setLayoutEditorActive] = useState(false);
@@ -612,6 +811,13 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
                   : "Auto-advancing";
 
   const cardLookup = new Map(state.shuffledDeck.map((card) => [card.id, card]));
+  const seatEvaluations = useMemo(
+    () =>
+      Object.fromEntries(
+        SEAT_IDS.map((seat) => [seat, buildHandEvaluation(state, seat)])
+      ) as Record<SeatId, HandEvaluation>,
+    [state]
+  );
   const exchangeRenderModel = deriveExchangeRenderModel({
     state,
     localSeat: LOCAL_SEAT,
@@ -742,6 +948,367 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     playEnabled: !roundGenerationPending && localTurnActions.canPlay,
     matchComplete: state.matchComplete
   });
+  const activeInspectorSeat: SeatId =
+    state.activeSeat && state.activeSeat !== SYSTEM_ACTOR
+      ? state.activeSeat
+      : LOCAL_SEAT;
+  const activeInspectorEvaluation = seatEvaluations[activeInspectorSeat];
+  const activeUrgency = buildUrgencyProfile(state, activeInspectorSeat);
+  const chosenActionDescriptor = decisionDiagnostics.lastChosenAction
+    ? summarizeActionDescriptor(
+        decisionDiagnostics.lastChosenAction,
+        decisionDiagnostics.lastLegalActions ?? round.legalActions,
+        state.currentWish
+      )
+    : null;
+  const chosenActionAfterEvaluation =
+    decisionDiagnostics.lastChosenAction?.type === "play_cards" &&
+    "seat" in decisionDiagnostics.lastChosenAction
+      ? buildHandEvaluationAfterRemovingCards(
+          state,
+          decisionDiagnostics.lastChosenAction.seat,
+          decisionDiagnostics.lastChosenAction.cardIds
+        )
+      : null;
+  const liveMasterControlSnapshot = useMemo<MasterControlSnapshot>(() => {
+    const requestPayload = decisionDiagnostics.lastRequestPayload;
+    const responseMetadata = decisionDiagnostics.lastResponseMetadata;
+    const lastExplanation = lastAiDecision?.explanation;
+    const candidateSource =
+      lastExplanation?.candidateScores.length
+        ? lastExplanation.candidateScores.slice(0, 8).map((candidate) => ({
+            action: candidate.action,
+            score: candidate.score,
+            reasons: candidate.reasons,
+            tags: candidate.tags,
+            teamplay: candidate.teamplay,
+            features: candidate.features
+          }))
+        : Array.isArray(responseMetadata?.scores)
+          ? (responseMetadata.scores as Array<Record<string, unknown>>)
+              .slice(0, 8)
+              .map((entry) => ({
+                action: entry.action as EngineAction,
+                score:
+                  typeof entry.score === "number" ? entry.score : 0,
+                reasons: ["backend model ranking"],
+                tags: [] as PolicyTag[],
+                teamplay: undefined,
+                features: undefined as CandidateActionFeatureSnapshot | undefined
+              }))
+          : [];
+    const selectedFeatures =
+      lastExplanation?.selectedFeatures ??
+      ((responseMetadata?.explanation as { selectedFeatures?: CandidateActionFeatureSnapshot } | undefined)
+        ?.selectedFeatures ?? null);
+
+    const topCandidates = candidateSource.map((candidate) => {
+      const descriptor = summarizeActionDescriptor(
+        candidate.action,
+        decisionDiagnostics.lastLegalActions ?? round.legalActions,
+        state.currentWish
+      );
+      const tags = candidate.tags ?? [];
+      return {
+        ...descriptor,
+        score: Number(candidate.score.toFixed(2)),
+        scoreBreakdown: candidate.reasons,
+        reasonTags: tags,
+        overtakesPartner:
+          candidate.features?.overtakes_partner ??
+          (tags.includes("YIELD_TO_PARTNER") === false &&
+            Boolean(candidate.teamplay?.partnerCurrentControl)),
+        controlRetaining:
+          candidate.features
+            ? candidate.features.control_retention_estimate >= 60
+            : tags.includes("TEMPO_WIN") ||
+              tags.includes("CONTROL_LEAD") ||
+              Boolean(candidate.teamplay?.partnerCurrentControl),
+        endgameOriented:
+          candidate.features
+            ? candidate.features.urgency_mode === "endgame" ||
+              candidate.features.endgame_pressure >= 70
+            : tags.includes("ENDGAME_COMMIT") ||
+              tags.includes("SELF_NEAR_OUT") ||
+              tags.includes("OPPONENT_STOP"),
+        teamplay: candidate.teamplay
+      };
+    });
+
+    const telemetryCompleteness = buildTelemetryCompleteness(
+      telemetryDiagnostics.lastDecisionPayload
+    );
+    const phaseList = getTelemetryEventPhaseList(
+      telemetryDiagnostics.lastDecisionPayload,
+      telemetryDiagnostics.lastEventPayload,
+      telemetryDiagnostics.phaseHistory
+    );
+    const phaseTracking = buildPhaseTracking(phaseList);
+    const exchangeRecorded =
+      phaseTracking.passSelect && phaseTracking.exchange && phaseTracking.pickup;
+    const backendReachable =
+      endpointDiagnostics.health.reachable === true ||
+      endpointDiagnostics.decision.reachable === true ||
+      endpointDiagnostics.telemetry.reachable === true;
+    const telemetryHealthy =
+      backendSettings.telemetryEnabled &&
+      telemetryDiagnostics.lastError === null &&
+      telemetryDiagnostics.lastWriteAt !== null;
+    const collectionReadiness = buildCollectionReadiness({
+      telemetryEnabled: backendSettings.telemetryEnabled,
+      telemetryHealthy,
+      backendReachable,
+      decisionPayloadValid: endpointDiagnostics.decision.payloadValid === true,
+      telemetryPayloadValid: telemetryDiagnostics.payloadValid,
+      exchangeRecorded,
+      completeness: telemetryCompleteness
+    });
+    const handBefore = buildHandMetricSnapshot(
+      activeInspectorEvaluation,
+      state.hands[activeInspectorSeat].length
+    );
+    const handAfter = chosenActionAfterEvaluation
+      ? buildHandMetricSnapshot(
+          chosenActionAfterEvaluation,
+          Math.max(
+            0,
+            state.hands[activeInspectorSeat].length -
+              (chosenActionDescriptor?.length ?? 0)
+          )
+        )
+      : null;
+    const handDelta = buildHandMetricDelta(
+      activeInspectorEvaluation,
+      chosenActionAfterEvaluation
+    );
+    const seatRows = buildSeatDashboardRows({
+      seats: [...SEAT_IDS],
+      localSeat: LOCAL_SEAT,
+      activeSeat: state.activeSeat,
+      currentWinner: state.currentTrick?.currentWinner ?? null,
+      handCounts: derived.handCounts,
+      evaluations: seatEvaluations,
+      calls: derived.calls
+    });
+    const tichuCalls = SEAT_IDS.filter((seat) => derived.calls[seat].smallTichu).map(
+      (seat) => seat
+    );
+    const grandTichuCalls = SEAT_IDS.filter(
+      (seat) => derived.calls[seat].grandTichu
+    ).map((seat) => seat);
+    const requestActorSeat =
+      requestPayload?.actor_seat && requestPayload.actor_seat !== SYSTEM_ACTOR
+        ? (requestPayload.actor_seat as SeatId)
+        : activeInspectorSeat;
+    const partnerSeat = getPartnerSeat(requestActorSeat);
+    const partnerAdvantage = Number(
+      (
+        (seatEvaluations[partnerSeat]?.finishPlanScore ?? 0) -
+        (state.hands[partnerSeat].length / 2)
+      ).toFixed(2)
+    );
+    const exchangePanel: ExchangePanelSnapshot = {
+      state: exchangeFlowState,
+      direction: "left / partner / right",
+      pickupStatus: pickupPending ? "Pending pickup" : "Not pending",
+      telemetryEmitted: exchangeRecorded,
+      backendRecorded: telemetryDiagnostics.lastTelemetryIds.length > 0,
+      selectedBySeat: SEAT_IDS.map((seat) => {
+        const selection = stagedSelectionBySeat[seat];
+        const cards = pickupPending
+          ? exchangeRenderModel.receivedPendingPickupBySeat[seat]
+          : PASS_TARGETS.map((target) => selection?.[target]).filter(
+              (value): value is string => Boolean(value)
+            );
+        return {
+          seat,
+          label: relationLabel(LOCAL_SEAT, seat),
+          cards
+        };
+      })
+    };
+
+    return {
+      generatedAt: new Date().toISOString(),
+      ui: dashboardUi,
+      game: {
+        gameId: matchId,
+        handId,
+        decisionIndex: decisionCount,
+        phase: state.phase,
+        activeSeat: state.activeSeat,
+        wishState:
+          state.currentWish === null ? "No active wish" : String(state.currentWish),
+        tichuCalls,
+        grandTichuCalls,
+        exchangeState: exchangeFlowState,
+        pickupState: pickupPending ? "pending" : "not pending",
+        trick: {
+          comboType: state.currentTrick?.currentCombination.kind ?? "none",
+          rank:
+            state.currentTrick?.currentCombination.primaryRank !== undefined
+              ? String(state.currentTrick.currentCombination.primaryRank)
+              : null,
+          cards: state.currentTrick?.currentCombination.cardIds ?? [],
+          currentLeader: state.currentTrick?.currentWinner ?? null
+        },
+        seats: seatRows
+      },
+      decision: {
+        requestedProvider: backendSettings.decisionMode,
+        actualProviderUsed: decisionDiagnostics.providerUsed,
+        fallbackUsed: decisionDiagnostics.fallbackUsed,
+        fallbackReason: decisionDiagnostics.fallbackReason,
+        latencyMs: decisionDiagnostics.latencyMs,
+        legalActionCount: requestPayload
+          ? Array.isArray(requestPayload.legal_actions)
+            ? requestPayload.legal_actions.length
+            : Array.isArray(
+                  (requestPayload.legal_actions as Record<string, unknown>)[
+                    requestActorSeat
+                  ]
+                )
+              ? (
+                  (requestPayload.legal_actions as Record<string, LegalAction[]>)[
+                    requestActorSeat
+                  ] ?? []
+                ).length
+              : 0
+          : 0,
+        chosenAction: chosenActionDescriptor,
+        topCandidates,
+        urgencyMode: selectedFeatures
+          ? selectedFeatures.urgency_mode.replaceAll("_", " ")
+          : buildUrgencyModeLabel(activeUrgency),
+        handQualityScore: selectedFeatures
+          ? selectedFeatures.state.hand_quality_score
+          : Number(activeInspectorEvaluation.finishPlanScore.toFixed(2)),
+        controlRetentionEstimate: selectedFeatures
+          ? selectedFeatures.control_retention_estimate
+          : Number(activeInspectorEvaluation.controlCount.toFixed(2)),
+        structurePreservation: selectedFeatures
+          ? selectedFeatures.structure_preservation_score
+          : Number(
+              (
+                activeInspectorEvaluation.synergyScore -
+                activeInspectorEvaluation.fragmentation
+              ).toFixed(2)
+            ),
+        endgamePressure: selectedFeatures
+          ? selectedFeatures.endgame_pressure
+          : Number(
+              (
+                (activeUrgency.opponentOutUrgent ? 2 : 0) +
+                (activeUrgency.selfNearOut ? 2 : 0) +
+                (activeUrgency.partnerNearOut ? 1 : 0)
+              ).toFixed(2)
+            ),
+        partnerAdvantage: selectedFeatures
+          ? selectedFeatures.partner_advantage_estimate
+          : partnerAdvantage,
+        lookahead: selectedFeatures
+          ? {
+              futureHandQualityDelta: selectedFeatures.future_hand_quality_delta,
+              controlRetentionDelta: selectedFeatures.control_retention_estimate,
+              deadSinglesDelta: selectedFeatures.dead_singles_reduction,
+              comboPreservationImpact:
+                (selectedFeatures.combo_count_after ?? selectedFeatures.combo_count_before) -
+                selectedFeatures.combo_count_before
+            }
+          : handDelta,
+        reasonTags:
+          lastExplanation?.selectedTags ??
+          ((responseMetadata?.explanation as { selectedTags?: PolicyTag[] } | undefined)
+            ?.selectedTags ?? []),
+        requestedProviderLabel: buildProviderModeLabel(backendSettings.decisionMode)
+      },
+      telemetry: {
+        enabled: backendSettings.telemetryEnabled,
+        healthy: telemetryHealthy,
+        payloadValid: telemetryDiagnostics.payloadValid,
+        decisionPayloadValid: endpointDiagnostics.decision.payloadValid === true,
+        lastWriteAt: telemetryDiagnostics.lastWriteAt,
+        lastRecordedPhase: telemetryDiagnostics.lastRecordedPhase,
+        lastDecisionIndex: telemetryDiagnostics.lastDecisionIndex,
+        completeness: telemetryCompleteness,
+        phaseTracking,
+        exchangeRecorded,
+        collectionReadiness,
+        lastError: telemetryDiagnostics.lastError
+      },
+      backendMl: {
+        backendUrl: backendSettings.backendBaseUrl,
+        backendReachable:
+          backendReachable ? true : backendStatus.state === "unreachable" ? false : null,
+        backendLatencyMs: endpointDiagnostics.health.latencyMs,
+        backendLastError:
+          endpointDiagnostics.health.lastError ?? backendStatus.detail,
+        endpoints: Object.values(endpointDiagnostics),
+        modelLoaded: mlDiagnostics.modelLoaded,
+        modelName: mlDiagnostics.modelName,
+        inferenceWorking: mlDiagnostics.inferenceWorking,
+        inferenceLatencyMs: mlDiagnostics.inferenceLatencyMs,
+        candidatesScoredCount: mlDiagnostics.candidatesScoredCount,
+        scoreSpread: mlDiagnostics.scoreSpread,
+        lastError: mlDiagnostics.lastError
+      },
+      exchange: exchangePanel,
+      handInspector: {
+        seat: requestActorSeat,
+        before: handBefore,
+        after: handAfter,
+        delta: handDelta
+      },
+      timeline,
+      raw: {
+        stateRaw: (requestPayload?.state_raw as JsonObject | null) ?? null,
+        legalActions: requestPayload?.legal_actions ?? null,
+        chosenAction:
+          (decisionDiagnostics.lastChosenAction as unknown as JsonObject | null) ??
+          null,
+        telemetryPayload:
+          (telemetryDiagnostics.lastDecisionPayload as unknown as JsonObject | null) ??
+          (telemetryDiagnostics.lastEventPayload as unknown as JsonObject | null) ??
+          null,
+        backendResponse: responseMetadata
+      }
+    };
+  }, [
+    activeInspectorEvaluation,
+    activeInspectorSeat,
+    activeUrgency,
+    backendSettings,
+    backendStatus.state,
+    backendStatus.detail,
+    chosenActionAfterEvaluation,
+    chosenActionDescriptor,
+    decisionCount,
+    decisionDiagnostics,
+    derived.calls,
+    derived.handCounts,
+    dashboardUi,
+    endpointDiagnostics,
+    exchangeFlowState,
+    exchangeRenderModel.receivedPendingPickupBySeat,
+    handId,
+    lastAiDecision,
+    matchId,
+    mlDiagnostics,
+    pickupPending,
+    round.legalActions,
+    seatEvaluations,
+    stagedSelectionBySeat,
+    state,
+    telemetryDiagnostics,
+    timeline
+  ]);
+  const masterControlSnapshot =
+    dashboardUi.frozen && frozenSnapshot
+      ? {
+          ...frozenSnapshot,
+          ui: dashboardUi
+        }
+      : liveMasterControlSnapshot;
   const executeUiHotkeyCommand = useEffectEvent((commandId: UiCommandId) => {
     executeUiCommand(commandId);
   });
@@ -750,22 +1317,277 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     persistBackendSettings(backendSettings);
   }, [backendSettings]);
 
+  const pushTimeline = useEffectEvent((entry: TimelineEntry) => {
+    setTimeline((current) => [...current, entry].slice(-20));
+  });
+
+  const updateEndpointDiagnostics = useEffectEvent(
+    (
+      key: EndpointKey,
+      next: Partial<Omit<EndpointDiagnostics, "name">>
+    ) => {
+      setEndpointDiagnostics((current) => ({
+        ...current,
+        [key]: {
+          ...current[key],
+          ...next
+        }
+      }));
+    }
+  );
+
+  const recordTelemetryFailure = useEffectEvent((error: unknown) => {
+    const detail = error instanceof Error ? error.message : String(error);
+    const reachable = isBackendRequestError(error) ? error.reachable : false;
+    const payloadValid = isBackendRequestError(error)
+      ? error.kind === "validation" || error.kind === "client_validation"
+        ? false
+        : null
+      : null;
+    const validationReason = isBackendRequestError(error)
+      ? error.validationErrors?.map((issue) => `${issue.path}: ${issue.message}`).join("; ") ??
+        (error.kind === "validation" || error.kind === "client_validation"
+          ? detail
+          : null)
+      : null;
+    setTelemetryDiagnostics((current) => ({
+      ...current,
+      lastError: detail,
+      payloadValid:
+        payloadValid === false ? false : current.payloadValid
+    }));
+    updateEndpointDiagnostics("telemetry", {
+      reachable,
+      payloadValid,
+      lastStatus:
+        isBackendRequestError(error) &&
+        (error.kind === "validation" || error.kind === "client_validation")
+          ? "validation error"
+          : "error",
+      lastError: detail,
+      checkedAt: new Date().toISOString(),
+      lastValidationFailureReason: validationReason
+    });
+    pushTimeline(
+      createTimelineEntry(
+        "telemetry",
+        reachable === false ? "red" : "yellow",
+        "Telemetry failed",
+        validationReason ?? detail
+      )
+    );
+  });
+
+  const recordTelemetryDecision = useEffectEvent(
+    (
+      payload: TelemetryDecisionPayload,
+      telemetryId: number | null
+    ) => {
+      setTelemetryDiagnostics((current) => ({
+        ...current,
+        lastWriteAt: payload.ts,
+        lastRecordedPhase: payload.phase,
+        lastDecisionIndex: payload.decision_index,
+        lastDecisionPayload: payload,
+        phaseHistory: [...new Set([...current.phaseHistory, payload.phase])].slice(-16),
+        lastError: null,
+        decisionPayloadValid: true,
+        lastTelemetryIds:
+          telemetryId === null
+            ? current.lastTelemetryIds
+            : [...current.lastTelemetryIds, telemetryId].slice(-16)
+      }));
+      pushTimeline(
+        createTimelineEntry(
+          "telemetry",
+          "green",
+          "Decision telemetry",
+          `${payload.phase} • index ${payload.decision_index}`
+        )
+      );
+    }
+  );
+
+  const recordTelemetryEvent = useEffectEvent(
+    (payload: TelemetryEventPayload, telemetryIds: number[]) => {
+      setTelemetryDiagnostics((current) => ({
+        ...current,
+        lastWriteAt: payload.ts,
+        lastRecordedPhase: payload.phase,
+        lastEventPayload: payload,
+        phaseHistory: [...new Set([...current.phaseHistory, payload.phase])].slice(-16),
+        lastError: null,
+        payloadValid: true,
+        lastTelemetryIds: [...current.lastTelemetryIds, ...telemetryIds].slice(-16)
+      }));
+      updateEndpointDiagnostics("telemetry", {
+        reachable: true,
+        payloadValid: true,
+        lastStatus: "event recorded",
+        lastError: null,
+        checkedAt: payload.ts,
+        lastSuccessAt: payload.ts,
+        lastValidationFailureReason: null
+      });
+      pushTimeline(
+        createTimelineEntry(
+          "telemetry",
+          "green",
+          "Event telemetry",
+          `${payload.phase} • ${payload.event_type}`
+        )
+      );
+    }
+  );
+
   const handleBackendSettingsChange = useEffectEvent(
     (nextSettings: BackendRuntimeSettings) => {
       setBackendSettings(nextSettings);
       setBackendStatus(createUnknownBackendReachability());
+      setFrozenSnapshot(null);
+    }
+  );
+
+  const recordDecisionResolution = useEffectEvent(
+    (config: {
+      requestPayload: DecisionRequestPayload;
+      legalActions: EngineResult["legalActions"];
+      resolution: Awaited<ReturnType<typeof resolveDecisionWithProvider>>;
+    }) => {
+      setDecisionDiagnostics({
+        requestedProvider: config.resolution.requestedProvider,
+        providerUsed: config.resolution.providerUsed,
+        fallbackUsed: config.resolution.usedFallback,
+        fallbackReason: config.resolution.usedFallback
+          ? config.resolution.providerReason
+          : null,
+        latencyMs: Number(config.resolution.latencyMs.toFixed(1)),
+        lastResolutionAt: new Date().toISOString(),
+        lastRequestPayload: config.requestPayload,
+        lastResponseMetadata: config.resolution.responseMetadata,
+        lastChosenAction: config.resolution.chosen.action,
+        lastLegalActions: config.legalActions
+      });
+
+      updateEndpointDiagnostics("decision", {
+        reachable: config.resolution.endpointReachable,
+        payloadValid:
+          config.resolution.endpointStatus === "ok"
+            ? true
+            : config.resolution.endpointStatus === "validation_error" ||
+                config.resolution.endpointStatus === "client_validation_error"
+              ? false
+              : null,
+        latencyMs: Number(config.resolution.latencyMs.toFixed(1)),
+        lastStatus:
+          config.resolution.endpointStatus === "ok"
+            ? config.resolution.providerUsed
+            : config.resolution.endpointStatus.replaceAll("_", " "),
+        lastError: config.resolution.endpointError,
+        checkedAt: new Date().toISOString(),
+        lastSuccessAt:
+          config.resolution.endpointStatus === "ok"
+            ? new Date().toISOString()
+            : null,
+        lastValidationFailureReason:
+          config.resolution.validationErrors?.map(
+            (issue) => `${issue.path}: ${issue.message}`
+          ).join("; ") ??
+          (config.resolution.endpointStatus === "validation_error" ||
+          config.resolution.endpointStatus === "client_validation_error"
+            ? config.resolution.endpointError
+            : null)
+      });
+
+      const modelMetadata = config.resolution.responseMetadata?.model_metadata;
+      const scoreEntries = Array.isArray(config.resolution.responseMetadata?.scores)
+        ? (config.resolution.responseMetadata?.scores as Array<{ score?: number | null }>)
+        : [];
+      const summarizedScores = summarizeMlScores(scoreEntries);
+      const modelName =
+        typeof modelMetadata === "object" &&
+        modelMetadata !== null &&
+        typeof (modelMetadata as Record<string, unknown>).model_path === "string"
+          ? String((modelMetadata as Record<string, unknown>).model_path)
+              .split(/[\\/]/)
+              .slice(-1)[0] ?? "lightgbm_action_model.txt"
+          : null;
+
+      setMlDiagnostics((current) => ({
+        modelLoaded:
+          config.resolution.providerUsed === "lightgbm_model"
+            ? true
+            : current.modelLoaded,
+        modelName:
+          config.resolution.providerUsed === "lightgbm_model"
+            ? modelName ?? current.modelName
+            : current.modelName,
+        inferenceWorking:
+          config.resolution.providerUsed === "lightgbm_model"
+            ? !config.resolution.usedFallback
+            : current.inferenceWorking,
+        inferenceLatencyMs:
+          config.resolution.providerUsed === "lightgbm_model"
+            ? Number(config.resolution.latencyMs.toFixed(1))
+            : current.inferenceLatencyMs,
+        candidatesScoredCount:
+          config.resolution.providerUsed === "lightgbm_model"
+            ? summarizedScores.candidateCount
+            : current.candidatesScoredCount,
+        scoreSpread:
+          config.resolution.providerUsed === "lightgbm_model"
+            ? {
+                max: summarizedScores.max,
+                min: summarizedScores.min,
+                chosen: summarizedScores.chosen,
+                gapToSecond: summarizedScores.gapToSecond
+              }
+            : current.scoreSpread,
+        lastError:
+          config.resolution.providerUsed === "lightgbm_model" &&
+          config.resolution.usedFallback
+            ? config.resolution.providerReason
+            : current.lastError
+      }));
+
+      pushTimeline(
+        createTimelineEntry(
+          config.resolution.usedFallback ? "fallback" : "provider",
+          config.resolution.usedFallback ? "yellow" : "green",
+          config.resolution.usedFallback
+            ? "Provider fallback"
+            : "Decision resolved",
+          `${buildProviderModeLabel(
+            config.resolution.requestedProvider === "local"
+              ? "local"
+              : config.resolution.requestedProvider
+          )} -> ${config.resolution.providerUsed}`
+        )
+      );
     }
   );
 
   const testBackendConnection = useEffectEvent(async () => {
+    const startedAt = performance.now();
     setBackendStatus({
       state: "checking",
       detail: "Checking server health and database reachability.",
       checkedAt: null
     });
+    updateEndpointDiagnostics("health", {
+      reachable: null,
+      payloadValid: null,
+      latencyMs: null,
+      lastStatus: "checking",
+      lastError: null,
+      checkedAt: null,
+      lastSuccessAt: null,
+      lastValidationFailureReason: null
+    });
 
     try {
       const result = await testBackendHealth(backendSettings.backendBaseUrl);
+      const latencyMs = Number((performance.now() - startedAt).toFixed(1));
       setBackendStatus({
         state: "reachable",
         detail: result.database
@@ -773,13 +1595,45 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
           : "Health endpoint responded successfully.",
         checkedAt: new Date().toISOString()
       });
+      updateEndpointDiagnostics("health", {
+        reachable: true,
+        payloadValid: true,
+        latencyMs,
+        lastStatus: "ok",
+        lastError: null,
+        checkedAt: new Date().toISOString(),
+        lastSuccessAt: new Date().toISOString(),
+        lastValidationFailureReason: null
+      });
+      pushTimeline(
+        createTimelineEntry(
+          "backend",
+          "green",
+          "Backend reachable",
+          `Health check passed in ${latencyMs} ms`
+        )
+      );
     } catch (error) {
+      const detail =
+        error instanceof Error ? error.message : "Backend health check failed.";
       setBackendStatus({
         state: "unreachable",
-        detail:
-          error instanceof Error ? error.message : "Backend health check failed.",
+        detail,
         checkedAt: new Date().toISOString()
       });
+      updateEndpointDiagnostics("health", {
+        reachable: false,
+        payloadValid: null,
+        latencyMs: Number((performance.now() - startedAt).toFixed(1)),
+        lastStatus: "error",
+        lastError: detail,
+        checkedAt: new Date().toISOString(),
+        lastSuccessAt: null,
+        lastValidationFailureReason: null
+      });
+      pushTimeline(
+        createTimelineEntry("backend", "red", "Backend unreachable", detail)
+      );
     }
   });
 
@@ -916,6 +1770,32 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
         const legalActions = autoplayLocal
           ? round.legalActions
           : createActorOnlyLegalActions(round, primaryActor);
+        const requestPayload =
+          primaryActor === SYSTEM_ACTOR
+            ? buildDecisionRequestPayload({
+                matchId,
+                state: round.nextState,
+                derived: round.derivedView,
+                legalActions,
+                actorSeat: LOCAL_SEAT,
+                decisionIndex: decisionCount,
+                requestedProvider:
+                  backendSettings.decisionMode === "lightgbm_model"
+                    ? "lightgbm_model"
+                    : "server_heuristic"
+              })
+            : buildDecisionRequestPayload({
+                matchId,
+                state: round.nextState,
+                derived: round.derivedView,
+                legalActions,
+                actorSeat: primaryActor,
+                decisionIndex: decisionCount,
+                requestedProvider:
+                  backendSettings.decisionMode === "lightgbm_model"
+                    ? "lightgbm_model"
+                    : "server_heuristic"
+              });
         const initialResolution = await resolveDecisionWithProvider({
           context: {
             state: round.nextState,
@@ -923,40 +1803,19 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
           },
           actor: primaryActor,
           settings: backendSettings,
-          requestPayload:
-            primaryActor === SYSTEM_ACTOR
-              ? buildDecisionRequestPayload({
-                  matchId,
-                  state: round.nextState,
-                  derived: round.derivedView,
-                  legalActions,
-                  actorSeat: LOCAL_SEAT,
-                  decisionIndex: decisionCount,
-                  requestedProvider:
-                    backendSettings.decisionMode === "lightgbm_model"
-                      ? "lightgbm_model"
-                      : "server_heuristic"
-                })
-              : buildDecisionRequestPayload({
-                  matchId,
-                  state: round.nextState,
-                  derived: round.derivedView,
-                  legalActions,
-                  actorSeat: primaryActor,
-                  decisionIndex: decisionCount,
-                  requestedProvider:
-                    backendSettings.decisionMode === "lightgbm_model"
-                      ? "lightgbm_model"
-                      : "server_heuristic"
-                })
+          requestPayload
+        });
+        recordDecisionResolution({
+          requestPayload,
+          legalActions,
+          resolution: initialResolution
         });
 
         setBackendStatus((current) => ({
           state:
-            !initialResolution.usedFallback &&
-            backendSettings.decisionMode !== "local"
+            initialResolution.endpointReachable === true
               ? "reachable"
-              : initialResolution.usedFallback
+              : initialResolution.endpointReachable === false
                 ? "unreachable"
                 : current.state,
           detail: initialResolution.providerReason,
@@ -964,7 +1823,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
         }));
 
         if (!initialResolution.handledByServerTelemetry) {
-          emitDecisionTelemetry({
+          await emitDecisionTelemetry({
             settings: backendSettings,
             action: initialResolution.chosen.action,
             phase: round.nextState.phase,
@@ -979,14 +1838,22 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
             metadata: {
               provider_reason: initialResolution.providerReason
             }
-          });
+          })
+            .then((result) => {
+              if (result) {
+                recordTelemetryDecision(result.payload, result.telemetryId);
+              }
+            })
+            .catch((error) => {
+              recordTelemetryFailure(error);
+            });
         }
 
         let nextResult = applyEngineAction(
           round.nextState,
           initialResolution.chosen.action
         );
-        emitEventTelemetry({
+        await emitEventTelemetry({
           settings: backendSettings,
           events: nextResult.events,
           phase: round.nextState.phase,
@@ -1005,7 +1872,16 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
               }
             )
           }
-        });
+        })
+          .then((result) => {
+            const latestPayload = result?.payloads.at(-1);
+            if (result && latestPayload) {
+              recordTelemetryEvent(latestPayload, result.telemetryIds);
+            }
+          })
+          .catch((error) => {
+            recordTelemetryFailure(error);
+          });
 
         let decisionDelta = 1;
         let recordedDecision: ChosenDecision | null =
@@ -1028,6 +1904,18 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
           );
 
           if ((playOnlyLegalActions[primaryActor] ?? []).length > 0) {
+            const forcedRequestPayload = buildDecisionRequestPayload({
+              matchId,
+              state: nextResult.nextState,
+              derived: nextResult.derivedView,
+              legalActions: playOnlyLegalActions,
+              actorSeat: primaryActor,
+              decisionIndex: decisionCount + 1,
+              requestedProvider:
+                backendSettings.decisionMode === "lightgbm_model"
+                  ? "lightgbm_model"
+                  : "server_heuristic"
+            });
             const forcedResolution = await resolveDecisionWithProvider({
               context: {
                 state: nextResult.nextState,
@@ -1035,22 +1923,16 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
               },
               actor: primaryActor,
               settings: backendSettings,
-              requestPayload: buildDecisionRequestPayload({
-                matchId,
-                state: nextResult.nextState,
-                derived: nextResult.derivedView,
-                legalActions: playOnlyLegalActions,
-                actorSeat: primaryActor,
-                decisionIndex: decisionCount + 1,
-                requestedProvider:
-                  backendSettings.decisionMode === "lightgbm_model"
-                    ? "lightgbm_model"
-                    : "server_heuristic"
-              })
+              requestPayload: forcedRequestPayload
+            });
+            recordDecisionResolution({
+              requestPayload: forcedRequestPayload,
+              legalActions: playOnlyLegalActions,
+              resolution: forcedResolution
             });
 
             if (!forcedResolution.handledByServerTelemetry) {
-              emitDecisionTelemetry({
+              await emitDecisionTelemetry({
                 settings: backendSettings,
                 action: forcedResolution.chosen.action,
                 phase: nextResult.nextState.phase,
@@ -1066,14 +1948,22 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
                   provider_reason: forcedResolution.providerReason,
                   forced_opening_play: true
                 }
-              });
+              })
+                .then((result) => {
+                  if (result) {
+                    recordTelemetryDecision(result.payload, result.telemetryId);
+                  }
+                })
+                .catch((error) => {
+                  recordTelemetryFailure(error);
+                });
             }
 
             nextResult = applyEngineAction(
               nextResult.nextState,
               forcedResolution.chosen.action
             );
-            emitEventTelemetry({
+            await emitEventTelemetry({
               settings: backendSettings,
               events: nextResult.events,
               phase: round.nextState.phase,
@@ -1093,7 +1983,16 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
                   }
                 )
               }
-            });
+            })
+              .then((result) => {
+                const latestPayload = result?.payloads.at(-1);
+                if (result && latestPayload) {
+                  recordTelemetryEvent(latestPayload, result.telemetryIds);
+                }
+              })
+              .catch((error) => {
+                recordTelemetryFailure(error);
+              });
             nextEvents.push(...nextResult.events);
             decisionDelta += 1;
             dogAnimation =
@@ -1128,13 +2027,14 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
           }
         });
       })().catch((error) => {
+        const reachable = isBackendRequestError(error) ? error.reachable : false;
         console.error("[decision-provider] failed to resolve automated action", {
           error: error instanceof Error ? error.message : String(error),
           actor: primaryActor,
           phase: round.nextState.phase
         });
         setBackendStatus({
-          state: "unreachable",
+          state: reachable === true ? "reachable" : "unreachable",
           detail:
             error instanceof Error ? error.message : "Decision provider failed.",
           checkedAt: new Date().toISOString()
@@ -1157,6 +2057,10 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     openingLeadPending,
     pickupPending,
     primaryActor,
+    recordDecisionResolution,
+    recordTelemetryDecision,
+    recordTelemetryEvent,
+    recordTelemetryFailure,
     roundGenerationPending,
     round,
     state.phase
@@ -1207,8 +2111,19 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
       setSelectedPassTarget("left");
     }
 
+    if (previousPhase !== state.phase) {
+      pushTimeline(
+        createTimelineEntry(
+          "phase",
+          "green",
+          "Phase changed",
+          `${previousPhase} -> ${state.phase}`
+        )
+      );
+    }
+
     previousPhaseRef.current = state.phase;
-  }, [exchangePhaseActive, state.phase]);
+  }, [exchangePhaseActive, pushTimeline, state.phase]);
 
   useEffect(() => {
     const previousSelections = previousPassSelectionsRef.current;
@@ -1255,6 +2170,14 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
         console.info("[exchange] all exchanges ready", {
           phase: state.phase
         });
+        pushTimeline(
+          createTimelineEntry(
+            "exchange",
+            "green",
+            "Exchange ready",
+            "All four seats submitted exchange selections."
+          )
+        );
       }
 
       if (
@@ -1273,6 +2196,14 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
         console.info("[exchange] exchange complete", {
           phase: state.phase
         });
+        pushTimeline(
+          createTimelineEntry(
+            "exchange",
+            "green",
+            "Exchange complete",
+            "Pickup review state is active."
+          )
+        );
       }
     }
 
@@ -1286,6 +2217,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     exchangePhaseActive,
     localExchangeValidation.isValid,
     localPassSelection,
+    pushTimeline,
     state,
     state.phase
   ]);
@@ -1310,7 +2242,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     }
 
     if (!options?.skipDecisionTelemetry) {
-      emitDecisionTelemetry({
+      void emitDecisionTelemetry({
         settings: backendSettings,
         action,
         phase: state.phase,
@@ -1330,12 +2262,20 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
         metadata: {
           source: chosen ? "resolved-client-provider" : "direct-ui"
         }
-      });
+      })
+        .then((result) => {
+          if (result) {
+            recordTelemetryDecision(result.payload, result.telemetryId);
+          }
+        })
+        .catch((error) => {
+          recordTelemetryFailure(error);
+        });
     }
 
     const nextResult = applyEngineAction(state, action);
     const dogAnimation = getDogLeadAnimationView(action, nextResult);
-    emitEventTelemetry({
+    void emitEventTelemetry({
       settings: backendSettings,
       events: nextResult.events,
       phase: state.phase,
@@ -1346,13 +2286,39 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
       metadata: {
         ...buildTelemetryActionMetadata(action, state)
       }
-    });
+    })
+      .then((result) => {
+        const latestPayload = result?.payloads.at(-1);
+        if (result && latestPayload) {
+          recordTelemetryEvent(latestPayload, result.telemetryIds);
+        }
+      })
+      .catch((error) => {
+        recordTelemetryFailure(error);
+      });
 
     startTransition(() => {
       setRound(nextResult);
       setDecisionCount((current) => current + 1);
       setRecentEvents((current) =>
         [...current, ...nextResult.events.map(formatEvent)].slice(-14)
+      );
+      setDecisionDiagnostics((current) =>
+        chosen
+          ? {
+              ...current,
+              providerUsed: "local_heuristic",
+              requestedProvider: "local",
+              lastChosenAction: chosen.action,
+              lastResolutionAt: new Date().toISOString(),
+              lastLegalActions: round.legalActions
+            }
+          : {
+              ...current,
+              lastChosenAction: action,
+              lastResolutionAt: new Date().toISOString(),
+              lastLegalActions: round.legalActions
+            }
       );
       if (chosen && chosen.actor !== SYSTEM_ACTOR) {
         setLastAiDecision(chosen);
@@ -1362,6 +2328,15 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
       }
       resetInteractionState();
     });
+
+    pushTimeline(
+      createTimelineEntry(
+        "decision",
+        "green",
+        chosen ? "Client decision" : "UI action",
+        `${state.phase} • ${action.type}`
+      )
+    );
   }
 
   const loadRoundSession = useEffectEvent(
@@ -1388,6 +2363,16 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
           setThinkingActor(null);
           setLastAiDecision(null);
           setRecentEvents(nextSession.round.events.map(formatEvent));
+          setDecisionDiagnostics(createInitialDecisionDiagnostics());
+          setTelemetryDiagnostics(createInitialTelemetryDiagnostics());
+          setMlDiagnostics(createInitialMlDiagnostics());
+          setTimeline([]);
+          setFrozenSnapshot(null);
+          setDashboardUi((current) => ({
+            ...current,
+            frozen: false,
+            frozenAt: null
+          }));
           setSortMode("rank");
           setStagedTrick(null);
           setDogLeadAnimation(null);
@@ -1508,6 +2493,32 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     }
 
     const legalActions = createActorOnlyLegalActions(round, primaryActor);
+    const requestPayload =
+      primaryActor === SYSTEM_ACTOR
+        ? buildDecisionRequestPayload({
+            matchId,
+            state,
+            derived,
+            legalActions,
+            actorSeat: LOCAL_SEAT,
+            decisionIndex: decisionCount,
+            requestedProvider:
+              backendSettings.decisionMode === "lightgbm_model"
+                ? "lightgbm_model"
+                : "server_heuristic"
+          })
+        : buildDecisionRequestPayload({
+            matchId,
+            state,
+            derived,
+            legalActions,
+            actorSeat: primaryActor,
+            decisionIndex: decisionCount,
+            requestedProvider:
+              backendSettings.decisionMode === "lightgbm_model"
+                ? "lightgbm_model"
+                : "server_heuristic"
+          });
     void resolveDecisionWithProvider({
       context: {
         state,
@@ -1515,39 +2526,19 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
       },
       actor: primaryActor,
       settings: backendSettings,
-      requestPayload:
-        primaryActor === SYSTEM_ACTOR
-          ? buildDecisionRequestPayload({
-              matchId,
-              state,
-              derived,
-              legalActions,
-              actorSeat: LOCAL_SEAT,
-              decisionIndex: decisionCount,
-              requestedProvider:
-                backendSettings.decisionMode === "lightgbm_model"
-                  ? "lightgbm_model"
-                  : "server_heuristic"
-            })
-          : buildDecisionRequestPayload({
-              matchId,
-              state,
-              derived,
-              legalActions,
-              actorSeat: primaryActor,
-              decisionIndex: decisionCount,
-              requestedProvider:
-                backendSettings.decisionMode === "lightgbm_model"
-                  ? "lightgbm_model"
-                  : "server_heuristic"
-            })
+      requestPayload
     })
       .then((resolution) => {
+        recordDecisionResolution({
+          requestPayload,
+          legalActions,
+          resolution
+        });
         setBackendStatus({
           state:
-            !resolution.usedFallback && backendSettings.decisionMode !== "local"
+            resolution.endpointReachable === true
               ? "reachable"
-              : resolution.usedFallback
+              : resolution.endpointReachable === false
                 ? "unreachable"
                 : "unknown",
           detail: resolution.providerReason,
@@ -1555,7 +2546,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
         });
 
         if (!resolution.handledByServerTelemetry) {
-          emitDecisionTelemetry({
+          void emitDecisionTelemetry({
             settings: backendSettings,
             action: resolution.chosen.action,
             phase: state.phase,
@@ -1570,7 +2561,15 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
             metadata: {
               provider_reason: resolution.providerReason
             }
-          });
+          })
+            .then((result) => {
+              if (result) {
+                recordTelemetryDecision(result.payload, result.telemetryId);
+              }
+            })
+            .catch((error) => {
+              recordTelemetryFailure(error);
+            });
         }
 
         applyClientAction(resolution.chosen.action, resolution.chosen, {
@@ -1578,8 +2577,9 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
         });
       })
       .catch((error) => {
+        const reachable = isBackendRequestError(error) ? error.reachable : false;
         setBackendStatus({
-          state: "unreachable",
+          state: reachable === true ? "reachable" : "unreachable",
           detail:
             error instanceof Error ? error.message : "Decision provider failed.",
           checkedAt: new Date().toISOString()
@@ -1802,6 +2802,156 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     }
   }
 
+  function toggleDashboardVerboseMode() {
+    setDashboardUi((current) => ({
+      ...current,
+      verboseMode: !current.verboseMode
+    }));
+  }
+
+  function toggleDashboardRawJson() {
+    setDashboardUi((current) => ({
+      ...current,
+      rawJsonVisible: !current.rawJsonVisible
+    }));
+  }
+
+  function toggleFrozenSnapshot() {
+    setDashboardUi((current) => {
+      const nextFrozen = !current.frozen;
+      if (nextFrozen) {
+        setFrozenSnapshot(liveMasterControlSnapshot);
+      } else {
+        setFrozenSnapshot(null);
+      }
+      return {
+        ...current,
+        frozen: nextFrozen,
+        frozenAt: nextFrozen ? new Date().toISOString() : null
+      };
+    });
+  }
+
+  async function testMlProvider() {
+    if (!state.activeSeat) {
+      setMlDiagnostics((current) => ({
+        ...current,
+        inferenceWorking: false,
+        lastError:
+          "ML test requires an active seat and a live backend decision surface."
+      }));
+      pushTimeline(
+        createTimelineEntry(
+          "ml",
+          "yellow",
+          "ML test skipped",
+          "No active seat was available for a scored decision probe."
+        )
+      );
+      return;
+    }
+
+    const actorSeat = state.activeSeat;
+    const legalActions = createActorOnlyLegalActions(round, actorSeat);
+    const requestPayload = buildDecisionRequestPayload({
+      matchId,
+      state,
+      derived,
+      legalActions,
+      actorSeat,
+      decisionIndex: decisionCount,
+      requestedProvider: "lightgbm_model"
+    });
+    const startedAt = performance.now();
+
+    try {
+      const response = await postDecisionRequest(
+        backendSettings.backendBaseUrl,
+        requestPayload
+      );
+      const latencyMs = Number((performance.now() - startedAt).toFixed(1));
+      const scores = Array.isArray(response.metadata?.scores)
+        ? (response.metadata?.scores as Array<{ score?: number | null }>)
+        : [];
+      const summarized = summarizeMlScores(scores);
+      const modelMetadata = response.metadata?.model_metadata as
+        | Record<string, unknown>
+        | undefined;
+      setMlDiagnostics({
+        modelLoaded: response.provider_used === "lightgbm_model",
+        modelName:
+          typeof modelMetadata?.model_path === "string"
+            ? String(modelMetadata.model_path).split(/[\\/]/).slice(-1)[0] ??
+              "lightgbm_action_model.txt"
+            : "lightgbm_action_model.txt",
+        inferenceWorking: response.accepted,
+        inferenceLatencyMs: latencyMs,
+        candidatesScoredCount: summarized.candidateCount,
+        scoreSpread: {
+          max: summarized.max,
+          min: summarized.min,
+          chosen: summarized.chosen,
+          gapToSecond: summarized.gapToSecond
+        },
+        lastError: null
+      });
+      updateEndpointDiagnostics("decision", {
+        reachable: true,
+        payloadValid: true,
+        latencyMs,
+        lastStatus: "ml test ok",
+        lastError: null,
+        checkedAt: new Date().toISOString(),
+        lastSuccessAt: new Date().toISOString(),
+        lastValidationFailureReason: null
+      });
+      pushTimeline(
+        createTimelineEntry(
+          "ml",
+          "green",
+          "ML inference",
+          `Scored ${summarized.candidateCount} candidates in ${latencyMs} ms`
+        )
+      );
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      const reachable = isBackendRequestError(error) ? error.reachable : false;
+      const validationReason = isBackendRequestError(error)
+        ? error.validationErrors?.map((issue) => `${issue.path}: ${issue.message}`).join("; ") ??
+          (error.kind === "validation" || error.kind === "client_validation"
+            ? detail
+            : null)
+        : null;
+      setMlDiagnostics((current) => ({
+        ...current,
+        inferenceWorking: false,
+        lastError: detail
+      }));
+      updateEndpointDiagnostics("decision", {
+        reachable,
+        payloadValid:
+          isBackendRequestError(error) &&
+          (error.kind === "validation" || error.kind === "client_validation")
+            ? false
+            : null,
+        latencyMs: Number((performance.now() - startedAt).toFixed(1)),
+        lastStatus: "ml test failed",
+        lastError: detail,
+        checkedAt: new Date().toISOString(),
+        lastSuccessAt: null,
+        lastValidationFailureReason: validationReason
+      });
+      pushTimeline(
+        createTimelineEntry(
+          "ml",
+          reachable === false ? "red" : "yellow",
+          "ML inference failed",
+          validationReason ?? detail
+        )
+      );
+    }
+  }
+
   const viewProps = {
     roundSeed,
     decisionCount,
@@ -1851,6 +3001,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     latestEntropyDebug,
     backendSettings,
     backendStatus,
+    masterControlSnapshot,
     hotkeyDefinitions: UI_HOTKEYS,
     cardLookup,
     onAutoplayChange: setAutoplayLocal,
@@ -1875,6 +3026,12 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     onTestBackend: () => {
       void testBackendConnection();
     },
+    onTestMl: () => {
+      void testMlProvider();
+    },
+    onToggleDashboardVerboseMode: toggleDashboardVerboseMode,
+    onToggleDashboardRawJson: toggleDashboardRawJson,
+    onToggleFrozenSnapshot: toggleFrozenSnapshot,
     onUiCommand: executeUiCommand,
     onMainMenuOpenChange: setMainMenuOpen
   };

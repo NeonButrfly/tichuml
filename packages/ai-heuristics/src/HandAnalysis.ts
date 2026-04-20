@@ -11,6 +11,13 @@ import { cloneState, hasOpponentCalledTichu, partnerHasCalledTichu } from "./Heu
 import type { CardPassMetrics, HandEvaluation, PlayLegalAction } from "./types.js";
 import { cardStrength, isPlayLegalAction, isStandardCard } from "./utils.js";
 
+function countUniqueCombinations(
+  actions: PlayLegalAction[],
+  predicate: (action: PlayLegalAction) => boolean
+): number {
+  return new Set(actions.filter(predicate).map((action) => action.combination.key)).size;
+}
+
 function suitOf(card: Card): number {
   if (card.kind !== "standard") {
     return -1;
@@ -297,6 +304,18 @@ export function buildHandEvaluation(state: GameState, seat: SeatId): HandEvaluat
   const pairCount = [...rankCounts.values()].filter((count) => count === 2).length;
   const trioCount = [...rankCounts.values()].filter((count) => count === 3).length;
   const nearBombCount = [...rankCounts.values()].filter((count) => count === 3).length;
+  const straightsCount = countUniqueCombinations(
+    leadPlayActions,
+    (action) => action.combination.kind === "straight" && !action.combination.isBomb
+  );
+  const pairRunsCount = countUniqueCombinations(
+    leadPlayActions,
+    (action) => action.combination.kind === "pair-sequence"
+  );
+  const comboCount = countUniqueCombinations(
+    leadPlayActions,
+    (action) => action.combination.cardCount >= 2
+  );
   const longestStraightLength = leadPlayActions
     .filter(
       (action) =>
@@ -398,6 +417,27 @@ export function buildHandEvaluation(state: GameState, seat: SeatId): HandEvaluat
       !metric.isControl &&
       !metric.isDog
   ).length;
+  const singlesCount = [...cardMetrics.values()].filter(
+    (metric) =>
+      metric.card.kind === "special" ||
+      (metric.card.kind === "standard" && metric.rankCount === 1)
+  ).length;
+  const isolatedHighSinglesCount = [...cardMetrics.values()].filter(
+    (metric) =>
+      metric.card.kind === "standard" &&
+      metric.rankCount === 1 &&
+      metric.neighborCount === 0 &&
+      metric.comboCount <= 1 &&
+      metric.card.rank >= 11
+  ).length;
+  const isolatedLowSinglesCount = [...cardMetrics.values()].filter(
+    (metric) =>
+      metric.card.kind === "standard" &&
+      metric.rankCount === 1 &&
+      metric.neighborCount === 0 &&
+      metric.comboCount <= 1 &&
+      metric.card.rank <= 8
+  ).length;
   const handSpeed =
     [...cardMetrics.values()].reduce(
       (score, metric) => score + metric.maxComboSize,
@@ -441,6 +481,20 @@ export function buildHandEvaluation(state: GameState, seat: SeatId): HandEvaluat
     deadSingleCount * 18 -
     fragmentation * 11 -
     loserCount * 10;
+  const handQualityScore =
+    finishPlanScore +
+    synergyScore * 3.2 +
+    comboCount * 20 +
+    straightsCount * 22 +
+    pairRunsCount * 18 +
+    pairCount * 10 +
+    trioCount * 14 +
+    bombCount * 34 +
+    controlCount * 18 -
+    deadSingleCount * 26 -
+    isolatedLowSinglesCount * 14 -
+    isolatedHighSinglesCount * 9 -
+    fragmentation * 12;
   const protectedCardIds = new Set<string>();
 
   for (const [cardId, metric] of cardMetrics.entries()) {
@@ -494,12 +548,19 @@ export function buildHandEvaluation(state: GameState, seat: SeatId): HandEvaluat
     deadSingleCount,
     expectedTrickWins,
     handSpeed,
+    singlesCount,
     pairCount,
     trioCount,
     nearBombCount,
+    straightsCount,
+    pairRunsCount,
+    comboCount,
     longestStraightLength,
     longestPairSequenceLength,
     finishPlanScore,
+    handQualityScore,
+    isolatedHighSinglesCount,
+    isolatedLowSinglesCount,
     phoenixAvailable,
     dragonAvailable,
     dogAvailable,

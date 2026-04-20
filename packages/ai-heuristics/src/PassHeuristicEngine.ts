@@ -1,4 +1,5 @@
 import type { EngineAction, GameState, SeatId } from "@tichuml/engine";
+import type { HeuristicFeatureAnalyzer } from "./HeuristicFeatureAnalyzer.js";
 import { HEURISTIC_WEIGHTS } from "./HeuristicScorer.js";
 import { buildHandEvaluation, buildHandEvaluationAfterRemovingCards } from "./HandAnalysis.js";
 import { partnerHasCalledTichu } from "./HeuristicContext.js";
@@ -213,7 +214,8 @@ export function createPassSelectionAction(state: GameState, seat: SeatId): Engin
 export function scorePassSelection(
   state: GameState,
   seat: SeatId,
-  action: EngineAction
+  action: EngineAction,
+  analyzer?: HeuristicFeatureAnalyzer
 ): CandidateDecision {
   if (action.type !== "select_pass") {
     return {
@@ -241,7 +243,7 @@ export function scorePassSelection(
     partnerCalled: partnerHasCalledTichu(state, seat),
     selfCalled: state.calls[seat].smallTichu || state.calls[seat].grandTichu
   };
-  const score =
+  let score =
     HEURISTIC_WEIGHTS.pass.selectionBase +
     scoreCardForPartnerPass(
       analysis,
@@ -270,6 +272,7 @@ export function scorePassSelection(
       : "partner lane prioritizes useful connectors over premium control cards"
   ];
   const tags: CandidateDecision["tags"] = [];
+  const features = analyzer?.getCandidateFeatures(seat, action);
 
   appendUniqueTags(tags, "GIFT_PARTNER", "DUMP_LOW_IMPACT", "PASS_GIFT_PARTNER", "PASS_DUMP_LOW_IMPACT");
   if (
@@ -280,11 +283,25 @@ export function scorePassSelection(
     appendUniqueTags(tags, "PRESERVE_BOMB");
   }
 
+  if (features) {
+    const projected = features.projected_state;
+    score += features.future_hand_quality_delta * 0.12;
+    score += features.structure_preservation_score * 0.08;
+    score += features.dead_singles_reduction * 4;
+    score -= features.resource_cost_score * 0.03;
+
+    if ((projected?.combo_count ?? features.combo_count_before) >= features.combo_count_before) {
+      reasons.push("shared tactical features keep or improve projected combo density after the pass");
+      appendUniqueTags(tags, "PRESERVE_STRUCTURE");
+    }
+  }
+
   return {
     actor: seat,
     action,
     score,
     tags,
-    reasons
+    reasons,
+    ...(features ? { features } : {})
   };
 }

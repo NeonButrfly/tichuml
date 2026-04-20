@@ -1,6 +1,10 @@
 import fs from "node:fs";
 import readline from "node:readline";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import type {
+  CandidateActionFeatureSnapshot,
+  TacticalFeatureSnapshot
+} from "@tichuml/ai-heuristics";
 import type { LegalAction } from "@tichuml/engine";
 import type { JsonObject } from "@tichuml/shared";
 import type { ServerConfig } from "../config/env.js";
@@ -10,6 +14,8 @@ export type LightgbmScoreRequest = {
   actorSeat: string;
   phase: string;
   legalActions: LegalAction[];
+  stateFeatures: TacticalFeatureSnapshot;
+  candidateFeatures: Array<CandidateActionFeatureSnapshot | null>;
 };
 
 export type LightgbmScoreResult = {
@@ -164,7 +170,9 @@ export class PythonLightgbmScorer implements LightgbmScorer {
           state_raw: request.stateRaw,
           actor_seat: request.actorSeat,
           phase: request.phase,
-          legal_actions: request.legalActions
+          legal_actions: request.legalActions,
+          state_features: request.stateFeatures,
+          candidate_features: request.candidateFeatures
         })}\n`
       );
     });

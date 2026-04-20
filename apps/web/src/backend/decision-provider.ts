@@ -1,20 +1,34 @@
 import {
   heuristicsV1Policy,
   type ChosenDecision,
-  type HeadlessDecisionContext
+  type HeadlessDecisionContext,
+  type PolicyExplanation
 } from "@tichuml/ai-heuristics";
 import { SYSTEM_ACTOR, type ActorId, type EngineAction } from "@tichuml/engine";
 import {
   type BackendRuntimeSettings,
   type DecisionProviderUsed,
-  type DecisionRequestPayload
+  type DecisionRequestPayload,
+  type JsonObject,
+  type RequestedDecisionProvider
 } from "@tichuml/shared";
-import { postDecisionRequest } from "./client";
+import {
+  isBackendRequestError,
+  postDecisionRequest
+} from "./client";
 
 export type DecisionResolution = {
   chosen: ChosenDecision;
+  requestedProvider: RequestedDecisionProvider | "local";
   providerUsed: DecisionProviderUsed;
   providerReason: string;
+  responseMetadata: JsonObject | null;
+  telemetryId: number | null;
+  latencyMs: number;
+  endpointReachable: boolean | null;
+  endpointStatus: "ok" | "validation_error" | "client_validation_error" | "network_error" | "server_error";
+  endpointError: string | null;
+  validationErrors: Array<{ path: string; message: string }> | null;
   handledByServerTelemetry: boolean;
   usedFallback: boolean;
 };
@@ -23,24 +37,42 @@ function createSyntheticDecision(
   actor: ActorId,
   action: EngineAction,
   providerReason: string,
-  providerUsed: DecisionProviderUsed
+  providerUsed: DecisionProviderUsed,
+  explanation?: PolicyExplanation | null
 ): ChosenDecision {
   return {
     actor,
     action,
-    explanation: {
-      policy:
-        providerUsed === "lightgbm_model"
-          ? "lightgbm-model"
-          : providerUsed === "server_heuristic"
-            ? "server-heuristic"
-            : "local-heuristic",
-      actor,
-      candidateScores: [],
-      selectedReasonSummary: [providerReason],
-      selectedTags: []
-    }
+    explanation:
+      explanation ?? {
+        policy:
+          providerUsed === "lightgbm_model"
+            ? "lightgbm-model"
+            : providerUsed === "server_heuristic"
+              ? "server-heuristic"
+              : "local-heuristic",
+        actor,
+        candidateScores: [],
+        selectedReasonSummary: [providerReason],
+        selectedTags: []
+      }
   };
+}
+
+function readPolicyExplanation(
+  metadata: JsonObject | undefined
+): PolicyExplanation | null {
+  const explanation = metadata?.explanation;
+  if (
+    typeof explanation !== "object" ||
+    explanation === null ||
+    !("policy" in explanation) ||
+    !("candidateScores" in explanation)
+  ) {
+    return null;
+  }
+
+  return explanation as unknown as PolicyExplanation;
 }
 
 export async function resolveDecisionWithProvider(config: {
@@ -53,15 +85,26 @@ export async function resolveDecisionWithProvider(config: {
   const { context, actor, settings, requestPayload, fetchImpl } = config;
 
   if (actor === SYSTEM_ACTOR || settings.decisionMode === "local") {
+    const startedAt = performance.now();
+    const chosen = heuristicsV1Policy.chooseAction(context);
     return {
-      chosen: heuristicsV1Policy.chooseAction(context),
+      chosen,
+      requestedProvider: "local",
       providerUsed: "local_heuristic",
       providerReason: "Resolved through the local heuristics-v1 provider.",
+      responseMetadata: null,
+      telemetryId: null,
+      latencyMs: performance.now() - startedAt,
+      endpointReachable: null,
+      endpointStatus: "ok",
+      endpointError: null,
+      validationErrors: null,
       handledByServerTelemetry: false,
       usedFallback: false
     };
   }
 
+  const startedAt = performance.now();
   try {
     const response = await postDecisionRequest(
       settings.backendBaseUrl,
@@ -77,18 +120,29 @@ export async function resolveDecisionWithProvider(config: {
       );
     }
 
+    const metadata = response.metadata ?? undefined;
+    const explanation = readPolicyExplanation(metadata);
     return {
       chosen: createSyntheticDecision(
         actor,
         response.chosen_action as unknown as EngineAction,
         response.provider_reason ??
           "Resolved through the shared heuristics-v1 provider on the backend.",
-        response.provider_used ?? "server_heuristic"
+        response.provider_used ?? "server_heuristic",
+        explanation
       ),
+      requestedProvider: requestPayload.requested_provider,
       providerUsed: response.provider_used ?? "server_heuristic",
       providerReason:
         response.provider_reason ??
         "Resolved through the shared heuristics-v1 provider on the backend.",
+      responseMetadata: (response.metadata as JsonObject | undefined) ?? null,
+      telemetryId: response.telemetry_id ?? null,
+      latencyMs: performance.now() - startedAt,
+      endpointReachable: true,
+      endpointStatus: "ok",
+      endpointError: null,
+      validationErrors: null,
       handledByServerTelemetry: true,
       usedFallback: false
     };
@@ -100,11 +154,40 @@ export async function resolveDecisionWithProvider(config: {
     const fallbackReason = `Server provider failed, fell back to local heuristics: ${
       error instanceof Error ? error.message : String(error)
     }`;
+    const chosen = heuristicsV1Policy.chooseAction(context);
+    const endpointReachable = isBackendRequestError(error)
+      ? error.reachable
+      : false;
+    const endpointStatus = isBackendRequestError(error)
+      ? error.kind === "validation"
+        ? "validation_error"
+        : error.kind === "client_validation"
+          ? "client_validation_error"
+          : error.kind === "network"
+            ? "network_error"
+            : "server_error"
+      : "server_error";
+    const validationErrors = isBackendRequestError(error)
+      ? error.validationErrors
+      : null;
+    const endpointError =
+      error instanceof Error ? error.message : String(error);
 
     return {
-      chosen: heuristicsV1Policy.chooseAction(context),
+      chosen,
+      requestedProvider: requestPayload.requested_provider,
       providerUsed: "local_heuristic",
       providerReason: fallbackReason,
+      responseMetadata: {
+        requested_provider: requestPayload.requested_provider,
+        fallback_error: endpointError
+      },
+      telemetryId: null,
+      latencyMs: performance.now() - startedAt,
+      endpointReachable,
+      endpointStatus,
+      endpointError,
+      validationErrors,
       handledByServerTelemetry: false,
       usedFallback: true
     };

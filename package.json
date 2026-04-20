@@ -29,8 +29,10 @@
     "db:down": "docker compose down",
     "db:migrate": "tsx infra/db/scripts/migrate.ts",
     "db:migrate:status": "tsx infra/db/scripts/migrate.ts status",
-    "ml:export": "python ml/export_training_rows.py",
-    "ml:train": "python ml/train_lightgbm.py"
+    "sim": "tsx apps/sim-runner/src/cli.ts",
+    "ml:export": "tsx scripts/run-python.ts ml/export_training_rows.py",
+    "ml:train": "tsx scripts/run-python.ts ml/train_lightgbm.py",
+    "ml:bootstrap": "tsx scripts/ml-bootstrap.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.24.0",
