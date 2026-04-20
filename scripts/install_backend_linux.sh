@@ -16,46 +16,88 @@ run_root() {
   fi
 }
 
+has_command() {
+  command -v "$1" >/dev/null 2>&1
+}
+
 log_step() {
   printf '\n==> %s\n' "$1"
 }
 
 install_packages_apt() {
+  local packages=()
+
+  has_command git || packages+=(git)
+  has_command curl || packages+=(curl)
+  if has_command python3; then
+    python3 -m venv --help >/dev/null 2>&1 || packages+=(python3-venv)
+    python3 -m pip --version >/dev/null 2>&1 || packages+=(python3-pip)
+  else
+    packages+=(python3 python3-venv python3-pip)
+  fi
+  has_command docker || packages+=(docker.io docker-compose-plugin)
+  has_command node || packages+=(nodejs)
+
+  if ! has_command npm; then
+    if has_command node; then
+      printf '[WARN] Node.js is already installed but npm is missing. Skipping distro npm install to avoid package conflicts; install a Node distribution that includes npm before continuing.\n'
+    else
+      packages+=(npm)
+    fi
+  fi
+
+  if [ "${#packages[@]}" -eq 0 ]; then
+    printf '[INFO] apt dependencies already satisfied; skipping package installation.\n'
+    return
+  fi
+
   run_root apt-get update
-  run_root apt-get install -y \
-    git \
-    curl \
-    docker.io \
-    docker-compose-plugin \
-    python3 \
-    python3-venv \
-    python3-pip \
-    nodejs \
-    npm
+  run_root apt-get install -y "${packages[@]}"
 }
 
 install_packages_dnf() {
-  run_root dnf install -y \
-    git \
-    curl \
-    docker \
-    docker-compose-plugin \
-    python3 \
-    python3-pip \
-    python3-virtualenv \
-    nodejs \
-    npm
+  local packages=()
+
+  has_command git || packages+=(git)
+  has_command curl || packages+=(curl)
+  has_command docker || packages+=(docker docker-compose-plugin)
+  if has_command python3; then
+    python3 -m pip --version >/dev/null 2>&1 || packages+=(python3-pip)
+    python3 -m venv --help >/dev/null 2>&1 || packages+=(python3-virtualenv)
+  else
+    packages+=(python3 python3-pip python3-virtualenv)
+  fi
+  has_command node || packages+=(nodejs)
+  has_command npm || packages+=(npm)
+
+  if [ "${#packages[@]}" -eq 0 ]; then
+    printf '[INFO] dnf dependencies already satisfied; skipping package installation.\n'
+    return
+  fi
+
+  run_root dnf install -y "${packages[@]}"
 }
 
 install_packages_yum() {
-  run_root yum install -y \
-    git \
-    curl \
-    docker \
-    python3 \
-    python3-pip \
-    nodejs \
-    npm
+  local packages=()
+
+  has_command git || packages+=(git)
+  has_command curl || packages+=(curl)
+  has_command docker || packages+=(docker)
+  if has_command python3; then
+    python3 -m pip --version >/dev/null 2>&1 || packages+=(python3-pip)
+  else
+    packages+=(python3 python3-pip)
+  fi
+  has_command node || packages+=(nodejs)
+  has_command npm || packages+=(npm)
+
+  if [ "${#packages[@]}" -eq 0 ]; then
+    printf '[INFO] yum dependencies already satisfied; skipping package installation.\n'
+    return
+  fi
+
+  run_root yum install -y "${packages[@]}"
 }
 
 ensure_system_dependencies() {
@@ -71,7 +113,9 @@ ensure_system_dependencies() {
     exit 1
   fi
 
-  run_root systemctl enable --now docker
+  if has_command systemctl && has_command docker; then
+    run_root systemctl enable --now docker
+  fi
 }
 
 resolve_repo_root() {
