@@ -20,10 +20,14 @@ import {
   createInitialGameState,
   SEAT_IDS,
   SYSTEM_ACTOR,
+  type Combination,
   type EngineAction,
   type EngineEvent,
+  type GameState,
+  type LegalAction,
   type LegalActionMap,
-  type SeatId
+  type SeatId,
+  type TeamId
 } from "@tichuml/engine";
 import {
   TELEMETRY_ENGINE_VERSION,
@@ -54,6 +58,16 @@ export type SelfPlayGameResult = {
   fallbackCount: number;
   decisionsByPhase: Record<string, number>;
   eventsByPhase: Record<string, number>;
+  teamScores: Record<TeamId, number>;
+  winningTeam: TeamId | "tie";
+  scoreMargin: number;
+  passActions: number;
+  playActions: number;
+  bombPlays: number;
+  wishSatisfiedPlays: number;
+  wishActiveDecisions: number;
+  invalidDecisions: number;
+  latencyByProvider: Record<string, { count: number; totalMs: number; averageMs: number }>;
 };
 
 export type SelfPlayBatchSummary = {
@@ -70,6 +84,14 @@ export type SelfPlayBatchSummary = {
   averageDecisionsPerHand: number;
   exchangePhaseRecorded: boolean;
   passSelectRecorded: boolean;
+  winCountsByTeam: Record<TeamId | "tie", number>;
+  totalScoreByTeam: Record<TeamId, number>;
+  averageScoreMargin: number;
+  passRate: number;
+  bombUsageRate: number;
+  wishSatisfactionRate: number | null;
+  invalidDecisionCount: number;
+  averageLatencyByProvider: Record<string, number>;
 };
 
 type SimulatedDecision = {
@@ -79,6 +101,7 @@ type SimulatedDecision = {
   providerReason: string;
   explanation?: ChosenDecision["explanation"];
   fallbackUsed: boolean;
+  latencyMs: number;
 };
 
 type PersistedEventConfig = {
@@ -94,6 +117,105 @@ type PersistedEventConfig = {
 
 function countByKey(bucket: Record<string, number>, key: string): void {
   bucket[key] = (bucket[key] ?? 0) + 1;
+}
+
+function createTeamScoreBucket(): Record<TeamId, number> {
+  return {
+    "team-0": 0,
+    "team-1": 0
+  };
+}
+
+function cloneTeamScores(source?: Record<TeamId, number> | null): Record<TeamId, number> {
+  return {
+    "team-0": source?.["team-0"] ?? 0,
+    "team-1": source?.["team-1"] ?? 0
+  };
+}
+
+function summarizeLatency(
+  source: Record<string, { count: number; totalMs: number }>
+): Record<string, { count: number; totalMs: number; averageMs: number }> {
+  return Object.fromEntries(
+    Object.entries(source).map(([provider, metrics]) => [
+      provider,
+      {
+        count: metrics.count,
+        totalMs: metrics.totalMs,
+        averageMs:
+          metrics.count > 0
+            ? Number((metrics.totalMs / metrics.count).toFixed(2))
+            : 0
+      }
+    ])
+  );
+}
+
+function recordLatency(
+  bucket: Record<string, { count: number; totalMs: number }>,
+  provider: string,
+  latencyMs: number
+): void {
+  const current = bucket[provider] ?? { count: 0, totalMs: 0 };
+  current.count += 1;
+  current.totalMs += latencyMs;
+  bucket[provider] = current;
+}
+
+function sortCardIds(cardIds: string[]): string {
+  return [...cardIds].sort().join("|");
+}
+
+function findMatchingLegalAction(
+  legalActions: LegalActionMap,
+  actor: SeatId | typeof SYSTEM_ACTOR,
+  chosenAction: EngineAction
+): LegalAction | null {
+  const actorActions = legalActions[actor] ?? [];
+  return (
+    actorActions.find((candidate) => {
+      if (candidate.type !== chosenAction.type) {
+        return false;
+      }
+
+      switch (candidate.type) {
+        case "play_cards":
+          return (
+            chosenAction.type === "play_cards" &&
+            sortCardIds(candidate.cardIds) === sortCardIds(chosenAction.cardIds) &&
+            candidate.phoenixAsRank === chosenAction.phoenixAsRank
+          );
+        case "select_pass":
+          return chosenAction.type === "select_pass" && candidate.seat === chosenAction.seat;
+        case "assign_dragon_trick":
+          return (
+            chosenAction.type === "assign_dragon_trick" &&
+            candidate.recipient === chosenAction.recipient
+          );
+        case "advance_phase":
+          return chosenAction.type === "advance_phase" && candidate.actor === chosenAction.actor;
+        default:
+          return true;
+      }
+    }) ?? null
+  );
+}
+
+function getChosenCombination(legalAction: LegalAction | null): Combination | null {
+  return legalAction?.type === "play_cards" ? legalAction.combination : null;
+}
+
+function actionSatisfiesWish(state: GameState, legalAction: LegalAction | null): boolean {
+  if (!state.currentWish || legalAction?.type !== "play_cards") {
+    return false;
+  }
+
+  const actualRanks = legalAction.combination.actualRanks;
+  if (Array.isArray(actualRanks) && actualRanks.includes(state.currentWish)) {
+    return true;
+  }
+
+  return legalAction.combination.primaryRank === state.currentWish;
 }
 
 function buildGameId(baseSeed: string, index: number): string {
@@ -301,10 +423,14 @@ async function resolveDecision(
     seatProviders?: SeatProviderOverrides;
   }
 ): Promise<SimulatedDecision> {
+  const startedAt = Date.now();
+  const actorScopedLegalActions: LegalActionMap = {
+    [config.actor]: config.legalActions[config.actor] ?? []
+  };
   if (config.actor === SYSTEM_ACTOR) {
     const chosen = heuristicsV1Policy.chooseAction({
       state: config.stateRaw as never,
-      legalActions: config.legalActions
+      legalActions: actorScopedLegalActions
     });
 
     if (config.telemetryEnabled) {
@@ -333,7 +459,8 @@ async function resolveDecision(
       requestedProvider: "system_local",
       providerReason: "Resolved locally for a system-owned phase transition.",
       explanation: chosen.explanation,
-      fallbackUsed: false
+      fallbackUsed: false,
+      latencyMs: Date.now() - startedAt
     };
   }
 
@@ -346,7 +473,7 @@ async function resolveDecision(
   if (requestedProvider === "local") {
     const chosen = heuristicsV1Policy.chooseAction({
       state: config.stateRaw as never,
-      legalActions: config.legalActions
+      legalActions: actorScopedLegalActions
     });
 
     if (config.telemetryEnabled) {
@@ -375,7 +502,8 @@ async function resolveDecision(
       requestedProvider,
       providerReason: "Resolved locally through heuristics-v1 during self-play simulation.",
       explanation: chosen.explanation,
-      fallbackUsed: false
+      fallbackUsed: false,
+      latencyMs: Date.now() - startedAt
     };
   }
 
@@ -416,7 +544,8 @@ async function resolveDecision(
     ...(typeof metadata.explanation === "object" && metadata.explanation !== null
       ? { explanation: metadata.explanation as ChosenDecision["explanation"] }
       : {}),
-    fallbackUsed
+    fallbackUsed,
+    latencyMs: Date.now() - startedAt
   };
 }
 
@@ -434,7 +563,14 @@ async function runSingleGame(
   const providerUsage: Record<string, number> = {};
   const decisionsByPhase: Record<string, number> = {};
   const eventsByPhase: Record<string, number> = {};
+  const latencyByProvider: Record<string, { count: number; totalMs: number }> = {};
   let fallbackCount = 0;
+  let passActions = 0;
+  let playActions = 0;
+  let bombPlays = 0;
+  let wishSatisfiedPlays = 0;
+  let wishActiveDecisions = 0;
+  let invalidDecisions = 0;
 
   for (const event of result.events) {
     countByKey(eventsByPhase, result.nextState.phase);
@@ -469,8 +605,40 @@ async function runSingleGame(
 
     countByKey(providerUsage, resolved.providerUsed);
     countByKey(decisionsByPhase, result.nextState.phase);
+    recordLatency(latencyByProvider, resolved.providerUsed, resolved.latencyMs);
     if (resolved.fallbackUsed) {
       fallbackCount += 1;
+    }
+
+    const matchedLegalAction = findMatchingLegalAction(
+      result.legalActions,
+      actor,
+      resolved.chosenAction
+    );
+
+    if (!matchedLegalAction) {
+      invalidDecisions += 1;
+      throw new Error(
+        `Resolved action for actor ${actor} did not match a legal action: ${JSON.stringify(resolved.chosenAction)}`
+      );
+    }
+
+    if (matchedLegalAction.type === "pass_turn") {
+      passActions += 1;
+    }
+
+    if (matchedLegalAction.type === "play_cards") {
+      playActions += 1;
+      const combination = getChosenCombination(matchedLegalAction);
+      if (combination?.isBomb) {
+        bombPlays += 1;
+      }
+      if (result.nextState.currentWish !== null) {
+        wishActiveDecisions += 1;
+        if (actionSatisfiesWish(result.nextState, matchedLegalAction)) {
+          wishSatisfiedPlays += 1;
+        }
+      }
     }
 
     const nextResult = applyEngineAction(result.nextState, resolved.chosenAction);
@@ -492,6 +660,15 @@ async function runSingleGame(
     decisionIndex += 1;
   }
 
+  const teamScores = cloneTeamScores(result.nextState.roundSummary?.teamScores);
+  const scoreMargin = Math.abs(teamScores["team-0"] - teamScores["team-1"]);
+  const winningTeam =
+    teamScores["team-0"] === teamScores["team-1"]
+      ? "tie"
+      : teamScores["team-0"] > teamScores["team-1"]
+        ? "team-0"
+        : "team-1";
+
   return {
     gameId,
     handId,
@@ -501,7 +678,17 @@ async function runSingleGame(
     providerUsage,
     fallbackCount,
     decisionsByPhase,
-    eventsByPhase
+    eventsByPhase,
+    teamScores,
+    winningTeam,
+    scoreMargin,
+    passActions,
+    playActions,
+    bombPlays,
+    wishSatisfiedPlays,
+    wishActiveDecisions,
+    invalidDecisions,
+    latencyByProvider: summarizeLatency(latencyByProvider)
   };
 }
 
@@ -517,8 +704,17 @@ export async function runSelfPlayBatch(
   const backendBaseUrl = normalizeBackendBaseUrl(
     options.backendBaseUrl ?? "http://localhost:4310"
   );
+  const requestedProviders = new Set<DecisionMode>([
+    options.defaultProvider,
+    ...Object.values(options.seatProviders ?? {}).filter(
+      (provider): provider is DecisionMode => provider !== undefined
+    )
+  ]);
 
-  if (options.telemetryEnabled || options.defaultProvider !== "local") {
+  if (
+    options.telemetryEnabled ||
+    [...requestedProviders].some((provider) => provider !== "local")
+  ) {
     await verifyBackend(backendBaseUrl);
   }
 
@@ -535,10 +731,29 @@ export async function runSelfPlayBatch(
     averageGameDurationMs: 0,
     averageDecisionsPerHand: 0,
     exchangePhaseRecorded: false,
-    passSelectRecorded: false
+    passSelectRecorded: false,
+    winCountsByTeam: {
+      "team-0": 0,
+      "team-1": 0,
+      tie: 0
+    },
+    totalScoreByTeam: createTeamScoreBucket(),
+    averageScoreMargin: 0,
+    passRate: 0,
+    bombUsageRate: 0,
+    wishSatisfactionRate: null,
+    invalidDecisionCount: 0,
+    averageLatencyByProvider: {}
   };
 
   let totalDuration = 0;
+  let totalScoreMargin = 0;
+  let totalPassActions = 0;
+  let totalPlayActions = 0;
+  let totalBombPlays = 0;
+  let totalWishSatisfiedPlays = 0;
+  let totalWishActiveDecisions = 0;
+  const latencyTotals: Record<string, { count: number; totalMs: number }> = {};
 
   for (let index = 0; index < options.games; index += 1) {
     try {
@@ -548,10 +763,19 @@ export async function runSelfPlayBatch(
       summary.decisionsRecorded += game.decisions;
       summary.eventsRecorded += game.events;
       summary.fallbackCount += game.fallbackCount;
+      summary.invalidDecisionCount += game.invalidDecisions;
       totalDuration += game.durationMs;
+      totalScoreMargin += game.scoreMargin;
+      totalPassActions += game.passActions;
+      totalPlayActions += game.playActions;
+      totalBombPlays += game.bombPlays;
+      totalWishSatisfiedPlays += game.wishSatisfiedPlays;
+      totalWishActiveDecisions += game.wishActiveDecisions;
       mergeCounts(summary.decisionsByPhase, game.decisionsByPhase);
       mergeCounts(summary.eventsByPhase, game.eventsByPhase);
       mergeCounts(summary.providerUsage, game.providerUsage);
+      mergeCounts(summary.totalScoreByTeam, game.teamScores);
+      countByKey(summary.winCountsByTeam, game.winningTeam);
       summary.exchangePhaseRecorded =
         summary.exchangePhaseRecorded ||
         game.decisionsByPhase.pass_select !== undefined ||
@@ -559,6 +783,12 @@ export async function runSelfPlayBatch(
         game.eventsByPhase.pass_reveal !== undefined;
       summary.passSelectRecorded =
         summary.passSelectRecorded || game.decisionsByPhase.pass_select !== undefined;
+      for (const [provider, metrics] of Object.entries(game.latencyByProvider)) {
+        const bucket = latencyTotals[provider] ?? { count: 0, totalMs: 0 };
+        bucket.count += metrics.count;
+        bucket.totalMs += metrics.totalMs;
+        latencyTotals[provider] = bucket;
+      }
 
       if (!options.quiet && options.progress) {
         console.log(
@@ -590,6 +820,28 @@ export async function runSelfPlayBatch(
     summary.handsPlayed > 0
       ? Number((summary.decisionsRecorded / summary.handsPlayed).toFixed(2))
       : 0;
+  summary.averageScoreMargin =
+    summary.gamesPlayed > 0
+      ? Number((totalScoreMargin / summary.gamesPlayed).toFixed(2))
+      : 0;
+  summary.passRate =
+    totalPassActions + totalPlayActions > 0
+      ? Number((totalPassActions / (totalPassActions + totalPlayActions)).toFixed(4))
+      : 0;
+  summary.bombUsageRate =
+    totalPlayActions > 0
+      ? Number((totalBombPlays / totalPlayActions).toFixed(4))
+      : 0;
+  summary.wishSatisfactionRate =
+    totalWishActiveDecisions > 0
+      ? Number((totalWishSatisfiedPlays / totalWishActiveDecisions).toFixed(4))
+      : null;
+  summary.averageLatencyByProvider = Object.fromEntries(
+    Object.entries(latencyTotals).map(([provider, metrics]) => [
+      provider,
+      metrics.count > 0 ? Number((metrics.totalMs / metrics.count).toFixed(2)) : 0
+    ])
+  );
 
   return summary;
 }

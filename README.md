@@ -94,9 +94,14 @@ The root `.env.example` now includes:
 - `POSTGRES_PASSWORD`
 - `POSTGRES_PORT`
 - `PORT`
+- `HOST`
 - `BACKEND_BASE_URL`
+- `BACKEND_HOST_IP`
 - `AUTO_BOOTSTRAP_DATABASE`
 - `AUTO_MIGRATE`
+- `AUTO_UPDATE_ON_START`
+- `GIT_BRANCH`
+- `REPO_URL`
 - `PYTHON_EXECUTABLE`
 - `LIGHTGBM_INFER_SCRIPT`
 - `LIGHTGBM_MODEL_PATH`
@@ -107,6 +112,58 @@ The root `.env.example` now includes:
 - `VITE_TELEMETRY_ENABLED`
 
 `apps/server/.env.example` mirrors the server-specific defaults when you want a backend-only env reference.
+
+### Linux backend host
+
+GitHub issue [#33](https://github.com/NeonButrfly/tichuml/issues/33) and milestone [Linux Backend Deployment + ML Host](https://github.com/NeonButrfly/tichuml/milestone/25) track the dedicated Linux-host workflow.
+
+Target backend URL:
+
+- `http://192.168.50.36:4310`
+
+Linux install/bootstrap:
+
+```sh
+bash scripts/install_backend_linux.sh
+```
+
+Linux start/update flow:
+
+```sh
+bash scripts/start_backend_linux.sh
+```
+
+Manual Linux update-only flow:
+
+```sh
+bash scripts/update_backend_linux.sh
+```
+
+Status/health check:
+
+```sh
+bash scripts/status_backend_linux.sh
+```
+
+No systemd unit is added in-repo yet. The intended service entrypoint is `bash /path/to/tichuml/scripts/start_backend_linux.sh`, with `bash /path/to/tichuml/scripts/status_backend_linux.sh` as the companion health/status check.
+
+Those scripts:
+
+- install Linux host dependencies
+- clone or update the repo safely
+- create `.env` if missing
+- create `.venv` and install ML requirements
+- start Docker/Postgres with Postgres bound to loopback only
+- run migrations
+- build backend/simulator runtime artifacts
+- support safe startup with optional auto-update
+- record last update state in `.runtime/backend-update-status.env`
+
+Remote clients should set the runtime backend URL in the app to:
+
+- `http://192.168.50.36:4310`
+
+The client already persists that runtime override through the `Backend Settings` panel.
 
 ### Runtime decision and telemetry settings
 
@@ -148,6 +205,23 @@ npm run ml:bootstrap -- --games 5000 --provider server_heuristic
 ```
 
 That runs self-play, exports training rows, and trains the first model in sequence.
+
+Provider evaluation:
+
+```powershell
+npm run ml:evaluate -- --games 500 --ns-provider lightgbm_model --ew-provider server_heuristic
+```
+
+```sh
+npm run ml:evaluate -- --games 500 --ns-provider lightgbm_model --ew-provider server_heuristic
+```
+
+That evaluation path:
+
+- uses the real simulator and legal-action generator
+- supports team-level or seat-level provider assignment
+- writes machine-readable summaries to `eval/results/latest_summary.json` and a timestamped `eval/results/*.json`
+- reports win counts, win rate, score margin, provider usage, fallback count, invalid decisions, pass rate, bomb usage, wish satisfaction, and average decision latency by provider
 
 Export action rows from Postgres:
 
@@ -191,6 +265,16 @@ The first training phase is `play` (`trick_play` in stored telemetry). Exchange 
 
 Switch to the model at runtime from hamburger menu -> `Backend Settings` -> `Decision Mode` -> `LightGBM model`.
 
+### Firewall
+
+On the Linux backend host, expose only the HTTP API:
+
+```sh
+sudo ufw allow 4310
+```
+
+Do not expose Postgres publicly. `docker-compose.yml` now binds Postgres to `127.0.0.1` only.
+
 ### Exchange telemetry
 
 Issue [#31](https://github.com/NeonButrfly/tichuml/issues/31) keeps exchange telemetry phase-specific. The client now records:
@@ -217,6 +301,13 @@ Replay reads:
 
 ```powershell
 Invoke-RestMethod http://localhost:4310/api/games/<game-id>/replay
+```
+
+Linux host health:
+
+```sh
+curl http://127.0.0.1:4310/health
+curl http://192.168.50.36:4310/health
 ```
 
 Server decision request example:
