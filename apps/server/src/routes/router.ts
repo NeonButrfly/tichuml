@@ -2,6 +2,10 @@ import http from "node:http";
 import {
   BACKEND_HEALTH_PATH,
   DECISION_REQUEST_PATH,
+  ADMIN_CONFIRMATION_VALUE,
+  ADMIN_DATABASE_CLEAR_PATH,
+  ADMIN_DATABASE_RESET_PATH,
+  ADMIN_TELEMETRY_CLEAR_PATH,
   TELEMETRY_DECISION_PATH,
   TELEMETRY_EVENT_PATH,
   validateDecisionRequestPayload,
@@ -52,6 +56,36 @@ function extractGameId(pathname: string, suffix: string): string | null {
   return gameId.length > 0 ? decodeURIComponent(gameId) : null;
 }
 
+async function assertDestructiveAdminRequest(
+  request: http.IncomingMessage,
+  config: ServerConfig
+): Promise<{ ok: true } | { ok: false; issues: Array<{ path: string; message: string }> }> {
+  const issues: Array<{ path: string; message: string }> = [];
+  const body = (await readJsonBody(request)) as Record<string, unknown>;
+  const headerConfirm = request.headers["x-admin-confirm"];
+  const bodyConfirm = body.confirm;
+  const confirmed =
+    headerConfirm === ADMIN_CONFIRMATION_VALUE ||
+    bodyConfirm === ADMIN_CONFIRMATION_VALUE;
+
+  if (!config.destructiveAdminEndpointsEnabled) {
+    issues.push({
+      path: "ENABLE_DESTRUCTIVE_ADMIN_ENDPOINTS",
+      message:
+        "Destructive admin endpoints are disabled. Set ENABLE_DESTRUCTIVE_ADMIN_ENDPOINTS=true for development use."
+    });
+  }
+
+  if (!confirmed) {
+    issues.push({
+      path: "x-admin-confirm",
+      message: `Expected x-admin-confirm or body.confirm to equal ${ADMIN_CONFIRMATION_VALUE}.`
+    });
+  }
+
+  return issues.length === 0 ? { ok: true } : { ok: false, issues };
+}
+
 export function createRouter({
   config,
   repository,
@@ -84,6 +118,19 @@ export function createRouter({
             ok: true,
             service: "tichuml-server",
             database: "ok"
+          },
+          config.allowedOrigin
+        );
+        return;
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/telemetry/health") {
+        writeJson(
+          response,
+          200,
+          {
+            accepted: true,
+            stats: await repository.getHealthStats()
           },
           config.allowedOrigin
         );
@@ -163,6 +210,33 @@ export function createRouter({
           },
           config.allowedOrigin
         );
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        (url.pathname === ADMIN_TELEMETRY_CLEAR_PATH ||
+          url.pathname === ADMIN_DATABASE_CLEAR_PATH ||
+          url.pathname === ADMIN_DATABASE_RESET_PATH)
+      ) {
+        const guard = await assertDestructiveAdminRequest(request, config);
+        if (!guard.ok) {
+          badRequest(
+            response,
+            "Destructive admin endpoint safeguards were not satisfied.",
+            config.allowedOrigin,
+            guard.issues
+          );
+          return;
+        }
+
+        const result =
+          url.pathname === ADMIN_TELEMETRY_CLEAR_PATH
+            ? await repository.clearTelemetry()
+            : url.pathname === ADMIN_DATABASE_CLEAR_PATH
+              ? await repository.clearDatabase()
+              : await repository.resetDatabase();
+        writeJson(response, 200, result, config.allowedOrigin);
         return;
       }
 

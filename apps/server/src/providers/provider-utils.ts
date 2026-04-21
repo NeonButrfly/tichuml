@@ -231,6 +231,25 @@ export function createTelemetryPayload(config: {
   antipatternTags?: string[];
   metadata?: JsonObject;
 }): TelemetryDecisionPayload {
+  const explanation =
+    config.metadata?.explanation && typeof config.metadata.explanation === "object"
+      ? config.metadata.explanation
+      : null;
+  const candidateScores =
+    explanation &&
+    typeof explanation === "object" &&
+    "candidateScores" in explanation
+      ? ((explanation as JsonObject).candidateScores ?? null)
+      : null;
+  const stateFeatures =
+    explanation &&
+    typeof explanation === "object" &&
+    "stateFeatures" in explanation &&
+    typeof (explanation as JsonObject).stateFeatures === "object" &&
+    (explanation as JsonObject).stateFeatures !== null &&
+    !Array.isArray((explanation as JsonObject).stateFeatures)
+      ? ((explanation as JsonObject).stateFeatures as JsonObject)
+      : null;
   return {
     ts: new Date().toISOString(),
     game_id: config.payload.game_id,
@@ -241,16 +260,30 @@ export function createTelemetryPayload(config: {
     schema_version: config.payload.schema_version,
     engine_version: config.payload.engine_version,
     sim_version: config.payload.sim_version,
+    requested_provider: config.payload.requested_provider,
+    provider_used: config.providerUsed,
+    fallback_used:
+      typeof config.metadata?.fallback_used === "boolean"
+        ? config.metadata.fallback_used
+        : config.providerUsed !== config.payload.requested_provider,
     policy_name: config.policyName,
     policy_source: config.providerUsed,
     state_raw: config.payload.state_raw ?? {},
     state_norm: config.payload.state_norm,
     legal_actions: config.payload.legal_actions,
     chosen_action: config.chosenAction as unknown as JsonObject,
+    explanation,
+    candidateScores,
+    stateFeatures,
     metadata: {
       ...config.payload.metadata,
       requested_provider: config.payload.requested_provider,
+      provider_used: config.providerUsed,
       provider_reason: config.providerReason,
+      fallback_used:
+        typeof config.metadata?.fallback_used === "boolean"
+          ? config.metadata.fallback_used
+          : config.providerUsed !== config.payload.requested_provider,
       ...(config.metadata ?? {})
     } as JsonObject,
     antipattern_tags: config.antipatternTags ?? []

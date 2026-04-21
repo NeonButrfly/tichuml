@@ -8,6 +8,7 @@ import {
   TELEMETRY_EVENT_PATH,
   TELEMETRY_DECISION_PATH,
   normalizeBackendBaseUrl,
+  extractActorScopedLegalActions,
   type DecisionMode,
   type DecisionProviderUsed,
   type DecisionRequestPayload,
@@ -381,6 +382,11 @@ function buildLocalDecisionTelemetry(config: {
 }): TelemetryDecisionPayload {
   const providerUsed =
     config.actorSeat === SYSTEM_ACTOR ? "system_local" : "local_heuristic";
+  const explanation = config.chosen.explanation as unknown as JsonObject;
+  const actorLegalActions = extractActorScopedLegalActions(
+    config.legalActions as unknown as JsonObject,
+    String(config.actorSeat)
+  );
 
   return {
     ts: new Date().toISOString(),
@@ -392,12 +398,21 @@ function buildLocalDecisionTelemetry(config: {
     schema_version: TELEMETRY_SCHEMA_VERSION,
     engine_version: TELEMETRY_ENGINE_VERSION,
     sim_version: TELEMETRY_SIM_VERSION,
+    requested_provider: config.requestedProvider,
+    provider_used: providerUsed,
+    fallback_used: false,
     policy_name: heuristicsV1Policy.name,
     policy_source: providerUsed,
     state_raw: config.stateRaw,
     state_norm: config.stateNorm,
-    legal_actions: config.legalActions as unknown as JsonObject,
+    legal_actions: actorLegalActions,
     chosen_action: config.chosen.action as unknown as JsonObject,
+    explanation,
+    candidateScores: config.chosen.explanation.candidateScores as unknown as JsonObject[],
+    stateFeatures:
+      config.chosen.explanation.stateFeatures === undefined
+        ? null
+        : (config.chosen.explanation.stateFeatures as unknown as JsonObject),
     metadata: {
       requested_provider: config.requestedProvider,
       provider_used: providerUsed,
@@ -440,9 +455,14 @@ async function persistEvent(
     phase: stateNorm.phase as string,
     event_type: event.type,
     actor_seat: extractActorSeatFromEvent(event, config.actorSeat),
+    event_index: config.eventIndex,
     schema_version: TELEMETRY_SCHEMA_VERSION,
     engine_version: TELEMETRY_ENGINE_VERSION,
     sim_version: TELEMETRY_SIM_VERSION,
+    requested_provider: config.requestedProvider,
+    provider_used: config.providerUsed,
+    fallback_used: config.providerUsed !== config.requestedProvider,
+    state_norm: stateNorm,
     payload: {
       engine_event: event,
       state_norm: stateNorm

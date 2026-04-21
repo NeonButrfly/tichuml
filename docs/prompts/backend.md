@@ -91,3 +91,18 @@ Prompt logs here capture backend/platform prompt intent only. GitHub issue state
   [Linux Backend Deployment + ML Host](https://github.com/NeonButrfly/tichuml/milestone/25)
 - Status:
   Lives in GitHub, not here.
+
+## 2026-04-21 - Telemetry pipeline contract, ML storage, and guarded admin reset endpoints
+
+- Prompt signal:
+  Fully line up the telemetry pipeline across sim runner, backend ingestion, database storage, ML export, and evaluation so the data is consistent, queryable, and useful for training. Add explicit admin API endpoints to clear telemetry data or reset the development database.
+- Interpreted requirement:
+  Issue [#35](https://github.com/NeonButrfly/tichuml/issues/35) tracks a canonical telemetry contract with strict ingestion validation, actor-scoped decision legality checks, raw-plus-extracted decision/event storage, ML exporter alignment, and destructive admin endpoints protected by both env and confirmation-token safeguards.
+- Affected systems:
+  `packages/shared`, `apps/server`, `apps/sim-runner`, `apps/web/src/backend/telemetry.ts`, `infra/db/migrations`, `ml/export_training_rows.py`, telemetry/admin docs, backend telemetry tests.
+- Linked GitHub issue:
+  [#35](https://github.com/NeonButrfly/tichuml/issues/35)
+- Milestone:
+  [6.5 - Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status:
+  Lives in GitHub, not here.

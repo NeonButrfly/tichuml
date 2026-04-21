@@ -92,6 +92,23 @@ export async function routeLightgbmDecision(
 
     const concreteAction = selected.concreteAction;
     const providerReason = "Resolved by the LightGBM action model on the backend.";
+    const explanation = {
+      policy: "lightgbm-action-model",
+      actor: canonicalActor,
+      stateFeatures,
+      candidateScores: ranked.map((entry) => ({
+        action: entry.concreteAction,
+        score: entry.score,
+        features: entry.features,
+        reasons: ["LightGBM model score"],
+        tags: []
+      })),
+      selectedReasonSummary: [
+        "ranked legal actions with the shared LightGBM feature builder",
+        "selected the highest-scoring deterministic candidate"
+      ],
+      selectedTags: ["TEMPO_WIN"]
+    };
 
     return {
       providerUsed: "lightgbm_model",
@@ -113,7 +130,9 @@ export async function routeLightgbmDecision(
         policyName: "lightgbm-action-model",
         chosenAction: concreteAction,
         metadata: {
+          requested_provider: payload.requested_provider,
           model_metadata: scored.modelMetadata,
+          explanation,
           state_features: stateFeatures,
           candidate_features: ranked.map((entry) => ({
             action_key: entry.actionKey,

@@ -15,7 +15,7 @@ export function writeJson(
     "Cache-Control": "no-store",
     "Access-Control-Allow-Origin": allowedOrigin,
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type"
+    "Access-Control-Allow-Headers": "Content-Type, x-admin-confirm"
   });
   response.end(body);
 }
@@ -64,7 +64,7 @@ export function handleCorsPreflight(
   response.writeHead(204, {
     "Access-Control-Allow-Origin": allowedOrigin,
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type"
+    "Access-Control-Allow-Headers": "Content-Type, x-admin-confirm"
   });
   response.end();
   return true;

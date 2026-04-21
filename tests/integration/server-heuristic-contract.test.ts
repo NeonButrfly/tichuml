@@ -13,7 +13,16 @@ import {
   type EngineResult,
   type SeatId
 } from "@tichuml/engine";
-import type { DecisionRequestPayload, JsonObject } from "@tichuml/shared";
+import type {
+  AdminClearResult,
+  DecisionRequestPayload,
+  JsonObject,
+  TelemetryHealthStats
+} from "@tichuml/shared";
+import {
+  deriveTelemetryDecisionFields,
+  deriveTelemetryEventFields
+} from "@tichuml/shared";
 import type {
   ReplayPayload,
   StoredTelemetryDecisionRecord,
@@ -43,6 +52,7 @@ class InMemoryTelemetryRepository implements TelemetryRepository {
     const id = this.decisionId++;
     this.decisions.push({
       ...payload,
+      ...deriveTelemetryDecisionFields(payload),
       id,
       created_at: new Date().toISOString()
     });
@@ -53,6 +63,7 @@ class InMemoryTelemetryRepository implements TelemetryRepository {
     const id = this.eventId++;
     this.events.push({
       ...payload,
+      ...deriveTelemetryEventFields(payload),
       id,
       created_at: new Date().toISOString()
     });
@@ -75,6 +86,57 @@ class InMemoryTelemetryRepository implements TelemetryRepository {
       timeline: []
     };
   }
+
+  async getHealthStats(): Promise<TelemetryHealthStats> {
+    return {
+      decisions: this.decisions.length,
+      events: this.events.length,
+      decisions_with_explanation: this.decisions.filter(
+        (decision) => decision.has_explanation
+      ).length,
+      decisions_with_candidate_scores: this.decisions.filter(
+        (decision) => decision.has_candidate_scores
+      ).length,
+      decisions_with_state_features: this.decisions.filter(
+        (decision) => decision.has_state_features
+      ).length,
+      duplicate_state_hashes: 0
+    };
+  }
+
+  async clearTelemetry(): Promise<AdminClearResult> {
+    const row_counts = {
+      decisions: this.decisions.length,
+      events: this.events.length
+    };
+    this.decisions = [];
+    this.events = [];
+    return {
+      accepted: true,
+      action: "telemetry.clear",
+      tables_cleared: ["decisions", "events"],
+      row_counts,
+      warnings: ["Development/admin destructive endpoint used."]
+    };
+  }
+
+  async clearDatabase(): Promise<AdminClearResult> {
+    const result = await this.clearTelemetry();
+    return {
+      ...result,
+      action: "database.clear",
+      tables_cleared: ["decisions", "events", "matches"],
+      row_counts: { ...result.row_counts, matches: 0 }
+    };
+  }
+
+  async resetDatabase(): Promise<AdminClearResult> {
+    const result = await this.clearDatabase();
+    return {
+      ...result,
+      action: "database.reset"
+    };
+  }
 }
 
 const TEST_SERVER_CONFIG: ServerConfig = {
@@ -86,6 +148,7 @@ const TEST_SERVER_CONFIG: ServerConfig = {
   autoBootstrapDatabase: false,
   autoMigrate: false,
   backendBaseUrl: "http://127.0.0.1",
+  destructiveAdminEndpointsEnabled: false,
   repoRoot: "C:/tichu/tichuml",
   pythonExecutable: "python",
   lightgbmInferScript: "ml/infer.py",

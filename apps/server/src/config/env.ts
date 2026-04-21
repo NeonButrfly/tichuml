@@ -17,6 +17,7 @@ export type ServerConfig = {
   autoBootstrapDatabase: boolean;
   autoMigrate: boolean;
   backendBaseUrl: string;
+  destructiveAdminEndpointsEnabled: boolean;
   repoRoot: string;
   pythonExecutable: string;
   lightgbmInferScript: string;
@@ -139,6 +140,10 @@ export function loadServerConfig(
     autoMigrate: parseBooleanEnv(mergedEnv.AUTO_MIGRATE, true),
     backendBaseUrl: normalizeBackendBaseUrl(
       mergedEnv.BACKEND_BASE_URL ?? `http://localhost:${port}`
+    ),
+    destructiveAdminEndpointsEnabled: parseBooleanEnv(
+      mergedEnv.ENABLE_DESTRUCTIVE_ADMIN_ENDPOINTS,
+      false
     ),
     repoRoot,
     pythonExecutable: resolvePythonExecutable(repoRoot, mergedEnv.PYTHON_EXECUTABLE),
