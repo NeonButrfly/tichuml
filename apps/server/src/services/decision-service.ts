@@ -15,6 +15,7 @@ export async function handleDecisionRequest(
     lightgbmScorer?: LightgbmScorer;
   } = {}
 ): Promise<DecisionResponsePayload> {
+  const startedAt = Date.now();
   const routed =
     payload.requested_provider === "lightgbm_model"
       ? await routeLightgbmDecision(
@@ -30,6 +31,11 @@ export async function handleDecisionRequest(
             } satisfies LightgbmScorer)
         )
       : routeHeuristicDecision(payload);
+  const latencyMs = Date.now() - startedAt;
+  routed.telemetryPayload.metadata = {
+    ...routed.telemetryPayload.metadata,
+    latency_ms: latencyMs
+  };
   const telemetryId = await repository.insertDecision(routed.telemetryPayload);
 
   return {
@@ -37,7 +43,10 @@ export async function handleDecisionRequest(
     chosen_action: routed.chosen.action as unknown as JsonObject,
     provider_used: routed.providerUsed,
     provider_reason: routed.providerReason,
-    ...(routed.responseMetadata ? { metadata: routed.responseMetadata } : {}),
+    metadata: {
+      ...(routed.responseMetadata ?? {}),
+      latency_ms: latencyMs
+    },
     telemetry_id: telemetryId
   };
 }

@@ -34,6 +34,7 @@
     "state_norm",
     "legal_actions",
     "chosen_action",
+    "chosen_action_is_legal",
     "metadata",
     "explanation",
     "candidateScores",
@@ -42,9 +43,11 @@
   "storage_helpers": [
     "chosen_action_type",
     "legal_action_count",
+    "chosen_action_is_legal",
     "has_explanation",
     "has_candidate_scores",
     "has_state_features",
+    "explanation_quality_level",
     "has_wish",
     "wish_rank",
     "can_pass",
@@ -52,5 +55,18 @@
     "legal_actions_hash",
     "chosen_action_hash",
     "event_hash"
+  ],
+  "health_stats": [
+    "unique_state_hashes",
+    "duplicate_state_hashes",
+    "unique_legal_actions_hashes",
+    "duplicate_legal_actions_hashes",
+    "decisions_by_provider",
+    "decisions_by_phase",
+    "decisions_by_seat",
+    "events_by_type",
+    "events_by_phase",
+    "latest_decision_ts",
+    "latest_event_ts"
   ]
 }

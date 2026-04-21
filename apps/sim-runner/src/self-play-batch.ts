@@ -14,6 +14,7 @@ import {
   type DecisionRequestPayload,
   type DecisionResponsePayload,
   type JsonObject,
+  type SeedJsonValue,
   type TelemetryDecisionPayload,
   type TelemetryEventPayload
 } from "@tichuml/shared";
@@ -224,6 +225,52 @@ function actionSatisfiesWish(state: GameState, legalAction: LegalAction | null):
   return legalAction.combination.primaryRank === state.currentWish;
 }
 
+function summarizeCurrentCombination(state: GameState): JsonObject | null {
+  const combination = state.currentTrick?.currentCombination;
+  return combination
+    ? {
+        kind: combination.kind,
+        primaryRank: combination.primaryRank,
+        cardCount: combination.cardCount,
+        isBomb: combination.isBomb
+      }
+    : null;
+}
+
+function buildDecisionContextMetadata(
+  state: GameState,
+  actorLegalActions: SeedJsonValue[],
+  latencyMs: number
+): JsonObject {
+  const wishActive = state.currentWish !== null;
+  const wishSatisfiable =
+    wishActive &&
+    actorLegalActions.some(
+      (action) =>
+        typeof action === "object" &&
+        action !== null &&
+        "combination" in action &&
+        typeof action.combination === "object" &&
+        action.combination !== null &&
+        ((action.combination as JsonObject).primaryRank === state.currentWish ||
+          (Array.isArray((action.combination as JsonObject).actualRanks) &&
+            ((action.combination as JsonObject).actualRanks as SeedJsonValue[]).includes(
+              state.currentWish
+            )))
+    );
+
+  return {
+    seed: state.seed,
+    latency_ms: latencyMs,
+    current_lead_seat: state.currentTrick?.currentWinner ?? null,
+    current_combination: summarizeCurrentCombination(state),
+    wish_active: wishActive,
+    current_wish: state.currentWish,
+    wish_satisfiable: wishSatisfiable,
+    active_wish_no_legal_fulfilling_move: wishActive && !wishSatisfiable
+  };
+}
+
 function buildGameId(baseSeed: string, index: number): string {
   return `selfplay-${baseSeed}-game-${String(index + 1).padStart(6, "0")}`;
 }
@@ -379,6 +426,7 @@ function buildLocalDecisionTelemetry(config: {
   legalActions: LegalActionMap;
   chosen: ChosenDecision;
   requestedProvider: DecisionMode | "system_local";
+  latencyMs: number;
 }): TelemetryDecisionPayload {
   const providerUsed =
     config.actorSeat === SYSTEM_ACTOR ? "system_local" : "local_heuristic";
@@ -418,6 +466,11 @@ function buildLocalDecisionTelemetry(config: {
       provider_used: providerUsed,
       fallback_used: false,
       simulation_mode: true,
+      ...buildDecisionContextMetadata(
+        config.stateRaw as unknown as GameState,
+        actorLegalActions,
+        config.latencyMs
+      ),
       explanation: config.chosen.explanation
     },
     antipattern_tags: config.chosen.explanation.selectedTags
@@ -515,7 +568,8 @@ async function resolveDecision(
         stateNorm: config.stateNorm,
         legalActions: config.legalActions,
         chosen,
-        requestedProvider: "system_local"
+        requestedProvider: "system_local",
+        latencyMs: Date.now() - startedAt
       });
       await requestJson(
         "POST",
@@ -558,7 +612,8 @@ async function resolveDecision(
         stateNorm: config.stateNorm,
         legalActions: config.legalActions,
         chosen,
-        requestedProvider
+        requestedProvider,
+        latencyMs: Date.now() - startedAt
       });
       await requestJson(
         "POST",

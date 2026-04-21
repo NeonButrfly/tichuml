@@ -222,6 +222,51 @@ export function buildChosenDecision(
   };
 }
 
+function summarizeCurrentCombination(state: GameState): JsonObject | null {
+  const combination = state.currentTrick?.currentCombination;
+  return combination
+    ? {
+        kind: combination.kind,
+        primaryRank: combination.primaryRank,
+        cardCount: combination.cardCount,
+        isBomb: combination.isBomb
+      }
+    : null;
+}
+
+function legalActionFulfillsWish(state: GameState, legalAction: LegalAction): boolean {
+  if (state.currentWish === null || legalAction.type !== "play_cards") {
+    return false;
+  }
+
+  return (
+    legalAction.combination.primaryRank === state.currentWish ||
+    legalAction.combination.actualRanks.includes(state.currentWish)
+  );
+}
+
+function buildDecisionContextMetadata(config: {
+  state: GameState;
+  actorLegalActions: LegalAction[];
+}): JsonObject {
+  const wishActive = config.state.currentWish !== null;
+  const wishSatisfiable =
+    wishActive &&
+    config.actorLegalActions.some((action) =>
+      legalActionFulfillsWish(config.state, action)
+    );
+
+  return {
+    seed: config.state.seed,
+    current_lead_seat: config.state.currentTrick?.currentWinner ?? null,
+    current_combination: summarizeCurrentCombination(config.state),
+    wish_active: wishActive,
+    current_wish: config.state.currentWish,
+    wish_satisfiable: wishSatisfiable,
+    active_wish_no_legal_fulfilling_move: wishActive && !wishSatisfiable
+  };
+}
+
 export function createTelemetryPayload(config: {
   payload: DecisionRequestPayload;
   providerUsed: RequestedDecisionProvider;
@@ -231,6 +276,9 @@ export function createTelemetryPayload(config: {
   antipatternTags?: string[];
   metadata?: JsonObject;
 }): TelemetryDecisionPayload {
+  const stateRaw = config.payload.state_raw;
+  const actorLegalActions =
+    isUsableState(stateRaw) ? extractActorLegalActions(config.payload) : [];
   const explanation =
     config.metadata?.explanation && typeof config.metadata.explanation === "object"
       ? config.metadata.explanation
@@ -277,6 +325,12 @@ export function createTelemetryPayload(config: {
     stateFeatures,
     metadata: {
       ...config.payload.metadata,
+      ...(isUsableState(stateRaw)
+        ? buildDecisionContextMetadata({
+            state: stateRaw,
+            actorLegalActions
+          })
+        : {}),
       requested_provider: config.payload.requested_provider,
       provider_used: config.providerUsed,
       provider_reason: config.providerReason,

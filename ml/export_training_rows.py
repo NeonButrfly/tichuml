@@ -69,9 +69,11 @@ def build_query(phase: str | None, provider: str | None, limit: int | None) -> t
             requested_provider,
             fallback_used,
             legal_action_count,
+            chosen_action_is_legal,
             has_explanation,
             has_candidate_scores,
             has_state_features,
+            explanation_quality_level,
             chosen_action_type,
             state_hash,
             legal_actions_hash,
@@ -160,8 +162,9 @@ def build_candidate_feature_map(
     )
 
 
-def build_rows(decisions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def build_rows(decisions: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
     rows: list[dict[str, Any]] = []
+    malformed_decisions = 0
 
     for decision in decisions:
         actor_seat = str(decision.get("actor_seat", ""))
@@ -170,6 +173,10 @@ def build_rows(decisions: list[dict[str, Any]]) -> list[dict[str, Any]]:
             decision.get("legal_actions"),
             actor_seat,
         )
+        if decision.get("chosen_action_is_legal") is False or not legal_actions:
+            malformed_decisions += 1
+            continue
+
         chosen_signature = action_signature(decision.get("chosen_action", {}))
         explanation = extract_explanation_metadata(decision)
         state_features, candidate_feature_map = build_candidate_feature_map(
@@ -211,10 +218,14 @@ def build_rows(decisions: list[dict[str, Any]]) -> list[dict[str, Any]]:
             row.update({feature_name: features.get(feature_name, 0.0) for feature_name in FEATURE_ORDER})
             rows.append(row)
 
-    return rows
+    return rows, malformed_decisions
 
 
-def summarize_decisions(decisions: list[dict[str, Any]], rows_written: int) -> dict[str, Any]:
+def summarize_decisions(
+    decisions: list[dict[str, Any]],
+    rows_written: int,
+    malformed_decisions: int,
+) -> dict[str, Any]:
     def has_column_flag(decision: dict[str, Any], flag: str, fallback_key: str) -> bool:
         if isinstance(decision.get(flag), bool):
             return bool(decision[flag])
@@ -237,6 +248,12 @@ def summarize_decisions(decisions: list[dict[str, Any]], rows_written: int) -> d
             for decision in decisions
             if has_column_flag(decision, "has_state_features", "state_features")
         ),
+        "rows_with_chosen_action_is_legal_true": sum(
+            1
+            for decision in decisions
+            if decision.get("chosen_action_is_legal") is not False
+        ),
+        "rows_filtered_or_rejected_malformed": malformed_decisions,
     }
 
 
@@ -265,13 +282,17 @@ def main() -> None:
         provider=args.provider,
         limit=args.limit,
     )
-    rows = build_rows(decisions)
+    rows, malformed_decisions = build_rows(decisions)
     frame = pd.DataFrame(rows)
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     frame.to_parquet(output_path, index=False)
     write_feature_schema(args.schema_output)
-    diagnostics = summarize_decisions(decisions, int(len(frame.index)))
+    diagnostics = summarize_decisions(
+        decisions,
+        int(len(frame.index)),
+        malformed_decisions,
+    )
     print(
         json.dumps(
             {

@@ -87,9 +87,11 @@ export type TelemetryEventPayload = {
 export type DerivedTelemetryDecisionFields = {
   chosen_action_type: string;
   legal_action_count: number;
+  chosen_action_is_legal: boolean;
   has_explanation: boolean;
   has_candidate_scores: boolean;
   has_state_features: boolean;
+  explanation_quality_level: "none" | "basic" | "scored" | "featured";
   has_wish: boolean;
   wish_rank: number | null;
   can_pass: boolean;
@@ -135,6 +137,8 @@ export type StoredTelemetryDecisionRecord = TelemetryDecisionPayload & {
   has_explanation: boolean;
   has_candidate_scores: boolean;
   has_state_features: boolean;
+  explanation_quality_level: "none" | "basic" | "scored" | "featured";
+  chosen_action_is_legal: boolean;
   has_wish: boolean;
   wish_rank: number | null;
   can_pass: boolean;
@@ -187,10 +191,23 @@ export type AdminClearResult = {
 export type TelemetryHealthStats = {
   decisions: number;
   events: number;
+  unique_state_hashes: number;
+  duplicate_state_hashes: number;
+  unique_legal_actions_hashes: number;
+  duplicate_legal_actions_hashes: number;
   decisions_with_explanation: number;
   decisions_with_candidate_scores: number;
   decisions_with_state_features: number;
-  duplicate_state_hashes: number;
+  decisions_with_legal_chosen_action: number;
+  decisions_with_wish: number;
+  decisions_can_pass: number;
+  latest_decision_ts: string | null;
+  latest_event_ts: string | null;
+  decisions_by_provider: Record<string, number>;
+  decisions_by_phase: Record<string, number>;
+  decisions_by_seat: Record<string, number>;
+  events_by_type: Record<string, number>;
+  events_by_phase: Record<string, number>;
 };
 
 type ValidatorContext = {
@@ -426,6 +443,10 @@ function readMetadataBoolean(
   return typeof value === "boolean" ? value : null;
 }
 
+function readFiniteNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 function toStableJson(value: unknown): string {
   if (value === null || typeof value !== "object") {
     return JSON.stringify(value);
@@ -558,18 +579,32 @@ export function deriveTelemetryDecisionFields(
     payload.actor_seat
   );
   const chosenActionType = getActionType(payload.chosen_action);
+  const chosenActionIsLegal = actorActions.some((candidate) =>
+    actionsEquivalent(candidate, payload.chosen_action)
+  );
   const wishRank =
-    typeof payload.chosen_action.wishRank === "number" &&
-    Number.isFinite(payload.chosen_action.wishRank)
-      ? payload.chosen_action.wishRank
-      : null;
+    readFiniteNumber(payload.state_raw.currentWish) ??
+    readFiniteNumber(payload.metadata.current_wish) ??
+    readFiniteNumber(payload.metadata.wish_rank) ??
+    readFiniteNumber(payload.chosen_action.wishRank);
+
+  const explanationQualityLevel =
+    payload.stateFeatures !== null
+      ? "featured"
+      : Array.isArray(payload.candidateScores)
+        ? "scored"
+        : payload.explanation !== null
+          ? "basic"
+          : "none";
 
   return {
     chosen_action_type: chosenActionType,
     legal_action_count: actorActions.length,
+    chosen_action_is_legal: chosenActionIsLegal,
     has_explanation: payload.explanation !== null,
     has_candidate_scores: Array.isArray(payload.candidateScores),
     has_state_features: payload.stateFeatures !== null,
+    explanation_quality_level: explanationQualityLevel,
     has_wish: wishRank !== null,
     wish_rank: wishRank,
     can_pass: actorActions.some((action) => getActionType(action) === "pass_turn"),

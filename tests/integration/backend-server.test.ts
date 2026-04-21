@@ -17,7 +17,8 @@ import type {
 } from "@tichuml/shared";
 import {
   deriveTelemetryDecisionFields,
-  deriveTelemetryEventFields
+  deriveTelemetryEventFields,
+  stableTelemetryHash
 } from "@tichuml/shared";
 import { createAppServer } from "../../apps/server/src/app";
 import type { ServerConfig } from "../../apps/server/src/config/env";
@@ -101,9 +102,25 @@ class InMemoryTelemetryRepository implements TelemetryRepository {
   }
 
   async getHealthStats(): Promise<TelemetryHealthStats> {
+    const countBy = <T extends { [key: string]: unknown }>(
+      rows: T[],
+      key: keyof T
+    ): Record<string, number> =>
+      rows.reduce<Record<string, number>>((counts, row) => {
+        const value = String(row[key] ?? "null");
+        counts[value] = (counts[value] ?? 0) + 1;
+        return counts;
+      }, {});
+
     return {
       decisions: this.decisions.length,
       events: this.events.length,
+      unique_state_hashes: new Set(this.decisions.map((decision) => decision.state_hash)).size,
+      duplicate_state_hashes: 0,
+      unique_legal_actions_hashes: new Set(
+        this.decisions.map((decision) => decision.legal_actions_hash)
+      ).size,
+      duplicate_legal_actions_hashes: 0,
       decisions_with_explanation: this.decisions.filter(
         (decision) => decision.has_explanation
       ).length,
@@ -113,7 +130,20 @@ class InMemoryTelemetryRepository implements TelemetryRepository {
       decisions_with_state_features: this.decisions.filter(
         (decision) => decision.has_state_features
       ).length,
-      duplicate_state_hashes: 0
+      decisions_with_legal_chosen_action: this.decisions.filter(
+        (decision) => decision.chosen_action_is_legal
+      ).length,
+      decisions_with_wish: this.decisions.filter((decision) => decision.has_wish)
+        .length,
+      decisions_can_pass: this.decisions.filter((decision) => decision.can_pass)
+        .length,
+      latest_decision_ts: this.decisions.at(-1)?.ts ?? null,
+      latest_event_ts: this.events.at(-1)?.ts ?? null,
+      decisions_by_provider: countBy(this.decisions, "provider_used"),
+      decisions_by_phase: countBy(this.decisions, "phase"),
+      decisions_by_seat: countBy(this.decisions, "actor_seat"),
+      events_by_type: countBy(this.events, "event_type"),
+      events_by_phase: countBy(this.events, "phase")
     };
   }
 
@@ -350,6 +380,7 @@ describe("backend foundation server routes", () => {
       expect(response.status).toBe(201);
       expect(repository.decisions).toHaveLength(1);
       expect(repository.decisions[0]?.policy_name).toBe("heuristics-v1");
+      expect(repository.decisions[0]?.chosen_action_is_legal).toBe(true);
     });
   });
 
@@ -375,6 +406,36 @@ describe("backend foundation server routes", () => {
       ).toBe(true);
       expect(repository.decisions).toHaveLength(0);
     });
+  });
+
+  it("rejects decision telemetry when phase and actor_seat contradict state_raw", async () => {
+    await withServer(async ({ baseUrl, repository }) => {
+      const response = await fetch(`${baseUrl}/api/telemetry/decision`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...createDecisionPayload(),
+          phase: "pass_select",
+          actor_seat: "seat-2"
+        })
+      });
+
+      expect(response.status).toBe(400);
+      const payload = (await response.json()) as {
+        accepted: boolean;
+        validation_errors: Array<{ path: string }>;
+      };
+      expect(payload.accepted).toBe(false);
+      expect(payload.validation_errors.map((issue) => issue.path)).toContain("phase");
+      expect(payload.validation_errors.map((issue) => issue.path)).toContain("actor_seat");
+      expect(repository.decisions).toHaveLength(0);
+    });
+  });
+
+  it("hashes canonical JSON deterministically regardless of object key order", () => {
+    expect(stableTelemetryHash({ b: 2, a: { d: 4, c: 3 } })).toBe(
+      stableTelemetryHash({ a: { c: 3, d: 4 }, b: 2 })
+    );
   });
 
   it("returns a heuristic action from the decision route", async () => {

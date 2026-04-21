@@ -65,7 +65,9 @@ It also stores query-friendly scalar fields:
 - decision/event indexes
 - `chosen_action_type`
 - `legal_action_count`
+- `chosen_action_is_legal`
 - explanation/candidate/state feature flags
+- `explanation_quality_level` (`none`, `basic`, `scored`, `featured`)
 - wish/pass helpers
 - `state_hash`, `legal_actions_hash`, `chosen_action_hash`, `event_hash`
 
@@ -74,7 +76,24 @@ Views:
 - `telemetry_decision_counts_by_phase_provider`
 - `telemetry_event_counts_by_type_phase`
 - `telemetry_training_readiness_stats`
+- `telemetry_duplicate_state_counts`
+- `telemetry_duplicate_legal_action_counts`
+
+Hashes are computed from canonical JSON with object keys sorted before hashing.
+Use `stableTelemetryHash` from `@tichuml/shared` whenever another layer needs to
+produce comparable hashes.
+
+## Health / ML Usefulness
+
+`GET /api/telemetry/health` returns decision/event totals, unique and duplicate
+state/action-set hash counts, provider/phase/seat/type aggregates, rich-metadata
+coverage, legal chosen-action coverage, wish/pass counts, and latest telemetry
+timestamps. This endpoint is intended for operator checks and training-readiness
+diagnostics, not as a UI contract.
 
 ## ML Export
 
 `ml/export_training_rows.py` reads decisions as the canonical ML source. It prefers canonical rich columns and falls back to legacy metadata paths for explanation, `candidateScores`, and `stateFeatures`.
+Rows from malformed legacy decisions are filtered when `chosen_action_is_legal`
+is explicitly false or actor-scoped legal actions are missing, and diagnostics
+report the filtered count.

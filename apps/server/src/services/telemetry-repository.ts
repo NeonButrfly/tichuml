@@ -64,9 +64,11 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
         antipattern_tags,
         chosen_action_type,
         legal_action_count,
+        chosen_action_is_legal,
         has_explanation,
         has_candidate_scores,
         has_state_features,
+        explanation_quality_level,
         has_wish,
         wish_rank,
         can_pass,
@@ -100,9 +102,11 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
         ${this.sql.json(payload.antipattern_tags)},
         ${derived.chosen_action_type},
         ${derived.legal_action_count},
+        ${derived.chosen_action_is_legal},
         ${derived.has_explanation},
         ${derived.has_candidate_scores},
         ${derived.has_state_features},
+        ${derived.explanation_quality_level},
         ${derived.has_wish},
         ${derived.wish_rank},
         ${derived.can_pass},
@@ -194,9 +198,11 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
         antipattern_tags,
         chosen_action_type,
         legal_action_count,
+        chosen_action_is_legal,
         has_explanation,
         has_candidate_scores,
         has_state_features,
+        explanation_quality_level,
         has_wish,
         wish_rank,
         can_pass,
@@ -278,19 +284,36 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
   async getHealthStats(): Promise<TelemetryHealthStats> {
     const [decisionStats] = await this.sql<Array<{
       decisions: number;
+      unique_state_hashes: number;
+      unique_legal_actions_hashes: number;
       decisions_with_explanation: number;
       decisions_with_candidate_scores: number;
       decisions_with_state_features: number;
+      decisions_with_legal_chosen_action: number;
+      decisions_with_wish: number;
+      decisions_can_pass: number;
+      latest_decision_ts: string | null;
     }>>`
       SELECT
         COUNT(*)::INTEGER AS decisions,
+        COUNT(DISTINCT state_hash)::INTEGER AS unique_state_hashes,
+        COUNT(DISTINCT legal_actions_hash)::INTEGER AS unique_legal_actions_hashes,
         COUNT(*) FILTER (WHERE has_explanation)::INTEGER AS decisions_with_explanation,
         COUNT(*) FILTER (WHERE has_candidate_scores)::INTEGER AS decisions_with_candidate_scores,
-        COUNT(*) FILTER (WHERE has_state_features)::INTEGER AS decisions_with_state_features
+        COUNT(*) FILTER (WHERE has_state_features)::INTEGER AS decisions_with_state_features,
+        COUNT(*) FILTER (WHERE chosen_action_is_legal)::INTEGER AS decisions_with_legal_chosen_action,
+        COUNT(*) FILTER (WHERE has_wish)::INTEGER AS decisions_with_wish,
+        COUNT(*) FILTER (WHERE can_pass)::INTEGER AS decisions_can_pass,
+        MAX(ts)::TEXT AS latest_decision_ts
       FROM decisions
     `;
-    const [eventStats] = await this.sql<Array<{ events: number }>>`
-      SELECT COUNT(*)::INTEGER AS events
+    const [eventStats] = await this.sql<Array<{
+      events: number;
+      latest_event_ts: string | null;
+    }>>`
+      SELECT
+        COUNT(*)::INTEGER AS events,
+        MAX(ts)::TEXT AS latest_event_ts
       FROM events
     `;
     const [duplicateStats] = await this.sql<Array<{ duplicate_state_hashes: number }>>`
@@ -303,17 +326,51 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
         HAVING COUNT(*) > 1
       ) duplicate_states
     `;
+    const [duplicateLegalActionStats] = await this.sql<Array<{ duplicate_legal_actions_hashes: number }>>`
+      SELECT COUNT(*)::INTEGER AS duplicate_legal_actions_hashes
+      FROM (
+        SELECT legal_actions_hash
+        FROM decisions
+        WHERE legal_actions_hash IS NOT NULL
+        GROUP BY legal_actions_hash
+        HAVING COUNT(*) > 1
+      ) duplicate_legal_actions
+    `;
+    const decisionsByProvider = await this.countGrouped(
+      "decisions",
+      "provider_used"
+    );
+    const decisionsByPhase = await this.countGrouped("decisions", "phase");
+    const decisionsBySeat = await this.countGrouped("decisions", "actor_seat");
+    const eventsByType = await this.countGrouped("events", "event_type");
+    const eventsByPhase = await this.countGrouped("events", "phase");
 
     return {
       decisions: decisionStats?.decisions ?? 0,
       events: eventStats?.events ?? 0,
+      unique_state_hashes: decisionStats?.unique_state_hashes ?? 0,
+      duplicate_state_hashes: duplicateStats?.duplicate_state_hashes ?? 0,
+      unique_legal_actions_hashes:
+        decisionStats?.unique_legal_actions_hashes ?? 0,
+      duplicate_legal_actions_hashes:
+        duplicateLegalActionStats?.duplicate_legal_actions_hashes ?? 0,
       decisions_with_explanation:
         decisionStats?.decisions_with_explanation ?? 0,
       decisions_with_candidate_scores:
         decisionStats?.decisions_with_candidate_scores ?? 0,
       decisions_with_state_features:
         decisionStats?.decisions_with_state_features ?? 0,
-      duplicate_state_hashes: duplicateStats?.duplicate_state_hashes ?? 0
+      decisions_with_legal_chosen_action:
+        decisionStats?.decisions_with_legal_chosen_action ?? 0,
+      decisions_with_wish: decisionStats?.decisions_with_wish ?? 0,
+      decisions_can_pass: decisionStats?.decisions_can_pass ?? 0,
+      latest_decision_ts: decisionStats?.latest_decision_ts ?? null,
+      latest_event_ts: eventStats?.latest_event_ts ?? null,
+      decisions_by_provider: decisionsByProvider,
+      decisions_by_phase: decisionsByPhase,
+      decisions_by_seat: decisionsBySeat,
+      events_by_type: eventsByType,
+      events_by_phase: eventsByPhase
     };
   }
 
@@ -367,5 +424,28 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
       counts[table] = row?.count ?? 0;
     }
     return counts;
+  }
+
+  private async countGrouped(
+    table: "decisions" | "events",
+    column: string
+  ): Promise<Record<string, number>> {
+    const allowedColumns = new Set([
+      "provider_used",
+      "phase",
+      "actor_seat",
+      "event_type"
+    ]);
+    if (!allowedColumns.has(column)) {
+      throw new Error(`Unsupported telemetry aggregate column: ${column}`);
+    }
+
+    const rows = await this.sql.unsafe<Array<{ key: string | null; count: number }>>(
+      `SELECT ${column}::TEXT AS key, COUNT(*)::INTEGER AS count FROM ${table} GROUP BY ${column}`
+    );
+
+    return Object.fromEntries(
+      rows.map((row) => [row.key ?? "null", row.count])
+    );
   }
 }
