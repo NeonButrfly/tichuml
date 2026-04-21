@@ -139,7 +139,7 @@ The installer is idempotent and only installs missing system dependencies. On a 
 - `nodejs`
 - `npm`
 
-If Docker or Node.js are already present from another package source, the installer reuses them instead of forcing Ubuntu's `docker.io` or `npm` packages over the top. On Ubuntu hosts that already have Docker's `containerd.io` / `docker-ce` package family, the installer detects that partial Docker CE state and avoids the conflicting `docker.io` path. If Node.js already exists without `npm`, the installer warns and refuses to pretend the host is ready until `npm` is supplied from the same Node distribution. The shared Linux bootstrap helper also initializes `BACKEND_REPO_ROOT` safely under `set -u`, even when the repo is already dirty and the pull step is skipped.
+If Docker or Node.js are already present from another package source, the installer reuses them instead of forcing Ubuntu's `docker.io` or `npm` packages over the top. On Ubuntu hosts that already have Docker's `containerd.io` / `docker-ce` package family, the installer detects that partial Docker CE state and avoids the conflicting `docker.io` path. If Node.js already exists without `npm`, the installer warns and refuses to pretend the host is ready until `npm` is supplied from the same Node distribution. The shared Linux bootstrap helper also initializes `BACKEND_REPO_ROOT` safely under `set -u`, even when the repo is already dirty and the pull step is skipped, and it now runs `docker compose` from the repo root without depending on the newer `--env-file` flag so older Ubuntu Compose builds still work.
 
 The Linux installer now prints the exact command it is about to run before:
 

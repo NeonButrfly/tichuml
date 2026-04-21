@@ -105,7 +105,10 @@ docker_compose() {
     log_fail "Docker is installed but the 'docker compose' subcommand is unavailable. Install docker-compose-plugin or a Docker build that includes Compose v2, then rerun the Linux backend scripts."
     exit 1
   fi
-  docker compose --env-file "$BACKEND_REPO_ROOT/.env" "$@"
+  (
+    cd "$BACKEND_REPO_ROOT" &&
+      docker compose -f "$BACKEND_REPO_ROOT/docker-compose.yml" "$@"
+  )
 }
 
 repo_dirty() {
