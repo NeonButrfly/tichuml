@@ -127,7 +127,43 @@ Linux install/bootstrap:
 bash scripts/install_backend_linux.sh
 ```
 
-The installer is idempotent and only installs missing system dependencies. If Docker or Node.js are already present from another package source, it will reuse them instead of forcing distro `docker.io`/`npm` packages over the top. On Ubuntu hosts that already have Docker's `containerd.io` / `docker-ce` package family, the installer now detects that and avoids the conflicting `docker.io` path. The shared Linux bootstrap helper also now initializes `BACKEND_REPO_ROOT` safely under `set -u`, even when the repo is already dirty and the pull step is skipped.
+The installer is idempotent and only installs missing system dependencies. On a clean Ubuntu host with no existing Docker/Node stack it installs:
+
+- `git`
+- `curl`
+- `python3`
+- `python3-venv`
+- `python3-pip`
+- `docker.io`
+- `docker-compose-plugin`
+- `nodejs`
+- `npm`
+
+If Docker or Node.js are already present from another package source, the installer reuses them instead of forcing Ubuntu's `docker.io` or `npm` packages over the top. On Ubuntu hosts that already have Docker's `containerd.io` / `docker-ce` package family, the installer detects that partial Docker CE state and avoids the conflicting `docker.io` path. If Node.js already exists without `npm`, the installer warns and refuses to pretend the host is ready until `npm` is supplied from the same Node distribution. The shared Linux bootstrap helper also initializes `BACKEND_REPO_ROOT` safely under `set -u`, even when the repo is already dirty and the pull step is skipped.
+
+The Linux installer now prints the exact command it is about to run before:
+
+- `apt-get update`
+- `apt-get install`
+- `systemctl enable --now docker`
+- repo clone/refresh
+- helper/env sourcing
+- `npm install`
+- Python venv creation and `pip install`
+- `docker compose up -d postgres`
+- Postgres readiness waits
+- migrations
+- backend start
+
+When `apt` is busy, the installer no longer appears to hang after `Installing system dependencies`. It now:
+
+- detects apt/dpkg lock contention before `apt-get update` and `apt-get install`
+- prints the active `apt` / `dpkg` / `unattended-upgrade` process while waiting
+- waits up to `180s` by default (`APT_LOCK_WAIT_SECONDS`)
+- times out `apt-get update` after `300s` by default (`APT_UPDATE_TIMEOUT_SECONDS`)
+- times out `apt-get install` after `900s` by default (`APT_INSTALL_TIMEOUT_SECONDS`)
+- writes the apt command output to `/tmp/tichuml-apt-*.log`
+- fails with a classified message for lock contention, apt network/mirror failures, package conflicts, or missing package candidates instead of silently stalling
 
 Linux start/update flow:
 
@@ -160,6 +196,19 @@ Those scripts:
 - build backend/simulator runtime artifacts
 - support safe startup with optional auto-update
 - record last update state in `.runtime/backend-update-status.env`
+
+Linux-host recovery:
+
+- `apt` lock held by unattended-upgrades:
+  Wait for the lock to clear or inspect the holder with `ps -ef | grep -E 'apt|dpkg|unattended'`. If you intentionally need to stop unattended upgrades first, run `sudo systemctl stop unattended-upgrades`, then rerun `bash scripts/install_backend_linux.sh`.
+- Missing Docker repo / partial Docker CE family:
+  If the host has `containerd.io`, `docker-ce`, or `docker-ce-cli` but no working `docker` command, either finish configuring Docker's apt repository and install `docker-ce docker-ce-cli docker-compose-plugin`, or remove the partial Docker CE packages before rerunning the installer. The script will not force Ubuntu `docker.io` over that partial state.
+- Dirty repo:
+  `install_backend_linux.sh` and `update_backend_linux.sh` refuse to `git pull` over a dirty worktree. Inspect `git status`, commit or stash what you need, then rerun. `status_backend_linux.sh` reports this state explicitly.
+- Missing `npm` with `node` already present:
+  Install `npm` from the same Node distribution already on the host, or reinstall Node with npm included. The installer intentionally skips forcing Ubuntu's `npm` package into that mixed state.
+- Docker daemon not active:
+  Run `sudo systemctl enable --now docker`, then rerun `bash scripts/status_backend_linux.sh` or `bash scripts/start_backend_linux.sh`. If the daemon is running but access is denied, add the service user to the `docker` group and sign in again before retrying.
 
 Remote clients should set the runtime backend URL in the app to:
 

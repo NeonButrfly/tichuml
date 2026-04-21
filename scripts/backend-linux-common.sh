@@ -29,6 +29,10 @@ backend_log() {
   printf '%s %s\n' "$1" "$2"
 }
 
+log_step() {
+  printf '\n==> %s\n' "$1"
+}
+
 log_info() {
   backend_log "[INFO]" "$1"
 }
@@ -45,8 +49,12 @@ log_fail() {
   backend_log "[FAIL]" "$1" >&2
 }
 
+has_command() {
+  command -v "$1" >/dev/null 2>&1
+}
+
 require_command() {
-  if ! command -v "$1" >/dev/null 2>&1; then
+  if ! has_command "$1"; then
     log_fail "Required command '$1' was not found in PATH."
     exit 1
   fi
@@ -63,6 +71,7 @@ ensure_env_file() {
 }
 
 load_repo_env() {
+  log_info "Loading backend environment from $BACKEND_REPO_ROOT/.env"
   ensure_env_file
 
   set -a
@@ -83,7 +92,19 @@ load_repo_env() {
   export POSTGRES_PORT="${POSTGRES_PORT:-54329}"
 }
 
+docker_compose_available() {
+  docker compose version >/dev/null 2>&1
+}
+
+docker_info_error() {
+  docker info 2>&1 >/dev/null || true
+}
+
 docker_compose() {
+  if ! docker_compose_available; then
+    log_fail "Docker is installed but the 'docker compose' subcommand is unavailable. Install docker-compose-plugin or a Docker build that includes Compose v2, then rerun the Linux backend scripts."
+    exit 1
+  fi
   docker compose --env-file "$BACKEND_REPO_ROOT/.env" "$@"
 }
 
@@ -139,39 +160,66 @@ ensure_docker_running() {
   require_command docker
 
   if docker info >/dev/null 2>&1; then
+    log_info "Docker daemon is already reachable"
     return
   fi
 
-  if command -v systemctl >/dev/null 2>&1; then
+  local docker_error
+  docker_error="$(docker_info_error)"
+  if printf '%s' "$docker_error" | grep -qi 'permission denied'; then
+    log_fail "Docker is installed but the current user cannot access the daemon. Add the user to the docker group (then sign in again) or use a user that already has Docker access."
+    exit 1
+  fi
+
+  log_step "Starting Docker daemon"
+  if has_command systemctl; then
+    log_info "Running systemctl enable --now docker"
     sudo systemctl enable --now docker >/dev/null 2>&1 || true
-  elif command -v service >/dev/null 2>&1; then
+  elif has_command service; then
+    log_info "Running service docker start"
     sudo service docker start >/dev/null 2>&1 || true
   fi
 
   local attempt=0
   while [ "$attempt" -lt 60 ]; do
     if docker info >/dev/null 2>&1; then
+      log_ok "Docker daemon is ready"
       return
     fi
     attempt=$((attempt + 1))
+    if [ $((attempt % 5)) -eq 1 ]; then
+      log_info "Waiting for Docker daemon readiness (${attempt}/60)"
+    fi
     sleep 2
   done
+
+  docker_error="$(docker_info_error)"
+  if printf '%s' "$docker_error" | grep -qi 'permission denied'; then
+    log_fail "Docker daemon is running, but this user still lacks permission to access it. Add the user to the docker group and sign in again before rerunning."
+    exit 1
+  fi
 
   log_fail "Docker did not become ready within the timeout window."
   exit 1
 }
 
 start_postgres() {
+  log_step "Starting Postgres via docker compose"
   docker_compose up -d postgres
 }
 
 wait_for_postgres() {
+  log_step "Waiting for Postgres readiness"
   local attempt=0
   while [ "$attempt" -lt 60 ]; do
     if docker_compose exec -T postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1; then
+      log_ok "Postgres is accepting connections"
       return
     fi
     attempt=$((attempt + 1))
+    if [ $((attempt % 5)) -eq 1 ]; then
+      log_info "Postgres not ready yet (${attempt}/60)"
+    fi
     sleep 2
   done
 
@@ -180,6 +228,7 @@ wait_for_postgres() {
 }
 
 run_migrations() {
+  log_step "Running database migrations"
   (cd "$BACKEND_REPO_ROOT" && npm run db:migrate)
 }
 
@@ -203,7 +252,8 @@ node_install_needed() {
 install_node_dependencies_if_needed() {
   ensure_runtime_dirs
   if node_install_needed; then
-    log_info "Installing workspace dependencies"
+    log_step "Installing Node workspace dependencies"
+    log_info "Running npm install in $BACKEND_REPO_ROOT"
     (cd "$BACKEND_REPO_ROOT" && npm install)
     touch "$BACKEND_RUNTIME_DIR/npm-install.stamp"
   else
@@ -213,6 +263,7 @@ install_node_dependencies_if_needed() {
 
 ensure_python_venv() {
   if [ ! -d "$BACKEND_REPO_ROOT/.venv" ]; then
+    log_step "Creating Python virtual environment"
     python3 -m venv "$BACKEND_REPO_ROOT/.venv"
   fi
 }
@@ -235,7 +286,7 @@ install_ml_requirements_if_needed() {
   local py
   py="$(python_bin)"
   if ml_install_needed; then
-    log_info "Installing ML requirements"
+    log_step "Installing ML Python requirements"
     "$py" -m pip install --upgrade pip
     "$py" -m pip install -r "$BACKEND_REPO_ROOT/ml/requirements.txt"
     touch "$BACKEND_RUNTIME_DIR/ml-install.stamp"
@@ -245,6 +296,7 @@ install_ml_requirements_if_needed() {
 }
 
 build_runtime_artifacts() {
+  log_step "Building backend and simulator runtime artifacts"
   (cd "$BACKEND_REPO_ROOT" && npm run build:shared && npm run build:engine && npm run build:telemetry && npm run build:ai && npm run build:server && npm run build:sim-runner)
 }
 
@@ -308,6 +360,8 @@ start_backend_background() {
     return
   fi
 
+  log_step "Starting backend server"
+  log_info "Streaming backend logs to $BACKEND_LOG_FILE"
   : >"$BACKEND_LOG_FILE"
   (
     cd "$BACKEND_REPO_ROOT" &&
@@ -318,9 +372,13 @@ start_backend_background() {
   local attempt=0
   while [ "$attempt" -lt 60 ]; do
     if health_endpoint_ready; then
+      log_ok "Backend passed the /health check"
       return
     fi
     attempt=$((attempt + 1))
+    if [ $((attempt % 5)) -eq 1 ]; then
+      log_info "Waiting for backend /health readiness (${attempt}/60)"
+    fi
     sleep 2
   done
 
@@ -329,6 +387,7 @@ start_backend_background() {
 }
 
 prepare_runtime_stack() {
+  log_step "Preparing Linux backend runtime stack"
   require_command git
   require_command curl
   require_command node

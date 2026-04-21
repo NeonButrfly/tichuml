@@ -7,6 +7,7 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 . "$SCRIPT_DIR/backend-linux-common.sh"
 
 main() {
+  log_step "Checking Linux backend repository updates"
   load_repo_env
   ensure_runtime_dirs
   require_command git
@@ -20,6 +21,7 @@ main() {
 
   if repo_dirty; then
     local_commit="$(git_local_commit)"
+    log_info "Refreshing remote metadata for a dirty-repo status check"
     git -C "$BACKEND_REPO_ROOT" fetch origin "$branch" >/dev/null 2>&1 || true
     remote_commit="$(git_remote_commit 2>/dev/null || printf '%s\n' "$local_commit")"
     set -- $(git_ahead_behind 2>/dev/null || printf '0 0')
@@ -32,6 +34,7 @@ main() {
     return
   fi
 
+  log_step "Refreshing repository from origin/$branch"
   git -C "$BACKEND_REPO_ROOT" fetch origin "$branch"
   local_commit="$(git_local_commit)"
   remote_commit="$(git_remote_commit)"
@@ -66,6 +69,7 @@ main() {
     backend_was_running=false
   fi
 
+  log_step "Applying fast-forward update from origin/$branch"
   git -C "$BACKEND_REPO_ROOT" pull --ff-only origin "$branch"
   load_repo_env
 
@@ -81,6 +85,7 @@ main() {
   message="Pulled latest code from origin/$branch."
 
   if [ "$backend_was_running" = true ]; then
+    log_step "Restarting backend after update"
     stop_backend
     start_backend_background
     restart_triggered=true

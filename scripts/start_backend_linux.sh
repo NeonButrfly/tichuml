@@ -14,14 +14,17 @@ auto_update_enabled() {
 }
 
 main() {
+  log_step "Starting Linux backend host flow"
   load_repo_env
   ensure_runtime_dirs
 
   if auto_update_enabled; then
-    log_info "Checking for backend updates on startup"
+    log_step "Checking for backend updates on startup"
     if ! "$SCRIPT_DIR/update_backend_linux.sh"; then
       log_warn "Update step failed; continuing with the current checkout."
     fi
+  else
+    log_info "Startup auto-update is disabled; continuing with the current checkout."
   fi
 
   prepare_runtime_stack
@@ -36,6 +39,7 @@ main() {
 
   local local_commit remote_commit ahead behind
   local_commit="$(git_local_commit)"
+  log_info "Refreshing remote commit metadata for status output"
   git -C "$BACKEND_REPO_ROOT" fetch origin "$GIT_BRANCH" >/dev/null 2>&1 || true
   remote_commit="$(git_remote_commit 2>/dev/null || printf '%s\n' "$local_commit")"
   set -- $(git_ahead_behind 2>/dev/null || printf '0 0')
