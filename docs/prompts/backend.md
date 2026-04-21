@@ -121,3 +121,18 @@ Prompt logs here capture backend/platform prompt intent only. GitHub issue state
   [6.5 - Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
 - Status:
   Lives in GitHub, not here.
+
+## 2026-04-21 - Linux migration bootstrap shared-dist failure
+
+- Prompt signal:
+  Linux migration failed with `ERR_MODULE_NOT_FOUND` for `/opt/tichuml/node_modules/@tichuml/shared/dist/index.js` imported from `infra/db/scripts/migrate.ts`.
+- Interpreted requirement:
+  Issue [#38](https://github.com/NeonButrfly/tichuml/issues/38) tracks removing DB migration startup's dependency on built workspace package artifacts so fresh or force-synced Linux hosts can run migrations before package `dist/` output exists.
+- Affected systems:
+  `infra/db/scripts/migrate.ts`, `apps/server/src/db/migrations.ts`, Linux backend startup.
+- Linked GitHub issue:
+  [#38](https://github.com/NeonButrfly/tichuml/issues/38)
+- Milestone:
+  [Linux Backend Deployment + ML Host](https://github.com/NeonButrfly/tichuml/milestone/25)
+- Status:
+  Lives in GitHub, not here.
