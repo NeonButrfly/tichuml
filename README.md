@@ -171,6 +171,20 @@ Linux start/update flow:
 bash scripts/start_backend_linux.sh
 ```
 
+On Linux, backend startup now force-syncs `/opt/tichuml` before starting the runtime stack. This is intentionally destructive for local source changes on the backend host and runs only from `scripts/start_backend_linux.sh`, not from simulator commands or unrelated CLI workflows. The startup sync uses:
+
+- `git fetch --all --prune`
+- `git reset --hard origin/main`
+- `git clean -fd`
+
+For systemd deployments, wire the same sync as:
+
+```ini
+ExecStartPre=/opt/tichuml/scripts/force-sync.sh
+```
+
+If the sync fails, the backend must not start. Manual update-only flows remain separate and are not used by Linux backend startup.
+
 Manual Linux update-only flow:
 
 ```sh
@@ -194,7 +208,7 @@ Those scripts:
 - start Docker/Postgres with Postgres bound to loopback only
 - run migrations
 - build backend/simulator runtime artifacts
-- support safe startup with optional auto-update
+- force-sync Linux backend source on startup before the backend starts
 - record last update state in `.runtime/backend-update-status.env`
 
 Linux-host recovery:

@@ -10,6 +10,10 @@ import type {
   LegalActionMap,
   SeatId
 } from "@tichuml/engine";
+import {
+  getCanonicalActiveSeatFromState,
+  validateLegalActionsForCanonicalActor
+} from "@tichuml/engine";
 import type {
   DecisionRequestPayload,
   JsonObject,
@@ -37,6 +41,76 @@ export function isUsableState(value: unknown): value is GameState {
 
 export function isUsableLegalActionMap(value: unknown): value is LegalActionMap {
   return typeof value === "object" && value !== null;
+}
+
+function legalActionTypesForDiagnostics(legalActions: LegalActionMap): string[] {
+  return Object.values(legalActions)
+    .flat()
+    .slice(0, 6)
+    .map((action) => action.type);
+}
+
+export function formatActorMismatchDiagnostics(config: {
+  payload: DecisionRequestPayload;
+  canonicalActorSeat: string;
+  derivedActorSeat: string;
+  legalActionIssues?: string[];
+}): string {
+  const stateRaw = config.payload.state_raw;
+  const stateNorm = config.payload.state_norm;
+  const legalActions = config.payload.legal_actions as unknown as LegalActionMap;
+  const turnMetadata = {
+    stateRawActiveSeat:
+      isUsableState(stateRaw) ? stateRaw.activeSeat : undefined,
+    stateNormActiveSeat:
+      stateNorm && typeof stateNorm.activeSeat === "string"
+        ? stateNorm.activeSeat
+        : undefined,
+    phase: stateRaw?.phase ?? stateNorm?.phase ?? config.payload.phase
+  };
+
+  return [
+    "Actor mismatch:",
+    `request.actor_seat=${config.payload.actor_seat}`,
+    `canonical.state.activeSeat=${config.canonicalActorSeat}`,
+    `derivedActorSeat=${config.derivedActorSeat}`,
+    `phase=${config.payload.phase}`,
+    `legalActions=[${legalActionTypesForDiagnostics(legalActions).join(", ")}]`,
+    `game_id=${config.payload.game_id}`,
+    `hand_id=${config.payload.hand_id}`,
+    `turnMetadata=${JSON.stringify(turnMetadata)}`,
+    ...(config.legalActionIssues ?? [])
+  ].join("\n");
+}
+
+export function validateDecisionRequestActorContract(
+  payload: DecisionRequestPayload
+): SeatId {
+  if (!isUsableState(payload.state_raw)) {
+    throw new Error(
+      "Decision requests require a full state_raw payload before actor validation."
+    );
+  }
+
+  const canonicalActorSeat = getCanonicalActiveSeatFromState(payload.state_raw);
+  const legalActions = payload.legal_actions as unknown as LegalActionMap;
+  const legalActionIssues = validateLegalActionsForCanonicalActor({
+    legalActions,
+    actor: canonicalActorSeat
+  });
+
+  if (payload.actor_seat !== canonicalActorSeat || legalActionIssues.length > 0) {
+    throw new Error(
+      formatActorMismatchDiagnostics({
+        payload,
+        canonicalActorSeat,
+        derivedActorSeat: canonicalActorSeat,
+        legalActionIssues
+      })
+    );
+  }
+
+  return canonicalActorSeat;
 }
 
 export function getDecisionIndex(payload: DecisionRequestPayload): number {

@@ -10,6 +10,7 @@ import {
   normalizeBackendBaseUrl,
   type DecisionMode,
   type DecisionProviderUsed,
+  type DecisionRequestPayload,
   type DecisionResponsePayload,
   type JsonObject,
   type TelemetryDecisionPayload,
@@ -18,8 +19,11 @@ import {
 import {
   applyEngineAction,
   createInitialGameState,
+  getActorScopedLegalActions,
+  getCanonicalActiveSeatFromState,
   SEAT_IDS,
   SYSTEM_ACTOR,
+  validateLegalActionsForCanonicalActor,
   type Combination,
   type EngineAction,
   type EngineEvent,
@@ -46,6 +50,7 @@ export type SelfPlayBatchOptions = {
   backendBaseUrl?: string;
   quiet?: boolean;
   progress?: boolean;
+  maxDecisionsPerGame?: number;
 };
 
 export type SelfPlayGameResult = {
@@ -242,13 +247,22 @@ function getActorLegalActions(
   return Array.isArray(actorActions) ? actorActions : [];
 }
 
-function resolveNextActor(legalActions: LegalActionMap, activeSeat: SeatId | null): SeatId | typeof SYSTEM_ACTOR {
+function resolveNextActor(
+  legalActions: LegalActionMap,
+  state: GameState
+): SeatId | typeof SYSTEM_ACTOR {
   if (getActorLegalActions(legalActions, SYSTEM_ACTOR).length > 0) {
     return SYSTEM_ACTOR;
   }
 
-  if (activeSeat && getActorLegalActions(legalActions, activeSeat).length > 0) {
-    return activeSeat;
+  try {
+    const canonicalActor = getCanonicalActiveSeatFromState(state);
+    if (getActorLegalActions(legalActions, canonicalActor).length > 0) {
+      return canonicalActor;
+    }
+  } catch {
+    // Non-seat phases are system-owned. If no system action exists, fall back to
+    // the stable absolute engine seat order, never a presentation rotation.
   }
 
   for (const seat of SEAT_IDS) {
@@ -260,22 +274,55 @@ function resolveNextActor(legalActions: LegalActionMap, activeSeat: SeatId | nul
   throw new Error("No legal actor was available for the next self-play decision.");
 }
 
-function buildDecisionRequestPayload(config: {
+export function validateServerHeuristicDecisionRequestContract(
+  request: DecisionRequestPayload
+): void {
+  const canonicalActorSeat = getCanonicalActiveSeatFromState(request.state_raw);
+  const phase = request.state_raw?.phase;
+  const legalActions = request.legal_actions as unknown as LegalActionMap;
+  const legalActionIssues = validateLegalActionsForCanonicalActor({
+    legalActions,
+    actor: canonicalActorSeat
+  });
+
+  if (
+    request.actor_seat !== canonicalActorSeat ||
+    request.phase !== phase ||
+    legalActionIssues.length > 0
+  ) {
+    const legalActionTypes = Object.values(legalActions)
+      .flat()
+      .slice(0, 6)
+      .map((action) => action.type);
+    throw new Error(
+      [
+        `[server_heuristic] refusing inconsistent request: actor_seat=${request.actor_seat}, canonical=${canonicalActorSeat}, phase=${request.phase}`,
+        `state.phase=${String(phase)}`,
+        `game_id=${request.game_id}`,
+        `hand_id=${request.hand_id}`,
+        `legalActions=[${legalActionTypes.join(", ")}]`,
+        ...legalActionIssues
+      ].join("; ")
+    );
+  }
+}
+
+export function buildDecisionRequestPayload(config: {
   gameId: string;
   handId: string;
   stateRaw: JsonObject;
   stateNorm: JsonObject;
   legalActions: LegalActionMap;
-  actorSeat: SeatId;
   phase: string;
   requestedProvider: Exclude<DecisionMode, "local">;
   decisionIndex: number;
-}): JsonObject {
-  return {
+}): DecisionRequestPayload {
+  const actorSeat = getCanonicalActiveSeatFromState(config.stateRaw);
+  const payload: DecisionRequestPayload = {
     game_id: config.gameId,
     hand_id: config.handId,
     phase: config.phase,
-    actor_seat: config.actorSeat,
+    actor_seat: actorSeat,
     schema_version: TELEMETRY_SCHEMA_VERSION,
     engine_version: TELEMETRY_ENGINE_VERSION,
     sim_version: TELEMETRY_SIM_VERSION,
@@ -288,6 +335,10 @@ function buildDecisionRequestPayload(config: {
       simulation_mode: true
     } as JsonObject
   };
+
+  validateServerHeuristicDecisionRequestContract(payload);
+
+  return payload;
 }
 
 async function requestJson(
@@ -507,20 +558,28 @@ async function resolveDecision(
     };
   }
 
+  const canonicalActor = getCanonicalActiveSeatFromState(config.stateRaw);
+  if (config.actor !== canonicalActor) {
+    throw new Error(
+      `[server_heuristic] refusing inconsistent request source: actor=${config.actor}, canonical=${canonicalActor}, phase=${config.phase}, game_id=${config.gameId}, hand_id=${config.handId}`
+    );
+  }
+
+  const decisionRequestPayload = buildDecisionRequestPayload({
+    gameId: config.gameId,
+    handId: config.handId,
+    stateRaw: config.stateRaw,
+    stateNorm: config.stateNorm,
+    legalActions: getActorScopedLegalActions(config.legalActions, canonicalActor),
+    phase: config.phase,
+    requestedProvider,
+    decisionIndex: config.decisionIndex
+  });
+
   const decisionResponse = await requestJson(
     "POST",
     `${config.backendBaseUrl}${DECISION_REQUEST_PATH}`,
-    buildDecisionRequestPayload({
-      gameId: config.gameId,
-      handId: config.handId,
-      stateRaw: config.stateRaw,
-      stateNorm: config.stateNorm,
-      legalActions: config.legalActions,
-      actorSeat: config.actor,
-      phase: config.phase,
-      requestedProvider,
-      decisionIndex: config.decisionIndex
-    })
+    decisionRequestPayload as unknown as JsonObject
   );
 
   const payload = decisionResponse.payload as unknown as DecisionResponsePayload;
@@ -587,21 +646,30 @@ async function runSingleGame(
   }
 
   while (result.nextState.phase !== "finished") {
-    const actor = resolveNextActor(result.legalActions, result.nextState.activeSeat);
-      const resolved = await resolveDecision({
-        backendBaseUrl,
-        telemetryEnabled: options.telemetryEnabled,
-        gameId,
-        handId,
+    if (
+      options.maxDecisionsPerGame !== undefined &&
+      decisionIndex >= options.maxDecisionsPerGame
+    ) {
+      throw new Error(
+        `Soft lock protection tripped after ${options.maxDecisionsPerGame} decisions for ${gameId}.`
+      );
+    }
+
+    const actor = resolveNextActor(result.legalActions, result.nextState);
+    const resolved = await resolveDecision({
+      backendBaseUrl,
+      telemetryEnabled: options.telemetryEnabled,
+      gameId,
+      handId,
       actor,
       decisionIndex,
       stateRaw: result.nextState as unknown as JsonObject,
-        stateNorm: result.derivedView as unknown as JsonObject,
-        legalActions: result.legalActions,
-        phase: result.nextState.phase,
-        defaultProvider: options.defaultProvider,
-        ...(options.seatProviders ? { seatProviders: options.seatProviders } : {})
-      });
+      stateNorm: result.derivedView as unknown as JsonObject,
+      legalActions: result.legalActions,
+      phase: result.nextState.phase,
+      defaultProvider: options.defaultProvider,
+      ...(options.seatProviders ? { seatProviders: options.seatProviders } : {})
+    });
 
     countByKey(providerUsage, resolved.providerUsed);
     countByKey(decisionsByPhase, result.nextState.phase);

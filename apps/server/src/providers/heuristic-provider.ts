@@ -2,8 +2,10 @@ import { heuristicsV1Policy } from "@tichuml/ai-heuristics";
 import type { DecisionRequestPayload, JsonObject } from "@tichuml/shared";
 import {
   createTelemetryPayload,
+  formatActorMismatchDiagnostics,
   isUsableLegalActionMap,
   isUsableState,
+  validateDecisionRequestActorContract,
   type RoutedDecision
 } from "./provider-utils.js";
 
@@ -24,6 +26,16 @@ export function routeHeuristicDecision(
     throw new Error("Decision requests require a legal_actions map.");
   }
 
+  const canonicalActor = validateDecisionRequestActorContract(payload);
+  console.debug("[decision] server_heuristic request", {
+    game_id: payload.game_id,
+    hand_id: payload.hand_id,
+    phase: payload.phase,
+    actor_seat: payload.actor_seat,
+    canonicalActor,
+    legal_action_keys: Object.keys(payload.legal_actions)
+  });
+
   const providerReason =
     options.providerReason ??
     "Resolved through the shared heuristics-v1 policy on the backend.";
@@ -34,7 +46,14 @@ export function routeHeuristicDecision(
 
   if (chosen.actor !== payload.actor_seat) {
     throw new Error(
-      `Server heuristic selected actor ${chosen.actor} for request actor ${payload.actor_seat}.`
+      formatActorMismatchDiagnostics({
+        payload,
+        canonicalActorSeat: canonicalActor,
+        derivedActorSeat: chosen.actor,
+        legalActionIssues: [
+          `Server heuristic selected actor ${chosen.actor} for request actor ${payload.actor_seat}.`
+        ]
+      })
     );
   }
 

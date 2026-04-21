@@ -3,29 +3,18 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+
+if [ "$(uname -s)" = "Linux" ]; then
+  /opt/tichuml/scripts/force-sync.sh
+fi
+
 # shellcheck disable=SC1091
 . "$SCRIPT_DIR/backend-linux-common.sh"
-
-auto_update_enabled() {
-  case "${AUTO_UPDATE_ON_START:-true}" in
-    1|true|TRUE|yes|YES|on|ON) return 0 ;;
-    *) return 1 ;;
-  esac
-}
 
 main() {
   log_step "Starting Linux backend host flow"
   load_repo_env
   ensure_runtime_dirs
-
-  if auto_update_enabled; then
-    log_step "Checking for backend updates on startup"
-    if ! "$SCRIPT_DIR/update_backend_linux.sh"; then
-      log_warn "Update step failed; continuing with the current checkout."
-    fi
-  else
-    log_info "Startup auto-update is disabled; continuing with the current checkout."
-  fi
 
   prepare_runtime_stack
   build_runtime_artifacts

@@ -61,3 +61,18 @@ Prompt logs here capture backend/platform prompt intent only. GitHub issue state
   [Linux Backend Deployment + ML Host](https://github.com/NeonButrfly/tichuml/milestone/25)
 - Status:
   Lives in GitHub, not here.
+
+## 2026-04-21 - Linux startup force-sync and server_heuristic actor contract hardening
+
+- Prompt signal:
+  Force-sync the Linux backend host source tree on backend startup only, and fix `server_heuristic` decision requests so `actor_seat` always matches the canonical active actor derived from the supplied state snapshot.
+- Interpreted requirement:
+  Linux backend startup must destructively synchronize `/opt/tichuml` with `origin/main` before the backend starts, while simulator/backend decision routing must share one canonical active actor helper, pre-send validation, backend validation diagnostics, and regression tests that prevent seat rotation or stale actor leakage.
+- Affected systems:
+  `scripts/force-sync.sh`, `scripts/start_backend_linux.sh`, `packages/engine/src/seat-identity.ts`, `apps/sim-runner/src/self-play-batch.ts`, `apps/server/src/providers/*`, `apps/server/src/routes/router.ts`, tests, docs.
+- Linked GitHub issues:
+  [#33](https://github.com/NeonButrfly/tichuml/issues/33), [#34](https://github.com/NeonButrfly/tichuml/issues/34)
+- Milestone:
+  [Linux Backend Deployment + ML Host](https://github.com/NeonButrfly/tichuml/milestone/25)
+- Status:
+  Lives in GitHub, not here.

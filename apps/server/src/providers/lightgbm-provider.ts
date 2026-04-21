@@ -1,5 +1,5 @@
 import { createHeuristicFeatureAnalyzer } from "@tichuml/ai-heuristics";
-import type { GameState, LegalAction, SeatId } from "@tichuml/engine";
+import type { GameState, LegalAction } from "@tichuml/engine";
 import type { DecisionRequestPayload, JsonObject } from "@tichuml/shared";
 import type { LightgbmScorer } from "../ml/lightgbm-scorer.js";
 import {
@@ -9,6 +9,7 @@ import {
   isUsableState,
   toActionSortKey,
   toConcreteActionForLegalAction,
+  validateDecisionRequestActorContract,
   type RoutedDecision
 } from "./provider-utils.js";
 import { routeHeuristicDecision } from "./heuristic-provider.js";
@@ -31,6 +32,7 @@ export async function routeLightgbmDecision(
     );
   }
 
+  const canonicalActor = validateDecisionRequestActorContract(payload);
   const actorLegalActions = extractActorLegalActions(payload);
   if (actorLegalActions.length === 0) {
     throw new Error(
@@ -43,7 +45,7 @@ export async function routeLightgbmDecision(
       state: stateRaw,
       legalActions: payload.legal_actions as never
     });
-    const actorSeat = payload.actor_seat as SeatId;
+    const actorSeat = canonicalActor;
     const stateFeatures = analyzer.getStateFeatures(actorSeat);
     const candidateFeatures = actorLegalActions.map((legalAction) =>
       analyzer.getCandidateFeatures(
@@ -54,7 +56,7 @@ export async function routeLightgbmDecision(
     );
     const scored = await scorer.score({
       stateRaw,
-      actorSeat: payload.actor_seat,
+      actorSeat: canonicalActor,
       phase: payload.phase,
       legalActions: actorLegalActions,
       stateFeatures,
@@ -95,7 +97,7 @@ export async function routeLightgbmDecision(
       providerUsed: "lightgbm_model",
       providerReason,
       chosen: buildChosenDecision(
-        payload.actor_seat as SeatId,
+        canonicalActor,
         concreteAction,
         "lightgbm-action-model",
         [

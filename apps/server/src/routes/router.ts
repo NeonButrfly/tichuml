@@ -178,11 +178,31 @@ export function createRouter({
           return;
         }
 
-        const decisionResponse = await handleDecisionRequest(
-          repository,
-          parsed.value,
-          lightgbmScorer ? { lightgbmScorer } : {}
-        );
+        let decisionResponse;
+        try {
+          decisionResponse = await handleDecisionRequest(
+            repository,
+            parsed.value,
+            lightgbmScorer ? { lightgbmScorer } : {}
+          );
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : "Unexpected decision error.";
+          console.error("[decision] request handling failed", {
+            game_id: parsed.value.game_id,
+            hand_id: parsed.value.hand_id,
+            phase: parsed.value.phase,
+            actor_seat: parsed.value.actor_seat,
+            error: message
+          });
+          if (message.startsWith("Actor mismatch:")) {
+            badRequest(response, message, config.allowedOrigin, [
+              { path: "actor_seat", message }
+            ]);
+            return;
+          }
+          throw error;
+        }
         writeJson(response, 200, decisionResponse, config.allowedOrigin);
         return;
       }
