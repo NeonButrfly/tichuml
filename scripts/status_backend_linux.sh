@@ -90,9 +90,9 @@ main() {
 
   if has_command docker; then
     if docker_compose_available; then
-      status_line "[OK]" "'docker compose' is available"
+      status_line "[OK]" "Docker Compose is available via $(docker_compose_command)"
     else
-      status_line "[FAIL]" "'docker compose' is unavailable; install docker-compose-plugin or a Docker build with Compose v2"
+      status_line "[FAIL]" "Docker Compose is unavailable; rerun install_backend_linux.sh to install a distro package or manual CLI plugin"
       prerequisites_missing=true
     fi
   else
@@ -131,7 +131,7 @@ main() {
         status_line "[FAIL]" "Postgres connectivity check failed"
       fi
     else
-      status_line "[WARN]" "Skipping Postgres container checks because 'docker compose' is unavailable"
+      status_line "[WARN]" "Skipping Postgres container checks because Docker Compose is unavailable"
     fi
   else
     status_line "[WARN]" "Skipping Docker/Postgres runtime checks because docker is missing"
@@ -199,7 +199,7 @@ main() {
     status_line "[OK]" "Ahead/behind: $ahead/$behind"
 
     if repo_dirty; then
-      status_line "[WARN]" "Repository has uncommitted changes; update/install will not overwrite them"
+      status_line "[WARN]" "Repository has uncommitted changes; install/update/start workflows will force remote state over them"
     else
       status_line "[OK]" "Repository worktree is clean"
     fi

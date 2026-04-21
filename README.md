@@ -127,24 +127,42 @@ Linux install/bootstrap:
 bash scripts/install_backend_linux.sh
 ```
 
-The installer is idempotent and only installs missing system dependencies. On a clean Ubuntu host with no existing Docker/Node stack it installs:
+The installer is idempotent and only installs missing system dependencies. It supports Ubuntu/Debian-family hosts with `apt-get` and Oracle Linux 9 / RHEL-family hosts with `dnf` or `yum`.
 
+On a clean Ubuntu/Debian host with no existing Docker/Node stack it installs:
+
+- `ca-certificates`
 - `git`
 - `curl`
+- `jq`
 - `python3`
 - `python3-venv`
 - `python3-pip`
 - `docker.io`
-- `docker-compose-plugin`
+- `docker-compose-plugin`, `docker-compose-v2`, `docker-compose`, or a manual Compose CLI plugin when no distro package is available
 - `nodejs`
 - `npm`
 
-If Docker or Node.js are already present from another package source, the installer reuses them instead of forcing Ubuntu's `docker.io` or `npm` packages over the top. On Ubuntu hosts that already have Docker's `containerd.io` / `docker-ce` package family, the installer detects that partial Docker CE state and avoids the conflicting `docker.io` path. If Node.js already exists without `npm`, the installer warns and refuses to pretend the host is ready until `npm` is supplied from the same Node distribution. The shared Linux bootstrap helper also initializes `BACKEND_REPO_ROOT` safely under `set -u`, even when the repo is already dirty and the pull step is skipped, and it now runs `docker compose` from the repo root without depending on the newer `--env-file` flag so older Ubuntu Compose builds still work.
+On a clean Oracle Linux 9 / RHEL-family host with no existing Docker/Node stack it installs:
+
+- `ca-certificates`
+- `git`
+- `curl`
+- `jq`
+- `python3`
+- `python3-pip`
+- `python3-virtualenv`
+- `docker`
+- `docker-compose-plugin`, `docker-compose`, or a manual Compose CLI plugin when no distro package is available
+- Node.js 20 and `npm`
+
+If Docker is already present from another package source, the installer reuses it and ensures Compose is available through `docker compose` or `docker-compose`. If Node.js is missing or insufficient on Oracle/RHEL, the installer first tries the distro Node.js 20 module and then falls back to the supported NodeSource RPM setup for Node.js 20. The shared Linux bootstrap helper initializes `BACKEND_REPO_ROOT` safely under `set -u`, runs Docker Compose from the repo root without depending on the newer `--env-file` flag, and supports both `docker compose` and `docker-compose`.
 
 The Linux installer now prints the exact command it is about to run before:
 
 - `apt-get update`
 - `apt-get install`
+- `dnf install` / `yum install`
 - `systemctl enable --now docker`
 - repo clone/refresh
 - helper/env sourcing
@@ -171,19 +189,21 @@ Linux start/update flow:
 bash scripts/start_backend_linux.sh
 ```
 
-On Linux, backend startup now force-syncs `/opt/tichuml` before starting the runtime stack. This is intentionally destructive for local source changes on the backend host and runs only from `scripts/start_backend_linux.sh`, not from simulator commands or unrelated CLI workflows. The startup sync uses:
+On Linux, backend startup force-syncs the checked-out repo before starting the runtime stack. This is intentionally destructive for local source changes on the backend host and runs only from `scripts/start_backend_linux.sh`, not from simulator commands or unrelated CLI workflows. The installer and update scripts use the same force-overwrite policy. The sync uses:
 
-- `git fetch --all --prune`
+- `git remote set-url origin ...`
+- `git fetch --prune origin main`
+- `git checkout main`
 - `git reset --hard origin/main`
 - `git clean -fd`
 
 For systemd deployments, wire the same sync as:
 
 ```ini
-ExecStartPre=/opt/tichuml/scripts/force-sync.sh
+ExecStartPre=/path/to/tichuml/scripts/force-sync.sh
 ```
 
-If the sync fails, the backend must not start. Manual update-only flows remain separate and are not used by Linux backend startup.
+If the sync fails, the backend must not start.
 
 Manual Linux update-only flow:
 
@@ -202,7 +222,7 @@ No systemd unit is added in-repo yet. The intended service entrypoint is `bash /
 Those scripts:
 
 - install Linux host dependencies
-- clone or update the repo safely
+- clone or force-update the repo to the configured remote branch
 - create `.env` if missing
 - create `.venv` and install ML requirements
 - start Docker/Postgres with Postgres bound to loopback only
@@ -218,11 +238,13 @@ Linux-host recovery:
 - Missing Docker repo / partial Docker CE family:
   If the host has `containerd.io`, `docker-ce`, or `docker-ce-cli` but no working `docker` command, either finish configuring Docker's apt repository and install `docker-ce docker-ce-cli docker-compose-plugin`, or remove the partial Docker CE packages before rerunning the installer. The script will not force Ubuntu `docker.io` over that partial state.
 - Dirty repo:
-  `install_backend_linux.sh` and `update_backend_linux.sh` refuse to `git pull` over a dirty worktree. Inspect `git status`, commit or stash what you need, then rerun. `status_backend_linux.sh` reports this state explicitly.
+  `install_backend_linux.sh`, `update_backend_linux.sh`, and Linux startup intentionally force remote state over local changes with `fetch`, `checkout`, `reset --hard`, and `clean -fd`. Save anything you need somewhere else before running backend install/start/update on a host.
 - Missing `npm` with `node` already present:
-  Install `npm` from the same Node distribution already on the host, or reinstall Node with npm included. The installer intentionally skips forcing Ubuntu's `npm` package into that mixed state.
+  On Ubuntu/Debian, install `npm` from the same Node distribution already on the host, or reinstall Node with npm included. On Oracle/RHEL, rerun the installer so it can enable/install Node.js 20 with npm.
 - Docker daemon not active:
   Run `sudo systemctl enable --now docker`, then rerun `bash scripts/status_backend_linux.sh` or `bash scripts/start_backend_linux.sh`. If the daemon is running but access is denied, add the service user to the `docker` group and sign in again before retrying.
+- Missing Docker Compose package:
+  Rerun `bash scripts/install_backend_linux.sh`. It tries distro Compose packages first and then installs a pinned Compose CLI plugin in `/usr/local/lib/docker/cli-plugins`.
 
 Remote clients should set the runtime backend URL in the app to:
 

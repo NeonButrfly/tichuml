@@ -3,9 +3,20 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+START_REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
+
+if [ -f "$START_REPO_ROOT/.env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . "$START_REPO_ROOT/.env"
+  set +a
+fi
 
 if [ "$(uname -s)" = "Linux" ]; then
-  /opt/tichuml/scripts/force-sync.sh
+  REPO_DIR="${REPO_DIR:-$START_REPO_ROOT}" \
+    REPO_URL="${REPO_URL:-https://github.com/NeonButrfly/tichuml.git}" \
+    BRANCH="${BRANCH:-${GIT_BRANCH:-main}}" \
+    "$SCRIPT_DIR/force-sync.sh"
 fi
 
 # shellcheck disable=SC1091

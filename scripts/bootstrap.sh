@@ -45,6 +45,21 @@ ensure_docker_running() {
   exit 1
 }
 
+docker_compose() {
+  if docker compose version >/dev/null 2>&1; then
+    docker compose "$@"
+    return
+  fi
+
+  if command -v docker-compose >/dev/null 2>&1 && docker-compose version >/dev/null 2>&1; then
+    docker-compose "$@"
+    return
+  fi
+
+  printf "Docker is running, but neither 'docker compose' nor 'docker-compose' is available.\n" >&2
+  exit 1
+}
+
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 cd "$REPO_ROOT"
@@ -73,7 +88,7 @@ npm install
 COMPOSE_ARGS="--env-file .env"
 
 log_step "Starting Postgres via Docker"
-docker compose $COMPOSE_ARGS up -d postgres
+docker_compose $COMPOSE_ARGS up -d postgres
 
 POSTGRES_USER=${POSTGRES_USER:-postgres}
 POSTGRES_DB=${POSTGRES_DB:-tichuml}
@@ -81,7 +96,7 @@ POSTGRES_DB=${POSTGRES_DB:-tichuml}
 log_step "Waiting for Postgres readiness"
 attempt=0
 while [ "$attempt" -lt 60 ]; do
-  if docker compose $COMPOSE_ARGS exec -T postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1; then
+  if docker_compose $COMPOSE_ARGS exec -T postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1; then
     break
   fi
 

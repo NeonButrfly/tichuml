@@ -17,50 +17,7 @@ main() {
   update_applied=false
   restart_triggered=false
   status="ok"
-  message="Repository already up to date."
-
-  if repo_dirty; then
-    local_commit="$(git_local_commit)"
-    log_info "Refreshing remote metadata for a dirty-repo status check"
-    git -C "$BACKEND_REPO_ROOT" fetch origin "$branch" >/dev/null 2>&1 || true
-    remote_commit="$(git_remote_commit 2>/dev/null || printf '%s\n' "$local_commit")"
-    set -- $(git_ahead_behind 2>/dev/null || printf '0 0')
-    ahead="$1"
-    behind="$2"
-    dirty=true
-    message="Repository is dirty; skipping update to avoid overwriting local changes."
-    write_update_status "warn" "$update_applied" "$restart_triggered" "$message" "$local_commit" "$remote_commit" "$ahead" "$behind" "$dirty"
-    log_warn "$message"
-    return
-  fi
-
-  log_step "Refreshing repository from origin/$branch"
-  git -C "$BACKEND_REPO_ROOT" fetch origin "$branch"
-  local_commit="$(git_local_commit)"
-  remote_commit="$(git_remote_commit)"
-  set -- $(git_ahead_behind)
-  ahead="$1"
-  behind="$2"
-  dirty=false
-
-  if [ "$behind" -gt 0 ] && [ "$ahead" -gt 0 ]; then
-    status="fail"
-    message="Repository has diverged from origin/$branch; manual intervention required."
-    write_update_status "$status" "$update_applied" "$restart_triggered" "$message" "$local_commit" "$remote_commit" "$ahead" "$behind" "$dirty"
-    log_fail "$message"
-    exit 1
-  fi
-
-  if [ "$behind" -eq 0 ]; then
-    write_update_status "$status" "$update_applied" "$restart_triggered" "$message" "$local_commit" "$remote_commit" "$ahead" "$behind" "$dirty"
-    log_info "Branch: $branch"
-    log_info "Local commit: $local_commit"
-    log_info "Remote commit: $remote_commit"
-    log_info "Update applied: $update_applied"
-    log_info "Restart triggered: $restart_triggered"
-    log_ok "$message"
-    return
-  fi
+  message="Repository force-synced to origin/$branch."
 
   local backend_was_running
   if backend_running; then
@@ -69,8 +26,12 @@ main() {
     backend_was_running=false
   fi
 
-  log_step "Applying fast-forward update from origin/$branch"
-  git -C "$BACKEND_REPO_ROOT" pull --ff-only origin "$branch"
+  log_step "Applying force update from origin/$branch"
+  if repo_dirty; then
+    log_warn "Repository is dirty; local changes will be overwritten by the backend update workflow."
+  fi
+  local_commit="$(git_local_commit)"
+  git_force_sync_repo "$BACKEND_REPO_ROOT" "$branch" "$REPO_URL"
   load_repo_env
 
   install_node_dependencies_if_needed
@@ -82,14 +43,19 @@ main() {
   run_migrations
   build_runtime_artifacts
   update_applied=true
-  message="Pulled latest code from origin/$branch."
+  remote_commit="$(git_remote_commit)"
+  if [ "$local_commit" = "$remote_commit" ]; then
+    message="Repository already matched origin/$branch; runtime stack refreshed."
+  else
+    message="Force-synced latest code from origin/$branch."
+  fi
 
   if [ "$backend_was_running" = true ]; then
     log_step "Restarting backend after update"
     stop_backend
     start_backend_background
     restart_triggered=true
-    message="Pulled latest code from origin/$branch and restarted the backend."
+    message="$message Backend restarted."
   fi
 
   local_commit="$(git_local_commit)"
@@ -97,6 +63,7 @@ main() {
   set -- $(git_ahead_behind)
   ahead="$1"
   behind="$2"
+  dirty=false
 
   write_update_status "$status" "$update_applied" "$restart_triggered" "$message" "$local_commit" "$remote_commit" "$ahead" "$behind" "$dirty"
   log_info "Branch: $branch"

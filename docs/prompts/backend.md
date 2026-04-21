@@ -76,3 +76,18 @@ Prompt logs here capture backend/platform prompt intent only. GitHub issue state
   [Linux Backend Deployment + ML Host](https://github.com/NeonButrfly/tichuml/milestone/25)
 - Status:
   Lives in GitHub, not here.
+
+## 2026-04-21 - Debian and Oracle/RHEL Linux backend installer portability
+
+- Prompt signal:
+  Make Linux backend install/start/status/update scripts work on both Ubuntu/Debian-family systems and Oracle Linux 9 / RHEL-family systems without assuming `apt`, without assuming a distro Docker Compose package exists, and without skipping dirty repo updates.
+- Interpreted requirement:
+  Add package-manager detection for `apt-get`, `dnf`, and `yum`; ensure Docker Compose through `docker compose`, `docker-compose`, distro packages, or a manual CLI plugin; force-sync repo state during install/start/update; write shell-safe update status env files; and keep the current Ubuntu backend flow working.
+- Affected systems:
+  `scripts/install_backend_linux.sh`, `scripts/backend-linux-common.sh`, `scripts/start_backend_linux.sh`, `scripts/update_backend_linux.sh`, `scripts/status_backend_linux.sh`, `scripts/force-sync.sh`, `README.md`.
+- Linked GitHub issue:
+  [#33](https://github.com/NeonButrfly/tichuml/issues/33)
+- Milestone:
+  [Linux Backend Deployment + ML Host](https://github.com/NeonButrfly/tichuml/milestone/25)
+- Status:
+  Lives in GitHub, not here.

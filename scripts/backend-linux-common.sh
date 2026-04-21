@@ -53,6 +53,14 @@ has_command() {
   command -v "$1" >/dev/null 2>&1
 }
 
+run_root() {
+  if [ "$(id -u)" -eq 0 ]; then
+    "$@"
+  else
+    sudo "$@"
+  fi
+}
+
 require_command() {
   if ! has_command "$1"; then
     log_fail "Required command '$1' was not found in PATH."
@@ -92,22 +100,41 @@ load_repo_env() {
   export POSTGRES_PORT="${POSTGRES_PORT:-54329}"
 }
 
-docker_compose_available() {
-  docker compose version >/dev/null 2>&1
-}
-
 docker_info_error() {
   docker info 2>&1 >/dev/null || true
 }
 
+docker_compose_command() {
+  if docker compose version >/dev/null 2>&1; then
+    printf '%s\n' "docker compose"
+    return
+  fi
+
+  if has_command docker-compose && docker-compose version >/dev/null 2>&1; then
+    printf '%s\n' "docker-compose"
+    return
+  fi
+
+  return 1
+}
+
+docker_compose_available() {
+  docker_compose_command >/dev/null 2>&1
+}
+
 docker_compose() {
-  if ! docker_compose_available; then
-    log_fail "Docker is installed but the 'docker compose' subcommand is unavailable. Install docker-compose-plugin or a Docker build that includes Compose v2, then rerun the Linux backend scripts."
+  local compose_command
+  if ! compose_command="$(docker_compose_command)"; then
+    log_fail "Docker is installed but neither 'docker compose' nor 'docker-compose' is available. Rerun install_backend_linux.sh so it can install a distro package or manual Compose plugin."
     exit 1
   fi
+
+  local -a compose_parts=()
+  # shellcheck disable=SC2206
+  compose_parts=($compose_command)
   (
     cd "$BACKEND_REPO_ROOT" &&
-      docker compose -f "$BACKEND_REPO_ROOT/docker-compose.yml" "$@"
+      "${compose_parts[@]}" -f "$BACKEND_REPO_ROOT/docker-compose.yml" "$@"
   )
 }
 
@@ -131,6 +158,42 @@ git_ahead_behind() {
   git -C "$BACKEND_REPO_ROOT" rev-list --left-right --count "HEAD...origin/$GIT_BRANCH"
 }
 
+git_force_sync_repo() {
+  local repo_root="$1"
+  local branch="$2"
+  local repo_url="$3"
+
+  log_step "Force-syncing repository to origin/$branch"
+  log_info "This intentionally overwrites local changes for the backend install/start workflow."
+
+  git -C "$repo_root" remote get-url origin >/dev/null 2>&1 ||
+    git -C "$repo_root" remote add origin "$repo_url"
+
+  log_info "Running git remote set-url origin $repo_url"
+  git -C "$repo_root" remote set-url origin "$repo_url"
+  log_info "Running git fetch --prune origin $branch"
+  git -C "$repo_root" fetch --prune origin "$branch"
+  log_info "Running git checkout $branch"
+  git -C "$repo_root" checkout "$branch" 2>/dev/null ||
+    git -C "$repo_root" checkout -b "$branch" "origin/$branch"
+  log_info "Running git reset --hard origin/$branch"
+  git -C "$repo_root" reset --hard "origin/$branch"
+  log_info "Running git clean -fd"
+  git -C "$repo_root" clean -fd
+}
+
+shell_quote() {
+  printf '%q' "$1"
+}
+
+write_env_assignment() {
+  local name="$1"
+  local value="$2"
+  printf '%s=' "$name"
+  shell_quote "$value"
+  printf '\n'
+}
+
 write_update_status() {
   ensure_runtime_dirs
 
@@ -144,19 +207,19 @@ write_update_status() {
   local behind="${8:-0}"
   local dirty="${9:-false}"
 
-  cat >"$BACKEND_UPDATE_STATUS_FILE" <<EOF
-LAST_CHECK_AT=$(backend_now_iso)
-STATUS=$status
-UPDATE_APPLIED=$update_applied
-RESTART_TRIGGERED=$restart_triggered
-BRANCH=${GIT_BRANCH}
-LOCAL_COMMIT=$local_commit
-REMOTE_COMMIT=$remote_commit
-AHEAD=$ahead
-BEHIND=$behind
-DIRTY=$dirty
-MESSAGE=$message
-EOF
+  {
+    write_env_assignment LAST_CHECK_AT "$(backend_now_iso)"
+    write_env_assignment STATUS "$status"
+    write_env_assignment UPDATE_APPLIED "$update_applied"
+    write_env_assignment RESTART_TRIGGERED "$restart_triggered"
+    write_env_assignment BRANCH "$GIT_BRANCH"
+    write_env_assignment LOCAL_COMMIT "$local_commit"
+    write_env_assignment REMOTE_COMMIT "$remote_commit"
+    write_env_assignment AHEAD "$ahead"
+    write_env_assignment BEHIND "$behind"
+    write_env_assignment DIRTY "$dirty"
+    write_env_assignment MESSAGE "$message"
+  } >"$BACKEND_UPDATE_STATUS_FILE"
 }
 
 ensure_docker_running() {
@@ -267,8 +330,45 @@ install_node_dependencies_if_needed() {
 ensure_python_venv() {
   if [ ! -d "$BACKEND_REPO_ROOT/.venv" ]; then
     log_step "Creating Python virtual environment"
-    python3 -m venv "$BACKEND_REPO_ROOT/.venv"
+    if python3 -m venv --help >/dev/null 2>&1; then
+      python3 -m venv "$BACKEND_REPO_ROOT/.venv"
+    elif has_command virtualenv; then
+      virtualenv -p python3 "$BACKEND_REPO_ROOT/.venv"
+    else
+      log_fail "Python venv support is unavailable. Install python3-venv on Debian/Ubuntu or python3-virtualenv on Oracle/RHEL, then rerun."
+      exit 1
+    fi
   fi
+
+  local py
+  py="$(python_bin)"
+  if "$py" -m pip --version >/dev/null 2>&1; then
+    return
+  fi
+
+  log_warn "Python virtual environment exists but pip is missing; attempting to bootstrap pip."
+  "$py" -m ensurepip --upgrade >/dev/null 2>&1 || true
+  if "$py" -m pip --version >/dev/null 2>&1; then
+    log_ok "Bootstrapped pip with ensurepip"
+    return
+  fi
+
+  if has_command curl; then
+    local get_pip
+    get_pip="$(mktemp /tmp/tichuml-get-pip.XXXXXX.py)"
+    if curl -fsSL https://bootstrap.pypa.io/get-pip.py -o "$get_pip" &&
+      "$py" "$get_pip" >/dev/null 2>&1; then
+      rm -f "$get_pip"
+      if "$py" -m pip --version >/dev/null 2>&1; then
+        log_ok "Bootstrapped pip with get-pip.py"
+        return
+      fi
+    fi
+    rm -f "$get_pip"
+  fi
+
+  log_fail "Unable to make pip available inside $BACKEND_REPO_ROOT/.venv. Install Python pip/venv support and rerun."
+  exit 1
 }
 
 python_bin() {
