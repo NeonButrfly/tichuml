@@ -99,6 +99,7 @@ import { resolveDecisionWithProvider } from "./backend/decision-provider";
 import { emitDecisionTelemetry, emitEventTelemetry } from "./backend/telemetry";
 import { postDecisionRequest, testBackendHealth } from "./backend/client";
 import { isBackendRequestError } from "./backend/client";
+import { SimControlDashboard } from "./SimControlDashboard";
 import {
   TELEMETRY_ENGINE_VERSION,
   TELEMETRY_SCHEMA_VERSION,
@@ -517,6 +518,14 @@ function AppLoadingScreen({
 }
 
 export function App() {
+  if (
+    typeof window !== "undefined" &&
+    (window.location.pathname === "/admin/sim" ||
+      window.location.pathname === "/sim/control")
+  ) {
+    return <SimControlDashboard />;
+  }
+
   const [initialSession, setInitialSession] = useState<RoundSession | null>(
     null
   );

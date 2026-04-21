@@ -53,6 +53,8 @@ export type SelfPlayBatchOptions = {
   quiet?: boolean;
   progress?: boolean;
   maxDecisionsPerGame?: number;
+  workerId?: string;
+  controllerMode?: boolean;
 };
 
 export type SelfPlayGameResult = {
@@ -120,6 +122,8 @@ type PersistedEventConfig = {
   eventIndex: number;
   providerUsed: string;
   requestedProvider: string;
+  workerId?: string;
+  controllerMode?: boolean;
 };
 
 function countByKey(bucket: Record<string, number>, key: string): void {
@@ -271,6 +275,16 @@ function buildDecisionContextMetadata(
   };
 }
 
+function buildControllerMetadata(config: {
+  workerId?: string;
+  controllerMode?: boolean;
+}): JsonObject {
+  return {
+    ...(config.workerId ? { worker_id: config.workerId } : {}),
+    ...(config.controllerMode ? { controller_mode: true } : {})
+  };
+}
+
 function buildGameId(baseSeed: string, index: number): string {
   return `selfplay-${baseSeed}-game-${String(index + 1).padStart(6, "0")}`;
 }
@@ -364,6 +378,8 @@ export function buildDecisionRequestPayload(config: {
   phase: string;
   requestedProvider: Exclude<DecisionMode, "local">;
   decisionIndex: number;
+  workerId?: string;
+  controllerMode?: boolean;
 }): DecisionRequestPayload {
   const actorSeat = getCanonicalActiveSeatFromState(config.stateRaw);
   const payload: DecisionRequestPayload = {
@@ -380,7 +396,11 @@ export function buildDecisionRequestPayload(config: {
     requested_provider: config.requestedProvider,
     metadata: {
       decision_index: config.decisionIndex,
-      simulation_mode: true
+      simulation_mode: true,
+      ...buildControllerMetadata({
+        ...(config.workerId ? { workerId: config.workerId } : {}),
+        ...(config.controllerMode ? { controllerMode: true } : {})
+      })
     } as JsonObject
   };
 
@@ -427,6 +447,8 @@ function buildLocalDecisionTelemetry(config: {
   chosen: ChosenDecision;
   requestedProvider: DecisionMode | "system_local";
   latencyMs: number;
+  workerId?: string;
+  controllerMode?: boolean;
 }): TelemetryDecisionPayload {
   const providerUsed =
     config.actorSeat === SYSTEM_ACTOR ? "system_local" : "local_heuristic";
@@ -466,6 +488,7 @@ function buildLocalDecisionTelemetry(config: {
       provider_used: providerUsed,
       fallback_used: false,
       simulation_mode: true,
+      ...buildControllerMetadata(config),
       ...buildDecisionContextMetadata(
         config.stateRaw as unknown as GameState,
         actorLegalActions,
@@ -524,6 +547,7 @@ async function persistEvent(
       requested_provider: config.requestedProvider,
       provider_used: config.providerUsed,
       simulation_mode: true,
+      ...buildControllerMetadata(config),
       event_index: config.eventIndex
     }
   };
@@ -545,6 +569,8 @@ async function resolveDecision(
     phase: string;
     defaultProvider: DecisionMode;
     seatProviders?: SeatProviderOverrides;
+    workerId?: string;
+    controllerMode?: boolean;
   }
 ): Promise<SimulatedDecision> {
   const startedAt = Date.now();
@@ -569,7 +595,9 @@ async function resolveDecision(
         legalActions: config.legalActions,
         chosen,
         requestedProvider: "system_local",
-        latencyMs: Date.now() - startedAt
+        latencyMs: Date.now() - startedAt,
+        ...(config.workerId ? { workerId: config.workerId } : {}),
+        ...(config.controllerMode ? { controllerMode: true } : {})
       });
       await requestJson(
         "POST",
@@ -613,7 +641,9 @@ async function resolveDecision(
         legalActions: config.legalActions,
         chosen,
         requestedProvider,
-        latencyMs: Date.now() - startedAt
+        latencyMs: Date.now() - startedAt,
+        ...(config.workerId ? { workerId: config.workerId } : {}),
+        ...(config.controllerMode ? { controllerMode: true } : {})
       });
       await requestJson(
         "POST",
@@ -648,7 +678,9 @@ async function resolveDecision(
     legalActions: getActorScopedLegalActions(config.legalActions, canonicalActor),
     phase: config.phase,
     requestedProvider,
-    decisionIndex: config.decisionIndex
+    decisionIndex: config.decisionIndex,
+    ...(config.workerId ? { workerId: config.workerId } : {}),
+    ...(config.controllerMode ? { controllerMode: true } : {})
   });
 
   const decisionResponse = await requestJson(
@@ -716,7 +748,9 @@ async function runSingleGame(
       actorSeat: SYSTEM_ACTOR,
       eventIndex: eventIndex++,
       providerUsed: "system_local",
-      requestedProvider: "system_local"
+      requestedProvider: "system_local",
+      ...(options.workerId ? { workerId: options.workerId } : {}),
+      ...(options.controllerMode ? { controllerMode: true } : {})
     });
   }
 
@@ -743,7 +777,9 @@ async function runSingleGame(
       legalActions: result.legalActions,
       phase: result.nextState.phase,
       defaultProvider: options.defaultProvider,
-      ...(options.seatProviders ? { seatProviders: options.seatProviders } : {})
+      ...(options.seatProviders ? { seatProviders: options.seatProviders } : {}),
+      ...(options.workerId ? { workerId: options.workerId } : {}),
+      ...(options.controllerMode ? { controllerMode: true } : {})
     });
 
     countByKey(providerUsage, resolved.providerUsed);
@@ -795,7 +831,9 @@ async function runSingleGame(
         actorSeat: actor,
         eventIndex: eventIndex++,
         providerUsed: resolved.providerUsed,
-        requestedProvider: resolved.requestedProvider
+        requestedProvider: resolved.requestedProvider,
+        ...(options.workerId ? { workerId: options.workerId } : {}),
+        ...(options.controllerMode ? { controllerMode: true } : {})
       });
     }
 

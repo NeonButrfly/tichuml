@@ -10,6 +10,12 @@ export const DECISION_REQUEST_PATH = "/api/decision/request";
 export const ADMIN_TELEMETRY_CLEAR_PATH = "/api/admin/telemetry/clear";
 export const ADMIN_DATABASE_CLEAR_PATH = "/api/admin/database/clear";
 export const ADMIN_DATABASE_RESET_PATH = "/api/admin/database/reset";
+export const ADMIN_SIM_START_PATH = "/api/admin/sim/start";
+export const ADMIN_SIM_PAUSE_PATH = "/api/admin/sim/pause";
+export const ADMIN_SIM_CONTINUE_PATH = "/api/admin/sim/continue";
+export const ADMIN_SIM_STOP_PATH = "/api/admin/sim/stop";
+export const ADMIN_SIM_STATUS_PATH = "/api/admin/sim/status";
+export const ADMIN_SIM_RUN_ONCE_PATH = "/api/admin/sim/run-once";
 export const ADMIN_CONFIRMATION_VALUE = "CLEAR_TICHU_DB";
 
 export type JsonObject = Record<string, SeedJsonValue>;
@@ -64,6 +70,111 @@ export type TelemetryDecisionPayload = {
   metadata: JsonObject;
   antipattern_tags: SeedJsonValue;
 };
+
+export type SimControllerStatus =
+  | "stopped"
+  | "starting"
+  | "running"
+  | "pausing"
+  | "paused"
+  | "stopping"
+  | "completed"
+  | "error";
+
+export type SimWorkerStatus =
+  | "starting"
+  | "running"
+  | "paused"
+  | "stopping"
+  | "stopped"
+  | "completed"
+  | "error";
+
+export type SimControllerConfig = {
+  provider: DecisionMode;
+  games_per_batch: number;
+  telemetry_enabled: boolean;
+  backend_url: string;
+  seed_prefix: string;
+  sleep_seconds: number;
+  worker_count: number;
+  quiet: boolean;
+  progress: boolean;
+  seat_providers: Record<string, DecisionMode>;
+};
+
+export type SimWorkerRuntimeState = {
+  worker_id: string;
+  status: SimWorkerStatus;
+  pid: number | null;
+  current_batch_started_at: string | null;
+  total_batches_completed: number;
+  total_games_completed: number;
+  last_heartbeat: string | null;
+  last_error: string | null;
+};
+
+export type SimControllerRuntimeState = {
+  status: SimControllerStatus;
+  pid: number | null;
+  controller_id: string;
+  started_at: string | null;
+  updated_at: string;
+  last_heartbeat: string | null;
+  heartbeat_stale: boolean;
+  heartbeat_stale_after_seconds: number;
+  requested_action: string | null;
+  current_batch_started_at: string | null;
+  last_batch_started_at: string | null;
+  last_batch_finished_at: string | null;
+  last_batch_size: number;
+  last_batch_status: string | null;
+  total_batches_completed: number;
+  total_games_completed: number;
+  total_errors: number;
+  last_error: string | null;
+  worker_count: number;
+  running_worker_count: number;
+  paused_worker_count: number;
+  stopped_worker_count: number;
+  errored_worker_count: number;
+  config: SimControllerConfig;
+  workers: SimWorkerRuntimeState[];
+  log_path: string;
+  runtime_path: string;
+  lock_path: string;
+  pause_path: string;
+  stop_path: string;
+  warnings: string[];
+  recent_logs: string[];
+};
+
+export type SimControllerResponse = {
+  accepted: boolean;
+  action: string;
+  prior_status: SimControllerStatus;
+  current_status: SimControllerStatus;
+  message: string;
+  runtime_state: SimControllerRuntimeState;
+  warnings: string[];
+};
+
+export type SimControllerRequestPayload = Partial<{
+  provider: DecisionMode;
+  games: number;
+  games_per_batch: number;
+  telemetry_enabled: boolean;
+  telemetry: boolean;
+  backend_url: string;
+  seed: string;
+  seed_prefix: string;
+  sleep_seconds: number;
+  worker_count: number;
+  sim_threads: number;
+  quiet: boolean;
+  progress: boolean;
+  seat_providers: Record<string, DecisionMode>;
+}>;
 
 export type TelemetryEventPayload = {
   ts: string;
@@ -132,6 +243,7 @@ export type DecisionResponsePayload = {
 
 export type StoredTelemetryDecisionRecord = TelemetryDecisionPayload & {
   id: number;
+  worker_id: string | null;
   chosen_action_type: string;
   legal_action_count: number;
   has_explanation: boolean;
@@ -150,6 +262,7 @@ export type StoredTelemetryDecisionRecord = TelemetryDecisionPayload & {
 
 export type StoredTelemetryEventRecord = TelemetryEventPayload & {
   id: number;
+  worker_id: string | null;
   state_hash: string | null;
   event_hash: string;
   created_at: string;

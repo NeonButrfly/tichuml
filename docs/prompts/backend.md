@@ -106,3 +106,18 @@ Prompt logs here capture backend/platform prompt intent only. GitHub issue state
   [6.5 - Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
 - Status:
   Lives in GitHub, not here.
+
+## 2026-04-21 - Simulator controller control plane and dashboard
+
+- Prompt signal:
+  Add a controller-style simulator control plane for background self-play execution, including a web control dashboard, simulator status surface, worker/thread support, controller script, and safe admin control endpoints.
+- Interpreted requirement:
+  Issue [#37](https://github.com/NeonButrfly/tichuml/issues/37) tracks a Linux-friendly operations layer for long-running self-play with guarded admin APIs, singleton lock semantics, pause/continue/stop at safe batch boundaries, heartbeat/runtime/log files, worker-level status, worker IDs in telemetry, and a browser dashboard plus CLI wrapper.
+- Affected systems:
+  `packages/shared`, `apps/server`, `apps/sim-runner`, `apps/web`, `scripts`, docs, backend integration tests, telemetry storage/export.
+- Linked GitHub issue:
+  [#37](https://github.com/NeonButrfly/tichuml/issues/37)
+- Milestone:
+  [6.5 - Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status:
+  Lives in GitHub, not here.

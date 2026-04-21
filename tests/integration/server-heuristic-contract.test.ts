@@ -178,6 +178,8 @@ const TEST_SERVER_CONFIG: ServerConfig = {
   autoMigrate: false,
   backendBaseUrl: "http://127.0.0.1",
   destructiveAdminEndpointsEnabled: false,
+  adminSimControlEnabled: false,
+  simControllerRuntimeDir: "C:/tichu/tichuml/.runtime/test-sim-controller",
   repoRoot: "C:/tichu/tichuml",
   pythonExecutable: "python",
   lightgbmInferScript: "ml/infer.py",

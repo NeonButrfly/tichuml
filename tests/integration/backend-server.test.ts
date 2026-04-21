@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import {
   applyEngineAction,
   createInitialGameState,
@@ -9,6 +12,9 @@ import {
 import type {
   AdminClearResult,
   ReplayPayload,
+  SimControllerRequestPayload,
+  SimControllerResponse,
+  SimControllerRuntimeState,
   StoredTelemetryDecisionRecord,
   StoredTelemetryEventRecord,
   TelemetryDecisionPayload,
@@ -23,6 +29,10 @@ import {
 import { createAppServer } from "../../apps/server/src/app";
 import type { ServerConfig } from "../../apps/server/src/config/env";
 import type { LightgbmScorer } from "../../apps/server/src/ml/lightgbm-scorer";
+import {
+  FileSimControllerService,
+  type SimControllerService
+} from "../../apps/server/src/services/sim-controller-service";
 import type { TelemetryRepository } from "../../apps/server/src/services/telemetry-repository";
 
 class InMemoryTelemetryRepository implements TelemetryRepository {
@@ -182,6 +192,139 @@ class InMemoryTelemetryRepository implements TelemetryRepository {
   }
 }
 
+function createSimState(
+  status: SimControllerRuntimeState["status"]
+): SimControllerRuntimeState {
+  const now = new Date().toISOString();
+  return {
+    status,
+    pid: null,
+    controller_id: "test-controller",
+    started_at: status === "stopped" ? null : now,
+    updated_at: now,
+    last_heartbeat: status === "stopped" ? null : now,
+    heartbeat_stale: false,
+    heartbeat_stale_after_seconds: 30,
+    requested_action: null,
+    current_batch_started_at: null,
+    last_batch_started_at: null,
+    last_batch_finished_at: null,
+    last_batch_size: 1,
+    last_batch_status: null,
+    total_batches_completed: 0,
+    total_games_completed: 0,
+    total_errors: 0,
+    last_error: null,
+    worker_count: 1,
+    running_worker_count: status === "running" ? 1 : 0,
+    paused_worker_count: status === "paused" ? 1 : 0,
+    stopped_worker_count: status === "stopped" ? 1 : 0,
+    errored_worker_count: status === "error" ? 1 : 0,
+    config: {
+      provider: "local",
+      games_per_batch: 1,
+      telemetry_enabled: false,
+      backend_url: "http://127.0.0.1",
+      seed_prefix: "test",
+      sleep_seconds: 1,
+      worker_count: 1,
+      quiet: true,
+      progress: false,
+      seat_providers: {}
+    },
+    workers: [],
+    log_path: "test.log",
+    runtime_path: "state.json",
+    lock_path: "controller.lock",
+    pause_path: "pause",
+    stop_path: "stop",
+    warnings: [],
+    recent_logs: []
+  };
+}
+
+class InMemorySimController implements SimControllerService {
+  state = createSimState("stopped");
+
+  private respond(
+    accepted: boolean,
+    action: string,
+    prior: SimControllerRuntimeState,
+    message: string,
+    warnings: string[] = []
+  ): SimControllerResponse {
+    return {
+      accepted,
+      action,
+      prior_status: prior.status,
+      current_status: this.state.status,
+      message,
+      runtime_state: this.state,
+      warnings
+    };
+  }
+
+  async start(payload: SimControllerRequestPayload): Promise<SimControllerResponse> {
+    const prior = this.state;
+    if (this.state.status === "running") {
+      return this.respond(false, "sim.start", prior, "Already running.");
+    }
+    this.state = createSimState("running");
+    this.state.worker_count = Number(payload.worker_count ?? 1);
+    this.state.running_worker_count = this.state.worker_count;
+    this.state.config.worker_count = this.state.worker_count;
+    this.state.workers = Array.from({ length: this.state.worker_count }, (_, index) => ({
+      worker_id: `worker-${index + 1}`,
+      status: "running",
+      pid: 1234 + index,
+      current_batch_started_at: this.state.started_at,
+      total_batches_completed: 0,
+      total_games_completed: 0,
+      last_heartbeat: this.state.last_heartbeat,
+      last_error: null
+    }));
+    return this.respond(true, "sim.start", prior, "Started.");
+  }
+
+  async pause(): Promise<SimControllerResponse> {
+    const prior = this.state;
+    if (this.state.status === "paused") {
+      return this.respond(true, "sim.pause", prior, "Already paused.");
+    }
+    this.state = { ...this.state, status: "paused", paused_worker_count: this.state.worker_count, running_worker_count: 0 };
+    return this.respond(true, "sim.pause", prior, "Paused.");
+  }
+
+  async continue(): Promise<SimControllerResponse> {
+    const prior = this.state;
+    const accepted = prior.status === "paused";
+    this.state = { ...this.state, status: "running", running_worker_count: this.state.worker_count, paused_worker_count: 0 };
+    return this.respond(accepted, "sim.continue", prior, accepted ? "Continued." : "Not paused.", accepted ? [] : ["Continue requested while not paused."]);
+  }
+
+  async stop(): Promise<SimControllerResponse> {
+    const prior = this.state;
+    if (this.state.status === "stopped") {
+      return this.respond(true, "sim.stop", prior, "Already stopped.");
+    }
+    this.state = createSimState("stopped");
+    return this.respond(true, "sim.stop", prior, "Stopped.");
+  }
+
+  async status(): Promise<SimControllerResponse> {
+    const prior = this.state;
+    return this.respond(true, "sim.status", prior, "Status loaded.");
+  }
+
+  async runOnce(payload: SimControllerRequestPayload): Promise<SimControllerResponse> {
+    const prior = this.state;
+    this.state = createSimState("completed");
+    this.state.total_batches_completed = 1;
+    this.state.total_games_completed = Number(payload.games ?? payload.games_per_batch ?? 1);
+    return this.respond(true, "sim.run_once", prior, "Run once completed.");
+  }
+}
+
 const TEST_SERVER_CONFIG: ServerConfig = {
   port: 0,
   host: "127.0.0.1",
@@ -192,6 +335,8 @@ const TEST_SERVER_CONFIG: ServerConfig = {
   autoMigrate: false,
   backendBaseUrl: "http://127.0.0.1",
   destructiveAdminEndpointsEnabled: false,
+  adminSimControlEnabled: false,
+  simControllerRuntimeDir: "C:/tichu/tichuml/.runtime/test-sim-controller",
   repoRoot: "C:/tichu/tichuml",
   pythonExecutable: "python",
   lightgbmInferScript: "ml/infer.py",
@@ -204,13 +349,15 @@ async function withServer<T>(
   options: {
     lightgbmScorer?: LightgbmScorer;
     serverConfig?: Partial<ServerConfig>;
+    simController?: SimControllerService;
   } = {}
 ) {
   const repository = new InMemoryTelemetryRepository();
   const server = createAppServer({
     serverConfig: { ...TEST_SERVER_CONFIG, ...(options.serverConfig ?? {}) },
     repository,
-    lightgbmScorer: options.lightgbmScorer
+    lightgbmScorer: options.lightgbmScorer,
+    simController: options.simController
   });
 
   await new Promise<void>((resolve) => {
@@ -651,5 +798,172 @@ describe("backend foundation server routes", () => {
       },
       { serverConfig: { destructiveAdminEndpointsEnabled: true } }
     );
+  });
+
+  it("rejects simulator control endpoints unless the sim admin guard is enabled", async () => {
+    await withServer(async ({ baseUrl }) => {
+      const response = await fetch(`${baseUrl}/api/admin/sim/start`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-confirm": "CLEAR_TICHU_DB"
+        },
+        body: JSON.stringify({ worker_count: 1 })
+      });
+
+      expect(response.status).toBe(400);
+      const payload = (await response.json()) as {
+        accepted: boolean;
+        validation_errors: Array<{ path: string }>;
+      };
+      expect(payload.accepted).toBe(false);
+      expect(payload.validation_errors.map((issue) => issue.path)).toContain(
+        "ENABLE_ADMIN_SIM_CONTROL"
+      );
+    });
+  });
+
+  it("requires confirmation for simulator mutating actions", async () => {
+    await withServer(
+      async ({ baseUrl }) => {
+        const response = await fetch(`${baseUrl}/api/admin/sim/pause`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({})
+        });
+
+        expect(response.status).toBe(400);
+        const payload = (await response.json()) as {
+          accepted: boolean;
+          validation_errors: Array<{ path: string }>;
+        };
+        expect(payload.accepted).toBe(false);
+        expect(payload.validation_errors.map((issue) => issue.path)).toContain(
+          "x-admin-confirm"
+        );
+      },
+      {
+        serverConfig: { adminSimControlEnabled: true },
+        simController: new InMemorySimController()
+      }
+    );
+  });
+
+  it("exposes simulator status when sim admin control is enabled", async () => {
+    await withServer(
+      async ({ baseUrl }) => {
+        const response = await fetch(`${baseUrl}/api/admin/sim/status`);
+
+        expect(response.status).toBe(200);
+        const payload = (await response.json()) as SimControllerResponse;
+        expect(payload.accepted).toBe(true);
+        expect(payload.current_status).toBe("stopped");
+        expect(payload.runtime_state.heartbeat_stale).toBe(false);
+      },
+      {
+        serverConfig: { adminSimControlEnabled: true },
+        simController: new InMemorySimController()
+      }
+    );
+  });
+
+  it("supports simulator start, duplicate start rejection, pause, continue, stop, and run-once", async () => {
+    const simController = new InMemorySimController();
+    await withServer(
+      async ({ baseUrl }) => {
+        const headers = {
+          "Content-Type": "application/json",
+          "x-admin-confirm": "CLEAR_TICHU_DB"
+        };
+        const start = await fetch(`${baseUrl}/api/admin/sim/start`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ worker_count: 2, games_per_batch: 3 })
+        });
+        expect(start.status).toBe(200);
+        const startPayload = (await start.json()) as SimControllerResponse;
+        expect(startPayload.current_status).toBe("running");
+        expect(startPayload.runtime_state.worker_count).toBe(2);
+        expect(startPayload.runtime_state.workers).toHaveLength(2);
+
+        const duplicate = await fetch(`${baseUrl}/api/admin/sim/start`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ worker_count: 1 })
+        });
+        expect(duplicate.status).toBe(409);
+
+        const pause = await fetch(`${baseUrl}/api/admin/sim/pause`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({})
+        });
+        expect(pause.status).toBe(200);
+        expect(((await pause.json()) as SimControllerResponse).current_status).toBe(
+          "paused"
+        );
+
+        const resume = await fetch(`${baseUrl}/api/admin/sim/continue`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({})
+        });
+        expect(resume.status).toBe(200);
+        expect(((await resume.json()) as SimControllerResponse).current_status).toBe(
+          "running"
+        );
+
+        const stop = await fetch(`${baseUrl}/api/admin/sim/stop`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({})
+        });
+        expect(stop.status).toBe(200);
+        expect(((await stop.json()) as SimControllerResponse).current_status).toBe(
+          "stopped"
+        );
+
+        const runOnce = await fetch(`${baseUrl}/api/admin/sim/run-once`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ games: 1 })
+        });
+        expect(runOnce.status).toBe(200);
+        const runOncePayload = (await runOnce.json()) as SimControllerResponse;
+        expect(runOncePayload.current_status).toBe("completed");
+        expect(runOncePayload.runtime_state.total_games_completed).toBe(1);
+      },
+      {
+        serverConfig: { adminSimControlEnabled: true },
+        simController
+      }
+    );
+  });
+
+  it("recovers a stale simulator singleton lock during status checks", async () => {
+    const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), "tichuml-sim-"));
+    const staleState = createSimState("running");
+    staleState.last_heartbeat = "2020-01-01T00:00:00.000Z";
+    staleState.runtime_path = path.join(runtimeDir, "state.json");
+    staleState.lock_path = path.join(runtimeDir, "controller.lock");
+    staleState.pause_path = path.join(runtimeDir, "pause");
+    staleState.stop_path = path.join(runtimeDir, "stop");
+    staleState.log_path = path.join(runtimeDir, "controller.ndjson");
+    fs.writeFileSync(staleState.runtime_path, JSON.stringify(staleState), "utf8");
+    fs.writeFileSync(staleState.lock_path, "stale", "utf8");
+
+    const service = new FileSimControllerService({
+      ...TEST_SERVER_CONFIG,
+      adminSimControlEnabled: true,
+      simControllerRuntimeDir: runtimeDir
+    });
+    const response = await service.status();
+
+    expect(response.accepted).toBe(true);
+    expect(response.runtime_state.heartbeat_stale).toBe(true);
+    expect(response.warnings).toContain(
+      "Recovered stale simulator lock after heartbeat timeout."
+    );
+    expect(fs.existsSync(staleState.lock_path)).toBe(false);
   });
 });

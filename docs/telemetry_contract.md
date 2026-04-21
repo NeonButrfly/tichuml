@@ -62,6 +62,7 @@ The database keeps raw JSONB for:
 It also stores query-friendly scalar fields:
 
 - provider context
+- `worker_id` when emitted by simulator controller workers
 - decision/event indexes
 - `chosen_action_type`
 - `legal_action_count`

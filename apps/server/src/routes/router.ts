@@ -5,12 +5,19 @@ import {
   ADMIN_CONFIRMATION_VALUE,
   ADMIN_DATABASE_CLEAR_PATH,
   ADMIN_DATABASE_RESET_PATH,
+  ADMIN_SIM_CONTINUE_PATH,
+  ADMIN_SIM_PAUSE_PATH,
+  ADMIN_SIM_RUN_ONCE_PATH,
+  ADMIN_SIM_START_PATH,
+  ADMIN_SIM_STATUS_PATH,
+  ADMIN_SIM_STOP_PATH,
   ADMIN_TELEMETRY_CLEAR_PATH,
   TELEMETRY_DECISION_PATH,
   TELEMETRY_EVENT_PATH,
   validateDecisionRequestPayload,
   validateTelemetryDecisionPayload,
-  validateTelemetryEventPayload
+  validateTelemetryEventPayload,
+  type SimControllerRequestPayload
 } from "@tichuml/shared";
 import {
   generateEntropySeed,
@@ -19,6 +26,7 @@ import {
 import type { ServerConfig } from "../config/env.js";
 import type { LightgbmScorer } from "../ml/lightgbm-scorer.js";
 import { handleDecisionRequest } from "../services/decision-service.js";
+import type { SimControllerService } from "../services/sim-controller-service.js";
 import type { TelemetryRepository } from "../services/telemetry-repository.js";
 import {
   badRequest,
@@ -31,6 +39,7 @@ import {
 type RouterDependencies = {
   config: ServerConfig;
   repository: TelemetryRepository;
+  simController: SimControllerService;
   lightgbmScorer?: LightgbmScorer;
 };
 
@@ -42,7 +51,8 @@ function createServerManifest(config: ServerConfig) {
     healthEndpoint: BACKEND_HEALTH_PATH,
     telemetryDecisionEndpoint: TELEMETRY_DECISION_PATH,
     telemetryEventEndpoint: TELEMETRY_EVENT_PATH,
-    decisionEndpoint: DECISION_REQUEST_PATH
+    decisionEndpoint: DECISION_REQUEST_PATH,
+    simControllerEndpoint: ADMIN_SIM_STATUS_PATH
   };
 }
 
@@ -86,9 +96,42 @@ async function assertDestructiveAdminRequest(
   return issues.length === 0 ? { ok: true } : { ok: false, issues };
 }
 
+async function assertSimAdminRequest(
+  request: http.IncomingMessage,
+  config: ServerConfig,
+  options: { mutating: boolean }
+): Promise<{ ok: true; body: Record<string, unknown> } | { ok: false; issues: Array<{ path: string; message: string }> }> {
+  const issues: Array<{ path: string; message: string }> = [];
+  const body =
+    options.mutating ? ((await readJsonBody(request)) as Record<string, unknown>) : {};
+  const headerConfirm = request.headers["x-admin-confirm"];
+  const bodyConfirm = body.confirm;
+  const confirmed =
+    headerConfirm === ADMIN_CONFIRMATION_VALUE ||
+    bodyConfirm === ADMIN_CONFIRMATION_VALUE;
+
+  if (!config.adminSimControlEnabled) {
+    issues.push({
+      path: "ENABLE_ADMIN_SIM_CONTROL",
+      message:
+        "Simulator admin control endpoints are disabled. Set ENABLE_ADMIN_SIM_CONTROL=true for development/operator use."
+    });
+  }
+
+  if (options.mutating && !confirmed) {
+    issues.push({
+      path: "x-admin-confirm",
+      message: `Expected x-admin-confirm or body.confirm to equal ${ADMIN_CONFIRMATION_VALUE}.`
+    });
+  }
+
+  return issues.length === 0 ? { ok: true, body } : { ok: false, issues };
+}
+
 export function createRouter({
   config,
   repository,
+  simController,
   lightgbmScorer
 }: RouterDependencies): http.RequestListener {
   return async (request, response) => {
@@ -237,6 +280,51 @@ export function createRouter({
               ? await repository.clearDatabase()
               : await repository.resetDatabase();
         writeJson(response, 200, result, config.allowedOrigin);
+        return;
+      }
+
+      if (
+        url.pathname === ADMIN_SIM_STATUS_PATH ||
+        url.pathname === ADMIN_SIM_START_PATH ||
+        url.pathname === ADMIN_SIM_PAUSE_PATH ||
+        url.pathname === ADMIN_SIM_CONTINUE_PATH ||
+        url.pathname === ADMIN_SIM_STOP_PATH ||
+        url.pathname === ADMIN_SIM_RUN_ONCE_PATH
+      ) {
+        const mutating = url.pathname !== ADMIN_SIM_STATUS_PATH;
+        if (
+          (mutating && request.method !== "POST") ||
+          (!mutating && request.method !== "GET")
+        ) {
+          notFound(response, config.allowedOrigin);
+          return;
+        }
+
+        const guard = await assertSimAdminRequest(request, config, { mutating });
+        if (!guard.ok) {
+          badRequest(
+            response,
+            "Simulator admin control safeguards were not satisfied.",
+            config.allowedOrigin,
+            guard.issues
+          );
+          return;
+        }
+
+        const body = guard.body as SimControllerRequestPayload;
+        const result =
+          url.pathname === ADMIN_SIM_START_PATH
+            ? await simController.start(body)
+            : url.pathname === ADMIN_SIM_PAUSE_PATH
+              ? await simController.pause()
+              : url.pathname === ADMIN_SIM_CONTINUE_PATH
+                ? await simController.continue()
+                : url.pathname === ADMIN_SIM_STOP_PATH
+                  ? await simController.stop()
+                  : url.pathname === ADMIN_SIM_RUN_ONCE_PATH
+                    ? await simController.runOnce(body)
+                    : await simController.status();
+        writeJson(response, result.accepted ? 200 : 409, result, config.allowedOrigin);
         return;
       }
 
