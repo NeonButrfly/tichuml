@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { createServer, type Server } from "node:http";
 import {
   applyEngineAction,
   compassToSeatId,
@@ -20,6 +21,8 @@ import type {
   TelemetryHealthStats
 } from "@tichuml/shared";
 import {
+  BACKEND_HEALTH_PATH,
+  DECISION_REQUEST_PATH,
   deriveTelemetryDecisionFields,
   deriveTelemetryEventFields
 } from "@tichuml/shared";
@@ -34,7 +37,9 @@ import { createAppServer } from "../../apps/server/src/app";
 import type { ServerConfig } from "../../apps/server/src/config/env";
 import {
   buildDecisionRequestPayload,
+  resolveDecision,
   runSelfPlayBatch,
+  validateBackendDecisionRequestInput,
   validateServerHeuristicDecisionRequestContract
 } from "../../apps/sim-runner/src/self-play-batch";
 import { routeHeuristicDecision as routeBackendHeuristicDecision } from "../../apps/server/src/providers/heuristic-provider";
@@ -227,6 +232,51 @@ async function withServer<T>(
   }
 }
 
+async function withRejectingDecisionServer<T>(
+  callback: (config: { baseUrl: string }) => Promise<T>
+): Promise<T> {
+  const server = createServer((request, response) => {
+    response.setHeader("content-type", "application/json");
+    if (request.url === BACKEND_HEALTH_PATH && request.method === "GET") {
+      response.writeHead(200);
+      response.end(JSON.stringify({ ok: true }));
+      return;
+    }
+    if (request.url === DECISION_REQUEST_PATH && request.method === "POST") {
+      response.writeHead(400);
+      response.end(
+        JSON.stringify({
+          accepted: false,
+          error: "state_raw rejected by test backend",
+          validation_errors: ["state_raw.hands is required"]
+        })
+      );
+      return;
+    }
+    response.writeHead(404);
+    response.end(JSON.stringify({ error: "not found" }));
+  });
+
+  const port = nextSafeTestPort++;
+  await new Promise<void>((resolve) => {
+    server.listen(port, "127.0.0.1", () => resolve());
+  });
+
+  try {
+    return await callback({ baseUrl: `http://127.0.0.1:${port}` });
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      (server as Server).close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    });
+  }
+}
+
 function advanceToPassSelect(): EngineResult {
   let result = createInitialGameState({ seed: "server-contract-pass-select" });
   while (result.nextState.phase === "grand_tichu_window") {
@@ -291,6 +341,34 @@ describe("server_heuristic actor contract", () => {
     );
   });
 
+  it("reports incomplete backend payloads before sending them", () => {
+    const result = advanceToPassSelect();
+    const actor = getCanonicalActiveSeatFromState(result.nextState);
+    const validation = validateBackendDecisionRequestInput({
+      gameId: "contract-game",
+      handId: "contract-hand",
+      stateRaw: { phase: result.nextState.phase, activeSeat: result.nextState.activeSeat },
+      stateNorm: result.derivedView as unknown as JsonObject,
+      legalActions: getActorScopedLegalActions(result.legalActions, actor),
+      phase: result.nextState.phase,
+      actor,
+      requestedProvider: "server_heuristic",
+      decisionIndex: 1
+    });
+
+    expect(validation.ok).toBe(false);
+    if (!validation.ok) {
+      expect(validation.kind).toBe("payload_validation");
+      expect(validation.missingFields).toContain("state_raw.hands");
+      expect(validation.context).toMatchObject({
+        game_id: "contract-game",
+        hand_id: "contract-hand",
+        actor_seat: actor,
+        provider: "server_heuristic"
+      });
+    }
+  });
+
   it("keeps backend validation as an actionable safety net", () => {
     const result = advanceToPassSelect();
     const request = createServerHeuristicPayload(result);
@@ -349,4 +427,69 @@ describe("server_heuristic actor contract", () => {
       expect(repository.decisions.length).toBeGreaterThan(0);
     });
   }, 15_000);
+
+  it("falls back locally with structured logs when the backend rejects decision requests", async () => {
+    await withRejectingDecisionServer(async ({ baseUrl }) => {
+      const result = advanceToPassSelect();
+      const actor = getCanonicalActiveSeatFromState(result.nextState);
+      const capturedErrors: string[] = [];
+      const errorSpy = vi.spyOn(console, "error").mockImplementation((value) => {
+        capturedErrors.push(typeof value === "string" ? value : JSON.stringify(value));
+      });
+      try {
+        const decision = await resolveDecision({
+          backendBaseUrl: baseUrl,
+          telemetryEnabled: false,
+          gameId: "backend-rejection-game",
+          handId: "backend-rejection-hand",
+          actor,
+          decisionIndex: 0,
+          stateRaw: result.nextState as unknown as JsonObject,
+          stateNorm: result.derivedView as unknown as JsonObject,
+          legalActions: result.legalActions,
+          phase: result.nextState.phase,
+          defaultProvider: "server_heuristic",
+          serverFallbackEnabled: true
+        });
+
+        expect(decision.providerUsed).toBe("local_heuristic");
+        expect(decision.requestedProvider).toBe("server_heuristic");
+        expect(decision.fallbackUsed).toBe(true);
+        expect(decision.chosenAction).toBeTruthy();
+      } finally {
+        errorSpy.mockRestore();
+      }
+
+      const joined = capturedErrors.join("\n");
+      expect(joined).toMatch(/"event":"decision_request_failure"/);
+      expect(joined).toMatch(/"kind":"backend_rejection"/);
+      expect(joined).toMatch(/"event":"decision_fallback"/);
+      expect(joined).toMatch(/"provider_used":"local_heuristic"/);
+      expect(joined).toMatch(/state_raw rejected by test backend/);
+    });
+  }, 15_000);
+
+  it("keeps local self-play independent from backend provider fallback handling", async () => {
+    const result = advanceToPassSelect();
+    const actor = getCanonicalActiveSeatFromState(result.nextState);
+    const decision = await resolveDecision({
+      backendBaseUrl: "http://127.0.0.1:1",
+      telemetryEnabled: false,
+      gameId: "local-provider-game",
+      handId: "local-provider-hand",
+      actor,
+      decisionIndex: 0,
+      stateRaw: result.nextState as unknown as JsonObject,
+      stateNorm: result.derivedView as unknown as JsonObject,
+      legalActions: result.legalActions,
+      phase: result.nextState.phase,
+      defaultProvider: "local"
+    });
+
+    expect(decision.providerUsed).toBe("local_heuristic");
+    expect(decision.requestedProvider).toBe("local");
+    expect(decision.fallbackUsed).toBe(false);
+    expect(decision.chosenAction).toBeTruthy();
+  });
+
 });

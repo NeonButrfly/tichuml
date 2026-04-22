@@ -94,6 +94,7 @@ export type SimControllerConfig = {
   provider: DecisionMode;
   games_per_batch: number;
   telemetry_enabled: boolean;
+  server_fallback_enabled: boolean;
   backend_url: string;
   seed_prefix: string;
   sleep_seconds: number;
@@ -165,6 +166,8 @@ export type SimControllerRequestPayload = Partial<{
   games_per_batch: number;
   telemetry_enabled: boolean;
   telemetry: boolean;
+  server_fallback_enabled: boolean;
+  server_fallback: boolean;
   backend_url: string;
   seed: string;
   seed_prefix: string;

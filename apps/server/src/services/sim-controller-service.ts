@@ -293,6 +293,8 @@ export class FileSimControllerService implements SimControllerService {
       resolved.seed_prefix,
       "--telemetry",
       String(resolved.telemetry_enabled),
+      "--server-fallback",
+      String(resolved.server_fallback_enabled),
       "--backend-url",
       resolved.backend_url
     ];
@@ -339,6 +341,8 @@ export class FileSimControllerService implements SimControllerService {
       resolved.seed_prefix,
       "--telemetry",
       String(resolved.telemetry_enabled),
+      "--server-fallback",
+      String(resolved.server_fallback_enabled),
       "--backend-url",
       resolved.backend_url,
       "--runtime-file",
@@ -505,6 +509,12 @@ export class FileSimControllerService implements SimControllerService {
           ? payload.telemetry_enabled
           : typeof payload.telemetry === "boolean"
             ? payload.telemetry
+            : true,
+      server_fallback_enabled:
+        typeof payload.server_fallback_enabled === "boolean"
+          ? payload.server_fallback_enabled
+          : typeof payload.server_fallback === "boolean"
+            ? payload.server_fallback
             : true,
       backend_url:
         typeof payload.backend_url === "string" && payload.backend_url.length > 0

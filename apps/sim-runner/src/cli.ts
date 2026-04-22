@@ -13,6 +13,7 @@ type ParsedArgs = {
   games: number;
   provider: DecisionMode;
   backendBaseUrl?: string;
+  serverFallbackEnabled: boolean;
   seed: string;
   seedPrefix: string;
   telemetryEnabled: boolean;
@@ -64,6 +65,7 @@ function parseArgs(argv: string[]): ParsedArgs {
   const parsed: ParsedArgs = {
     games: 1,
     provider: "local",
+    serverFallbackEnabled: true,
     seed: "self-play",
     seedPrefix: "self-play",
     telemetryEnabled: true,
@@ -102,6 +104,11 @@ function parseArgs(argv: string[]): ParsedArgs {
         if (next) {
           parsed.backendBaseUrl = next;
         }
+        index += 1;
+        break;
+      case "--server-fallback":
+      case "--server-fallback-enabled":
+        parsed.serverFallbackEnabled = parseBoolean(next, true);
         index += 1;
         break;
       case "--seed":
@@ -223,6 +230,7 @@ function buildControllerConfig(args: ParsedArgs): SimControllerConfig {
     provider: args.provider,
     games_per_batch: args.gamesPerBatch,
     telemetry_enabled: args.telemetryEnabled,
+    server_fallback_enabled: args.serverFallbackEnabled,
     backend_url: args.backendBaseUrl ?? "http://localhost:4310",
     seed_prefix: args.seedPrefix,
     sleep_seconds: args.sleepSeconds,
@@ -380,6 +388,7 @@ async function runWorker(args: ParsedArgs, worker: SimWorkerRuntimeState): Promi
         defaultProvider: args.provider,
         seatProviders: args.seatProviders,
         telemetryEnabled: args.telemetryEnabled,
+        serverFallbackEnabled: args.serverFallbackEnabled,
         ...(args.backendBaseUrl ? { backendBaseUrl: args.backendBaseUrl } : {}),
         quiet: args.quiet,
         progress: args.progress,
@@ -479,6 +488,7 @@ async function main(): Promise<void> {
       defaultProvider: args.provider,
       seatProviders: args.seatProviders,
       telemetryEnabled: args.telemetryEnabled,
+      serverFallbackEnabled: args.serverFallbackEnabled,
       ...(args.backendBaseUrl ? { backendBaseUrl: args.backendBaseUrl } : {}),
       quiet: args.quiet,
       progress: args.progress

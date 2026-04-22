@@ -163,6 +163,31 @@ Prompt logs here capture backend/platform prompt intent only. GitHub issue state
 - Status:
   Lives in GitHub, not here.
 
+## 2026-04-22 - Simulator backend decision fallback for zero-game batches
+
+- Prompt signal:
+  Backend-mode simulator batches were ending with `gamesPlayed: 0`,
+  `decisionsRecorded: 0`, `eventsRecorded: 0`, and `errors: 10`; fix the
+  simulator/backend integration so preventable `/api/decision/request` payload
+  failures do not kill every game opaquely.
+- Interpreted requirement:
+  Issue [#41](https://github.com/NeonButrfly/tichuml/issues/41) tracks full
+  `state_raw` pre-send validation for backend decision providers, explicit
+  structured logs for payload validation/network/backend-rejection/invalid
+  response failures, and a config-driven local heuristic fallback path when
+  backend-mode decisions cannot be served safely.
+- Affected systems:
+  `apps/sim-runner/src/self-play-batch.ts`,
+  `apps/sim-runner/src/cli.ts`,
+  `apps/server/src/services/sim-controller-service.ts`,
+  `packages/shared/src/backend.ts`, backend integration tests.
+- Linked GitHub issue:
+  [#41](https://github.com/NeonButrfly/tichuml/issues/41)
+- Milestone:
+  [Linux Backend Deployment + ML Host](https://github.com/NeonButrfly/tichuml/milestone/25)
+- Status:
+  Lives in GitHub, not here.
+
 ## 2026-04-21 - Simulator controller admin dashboard routes return 404
 
 - Prompt signal:
