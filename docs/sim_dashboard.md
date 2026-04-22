@@ -22,6 +22,11 @@ is listening on the configured backend port without a tracked pid file.
 The dashboard is a control surface, not a read-only page. It calls the same
 admin controller API used by `scripts/sim-controller.sh`.
 
+When the dashboard is loaded directly from the backend host on port `4310`, the
+default Backend URL is the current browser origin. For example,
+`https://192.168.50.196:4310/admin/sim` defaults controller API calls to
+`https://192.168.50.196:4310`, not to the browser machine's `localhost`.
+
 Always-visible controls:
 
 - Start

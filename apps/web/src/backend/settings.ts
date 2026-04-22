@@ -1,6 +1,7 @@
 import {
   BACKEND_SETTINGS_STORAGE_KEY,
   DEFAULT_BACKEND_BASE_URL,
+  DEFAULT_SERVER_PORT,
   normalizeBackendBaseUrl,
   parseBooleanEnv,
   type BackendReachabilityState,
@@ -26,12 +27,42 @@ function readDecisionMode(value: string | undefined): DecisionMode {
   return "local";
 }
 
+type BrowserLocationLike = Pick<
+  Location,
+  "host" | "origin" | "port" | "protocol"
+>;
+
+export function resolveBrowserBackendBaseUrl(
+  location: BrowserLocationLike | undefined
+): string | null {
+  if (!location || !["http:", "https:"].includes(location.protocol)) {
+    return null;
+  }
+
+  if (!location.host || location.port !== String(DEFAULT_SERVER_PORT)) {
+    return null;
+  }
+
+  return normalizeBackendBaseUrl(location.origin);
+}
+
+function resolveDefaultBackendBaseUrl(): string {
+  const configured = import.meta.env.VITE_BACKEND_BASE_URL;
+  if (configured) {
+    return normalizeBackendBaseUrl(configured);
+  }
+
+  return (
+    resolveBrowserBackendBaseUrl(
+      typeof window === "undefined" ? undefined : window.location
+    ) ?? DEFAULT_BACKEND_BASE_URL
+  );
+}
+
 export function getBackendSettingsDefaults(): BackendRuntimeSettings {
   return {
     decisionMode: readDecisionMode(import.meta.env.VITE_DECISION_MODE),
-    backendBaseUrl: normalizeBackendBaseUrl(
-      import.meta.env.VITE_BACKEND_BASE_URL ?? DEFAULT_BACKEND_BASE_URL
-    ),
+    backendBaseUrl: resolveDefaultBackendBaseUrl(),
     serverFallbackEnabled: parseBooleanEnv(
       import.meta.env.VITE_SERVER_FALLBACK_ENABLED,
       true
@@ -57,6 +88,16 @@ export function loadBackendSettings(): BackendRuntimeSettings {
 
   try {
     const parsed = JSON.parse(raw) as Partial<BackendRuntimeSettings>;
+    const parsedBackendBaseUrl =
+      typeof parsed.backendBaseUrl === "string"
+        ? normalizeBackendBaseUrl(parsed.backendBaseUrl)
+        : defaults.backendBaseUrl;
+    const backendBaseUrl =
+      parsedBackendBaseUrl === DEFAULT_BACKEND_BASE_URL &&
+      defaults.backendBaseUrl !== DEFAULT_BACKEND_BASE_URL
+        ? defaults.backendBaseUrl
+        : parsedBackendBaseUrl;
+
     return {
       decisionMode:
         parsed.decisionMode === "lightgbm_model" ||
@@ -64,11 +105,7 @@ export function loadBackendSettings(): BackendRuntimeSettings {
         parsed.decisionMode === "server"
           ? readDecisionMode(parsed.decisionMode)
           : defaults.decisionMode,
-      backendBaseUrl: normalizeBackendBaseUrl(
-        typeof parsed.backendBaseUrl === "string"
-          ? parsed.backendBaseUrl
-          : defaults.backendBaseUrl
-      ),
+      backendBaseUrl,
       serverFallbackEnabled:
         typeof parsed.serverFallbackEnabled === "boolean"
           ? parsed.serverFallbackEnabled
