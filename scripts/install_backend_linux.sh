@@ -716,6 +716,8 @@ main() {
 
   prepare_runtime_stack
   build_runtime_artifacts
+  verify_runtime_artifacts
+  run_migrations
 
   cat <<EOF
 
@@ -723,9 +725,13 @@ main() {
 Backend URLs:
 - $BACKEND_PUBLIC_URL
 - $BACKEND_LOCAL_URL
+Control panel:
+- $BACKEND_PUBLIC_URL/admin/control
 
 Next commands:
 - Start/update backend: $repo_root/scripts/start_backend_linux.sh
+- Stop backend: $repo_root/scripts/stop_backend_linux.sh --backend-only
+- Full stop: $repo_root/scripts/stop_backend_linux.sh --full
 - Check backend status: $repo_root/scripts/status_backend_linux.sh
 - Run simulation: (cd $repo_root && npm run sim -- --games 1000 --provider server_heuristic)
 - Export training rows: (cd $repo_root && npm run ml:export -- --phase play)

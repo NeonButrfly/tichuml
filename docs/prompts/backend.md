@@ -165,3 +165,28 @@ Prompt logs here capture backend/platform prompt intent only. GitHub issue state
   product scope.
 - Status:
   Lives in GitHub, not here.
+
+## 2026-04-22 - Linux backend lifecycle stop script and runtime control panel
+
+- Prompt signal:
+  Create a clean stop-server script, restore detailed operational startup
+  output, and add a system-wide web control panel that shows every backend host
+  component plus editable env/settings with safe apply/restart behavior.
+- Interpreted requirement:
+  Issue [#40](https://github.com/NeonButrfly/tichuml/issues/40) tracks a
+  production-minded Linux backend operations layer: idempotent backend/full stop,
+  detailed start/status/update logs, build-before-migration ordering, runtime
+  status/config/action APIs, a backend-hosted `/admin/control` panel, safe `.env`
+  editing, and dynamic apply/restart workflow while preserving Ubuntu/Debian and
+  Oracle/RHEL compatibility.
+- Affected systems:
+  `scripts/backend-linux-common.sh`, `scripts/install_backend_linux.sh`,
+  `scripts/start_backend_linux.sh`, `scripts/status_backend_linux.sh`,
+  `scripts/update_backend_linux.sh`, `scripts/stop_backend_linux.sh`,
+  `apps/server`, `.env.example`, docs, backend integration tests.
+- Linked GitHub issue:
+  [#40](https://github.com/NeonButrfly/tichuml/issues/40)
+- Milestone:
+  [Linux Backend Deployment + ML Host](https://github.com/NeonButrfly/tichuml/milestone/25)
+- Status:
+  Lives in GitHub, not here.

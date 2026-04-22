@@ -19,6 +19,8 @@ BACKEND_RUNTIME_DIR="${BACKEND_RUNTIME_DIR:-$BACKEND_REPO_ROOT/.runtime}"
 BACKEND_PID_FILE="${BACKEND_PID_FILE:-$BACKEND_RUNTIME_DIR/backend.pid}"
 BACKEND_LOG_FILE="${BACKEND_LOG_FILE:-$BACKEND_RUNTIME_DIR/backend.log}"
 BACKEND_UPDATE_STATUS_FILE="${BACKEND_UPDATE_STATUS_FILE:-$BACKEND_RUNTIME_DIR/backend-update-status.env}"
+BACKEND_UPDATE_STATUS_JSON_FILE="${BACKEND_UPDATE_STATUS_JSON_FILE:-$BACKEND_RUNTIME_DIR/backend-update-status.json}"
+BACKEND_ACTION_LOG_FILE="${BACKEND_ACTION_LOG_FILE:-$BACKEND_RUNTIME_DIR/actions.ndjson}"
 BACKEND_LAST_EVAL_FILE="${BACKEND_LAST_EVAL_FILE:-$BACKEND_REPO_ROOT/eval/results/latest_summary.json}"
 
 backend_now_iso() {
@@ -70,6 +72,7 @@ require_command() {
 
 ensure_runtime_dirs() {
   mkdir -p "$BACKEND_RUNTIME_DIR" "$BACKEND_REPO_ROOT/eval/results"
+  touch "$BACKEND_ACTION_LOG_FILE"
 }
 
 ensure_env_file() {
@@ -220,6 +223,34 @@ write_update_status() {
     write_env_assignment DIRTY "$dirty"
     write_env_assignment MESSAGE "$message"
   } >"$BACKEND_UPDATE_STATUS_FILE"
+
+  cat >"$BACKEND_UPDATE_STATUS_JSON_FILE" <<EOF
+{
+  "last_check_at": "$(backend_now_iso)",
+  "status": "$status",
+  "update_applied": $update_applied,
+  "restart_triggered": $restart_triggered,
+  "branch": "$GIT_BRANCH",
+  "local_commit": "$local_commit",
+  "remote_commit": "$remote_commit",
+  "ahead": "$ahead",
+  "behind": "$behind",
+  "dirty": $dirty,
+  "message": $(node -e 'process.stdout.write(JSON.stringify(process.argv[1] ?? ""))' "$message" 2>/dev/null || printf '"%s"' "$message")
+}
+EOF
+}
+
+log_action_result() {
+  ensure_runtime_dirs
+  local action="$1"
+  local status="$2"
+  local message="${3:-}"
+  local ts
+  ts="$(backend_now_iso)"
+  node -e 'const [ts, action, status, message] = process.argv.slice(1); console.log(JSON.stringify({ts, action, status, message}));' \
+    "$ts" "$action" "$status" "$message" >>"$BACKEND_ACTION_LOG_FILE" 2>/dev/null ||
+    printf '{"ts":"%s","action":"%s","status":"%s","message":"%s"}\n' "$ts" "$action" "$status" "$message" >>"$BACKEND_ACTION_LOG_FILE"
 }
 
 ensure_docker_running() {
@@ -327,6 +358,17 @@ install_node_dependencies_if_needed() {
   fi
 }
 
+verify_node_workspace_dependencies() {
+  log_step "Verifying Node workspace dependencies"
+  require_command node
+  require_command npm
+  if [ ! -d "$BACKEND_REPO_ROOT/node_modules" ]; then
+    log_fail "Node workspace dependencies are missing. Run npm install or rerun scripts/install_backend_linux.sh."
+    exit 1
+  fi
+  log_ok "Node workspace dependencies are present"
+}
+
 ensure_python_venv() {
   if [ ! -d "$BACKEND_REPO_ROOT/.venv" ]; then
     log_step "Creating Python virtual environment"
@@ -399,8 +441,57 @@ install_ml_requirements_if_needed() {
 }
 
 build_runtime_artifacts() {
-  log_step "Building backend and simulator runtime artifacts"
-  (cd "$BACKEND_REPO_ROOT" && npm run build:shared && npm run build:engine && npm run build:telemetry && npm run build:ai && npm run build:server && npm run build:sim-runner && npm run build:web)
+  log_step "Building workspace packages in dependency order"
+  log_info "Building shared contracts"
+  (cd "$BACKEND_REPO_ROOT" && npm run build:shared)
+  log_info "Building engine"
+  (cd "$BACKEND_REPO_ROOT" && npm run build:engine)
+  log_info "Building telemetry"
+  (cd "$BACKEND_REPO_ROOT" && npm run build:telemetry)
+  log_info "Building AI heuristics"
+  (cd "$BACKEND_REPO_ROOT" && npm run build:ai)
+  log_info "Building UI kit"
+  (cd "$BACKEND_REPO_ROOT" && npm run build:ui-kit)
+  log_info "Building backend server"
+  (cd "$BACKEND_REPO_ROOT" && npm run build:server)
+  log_info "Building simulator runner"
+  (cd "$BACKEND_REPO_ROOT" && npm run build:sim-runner)
+  log_info "Building web/admin dashboards"
+  (cd "$BACKEND_REPO_ROOT" && npm run build:web)
+  log_ok "Workspace runtime artifacts built"
+}
+
+runtime_artifact_missing_paths() {
+  local missing=()
+  [ -f "$BACKEND_REPO_ROOT/packages/shared/dist/index.js" ] || missing+=("packages/shared/dist/index.js")
+  [ -f "$BACKEND_REPO_ROOT/packages/engine/dist/index.js" ] || missing+=("packages/engine/dist/index.js")
+  [ -f "$BACKEND_REPO_ROOT/packages/telemetry/dist/index.js" ] || missing+=("packages/telemetry/dist/index.js")
+  [ -f "$BACKEND_REPO_ROOT/packages/ui-kit/dist/index.js" ] || missing+=("packages/ui-kit/dist/index.js")
+  [ -f "$BACKEND_REPO_ROOT/apps/server/dist/index.js" ] || missing+=("apps/server/dist/index.js")
+  [ -f "$BACKEND_REPO_ROOT/apps/sim-runner/dist/index.js" ] || missing+=("apps/sim-runner/dist/index.js")
+  [ -f "$BACKEND_REPO_ROOT/apps/web/dist/index.html" ] || missing+=("apps/web/dist/index.html")
+
+  if [ "${#missing[@]}" -gt 0 ]; then
+    printf '%s\n' "${missing[@]}"
+  fi
+}
+
+runtime_artifacts_ready() {
+  [ -z "$(runtime_artifact_missing_paths)" ]
+}
+
+verify_runtime_artifacts() {
+  log_step "Verifying runtime build artifacts"
+  local missing
+  missing="$(runtime_artifact_missing_paths)"
+
+  if [ -n "$missing" ]; then
+    log_fail "Missing runtime artifacts: $(printf '%s' "$missing" | tr '\n' ' ')"
+    log_fail "Recovery: run npm run build or scripts/update_backend_linux.sh before migrations/startup."
+    exit 1
+  fi
+
+  log_ok "Required runtime build artifacts exist"
 }
 
 backend_pid() {
@@ -484,6 +575,90 @@ stop_backend() {
   rm -f "$BACKEND_PID_FILE"
 }
 
+sim_controller_runtime_dir() {
+  printf '%s\n' "${SIM_CONTROLLER_RUNTIME_DIR:-$BACKEND_REPO_ROOT/.runtime/sim-controller}"
+}
+
+sim_controller_pids() {
+  local runtime_dir state_file
+  runtime_dir="$(sim_controller_runtime_dir)"
+  state_file="$runtime_dir/state.json"
+  if [ ! -f "$state_file" ]; then
+    return
+  fi
+
+  node -e '
+    const fs = require("fs");
+    const state = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    const pids = new Set();
+    if (Number.isInteger(state.pid)) pids.add(state.pid);
+    for (const worker of Array.isArray(state.workers) ? state.workers : []) {
+      if (Number.isInteger(worker.pid)) pids.add(worker.pid);
+    }
+    for (const pid of pids) console.log(pid);
+  ' "$state_file" 2>/dev/null || true
+}
+
+stop_sim_controller_runtime() {
+  local runtime_dir pids pid
+  runtime_dir="$(sim_controller_runtime_dir)"
+  pids="$(sim_controller_pids)"
+
+  if [ -z "$pids" ]; then
+    log_info "Simulator controller has no tracked running processes"
+    return
+  fi
+
+  log_step "Stopping simulator controller runtime"
+  mkdir -p "$runtime_dir"
+  printf '%s\n' "$(backend_now_iso)" >"$runtime_dir/stop"
+
+  for pid in $pids; do
+    if kill -0 "$pid" >/dev/null 2>&1; then
+      log_info "Sending TERM to simulator controller process $pid"
+      kill "$pid" >/dev/null 2>&1 || true
+    fi
+  done
+
+  local attempt=0
+  while [ "$attempt" -lt 20 ]; do
+    local any_running=false
+    for pid in $pids; do
+      if kill -0 "$pid" >/dev/null 2>&1; then
+        any_running=true
+      fi
+    done
+    if [ "$any_running" = false ]; then
+      log_ok "Simulator controller processes stopped"
+      return
+    fi
+    attempt=$((attempt + 1))
+    sleep 1
+  done
+
+  for pid in $pids; do
+    if kill -0 "$pid" >/dev/null 2>&1; then
+      log_warn "Escalating simulator controller process $pid with KILL"
+      kill -9 "$pid" >/dev/null 2>&1 || true
+    fi
+  done
+}
+
+stop_postgres() {
+  log_step "Stopping Postgres container"
+  if ! has_command docker; then
+    log_warn "Docker is not installed; Postgres container is already unavailable"
+    return
+  fi
+  if ! docker_compose_available; then
+    log_warn "Docker Compose is unavailable; skipping Postgres stop"
+    return
+  fi
+
+  docker_compose stop postgres
+  log_ok "Postgres stop requested"
+}
+
 curl_json_status() {
   local method="$1"
   local url="$2"
@@ -510,6 +685,55 @@ sim_dashboard_routes_ready() {
       return 1
     fi
   done
+}
+
+api_endpoint_reachable() {
+  local method="$1"
+  local url="$2"
+  local body="${3:-}"
+  local status
+  status="$(curl_json_status "$method" "$url" "$body" 2>/dev/null || true)"
+  case "$status" in
+    200|201|202|400|409|422) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+verify_backend_http_endpoints() {
+  log_step "Verifying backend HTTP endpoints"
+  if health_endpoint_ready; then
+    log_ok "/health reachable at $BACKEND_LOCAL_URL/health"
+  else
+    log_fail "/health is not reachable at $BACKEND_LOCAL_URL/health"
+    exit 1
+  fi
+
+  if api_endpoint_reachable POST "$BACKEND_LOCAL_URL/api/decision/request" '{}'; then
+    log_ok "/api/decision/request endpoint is reachable"
+  else
+    log_fail "/api/decision/request endpoint is not reachable"
+    exit 1
+  fi
+
+  if api_endpoint_reachable POST "$BACKEND_LOCAL_URL/api/telemetry/event" '{}'; then
+    log_ok "/api/telemetry/event endpoint is reachable"
+  else
+    log_fail "/api/telemetry/event endpoint is not reachable"
+    exit 1
+  fi
+
+  if sim_dashboard_routes_ready; then
+    log_ok "Simulator dashboard routes are reachable"
+  else
+    log_fail "Simulator dashboard routes are not reachable"
+    exit 1
+  fi
+
+  if api_endpoint_reachable GET "$BACKEND_LOCAL_URL/admin/control"; then
+    log_ok "Runtime control panel is reachable"
+  else
+    log_warn "Runtime control panel is not reachable yet"
+  fi
 }
 
 start_backend_background() {
@@ -567,9 +791,15 @@ prepare_runtime_stack() {
   ensure_runtime_dirs
   load_repo_env
   ensure_docker_running
+  if docker_compose_available; then
+    log_ok "Docker Compose is available via $(docker_compose_command)"
+  else
+    log_fail "Docker Compose is unavailable. Rerun install_backend_linux.sh."
+    exit 1
+  fi
   install_node_dependencies_if_needed
+  verify_node_workspace_dependencies
   install_ml_requirements_if_needed
   start_postgres
   wait_for_postgres
-  run_migrations
 }

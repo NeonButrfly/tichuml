@@ -29,6 +29,13 @@ import {
 import { createAppServer } from "../../apps/server/src/app";
 import type { ServerConfig } from "../../apps/server/src/config/env";
 import type { LightgbmScorer } from "../../apps/server/src/ml/lightgbm-scorer";
+import type {
+  RuntimeActionResult,
+  RuntimeAdminService,
+  RuntimeAdminStatus,
+  RuntimeConfigPayload,
+  RuntimeConfigSaveResult
+} from "../../apps/server/src/services/runtime-admin-service";
 import {
   FileSimControllerService,
   type SimControllerService
@@ -325,6 +332,114 @@ class InMemorySimController implements SimControllerService {
   }
 }
 
+class InMemoryRuntimeAdmin implements RuntimeAdminService {
+  config: RuntimeConfigPayload = {
+    env_file: "C:/tichu/tichuml/.env",
+    effective: { PORT: "4310" },
+    entries: [
+      {
+        key: "PORT",
+        value: "4310",
+        editable: true,
+        restart_required: true,
+        description: "Backend HTTP port."
+      }
+    ],
+    pending_restart: false,
+    runtime_differs_from_disk_config: false
+  };
+
+  async status(): Promise<RuntimeAdminStatus> {
+    return {
+      checked_at: new Date().toISOString(),
+      backend: {
+        running: true,
+        pid: 1234,
+        uptime_seconds: 12,
+        port_listeners: [1234],
+        pid_file: "backend.pid",
+        log_file: "backend.log",
+        runtime_dir: ".runtime"
+      },
+      endpoints: {
+        health: { ok: true, label: "HTTP 200", detail: "ok" }
+      },
+      postgres: {
+        container_running: true,
+        ready: true,
+        detail: "accepting connections"
+      },
+      git: {
+        branch: "main",
+        local_commit: "abc",
+        remote_commit: "abc",
+        ahead: 0,
+        behind: 0,
+        dirty: false
+      },
+      tools: {
+        node: { ok: true, label: "v20", detail: "node" }
+      },
+      runtime: {
+        repo_root: "C:/tichu/tichuml",
+        backend_public_url: "http://localhost:4310",
+        backend_local_url: "http://127.0.0.1:4310",
+        backend_base_url: "http://localhost:4310",
+        sim_controller_runtime_dir: ".runtime/sim-controller",
+        update_status_file: ".runtime/backend-update-status.env",
+        update_status_json_file: ".runtime/backend-update-status.json",
+        action_log_file: ".runtime/actions.ndjson",
+        web_dist_exists: true,
+        node_modules_exists: true,
+        python_venv_exists: true,
+        ml_requirements_installed: true,
+        lightgbm_model_exists: false,
+        config_pending_restart: false,
+        runtime_differs_from_disk_config: false
+      },
+      recent_logs: {
+        backend: [],
+        actions: []
+      }
+    };
+  }
+
+  async readConfig(): Promise<RuntimeConfigPayload> {
+    return this.config;
+  }
+
+  async saveConfig(
+    updates: Record<string, unknown>
+  ): Promise<RuntimeConfigSaveResult> {
+    this.config = {
+      ...this.config,
+      pending_restart: true,
+      entries: this.config.entries.map((entry) =>
+        entry.key in updates && typeof updates[entry.key] === "string"
+          ? { ...entry, value: updates[entry.key] }
+          : entry
+      )
+    };
+    return {
+      accepted: true,
+      message: "Config saved.",
+      changed_keys: Object.keys(updates),
+      restart_required: true,
+      config: this.config
+    };
+  }
+
+  async runAction(action: string): Promise<RuntimeActionResult> {
+    return {
+      accepted: true,
+      action,
+      message: `Runtime action '${action}' started.`,
+      log_file: ".runtime/actions.ndjson",
+      started_at: new Date().toISOString()
+    };
+  }
+}
+
 const TEST_SERVER_CONFIG: ServerConfig = {
   port: 0,
   host: "127.0.0.1",
@@ -336,6 +451,7 @@ const TEST_SERVER_CONFIG: ServerConfig = {
   backendBaseUrl: "http://127.0.0.1",
   destructiveAdminEndpointsEnabled: false,
   adminSimControlEnabled: false,
+  runtimeAdminControlEnabled: false,
   simControllerRuntimeDir: "C:/tichu/tichuml/.runtime/test-sim-controller",
   repoRoot: "C:/tichu/tichuml",
   pythonExecutable: "python",
@@ -352,6 +468,7 @@ async function withServer<T>(
     lightgbmScorer?: LightgbmScorer;
     serverConfig?: Partial<ServerConfig>;
     simController?: SimControllerService;
+    runtimeAdmin?: RuntimeAdminService;
   } = {}
 ) {
   const repository = new InMemoryTelemetryRepository();
@@ -359,7 +476,8 @@ async function withServer<T>(
     serverConfig: { ...TEST_SERVER_CONFIG, ...(options.serverConfig ?? {}) },
     repository,
     lightgbmScorer: options.lightgbmScorer,
-    simController: options.simController
+    simController: options.simController,
+    runtimeAdmin: options.runtimeAdmin ?? new InMemoryRuntimeAdmin()
   });
 
   const port = nextSafeTestPort++;
@@ -489,6 +607,59 @@ describe("backend foundation server routes", () => {
       };
       expect(payload.simDashboardEndpoints).toEqual(["/admin/sim", "/sim/control"]);
     });
+  });
+
+  it("serves the runtime control panel and read-only runtime status", async () => {
+    await withServer(async ({ baseUrl }) => {
+      const panel = await fetch(`${baseUrl}/admin/control`);
+      expect(panel.status).toBe(200);
+      expect(await panel.text()).toContain("Runtime Control");
+
+      const status = await fetch(`${baseUrl}/api/admin/runtime/status`);
+      expect(status.status).toBe(200);
+      const payload = (await status.json()) as RuntimeAdminStatus;
+      expect(payload.backend.running).toBe(true);
+      expect(payload.postgres.ready).toBe(true);
+    });
+  });
+
+  it("guards runtime mutating actions behind runtime admin safeguards", async () => {
+    await withServer(async ({ baseUrl }) => {
+      const response = await fetch(`${baseUrl}/api/admin/runtime/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "restart_backend" })
+      });
+
+      expect(response.status).toBe(400);
+      const payload = (await response.json()) as {
+        validation_errors: Array<{ path: string }>;
+      };
+      expect(payload.validation_errors.map((issue) => issue.path)).toContain(
+        "ENABLE_RUNTIME_ADMIN_CONTROL"
+      );
+    });
+  });
+
+  it("runs runtime actions when safeguards are satisfied", async () => {
+    await withServer(
+      async ({ baseUrl }) => {
+        const response = await fetch(`${baseUrl}/api/admin/runtime/action`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-admin-confirm": "CLEAR_TICHU_DB"
+          },
+          body: JSON.stringify({ action: "restart_backend" })
+        });
+
+        expect(response.status).toBe(202);
+        const payload = (await response.json()) as RuntimeActionResult;
+        expect(payload.accepted).toBe(true);
+        expect(payload.action).toBe("restart_backend");
+      },
+      { serverConfig: { runtimeAdminControlEnabled: true } }
+    );
   });
 
   it("rejects invalid telemetry decision payloads", async () => {

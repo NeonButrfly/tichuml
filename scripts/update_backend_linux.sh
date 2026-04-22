@@ -40,8 +40,9 @@ main() {
   start_postgres
   wait_for_postgres
 
-  run_migrations
   build_runtime_artifacts
+  verify_runtime_artifacts
+  run_migrations
   update_applied=true
   remote_commit="$(git_remote_commit)"
   if [ "$local_commit" = "$remote_commit" ]; then
@@ -54,6 +55,7 @@ main() {
     log_step "Restarting backend after update"
     stop_backend
     start_backend_background
+    verify_backend_http_endpoints
     restart_triggered=true
     message="$message Backend restarted."
   fi

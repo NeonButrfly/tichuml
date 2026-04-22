@@ -217,6 +217,22 @@ Status/health check:
 bash scripts/status_backend_linux.sh
 ```
 
+Stop backend services:
+
+```sh
+bash scripts/stop_backend_linux.sh --backend-only
+bash scripts/stop_backend_linux.sh --full
+```
+
+The backend host also serves a trusted-operator runtime control panel at:
+
+```text
+http://<backend-host>:4310/admin/control
+```
+
+Mutating control-panel actions require `ENABLE_RUNTIME_ADMIN_CONTROL=true` and
+the confirmation token `CLEAR_TICHU_DB`.
+
 No systemd unit is added in-repo yet. The intended service entrypoint is `bash /path/to/tichuml/scripts/start_backend_linux.sh`, with `bash /path/to/tichuml/scripts/status_backend_linux.sh` as the companion health/status check.
 
 Those scripts:
@@ -226,10 +242,11 @@ Those scripts:
 - create `.env` if missing
 - create `.venv` and install ML requirements
 - start Docker/Postgres with Postgres bound to loopback only
-- run migrations
-- build backend/simulator runtime artifacts
+- build backend/simulator/web runtime artifacts before migrations
+- run migrations only after required workspace `dist` artifacts exist
 - force-sync Linux backend source on startup before the backend starts
-- record last update state in `.runtime/backend-update-status.env`
+- record last update state in `.runtime/backend-update-status.env` and `.runtime/backend-update-status.json`
+- expose runtime status/actions/config editing through `/admin/control`
 
 Linux-host recovery:
 

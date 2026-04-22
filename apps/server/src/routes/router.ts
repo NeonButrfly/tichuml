@@ -28,6 +28,8 @@ import {
 import type { ServerConfig } from "../config/env.js";
 import type { LightgbmScorer } from "../ml/lightgbm-scorer.js";
 import { handleDecisionRequest } from "../services/decision-service.js";
+import type { RuntimeAdminService } from "../services/runtime-admin-service.js";
+import { renderRuntimeControlPanel } from "../services/runtime-control-panel.js";
 import type { SimControllerService } from "../services/sim-controller-service.js";
 import type { TelemetryRepository } from "../services/telemetry-repository.js";
 import {
@@ -42,6 +44,7 @@ type RouterDependencies = {
   config: ServerConfig;
   repository: TelemetryRepository;
   simController: SimControllerService;
+  runtimeAdmin: RuntimeAdminService;
   lightgbmScorer?: LightgbmScorer;
 };
 
@@ -156,7 +159,9 @@ function createServerManifest(config: ServerConfig) {
     telemetryEventEndpoint: TELEMETRY_EVENT_PATH,
     decisionEndpoint: DECISION_REQUEST_PATH,
     simControllerEndpoint: ADMIN_SIM_STATUS_PATH,
-    simDashboardEndpoints: [...SIM_DASHBOARD_PATHS]
+    simDashboardEndpoints: [...SIM_DASHBOARD_PATHS],
+    runtimeControlPanelEndpoint: "/admin/control",
+    runtimeAdminStatusEndpoint: "/api/admin/runtime/status"
   };
 }
 
@@ -232,10 +237,41 @@ async function assertSimAdminRequest(
   return issues.length === 0 ? { ok: true, body } : { ok: false, issues };
 }
 
+async function assertRuntimeAdminRequest(
+  request: http.IncomingMessage,
+  config: ServerConfig
+): Promise<{ ok: true; body: Record<string, unknown> } | { ok: false; issues: Array<{ path: string; message: string }> }> {
+  const issues: Array<{ path: string; message: string }> = [];
+  const body = (await readJsonBody(request)) as Record<string, unknown>;
+  const headerConfirm = request.headers["x-admin-confirm"];
+  const bodyConfirm = body.confirm;
+  const confirmed =
+    headerConfirm === ADMIN_CONFIRMATION_VALUE ||
+    bodyConfirm === ADMIN_CONFIRMATION_VALUE;
+
+  if (!config.runtimeAdminControlEnabled) {
+    issues.push({
+      path: "ENABLE_RUNTIME_ADMIN_CONTROL",
+      message:
+        "Runtime admin mutating endpoints are disabled. Set ENABLE_RUNTIME_ADMIN_CONTROL=true for trusted operator use."
+    });
+  }
+
+  if (!confirmed) {
+    issues.push({
+      path: "x-admin-confirm",
+      message: `Expected x-admin-confirm or body.confirm to equal ${ADMIN_CONFIRMATION_VALUE}.`
+    });
+  }
+
+  return issues.length === 0 ? { ok: true, body } : { ok: false, issues };
+}
+
 export function createRouter({
   config,
   repository,
   simController,
+  runtimeAdmin,
   lightgbmScorer
 }: RouterDependencies): http.RequestListener {
   return async (request, response) => {
@@ -251,6 +287,16 @@ export function createRouter({
     const url = new URL(request.url, config.backendBaseUrl);
 
     try {
+      if (request.method === "GET" && url.pathname === "/admin/control") {
+        response.writeHead(200, {
+          "Content-Type": "text/html; charset=utf-8",
+          "Cache-Control": "no-store",
+          "Access-Control-Allow-Origin": config.allowedOrigin
+        });
+        response.end(renderRuntimeControlPanel());
+        return;
+      }
+
       if (request.method === "GET" && serveWebAsset(response, config, url.pathname)) {
         return;
       }
@@ -264,6 +310,64 @@ export function createRouter({
 
       if (request.method === "GET" && url.pathname === "/api/manifest") {
         writeJson(response, 200, createServerManifest(config), config.allowedOrigin);
+        return;
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/admin/runtime/status") {
+        writeJson(response, 200, await runtimeAdmin.status(), config.allowedOrigin);
+        return;
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/admin/runtime/config") {
+        writeJson(response, 200, await runtimeAdmin.readConfig(), config.allowedOrigin);
+        return;
+      }
+
+      if (
+        request.method === "POST" &&
+        (url.pathname === "/api/admin/runtime/config" ||
+          url.pathname === "/api/admin/runtime/action")
+      ) {
+        const guard = await assertRuntimeAdminRequest(request, config);
+        if (!guard.ok) {
+          badRequest(
+            response,
+            "Runtime admin safeguards were not satisfied.",
+            config.allowedOrigin,
+            guard.issues
+          );
+          return;
+        }
+
+        if (url.pathname === "/api/admin/runtime/config") {
+          const values =
+            typeof guard.body.values === "object" &&
+            guard.body.values !== null &&
+            !Array.isArray(guard.body.values)
+              ? (guard.body.values as Record<string, unknown>)
+              : guard.body;
+          writeJson(
+            response,
+            200,
+            await runtimeAdmin.saveConfig(values),
+            config.allowedOrigin
+          );
+          return;
+        }
+
+        if (typeof guard.body.action !== "string") {
+          badRequest(response, "Expected action string.", config.allowedOrigin, [
+            { path: "action", message: "Expected action string." }
+          ]);
+          return;
+        }
+
+        writeJson(
+          response,
+          202,
+          await runtimeAdmin.runAction(guard.body.action),
+          config.allowedOrigin
+        );
         return;
       }
 

@@ -67,4 +67,16 @@ describe("server config env loading", () => {
       "postgres://override:pw@localhost:5444/override"
     );
   });
+
+  it("loads runtime admin control flag from env", async () => {
+    const repoRoot = await createTempRepo();
+    await fs.writeFile(
+      path.join(repoRoot, ".env"),
+      "ENABLE_RUNTIME_ADMIN_CONTROL=true\n"
+    );
+
+    const config = loadServerConfig({}, { repoRoot });
+
+    expect(config.runtimeAdminControlEnabled).toBe(true);
+  });
 });

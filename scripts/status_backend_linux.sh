@@ -44,6 +44,14 @@ print_update_status() {
   status_line "[OK]" "Last update message: ${MESSAGE:-n/a}"
 }
 
+print_runtime_layout() {
+  status_line "[OK]" "Runtime dir: $BACKEND_RUNTIME_DIR"
+  status_line "[OK]" "Backend pid file: $BACKEND_PID_FILE"
+  status_line "[OK]" "Backend log file: $BACKEND_LOG_FILE"
+  status_line "[OK]" "Action log file: $BACKEND_ACTION_LOG_FILE"
+  status_line "[OK]" "Update status file: $BACKEND_UPDATE_STATUS_JSON_FILE"
+}
+
 main() {
   log_step "Inspecting Linux backend host status"
   load_repo_env
@@ -128,7 +136,7 @@ main() {
     fi
 
     if docker_compose_available; then
-      if docker_compose ps --status running postgres | grep -q postgres; then
+      if docker_compose ps --status running postgres 2>/dev/null | grep -q postgres; then
         status_line "[OK]" "Postgres container is running"
       else
         status_line "[FAIL]" "Postgres container is not running"
@@ -184,6 +192,12 @@ main() {
     else
       status_line "[FAIL]" "/sim/control dashboard route is not reachable"
     fi
+
+    if http_status_ok GET "$BACKEND_LOCAL_URL/admin/control"; then
+      status_line "[OK]" "Control panel reachable at $BACKEND_PUBLIC_URL/admin/control"
+    else
+      status_line "[FAIL]" "Control panel is not reachable at $BACKEND_LOCAL_URL/admin/control"
+    fi
   else
     status_line "[WARN]" "Skipping HTTP endpoint checks because curl is missing"
   fi
@@ -204,6 +218,12 @@ main() {
     status_line "[OK]" "Web dashboard bundle exists"
   else
     status_line "[FAIL]" "Web dashboard bundle is missing; recovery: run scripts/update_backend_linux.sh or npm run build:web"
+  fi
+
+  if runtime_artifacts_ready; then
+    status_line "[OK]" "Runtime build artifacts are ready for migrations/startup"
+  else
+    status_line "[FAIL]" "Runtime build artifacts are incomplete"
   fi
 
   if [ -f "$BACKEND_REPO_ROOT/ml/model_registry/lightgbm_action_model.txt" ]; then
@@ -237,6 +257,7 @@ main() {
   fi
 
   print_update_status
+  print_runtime_layout
 }
 
 main "$@"

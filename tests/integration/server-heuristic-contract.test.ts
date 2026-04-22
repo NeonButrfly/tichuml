@@ -179,6 +179,7 @@ const TEST_SERVER_CONFIG: ServerConfig = {
   backendBaseUrl: "http://127.0.0.1",
   destructiveAdminEndpointsEnabled: false,
   adminSimControlEnabled: false,
+  runtimeAdminControlEnabled: false,
   simControllerRuntimeDir: "C:/tichu/tichuml/.runtime/test-sim-controller",
   repoRoot: "C:/tichu/tichuml",
   pythonExecutable: "python",
