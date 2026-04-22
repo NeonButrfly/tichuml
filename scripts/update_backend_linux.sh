@@ -20,7 +20,7 @@ main() {
   message="Repository force-synced to origin/$branch."
 
   local backend_was_running
-  if backend_running; then
+  if backend_running || health_endpoint_ready || backend_port_listening; then
     backend_was_running=true
   else
     backend_was_running=false

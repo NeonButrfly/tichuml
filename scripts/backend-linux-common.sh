@@ -409,6 +409,27 @@ backend_pid() {
   fi
 }
 
+backend_listener_pids() {
+  {
+    if has_command lsof; then
+      lsof -tiTCP:"$PORT" -sTCP:LISTEN 2>/dev/null || true
+    fi
+
+    if has_command fuser; then
+      fuser -n tcp "$PORT" 2>/dev/null | tr ' ' '\n' || true
+    fi
+
+    if has_command ss; then
+      ss -ltnp "sport = :$PORT" 2>/dev/null |
+        sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p' || true
+    fi
+  } | grep -E '^[0-9]+$' | sort -u || true
+}
+
+backend_port_listening() {
+  [ -n "$(backend_listener_pids)" ]
+}
+
 backend_running() {
   local pid
   pid="$(backend_pid)"
@@ -416,18 +437,40 @@ backend_running() {
 }
 
 stop_backend() {
-  if ! backend_running; then
+  local pid listener_pids pids
+  pid="$(backend_pid)"
+  listener_pids="$(backend_listener_pids)"
+  pids="$(
+    {
+      printf '%s\n' "$pid"
+      printf '%s\n' "$listener_pids"
+    } | grep -E '^[0-9]+$' | sort -u || true
+  )"
+
+  if [ -z "$pids" ]; then
     rm -f "$BACKEND_PID_FILE"
     return
   fi
 
-  local pid
-  pid="$(backend_pid)"
-  kill "$pid" >/dev/null 2>&1 || true
+  if ! backend_running && [ -n "$listener_pids" ]; then
+    log_warn "Found backend listener(s) on port $PORT without a tracked pid file: $(printf '%s' "$listener_pids" | tr '\n' ' ')"
+  fi
+
+  local process_pid
+  for process_pid in $pids; do
+    kill "$process_pid" >/dev/null 2>&1 || true
+  done
 
   local attempt=0
   while [ "$attempt" -lt 30 ]; do
-    if ! kill -0 "$pid" >/dev/null 2>&1; then
+    local any_running=false
+    for process_pid in $pids; do
+      if kill -0 "$process_pid" >/dev/null 2>&1; then
+        any_running=true
+      fi
+    done
+
+    if [ "$any_running" = false ] && ! backend_port_listening; then
       rm -f "$BACKEND_PID_FILE"
       return
     fi
@@ -435,7 +478,9 @@ stop_backend() {
     sleep 1
   done
 
-  kill -9 "$pid" >/dev/null 2>&1 || true
+  for process_pid in $pids; do
+    kill -9 "$process_pid" >/dev/null 2>&1 || true
+  done
   rm -f "$BACKEND_PID_FILE"
 }
 
@@ -472,6 +517,11 @@ start_backend_background() {
   if backend_running; then
     log_warn "Backend is already running with pid $(backend_pid)"
     return
+  fi
+
+  if backend_port_listening; then
+    log_warn "Port $PORT is already serving a backend without the tracked pid file; replacing that listener before start."
+    stop_backend
   fi
 
   log_step "Starting backend server"

@@ -148,6 +148,8 @@ main() {
 
   if backend_running; then
     status_line "[OK]" "Backend process is running with pid $(backend_pid)"
+  elif backend_port_listening; then
+    status_line "[WARN]" "Backend port $PORT is listening without a tracked pid file; recovery: run scripts/update_backend_linux.sh to replace the unmanaged listener"
   else
     status_line "[WARN]" "Backend process is not currently running"
   fi

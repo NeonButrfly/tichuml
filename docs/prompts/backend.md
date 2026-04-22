@@ -148,7 +148,8 @@ Prompt logs here capture backend/platform prompt intent only. GitHub issue state
   operator entrypoints, including the Vite assets needed by direct browser
   navigation on the backend origin. Follow-up live validation showed the host can
   remain on a running/stale process, so the Linux start/status flow must also
-  validate the dashboard routes after update/restart.
+  validate the dashboard routes after update/restart and replace unmanaged
+  listeners on the configured backend port.
 - Affected systems:
   `apps/server`, `apps/web`, `scripts/backend-linux-common.sh`, simulator
   dashboard docs, backend integration tests, Linux status/start scripts.

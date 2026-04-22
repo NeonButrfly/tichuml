@@ -16,7 +16,8 @@ served by the backend host.
 The Linux status/start flow validates both dashboard routes. If either route
 returns 404 after a code update, run `scripts/update_backend_linux.sh` on the
 host so it force-syncs `origin/main`, rebuilds `apps/web/dist`, and restarts the
-backend process.
+backend process. The update/start scripts also replace an unmanaged process that
+is listening on the configured backend port without a tracked pid file.
 
 The dashboard is a control surface, not a read-only page. It calls the same
 admin controller API used by `scripts/sim-controller.sh`.
