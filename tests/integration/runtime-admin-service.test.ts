@@ -65,7 +65,7 @@ describe("runtime admin config manager", () => {
 
     const result = await service.saveConfig({
       PORT: "4311",
-      BACKEND_PUBLIC_URL: "http://host name:4311"
+      BACKEND_PUBLIC_URL: "http://host-name:4311"
     });
 
     expect(result.accepted).toBe(true);
@@ -73,7 +73,8 @@ describe("runtime admin config manager", () => {
     const envText = await fs.readFile(path.join(repoRoot, ".env"), "utf8");
     expect(envText).toContain("# keep this comment");
     expect(envText).toContain("PORT=4311");
-    expect(envText).toContain('BACKEND_PUBLIC_URL="http://host name:4311"');
+    expect(envText).toContain("BACKEND_PUBLIC_URL_OVERRIDE_ENABLED=true");
+    expect(envText).toContain("BACKEND_PUBLIC_URL_OVERRIDE=http://host-name:4311");
     const status = JSON.parse(
       await fs.readFile(path.join(repoRoot, ".runtime", "config-status.json"), "utf8")
     ) as { pending_restart: boolean };
@@ -101,13 +102,16 @@ describe("runtime admin config manager", () => {
     const service = new FileRuntimeAdminService(createConfig(repoRoot));
 
     const config = await service.readConfig();
-    expect(config.entries.find((entry) => entry.key === "AUTO_MIGRATE")?.input).toBe(
+    expect(config.entries.find((entry) => entry.key === "AUTO_MIGRATE")?.type).toBe(
       "boolean"
     );
+    expect(config.entries.some((entry) => entry.key === "ENABLE_RUNTIME_ADMIN_CONTROL")).toBe(
+      false
+    );
     expect(
-      config.entries.find((entry) => entry.key === "ENABLE_RUNTIME_ADMIN_CONTROL")
-        ?.value
-    ).toBe("true");
+      config.entries.find((entry) => entry.key === "ENABLE_ADMIN_SIM_CONTROL")
+        ?.savedValue
+    ).toBe("false");
 
     await expect(
       service.saveConfig({
@@ -125,7 +129,37 @@ describe("runtime admin config manager", () => {
     const hostIp = config.entries.find((entry) => entry.key === "BACKEND_HOST_IP");
 
     expect(hostIp?.value).toBe("");
-    expect(hostIp?.effective_value).toBeTruthy();
-    expect(hostIp?.overridden).toBe(false);
+    expect(hostIp?.effectiveValue).toBeTruthy();
+    expect(hostIp?.overrideEnabled).toBe(false);
+  });
+
+  it("stores only override state and value for automated fields", async () => {
+    const repoRoot = await createTempRepo();
+    await fs.writeFile(path.join(repoRoot, ".env"), "PORT=4310\n");
+    const service = new FileRuntimeAdminService(createConfig(repoRoot));
+
+    await service.saveConfig({
+      BACKEND_HOST_IP: {
+        overrideEnabled: true,
+        overrideValue: "192.168.50.44"
+      }
+    });
+
+    const envText = await fs.readFile(path.join(repoRoot, ".env"), "utf8");
+    expect(envText).toContain("BACKEND_HOST_IP_OVERRIDE_ENABLED=true");
+    expect(envText).toContain("BACKEND_HOST_IP_OVERRIDE=192.168.50.44");
+    expect(envText).not.toContain("BACKEND_HOST_IP=192.168.50.44");
+  });
+
+  it("persists admin safety lock state as config", async () => {
+    const repoRoot = await createTempRepo();
+    await fs.writeFile(path.join(repoRoot, ".env"), "ENABLE_RUNTIME_ADMIN_CONTROL=true\n");
+    const service = new FileRuntimeAdminService(createConfig(repoRoot));
+
+    const result = await service.setAdminSafetyLocked(true);
+
+    expect(result.locked).toBe(true);
+    const envText = await fs.readFile(path.join(repoRoot, ".env"), "utf8");
+    expect(envText).toContain("ENABLE_RUNTIME_ADMIN_CONTROL=false");
   });
 });

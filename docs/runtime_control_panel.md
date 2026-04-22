@@ -76,12 +76,16 @@ Read-only status includes:
 - Python venv, ML requirements stamp, LightGBM model presence
 - backend/public/local URLs and recent backend/action logs
 
-Mutating actions require:
+Mutating actions require the Admin Safety panel to be unlocked:
 
 ```text
 ENABLE_RUNTIME_ADMIN_CONTROL=true
-x-admin-confirm: CLEAR_TICHU_DB
 ```
+
+The control panel no longer exposes or requires a `CLEAR_TICHU_DB` token input.
+`Clear DB` is a real runtime action button with a Yes/No confirmation dialog.
+When the safety lock is enabled, backend, Postgres, repo update, database reset,
+and apply/restart actions are blocked and the UI shows the blocked action list.
 
 The page includes buttons for:
 
@@ -110,16 +114,27 @@ control-panel writer, not by shell evaluation. Linux scripts load config through
 `scripts/runtime-config.mjs`, which parses `.env` and emits escaped exports for
 known runtime defaults, avoiding direct `.env` sourcing.
 
-The control panel validates known keys, rejects multiline values, writes
-atomically, preserves comments and key order where possible, keeps unsupported
-keys out of the edit path, and records pending restart state in
-`.runtime/config-status.json`. Boolean values render as `true` / `false`
-dropdowns and are rejected if submitted as anything else.
+The control panel separates saved disk config, unsaved form state, detected
+values, and effective runtime values. Background status polling updates status
+cards and logs but does not overwrite dirty form fields. Form values only change
+on initial load, explicit reset, or successful save.
 
-`BACKEND_HOST_IP` is a manual override. When it is blank or absent, scripts and
-the panel detect the primary non-loopback IPv4 address and use that value for
-default public URLs. The UI shows both the detected IP and the active override
-state so refreshes do not hide which value is actually in use.
+The backend returns a typed config schema for each item: key, type, category,
+editability, restart requirement, description, saved value, effective value,
+detected value, override flag, and override value. Boolean values render as
+`true` / `false` dropdowns and are rejected if submitted as anything else.
+
+Automated fields use override toggles. The persisted `.env` stores only
+`*_OVERRIDE_ENABLED` and `*_OVERRIDE` values. Detected values are never written
+back to disk. When override is off, the UI disables the input and the effective
+value comes from detection. When override is on, the saved override value becomes
+the effective value.
+
+IP detection ignores loopback and Docker-style interfaces where possible. It
+prefers Ethernet names (`eth*`, `en*`, `eno*`, `ens*`), then wireless names
+(`wlan*`, `wlp*`), then falls back to `127.0.0.1`. Status and config payloads
+include `detectedEthernet`, `detectedWireless`, and `detectedDefault`, and all
+runtime URL defaults flow from the same effective values.
 
 Most server/runtime settings require restart because they are loaded at process
 startup. The control panel marks restart-required settings and provides an

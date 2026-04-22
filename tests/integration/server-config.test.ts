@@ -99,4 +99,20 @@ describe("server config env loading", () => {
     expect(config.allowedOrigin).toBe("http://host name:5173");
     expect(config.port).toBe(5002);
   });
+
+  it("uses backend base URL override fields when enabled", async () => {
+    const repoRoot = await createTempRepo();
+    await fs.writeFile(
+      path.join(repoRoot, ".env"),
+      [
+        "PORT=4310",
+        "BACKEND_BASE_URL_OVERRIDE_ENABLED=true",
+        "BACKEND_BASE_URL_OVERRIDE=http://192.168.50.44:4310"
+      ].join("\n")
+    );
+
+    const config = loadServerConfig({}, { repoRoot });
+
+    expect(config.backendBaseUrl).toBe("http://192.168.50.44:4310");
+  });
 });

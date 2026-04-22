@@ -25,6 +25,10 @@ export type RuntimeComponentStatus = {
 
 export type RuntimeAdminStatus = {
   checked_at: string;
+  admin_safety: {
+    locked: boolean;
+    blocked_actions: string[];
+  };
   backend: {
     running: boolean;
     pid: number | null;
@@ -54,6 +58,9 @@ export type RuntimeAdminStatus = {
     backend_public_url: string;
     backend_local_url: string;
     backend_base_url: string;
+    detected_ethernet: string | null;
+    detected_wireless: string | null;
+    detected_default: string;
     detected_primary_ip: string | null;
     detected_system_ips: string[];
     backend_host_ip_override: string | null;
@@ -77,20 +84,32 @@ export type RuntimeAdminStatus = {
 
 export type RuntimeConfigEntry = {
   key: string;
+  label: string;
+  category: string;
+  type: "string" | "number" | "boolean" | "action" | "derived";
+  editable: boolean;
+  requiresRestart: boolean;
+  description: string;
+  savedValue: string;
+  effectiveValue: string;
+  detectedValue: string | undefined;
+  overrideEnabled: boolean;
+  overrideValue: string;
   value: string;
   effective_value: string;
   detected_value: string | undefined;
   overridden: boolean;
-  editable: boolean;
   restart_required: boolean;
-  description: string;
-  input: "text" | "boolean";
+  input: "text" | "number" | "boolean";
 };
 
 export type RuntimeConfigPayload = {
   env_file: string;
   effective: Record<string, string>;
   detected: {
+    detectedEthernet: string | null;
+    detectedWireless: string | null;
+    detectedDefault: string;
     primary_ip: string | null;
     system_ips: string[];
   };
@@ -115,48 +134,71 @@ export type RuntimeActionResult = {
   started_at: string;
 };
 
+export type RuntimeSafetyResult = {
+  accepted: boolean;
+  locked: boolean;
+  message: string;
+  config: RuntimeConfigPayload;
+};
+
 export interface RuntimeAdminService {
   status(): Promise<RuntimeAdminStatus>;
   readConfig(): Promise<RuntimeConfigPayload>;
   saveConfig(updates: Record<string, unknown>): Promise<RuntimeConfigSaveResult>;
+  setAdminSafetyLocked(locked: boolean): Promise<RuntimeSafetyResult>;
+  isAdminSafetyLocked(): Promise<boolean>;
   runAction(action: string): Promise<RuntimeActionResult>;
 }
 
-const EDITABLE_ENV: Array<{
-  key: string;
-  restart_required: boolean;
-  description: string;
-  input?: "text" | "boolean";
-  validate?: (value: string) => string | null;
-}> = [
-  { key: "PORT", restart_required: true, description: "Backend HTTP port.", validate: validatePort },
-  { key: "HOST", restart_required: true, description: "Backend listen host." },
-  { key: "BACKEND_HOST_IP", restart_required: false, description: "Host IP used for public URL defaults." },
-  { key: "BACKEND_PUBLIC_URL", restart_required: false, description: "Operator-facing backend URL." },
-  { key: "BACKEND_LOCAL_URL", restart_required: false, description: "Local backend URL for scripts." },
-  { key: "BACKEND_BASE_URL", restart_required: true, description: "Backend base URL used by server config." },
-  { key: "CORS_ALLOW_ORIGIN", restart_required: true, description: "Allowed CORS origin." },
-  { key: "DATABASE_URL", restart_required: true, description: "Application Postgres connection string." },
-  { key: "PG_BOOTSTRAP_URL", restart_required: true, description: "Bootstrap Postgres connection string." },
-  { key: "POSTGRES_DB", restart_required: true, description: "Postgres database name." },
-  { key: "POSTGRES_USER", restart_required: true, description: "Postgres username." },
-  { key: "POSTGRES_PORT", restart_required: true, description: "Host Postgres port.", validate: validatePort },
-  { key: "AUTO_BOOTSTRAP_DATABASE", restart_required: true, description: "Auto-create database on startup.", input: "boolean", validate: validateBoolean },
-  { key: "AUTO_MIGRATE", restart_required: true, description: "Auto-run migrations on server startup.", input: "boolean", validate: validateBoolean },
-  { key: "ENABLE_DESTRUCTIVE_ADMIN_ENDPOINTS", restart_required: true, description: "Enable destructive DB admin APIs.", input: "boolean", validate: validateBoolean },
-  { key: "ENABLE_ADMIN_SIM_CONTROL", restart_required: true, description: "Enable simulator admin control APIs.", input: "boolean", validate: validateBoolean },
-  { key: "ENABLE_RUNTIME_ADMIN_CONTROL", restart_required: true, description: "Enable mutating runtime admin APIs.", input: "boolean", validate: validateBoolean },
-  { key: "SIM_CONTROLLER_RUNTIME_DIR", restart_required: true, description: "Simulator controller runtime directory." },
-  { key: "AUTO_UPDATE_ON_START", restart_required: false, description: "Force-sync repo on Linux startup.", input: "boolean", validate: validateBoolean },
-  { key: "GIT_BRANCH", restart_required: false, description: "Git branch for force-sync/update." },
-  { key: "REPO_URL", restart_required: false, description: "Git remote URL for force-sync/update." },
-  { key: "PYTHON_EXECUTABLE", restart_required: true, description: "Python executable for ML inference." },
-  { key: "LIGHTGBM_INFER_SCRIPT", restart_required: true, description: "LightGBM inference script path." },
-  { key: "LIGHTGBM_MODEL_PATH", restart_required: true, description: "LightGBM model file path." },
-  { key: "LIGHTGBM_MODEL_META_PATH", restart_required: true, description: "LightGBM model metadata path." }
+const BLOCKED_WHEN_LOCKED = [
+  "start_backend",
+  "stop_backend",
+  "restart_backend",
+  "full_restart",
+  "start_postgres",
+  "stop_postgres",
+  "update_repo",
+  "clear_db",
+  "apply_config_restart"
 ];
 
-const EDITABLE_KEYS = new Set(EDITABLE_ENV.map((entry) => entry.key));
+const CONFIG_SCHEMA: Array<{
+  key: string;
+  label: string;
+  category: string;
+  type: "string" | "number" | "boolean" | "derived";
+  restart_required: boolean;
+  description: string;
+  automated?: boolean;
+  validate?: (value: string) => string | null;
+}> = [
+  { key: "PORT", label: "Port", category: "Network", type: "number", restart_required: true, description: "Backend HTTP port.", validate: validatePort },
+  { key: "HOST", label: "Bind host", category: "Network", type: "string", restart_required: true, description: "Backend listen host." },
+  { key: "BACKEND_HOST_IP", label: "Host IP", category: "Network", type: "string", restart_required: false, description: "Host IP used for public URL defaults.", automated: true, validate: validateIpAddress },
+  { key: "BACKEND_PUBLIC_URL", label: "Public URL", category: "Network", type: "string", restart_required: false, description: "Operator-facing backend URL.", automated: true, validate: validateUrl },
+  { key: "BACKEND_LOCAL_URL", label: "Local URL", category: "Network", type: "string", restart_required: false, description: "Local backend URL for scripts.", automated: true, validate: validateUrl },
+  { key: "BACKEND_BASE_URL", label: "Backend base URL", category: "Network", type: "string", restart_required: true, description: "Backend base URL used by server config.", automated: true, validate: validateUrl },
+  { key: "CORS_ALLOW_ORIGIN", label: "CORS origin", category: "Network", type: "string", restart_required: true, description: "Allowed CORS origin." },
+  { key: "DATABASE_URL", label: "Database URL", category: "Database", type: "string", restart_required: true, description: "Application Postgres connection string." },
+  { key: "PG_BOOTSTRAP_URL", label: "Bootstrap URL", category: "Database", type: "string", restart_required: true, description: "Bootstrap Postgres connection string." },
+  { key: "POSTGRES_DB", label: "Postgres DB", category: "Database", type: "string", restart_required: true, description: "Postgres database name." },
+  { key: "POSTGRES_USER", label: "Postgres user", category: "Database", type: "string", restart_required: true, description: "Postgres username." },
+  { key: "POSTGRES_PORT", label: "Postgres port", category: "Database", type: "number", restart_required: true, description: "Host Postgres port.", validate: validatePort },
+  { key: "AUTO_BOOTSTRAP_DATABASE", label: "Auto bootstrap database", category: "Database", type: "boolean", restart_required: true, description: "Auto-create database on startup.", validate: validateBoolean },
+  { key: "AUTO_MIGRATE", label: "Auto migrate", category: "Database", type: "boolean", restart_required: true, description: "Auto-run migrations on server startup.", validate: validateBoolean },
+  { key: "ENABLE_DESTRUCTIVE_ADMIN_ENDPOINTS", label: "Destructive DB APIs", category: "Admin", type: "boolean", restart_required: true, description: "Enable legacy destructive DB admin APIs.", validate: validateBoolean },
+  { key: "ENABLE_ADMIN_SIM_CONTROL", label: "Simulator admin APIs", category: "Admin", type: "boolean", restart_required: true, description: "Enable simulator admin control APIs.", validate: validateBoolean },
+  { key: "SIM_CONTROLLER_RUNTIME_DIR", label: "Sim controller runtime dir", category: "Runtime", type: "string", restart_required: true, description: "Simulator controller runtime directory." },
+  { key: "AUTO_UPDATE_ON_START", label: "Auto update on start", category: "Git", type: "boolean", restart_required: false, description: "Force-sync repo on Linux startup.", validate: validateBoolean },
+  { key: "GIT_BRANCH", label: "Git branch", category: "Git", type: "string", restart_required: false, description: "Git branch for force-sync/update." },
+  { key: "REPO_URL", label: "Repo URL", category: "Git", type: "string", restart_required: false, description: "Git remote URL for force-sync/update.", validate: validateUrl },
+  { key: "PYTHON_EXECUTABLE", label: "Python executable", category: "ML", type: "string", restart_required: true, description: "Python executable for ML inference." },
+  { key: "LIGHTGBM_INFER_SCRIPT", label: "LightGBM infer script", category: "ML", type: "string", restart_required: true, description: "LightGBM inference script path." },
+  { key: "LIGHTGBM_MODEL_PATH", label: "LightGBM model", category: "ML", type: "string", restart_required: true, description: "LightGBM model file path." },
+  { key: "LIGHTGBM_MODEL_META_PATH", label: "LightGBM model metadata", category: "ML", type: "string", restart_required: true, description: "LightGBM model metadata path." }
+];
+
+const EDITABLE_KEYS = new Set(CONFIG_SCHEMA.map((entry) => entry.key));
 const CONFIG_STATUS_FILE = "config-status.json";
 
 function nowIso(): string {
@@ -178,6 +220,31 @@ function validateBoolean(value: string): string | null {
 
 function normalizeBooleanValue(value: string): string {
   return value.toLowerCase() === "true" ? "true" : "false";
+}
+
+function validateUrl(value: string): string | null {
+  if (value.trim() === "" || value.trim() === "*") {
+    return null;
+  }
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:"
+      ? null
+      : "Expected an http or https URL.";
+  } catch {
+    return "Expected a valid URL.";
+  }
+}
+
+function validateIpAddress(value: string): string | null {
+  if (value.trim() === "") {
+    return null;
+  }
+  return /^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}$/u.test(
+    value
+  )
+    ? null
+    : "Expected a valid IPv4 address.";
 }
 
 function command(
@@ -332,57 +399,126 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
     return parseEnvText(fs.readFileSync(this.envPath(), "utf8")).values;
   }
 
-  private effectiveConfigValues(): Record<string, string> {
-    const disk = this.readEnvValues();
-    const detected = detectSystemIps();
-    const hostIp = disk.BACKEND_HOST_IP?.trim() || detected.primary || "127.0.0.1";
-    const port = disk.PORT?.trim() || String(this.config.port);
-    const localUrl = disk.BACKEND_LOCAL_URL?.trim() || `http://127.0.0.1:${port}`;
-    const publicUrl =
-      disk.BACKEND_PUBLIC_URL?.trim() || `http://${hostIp}:${port}`;
+  private getOverrideState(
+    disk: Record<string, string>,
+    key: string
+  ): { enabled: boolean; value: string } {
+    const enabledKey = `${key}_OVERRIDE_ENABLED`;
+    const valueKey = `${key}_OVERRIDE`;
+    if (enabledKey in disk || valueKey in disk) {
+      return {
+        enabled: normalizeBooleanValue(disk[enabledKey] ?? "false") === "true",
+        value: disk[valueKey] ?? ""
+      };
+    }
 
+    const legacyValue = disk[key]?.trim() ?? "";
     return {
+      enabled: legacyValue.length > 0,
+      value: legacyValue
+    };
+  }
+
+  private getDetectedValue(
+    key: string,
+    disk: Record<string, string>,
+    effectiveSoFar: Record<string, string> = {}
+  ): string | undefined {
+    const detected = detectSystemIps();
+    const port = disk.PORT?.trim() || effectiveSoFar.PORT || String(this.config.port);
+    const hostIp =
+      effectiveSoFar.BACKEND_HOST_IP || detected.detectedDefault || "127.0.0.1";
+
+    if (key === "BACKEND_HOST_IP") {
+      return detected.detectedDefault;
+    }
+    if (key === "BACKEND_PUBLIC_URL") {
+      return `http://${hostIp}:${port}`;
+    }
+    if (key === "BACKEND_LOCAL_URL") {
+      return `http://127.0.0.1:${port}`;
+    }
+    if (key === "BACKEND_BASE_URL") {
+      return effectiveSoFar.BACKEND_PUBLIC_URL || `http://${hostIp}:${port}`;
+    }
+    return undefined;
+  }
+
+  private getEffectiveValue(
+    key: string,
+    disk: Record<string, string>,
+    effectiveSoFar: Record<string, string> = {}
+  ): string {
+    const schema = CONFIG_SCHEMA.find((entry) => entry.key === key);
+    const detected = schema?.automated
+      ? this.getDetectedValue(key, disk, effectiveSoFar)
+      : undefined;
+    if (schema?.automated) {
+      const override = this.getOverrideState(disk, key);
+      return override.enabled ? override.value : detected ?? "";
+    }
+
+    const fallback: Record<string, string> = {
       PORT: String(this.config.port),
       HOST: this.config.host,
-      BACKEND_HOST_IP: hostIp,
-      BACKEND_PUBLIC_URL: publicUrl,
-      BACKEND_LOCAL_URL: localUrl,
       DATABASE_URL: this.config.databaseUrl,
       PG_BOOTSTRAP_URL: this.config.pgBootstrapUrl,
       CORS_ALLOW_ORIGIN: this.config.allowedOrigin,
-      POSTGRES_DB: disk.POSTGRES_DB ?? "tichu",
-      POSTGRES_USER: disk.POSTGRES_USER ?? "tichu",
-      POSTGRES_PORT: disk.POSTGRES_PORT ?? "54329",
+      POSTGRES_DB: "tichu",
+      POSTGRES_USER: "tichu",
+      POSTGRES_PORT: "54329",
       AUTO_BOOTSTRAP_DATABASE: String(this.config.autoBootstrapDatabase),
       AUTO_MIGRATE: String(this.config.autoMigrate),
-      BACKEND_BASE_URL: this.config.backendBaseUrl,
       ENABLE_DESTRUCTIVE_ADMIN_ENDPOINTS: String(
         this.config.destructiveAdminEndpointsEnabled
       ),
       ENABLE_ADMIN_SIM_CONTROL: String(this.config.adminSimControlEnabled),
-      ENABLE_RUNTIME_ADMIN_CONTROL: String(this.config.runtimeAdminControlEnabled),
       SIM_CONTROLLER_RUNTIME_DIR: this.config.simControllerRuntimeDir,
-      AUTO_UPDATE_ON_START: disk.AUTO_UPDATE_ON_START ?? "true",
-      GIT_BRANCH: disk.GIT_BRANCH ?? "main",
-      REPO_URL: disk.REPO_URL ?? "https://github.com/NeonButrfly/tichuml.git",
+      AUTO_UPDATE_ON_START: "true",
+      GIT_BRANCH: "main",
+      REPO_URL: "https://github.com/NeonButrfly/tichuml.git",
       PYTHON_EXECUTABLE: this.config.pythonExecutable,
       LIGHTGBM_INFER_SCRIPT: this.config.lightgbmInferScript,
       LIGHTGBM_MODEL_PATH: this.config.lightgbmModelPath,
       LIGHTGBM_MODEL_META_PATH: this.config.lightgbmModelMetaPath
     };
+    return disk[key] ?? fallback[key] ?? "";
+  }
+
+  private effectiveConfigValues(): Record<string, string> {
+    const disk = this.readEnvValues();
+    const effective: Record<string, string> = {};
+    for (const entry of CONFIG_SCHEMA) {
+      effective[entry.key] = this.getEffectiveValue(entry.key, disk, effective);
+    }
+    return effective;
   }
 
   private runtimeDiffersFromDisk(): boolean {
     const disk = this.readEnvValues();
     const effective = this.effectiveConfigValues();
-    return Object.entries(effective).some(([key, value]) =>
-      key in disk ? disk[key] !== value : false
-    );
+    return CONFIG_SCHEMA.some((entry) => {
+      if (entry.automated) {
+        const override = this.getOverrideState(disk, entry.key);
+        return override.enabled && override.value !== effective[entry.key];
+      }
+      return entry.restart_required && entry.key in disk
+        ? disk[entry.key] !== effective[entry.key]
+        : false;
+    });
   }
 
   private pendingRestart(): boolean {
     const status = readJsonFile<{ pending_restart?: boolean }>(this.configStatusPath());
     return status?.pending_restart === true || this.runtimeDiffersFromDisk();
+  }
+
+  async isAdminSafetyLocked(): Promise<boolean> {
+    const disk = this.readEnvValues();
+    const raw = disk.ENABLE_RUNTIME_ADMIN_CONTROL;
+    return raw === undefined
+      ? !this.config.runtimeAdminControlEnabled
+      : normalizeBooleanValue(raw) !== "true";
   }
 
   async status(): Promise<RuntimeAdminStatus> {
@@ -392,6 +528,7 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
     const diskEnv = this.readEnvValues();
     const effectiveConfig = this.effectiveConfigValues();
     const detectedIps = detectSystemIps();
+    const adminSafetyLocked = await this.isAdminSafetyLocked();
     const localBase = `http://127.0.0.1:${this.config.port}`;
     const dockerVersion = await commandText("docker", ["--version"]);
     const composeVersion = compose
@@ -426,6 +563,10 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
 
     return {
       checked_at: nowIso(),
+      admin_safety: {
+        locked: adminSafetyLocked,
+        blocked_actions: adminSafetyLocked ? BLOCKED_WHEN_LOCKED : []
+      },
       backend: {
         running: pid !== null,
         pid,
@@ -473,10 +614,16 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
         repo_root: this.config.repoRoot,
         backend_public_url: effectiveConfig.BACKEND_PUBLIC_URL ?? this.config.backendBaseUrl,
         backend_local_url: effectiveConfig.BACKEND_LOCAL_URL ?? localBase,
-        backend_base_url: this.config.backendBaseUrl,
+        backend_base_url: effectiveConfig.BACKEND_BASE_URL ?? this.config.backendBaseUrl,
+        detected_ethernet: detectedIps.detectedEthernet,
+        detected_wireless: detectedIps.detectedWireless,
+        detected_default: detectedIps.detectedDefault,
         detected_primary_ip: detectedIps.primary,
         detected_system_ips: detectedIps.addresses,
-        backend_host_ip_override: diskEnv.BACKEND_HOST_IP ?? null,
+        backend_host_ip_override: this.getOverrideState(diskEnv, "BACKEND_HOST_IP")
+          .enabled
+          ? this.getOverrideState(diskEnv, "BACKEND_HOST_IP").value
+          : null,
         sim_controller_runtime_dir: this.config.simControllerRuntimeDir,
         update_status_file: path.join(this.runtimeDir(), "backend-update-status.env"),
         update_status_json_file: this.updateStatusJsonPath(),
@@ -506,25 +653,49 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
       env_file: this.envPath(),
       effective,
       detected: {
+        detectedEthernet: detected.detectedEthernet,
+        detectedWireless: detected.detectedWireless,
+        detectedDefault: detected.detectedDefault,
         primary_ip: detected.primary,
         system_ips: detected.addresses
       },
-      entries: EDITABLE_ENV.map((entry) => ({
-        key: entry.key,
-        value: disk[entry.key] ?? (entry.key === "BACKEND_HOST_IP" ? "" : effective[entry.key] ?? ""),
-        effective_value: effective[entry.key] ?? "",
-        detected_value:
-          entry.key === "BACKEND_HOST_IP"
-            ? detected.primary ?? ""
-            : entry.key === "BACKEND_PUBLIC_URL"
-              ? `http://${disk.BACKEND_HOST_IP?.trim() || detected.primary || "127.0.0.1"}:${disk.PORT?.trim() || String(this.config.port)}`
-              : undefined,
-        overridden: entry.key in disk && (disk[entry.key] ?? "").length > 0,
-        editable: true,
-        restart_required: entry.restart_required,
-        description: entry.description,
-        input: entry.input ?? "text"
-      })),
+      entries: CONFIG_SCHEMA.map((entry) => {
+        const override = entry.automated
+          ? this.getOverrideState(disk, entry.key)
+          : { enabled: false, value: "" };
+        const detectedValue = entry.automated
+          ? this.getDetectedValue(entry.key, disk, effective)
+          : undefined;
+        const savedValue = entry.automated
+          ? override.value
+          : disk[entry.key] ?? effective[entry.key] ?? "";
+        const effectiveValue = effective[entry.key] ?? "";
+        return {
+          key: entry.key,
+          label: entry.label,
+          category: entry.category,
+          type: entry.type,
+          editable: entry.type !== "derived",
+          requiresRestart: entry.restart_required,
+          description: entry.description,
+          savedValue,
+          effectiveValue,
+          detectedValue,
+          overrideEnabled: entry.automated ? override.enabled : true,
+          overrideValue: override.value,
+          value: savedValue,
+          effective_value: effectiveValue,
+          detected_value: detectedValue,
+          overridden: entry.automated ? override.enabled : true,
+          restart_required: entry.restart_required,
+          input:
+            entry.type === "boolean"
+              ? "boolean"
+              : entry.type === "number"
+                ? "number"
+                : "text"
+        };
+      }),
       pending_restart: this.pendingRestart(),
       runtime_differs_from_disk_config: this.runtimeDiffersFromDisk()
     };
@@ -542,20 +713,50 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
       if (!EDITABLE_KEYS.has(key)) {
         throw new Error(`Unsupported config key: ${key}`);
       }
-      if (typeof rawValue !== "string") {
+      const metadata = CONFIG_SCHEMA.find((entry) => entry.key === key);
+      const structured =
+        typeof rawValue === "object" && rawValue !== null && !Array.isArray(rawValue)
+          ? (rawValue as Record<string, unknown>)
+          : null;
+      const overrideEnabled = structured
+        ? structured.overrideEnabled === true
+        : metadata?.automated
+          ? true
+          : false;
+      const valueSource = structured
+        ? structured.overrideValue ?? structured.savedValue ?? ""
+        : rawValue;
+      if (typeof valueSource !== "string") {
         throw new Error(`Config value for ${key} must be a string.`);
       }
-      if (/[\0\r\n]/u.test(rawValue)) {
+      if (/[\0\r\n]/u.test(valueSource)) {
         throw new Error(`Config value for ${key} cannot contain newlines.`);
       }
-      const metadata = EDITABLE_ENV.find((entry) => entry.key === key);
-      const validationError = metadata?.validate?.(rawValue) ?? null;
+      const validationError =
+        metadata?.automated && !overrideEnabled
+          ? null
+          : metadata?.validate?.(valueSource) ?? null;
       if (validationError) {
         throw new Error(`${key}: ${validationError}`);
       }
       const value =
-        metadata?.input === "boolean" ? normalizeBooleanValue(rawValue) : rawValue;
-      if ((nextValues[key] ?? "") !== value) {
+        metadata?.type === "boolean" ? normalizeBooleanValue(valueSource) : valueSource;
+      if (metadata?.automated) {
+        const enabledKey = `${key}_OVERRIDE_ENABLED`;
+        const valueKey = `${key}_OVERRIDE`;
+        if ((nextValues[enabledKey] ?? "false") !== String(overrideEnabled)) {
+          nextValues[enabledKey] = String(overrideEnabled);
+          changedKeys.push(key);
+        }
+        if ((nextValues[valueKey] ?? "") !== value) {
+          nextValues[valueKey] = value;
+          if (!changedKeys.includes(key)) changedKeys.push(key);
+        }
+        if (key in nextValues && nextValues[key] !== "") {
+          nextValues[key] = "";
+          if (!changedKeys.includes(key)) changedKeys.push(key);
+        }
+      } else if ((nextValues[key] ?? "") !== value) {
         nextValues[key] = value;
         changedKeys.push(key);
       }
@@ -571,13 +772,20 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
         writeEnvText(
           parsed,
           nextValues,
-          EDITABLE_ENV.map((entry) => entry.key)
+          [
+            ...CONFIG_SCHEMA.map((entry) => entry.key),
+            ...CONFIG_SCHEMA.filter((entry) => entry.automated).flatMap((entry) => [
+              `${entry.key}_OVERRIDE_ENABLED`,
+              `${entry.key}_OVERRIDE`
+            ]),
+            "ENABLE_RUNTIME_ADMIN_CONTROL"
+          ]
         )
       );
     }
 
     const restartRequired = changedKeys.some(
-      (key) => EDITABLE_ENV.find((entry) => entry.key === key)?.restart_required
+      (key) => CONFIG_SCHEMA.find((entry) => entry.key === key)?.restart_required
     );
     fs.mkdirSync(this.runtimeDir(), { recursive: true });
     writeFileAtomic(
@@ -607,6 +815,54 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
     };
   }
 
+  async setAdminSafetyLocked(locked: boolean): Promise<RuntimeSafetyResult> {
+    const currentText = fs.existsSync(this.envPath())
+      ? fs.readFileSync(this.envPath(), "utf8")
+      : "";
+    const parsed = parseEnvText(currentText);
+    const nextValues = {
+      ...parsed.values,
+      ENABLE_RUNTIME_ADMIN_CONTROL: String(!locked)
+    };
+    writeFileAtomic(
+      this.envPath(),
+      writeEnvText(
+        parsed,
+        nextValues,
+        [
+          ...CONFIG_SCHEMA.map((entry) => entry.key),
+          ...CONFIG_SCHEMA.filter((entry) => entry.automated).flatMap((entry) => [
+            `${entry.key}_OVERRIDE_ENABLED`,
+            `${entry.key}_OVERRIDE`
+          ]),
+          "ENABLE_RUNTIME_ADMIN_CONTROL"
+        ]
+      )
+    );
+    fs.mkdirSync(this.runtimeDir(), { recursive: true });
+    writeFileAtomic(
+      this.configStatusPath(),
+      `${JSON.stringify(
+        {
+          pending_restart: true,
+          changed_keys: ["ENABLE_RUNTIME_ADMIN_CONTROL"],
+          updated_at: nowIso()
+        },
+        null,
+        2
+      )}\n`
+    );
+
+    return {
+      accepted: true,
+      locked,
+      message: locked
+        ? "Admin safety lock enabled. Runtime actions are blocked."
+        : "Admin safety lock disabled. Runtime actions are available.",
+      config: await this.readConfig()
+    };
+  }
+
   async runAction(action: string): Promise<RuntimeActionResult> {
     const supportedActions = new Set([
       "start_backend",
@@ -622,6 +878,11 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
 
     if (!supportedActions.has(action)) {
       throw new Error(`Unsupported runtime action: ${action}`);
+    }
+    if (await this.isAdminSafetyLocked()) {
+      throw new Error(
+        "Admin safety lock is enabled. Disable the lock before running runtime actions."
+      );
     }
 
     fs.mkdirSync(this.runtimeDir(), { recursive: true });

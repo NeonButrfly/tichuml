@@ -137,6 +137,32 @@ Prompt logs here capture backend/platform prompt intent only. GitHub issue state
 - Status:
   Lives in GitHub, not here.
 
+## 2026-04-22 - Runtime control panel typed schema and safety lock follow-up
+
+- Prompt signal:
+  The current `/admin/control` page still exposes a `CLEAR_TICHU_DB` token field,
+  can wipe edits during polling, uses raw env names without enough typing, and
+  needs an Admin Safety lock plus automated-field override toggles.
+- Interpreted requirement:
+  Issue [#40](https://github.com/NeonButrfly/tichuml/issues/40) also covers the
+  typed-config follow-up: config payloads must separate saved form state,
+  effective runtime values, detected values, and override state; polling must not
+  overwrite dirty form edits; action-style env values must become real buttons;
+  Admin Safety must persist and block runtime actions when locked; automated
+  network fields must store only override flags/values while using centralized
+  detected/effective values everywhere.
+- Affected systems:
+  `apps/server/src/config`, `apps/server/src/routes/router.ts`,
+  `apps/server/src/services/runtime-admin-service.ts`,
+  `apps/server/src/services/runtime-control-panel.ts`,
+  `scripts/runtime-config.mjs`, `.env.example`, docs, backend integration tests.
+- Linked GitHub issue:
+  [#40](https://github.com/NeonButrfly/tichuml/issues/40)
+- Milestone:
+  [Linux Backend Deployment + ML Host](https://github.com/NeonButrfly/tichuml/milestone/25)
+- Status:
+  Lives in GitHub, not here.
+
 ## 2026-04-21 - Simulator controller admin dashboard routes return 404
 
 - Prompt signal:

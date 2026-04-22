@@ -81,19 +81,48 @@ function shellQuote(value) {
 }
 
 function detectPrimaryIp() {
-  for (const entries of Object.values(os.networkInterfaces())) {
+  const ethernet = [];
+  const wireless = [];
+  const fallback = [];
+  for (const [name, entries] of Object.entries(os.networkInterfaces())) {
+    const normalizedName = name.toLowerCase();
+    if (/^(docker|br-|veth|virbr|vmnet|tun|tap)/u.test(normalizedName)) {
+      continue;
+    }
     for (const entry of entries ?? []) {
-      if (entry.family === "IPv4" && !entry.internal) {
-        return entry.address;
+      if (entry.family !== "IPv4") continue;
+      if (entry.internal) {
+        fallback.push(entry.address);
+      } else if (/^(eth|en|eno|ens)/u.test(normalizedName)) {
+        ethernet.push(entry.address);
+      } else if (/^(wlan|wlp|wifi|wi-fi)/u.test(normalizedName)) {
+        wireless.push(entry.address);
+      } else {
+        fallback.push(entry.address);
       }
     }
   }
-  return "127.0.0.1";
+  return ethernet[0] ?? wireless[0] ?? fallback.find((ip) => ip !== "127.0.0.1") ?? "127.0.0.1";
 }
 
 function defaults(values) {
   const port = values.PORT || "4310";
-  const hostIp = values.BACKEND_HOST_IP || detectPrimaryIp();
+  const hostIp =
+    values.BACKEND_HOST_IP_OVERRIDE_ENABLED === "true"
+      ? values.BACKEND_HOST_IP_OVERRIDE || values.BACKEND_HOST_IP || detectPrimaryIp()
+      : values.BACKEND_HOST_IP || detectPrimaryIp();
+  const publicUrl =
+    values.BACKEND_PUBLIC_URL_OVERRIDE_ENABLED === "true"
+      ? values.BACKEND_PUBLIC_URL_OVERRIDE || values.BACKEND_PUBLIC_URL || `http://${hostIp}:${port}`
+      : values.BACKEND_PUBLIC_URL || `http://${hostIp}:${port}`;
+  const localUrl =
+    values.BACKEND_LOCAL_URL_OVERRIDE_ENABLED === "true"
+      ? values.BACKEND_LOCAL_URL_OVERRIDE || values.BACKEND_LOCAL_URL || `http://127.0.0.1:${port}`
+      : values.BACKEND_LOCAL_URL || `http://127.0.0.1:${port}`;
+  const baseUrl =
+    values.BACKEND_BASE_URL_OVERRIDE_ENABLED === "true"
+      ? values.BACKEND_BASE_URL_OVERRIDE || values.BACKEND_BASE_URL || publicUrl
+      : values.BACKEND_BASE_URL || publicUrl;
   return {
     ...values,
     REPO_URL: "https://github.com/NeonButrfly/tichuml.git",
@@ -102,8 +131,9 @@ function defaults(values) {
     PORT: port,
     HOST: "0.0.0.0",
     BACKEND_HOST_IP: hostIp,
-    BACKEND_PUBLIC_URL: `http://${hostIp}:${port}`,
-    BACKEND_LOCAL_URL: `http://127.0.0.1:${port}`,
+    BACKEND_PUBLIC_URL: publicUrl,
+    BACKEND_LOCAL_URL: localUrl,
+    BACKEND_BASE_URL: baseUrl,
     POSTGRES_USER: "tichu",
     POSTGRES_DB: "tichu",
     POSTGRES_PORT: "54329",

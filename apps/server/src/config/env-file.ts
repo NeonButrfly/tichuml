@@ -158,23 +158,53 @@ export function writeFileAtomic(filePath: string, contents: string): void {
 }
 
 export type DetectedIpInfo = {
+  detectedEthernet: string | null;
+  detectedWireless: string | null;
+  detectedDefault: string;
   primary: string | null;
   addresses: string[];
 };
 
 export function detectSystemIps(): DetectedIpInfo {
-  const addresses: string[] = [];
-  for (const entries of Object.values(os.networkInterfaces())) {
+  const ethernet: string[] = [];
+  const wireless: string[] = [];
+  const fallback: string[] = [];
+
+  for (const [name, entries] of Object.entries(os.networkInterfaces())) {
+    const normalizedName = name.toLowerCase();
+    if (/^(docker|br-|veth|virbr|vmnet|tun|tap)/u.test(normalizedName)) {
+      continue;
+    }
     for (const entry of entries ?? []) {
-      if (entry.family === "IPv4" && !entry.internal) {
-        addresses.push(entry.address);
+      if (entry.family !== "IPv4") {
+        continue;
+      }
+
+      if (entry.internal) {
+        fallback.push(entry.address);
+        continue;
+      }
+
+      if (/^(eth|en|eno|ens)/u.test(normalizedName)) {
+        ethernet.push(entry.address);
+      } else if (/^(wlan|wlp|wifi|wi-fi)/u.test(normalizedName)) {
+        wireless.push(entry.address);
+      } else {
+        fallback.push(entry.address);
       }
     }
   }
 
-  const unique = [...new Set(addresses)];
+  const unique = [...new Set([...ethernet, ...wireless, ...fallback])];
+  const detectedEthernet = ethernet[0] ?? null;
+  const detectedWireless = wireless[0] ?? null;
+  const detectedDefault =
+    detectedEthernet ?? detectedWireless ?? unique.find((ip) => ip !== "127.0.0.1") ?? "127.0.0.1";
   return {
-    primary: unique[0] ?? null,
+    detectedEthernet,
+    detectedWireless,
+    detectedDefault,
+    primary: detectedDefault,
     addresses: unique
   };
 }

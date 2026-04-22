@@ -7,7 +7,7 @@ import {
   normalizeBackendBaseUrl,
   parseBooleanEnv
 } from "@tichuml/shared";
-import { parseEnvFile } from "./env-file.js";
+import { detectSystemIps, parseEnvFile } from "./env-file.js";
 
 export type ServerConfig = {
   port: number;
@@ -95,6 +95,14 @@ export function loadServerConfig(
   const portValue = Number(mergedEnv.PORT ?? DEFAULT_SERVER_PORT);
   const databaseUrl = mergedEnv.DATABASE_URL ?? defaultDatabaseUrl;
   const port = Number.isFinite(portValue) ? portValue : DEFAULT_SERVER_PORT;
+  const detected = detectSystemIps();
+  const detectedPublicUrl = `http://${detected.detectedDefault}:${port}`;
+  const backendBaseUrl =
+    parseBooleanEnv(mergedEnv.BACKEND_BASE_URL_OVERRIDE_ENABLED, false)
+      ? mergedEnv.BACKEND_BASE_URL_OVERRIDE?.trim() ||
+        mergedEnv.BACKEND_BASE_URL?.trim() ||
+        detectedPublicUrl
+      : mergedEnv.BACKEND_BASE_URL?.trim() || detectedPublicUrl;
 
   return {
     port,
@@ -109,9 +117,7 @@ export function loadServerConfig(
       true
     ),
     autoMigrate: parseBooleanEnv(mergedEnv.AUTO_MIGRATE, true),
-    backendBaseUrl: normalizeBackendBaseUrl(
-      mergedEnv.BACKEND_BASE_URL ?? `http://localhost:${port}`
-    ),
+    backendBaseUrl: normalizeBackendBaseUrl(backendBaseUrl),
     destructiveAdminEndpointsEnabled: parseBooleanEnv(
       mergedEnv.ENABLE_DESTRUCTIVE_ADMIN_ENDPOINTS,
       false

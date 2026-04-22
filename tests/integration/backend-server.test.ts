@@ -333,21 +333,38 @@ class InMemorySimController implements SimControllerService {
 }
 
 class InMemoryRuntimeAdmin implements RuntimeAdminService {
+  constructor(private readonly locked = false) {}
+
   config: RuntimeConfigPayload = {
     env_file: "C:/tichu/tichuml/.env",
     effective: { PORT: "4310" },
-    detected: { primary_ip: "192.168.50.32", system_ips: ["192.168.50.32"] },
+    detected: {
+      detectedEthernet: "192.168.50.32",
+      detectedWireless: null,
+      detectedDefault: "192.168.50.32",
+      primary_ip: "192.168.50.32",
+      system_ips: ["192.168.50.32"]
+    },
     entries: [
       {
         key: "PORT",
+        label: "Port",
+        category: "Network",
+        type: "number",
+        editable: true,
+        requiresRestart: true,
+        description: "Backend HTTP port.",
+        savedValue: "4310",
+        effectiveValue: "4310",
+        detectedValue: undefined,
+        overrideEnabled: true,
+        overrideValue: "",
         value: "4310",
         effective_value: "4310",
         detected_value: undefined,
         overridden: true,
-        editable: true,
         restart_required: true,
-        description: "Backend HTTP port.",
-        input: "text"
+        input: "number"
       }
     ],
     pending_restart: false,
@@ -357,6 +374,10 @@ class InMemoryRuntimeAdmin implements RuntimeAdminService {
   async status(): Promise<RuntimeAdminStatus> {
     return {
       checked_at: new Date().toISOString(),
+      admin_safety: {
+        locked: this.locked,
+        blocked_actions: this.locked ? ["restart_backend"] : []
+      },
       backend: {
         running: true,
         pid: 1234,
@@ -390,6 +411,9 @@ class InMemoryRuntimeAdmin implements RuntimeAdminService {
         backend_public_url: "http://localhost:4310",
         backend_local_url: "http://127.0.0.1:4310",
         backend_base_url: "http://localhost:4310",
+        detected_ethernet: "192.168.50.32",
+        detected_wireless: null,
+        detected_default: "192.168.50.32",
         detected_primary_ip: "192.168.50.32",
         detected_system_ips: ["192.168.50.32"],
         backend_host_ip_override: null,
@@ -435,6 +459,19 @@ class InMemoryRuntimeAdmin implements RuntimeAdminService {
       restart_required: true,
       config: this.config
     };
+  }
+
+  async setAdminSafetyLocked(locked: boolean) {
+    return {
+      accepted: true,
+      locked,
+      message: locked ? "Admin safety lock enabled." : "Admin safety lock disabled.",
+      config: this.config
+    };
+  }
+
+  async isAdminSafetyLocked(): Promise<boolean> {
+    return this.locked;
   }
 
   async runAction(action: string): Promise<RuntimeActionResult> {
@@ -632,21 +669,24 @@ describe("backend foundation server routes", () => {
   });
 
   it("guards runtime mutating actions behind runtime admin safeguards", async () => {
-    await withServer(async ({ baseUrl }) => {
-      const response = await fetch(`${baseUrl}/api/admin/runtime/action`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "restart_backend" })
-      });
+    await withServer(
+      async ({ baseUrl }) => {
+        const response = await fetch(`${baseUrl}/api/admin/runtime/action`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "restart_backend" })
+        });
 
-      expect(response.status).toBe(400);
-      const payload = (await response.json()) as {
-        validation_errors: Array<{ path: string }>;
-      };
-      expect(payload.validation_errors.map((issue) => issue.path)).toContain(
-        "ENABLE_RUNTIME_ADMIN_CONTROL"
-      );
-    });
+        expect(response.status).toBe(400);
+        const payload = (await response.json()) as {
+          validation_errors: Array<{ path: string }>;
+        };
+        expect(payload.validation_errors.map((issue) => issue.path)).toContain(
+          "admin_safety"
+        );
+      },
+      { runtimeAdmin: new InMemoryRuntimeAdmin(true) }
+    );
   });
 
   it("runs runtime actions when safeguards are satisfied", async () => {
@@ -654,10 +694,7 @@ describe("backend foundation server routes", () => {
       async ({ baseUrl }) => {
         const response = await fetch(`${baseUrl}/api/admin/runtime/action`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-admin-confirm": "CLEAR_TICHU_DB"
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "restart_backend" })
         });
 
@@ -677,10 +714,7 @@ describe("backend foundation server routes", () => {
           `${baseUrl}/api/admin/runtime/actions/update-repo`,
           {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-admin-confirm": "CLEAR_TICHU_DB"
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({})
           }
         );
@@ -691,6 +725,47 @@ describe("backend foundation server routes", () => {
         expect(payload.action).toBe("update_repo");
       },
       { serverConfig: { runtimeAdminControlEnabled: true } }
+    );
+  });
+
+  it("requires explicit confirmation for clear database action", async () => {
+    await withServer(
+      async ({ baseUrl }) => {
+        const response = await fetch(
+          `${baseUrl}/api/admin/runtime/actions/clear-db`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({})
+          }
+        );
+
+        expect(response.status).toBe(400);
+        const payload = (await response.json()) as {
+          validation_errors: Array<{ path: string }>;
+        };
+        expect(payload.validation_errors.map((issue) => issue.path)).toContain(
+          "confirmed"
+        );
+      },
+      { serverConfig: { runtimeAdminControlEnabled: true } }
+    );
+  });
+
+  it("saves runtime config while admin safety is locked", async () => {
+    await withServer(
+      async ({ baseUrl }) => {
+        const response = await fetch(`${baseUrl}/api/admin/runtime/config`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ values: { PORT: "4311" } })
+        });
+
+        expect(response.status).toBe(200);
+        const payload = (await response.json()) as RuntimeConfigSaveResult;
+        expect(payload.accepted).toBe(true);
+      },
+      { runtimeAdmin: new InMemoryRuntimeAdmin(true) }
     );
   });
 

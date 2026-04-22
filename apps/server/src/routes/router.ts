@@ -237,30 +237,32 @@ async function assertSimAdminRequest(
   return issues.length === 0 ? { ok: true, body } : { ok: false, issues };
 }
 
-async function assertRuntimeAdminRequest(
+async function readRuntimeAdminBody(
   request: http.IncomingMessage,
-  config: ServerConfig
+): Promise<Record<string, unknown>> {
+  return (await readJsonBody(request)) as Record<string, unknown>;
+}
+
+async function assertRuntimeActionRequest(
+  request: http.IncomingMessage,
+  runtimeAdmin: RuntimeAdminService,
+  action: string | null
 ): Promise<{ ok: true; body: Record<string, unknown> } | { ok: false; issues: Array<{ path: string; message: string }> }> {
   const issues: Array<{ path: string; message: string }> = [];
   const body = (await readJsonBody(request)) as Record<string, unknown>;
-  const headerConfirm = request.headers["x-admin-confirm"];
-  const bodyConfirm = body.confirm;
-  const confirmed =
-    headerConfirm === ADMIN_CONFIRMATION_VALUE ||
-    bodyConfirm === ADMIN_CONFIRMATION_VALUE;
 
-  if (!config.runtimeAdminControlEnabled) {
+  if (await runtimeAdmin.isAdminSafetyLocked()) {
     issues.push({
-      path: "ENABLE_RUNTIME_ADMIN_CONTROL",
+      path: "admin_safety",
       message:
-        "Runtime admin mutating endpoints are disabled. Set ENABLE_RUNTIME_ADMIN_CONTROL=true for trusted operator use."
+        "Admin safety lock is enabled. Disable the lock before running runtime actions."
     });
   }
 
-  if (!confirmed) {
+  if (action === "clear_db" && body.confirmed !== true) {
     issues.push({
-      path: "x-admin-confirm",
-      message: `Expected x-admin-confirm or body.confirm to equal ${ADMIN_CONFIRMATION_VALUE}.`
+      path: "confirmed",
+      message: "Clear DB requires explicit confirmation."
     });
   }
 
@@ -323,13 +325,57 @@ export function createRouter({
         return;
       }
 
+      if (request.method === "POST" && url.pathname === "/api/admin/runtime/config") {
+        const body = await readRuntimeAdminBody(request);
+        const values =
+          typeof body.values === "object" &&
+          body.values !== null &&
+          !Array.isArray(body.values)
+            ? (body.values as Record<string, unknown>)
+            : body;
+        writeJson(
+          response,
+          200,
+          await runtimeAdmin.saveConfig(values),
+          config.allowedOrigin
+        );
+        return;
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/admin/runtime/safety") {
+        const body = await readRuntimeAdminBody(request);
+        if (typeof body.locked !== "boolean") {
+          badRequest(response, "Expected locked boolean.", config.allowedOrigin, [
+            { path: "locked", message: "Expected locked boolean." }
+          ]);
+          return;
+        }
+        if (body.locked === false && body.confirmed !== true) {
+          badRequest(response, "Unlock requires confirmation.", config.allowedOrigin, [
+            { path: "confirmed", message: "Expected confirmed=true when disabling the lock." }
+          ]);
+          return;
+        }
+        writeJson(
+          response,
+          200,
+          await runtimeAdmin.setAdminSafetyLocked(body.locked),
+          config.allowedOrigin
+        );
+        return;
+      }
+
       if (
         request.method === "POST" &&
-        (url.pathname === "/api/admin/runtime/config" ||
-          url.pathname === "/api/admin/runtime/action" ||
+        (url.pathname === "/api/admin/runtime/action" ||
           url.pathname.startsWith("/api/admin/runtime/actions/"))
       ) {
-        const guard = await assertRuntimeAdminRequest(request, config);
+        const action = url.pathname.startsWith("/api/admin/runtime/actions/")
+          ? url.pathname
+              .slice("/api/admin/runtime/actions/".length)
+              .replace(/-/gu, "_")
+          : null;
+        const guard = await assertRuntimeActionRequest(request, runtimeAdmin, action);
         if (!guard.ok) {
           badRequest(
             response,
@@ -340,26 +386,7 @@ export function createRouter({
           return;
         }
 
-        if (url.pathname === "/api/admin/runtime/config") {
-          const values =
-            typeof guard.body.values === "object" &&
-            guard.body.values !== null &&
-            !Array.isArray(guard.body.values)
-              ? (guard.body.values as Record<string, unknown>)
-              : guard.body;
-          writeJson(
-            response,
-            200,
-            await runtimeAdmin.saveConfig(values),
-            config.allowedOrigin
-          );
-          return;
-        }
-
-        if (url.pathname.startsWith("/api/admin/runtime/actions/")) {
-          const action = url.pathname
-            .slice("/api/admin/runtime/actions/".length)
-            .replace(/-/gu, "_");
+        if (action) {
           writeJson(
             response,
             202,
