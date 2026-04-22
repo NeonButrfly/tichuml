@@ -456,6 +456,17 @@ health_endpoint_ready() {
   [ "$status" = "200" ]
 }
 
+sim_dashboard_routes_ready() {
+  local route status
+  for route in /admin/sim /sim/control; do
+    status="$(curl_json_status GET "$BACKEND_LOCAL_URL$route" 2>/dev/null || true)"
+    if [ "$status" != "200" ]; then
+      log_warn "Simulator dashboard route $BACKEND_LOCAL_URL$route returned HTTP ${status:-unknown}"
+      return 1
+    fi
+  done
+}
+
 start_backend_background() {
   ensure_runtime_dirs
   if backend_running; then
@@ -476,6 +487,12 @@ start_backend_background() {
   while [ "$attempt" -lt 60 ]; do
     if health_endpoint_ready; then
       log_ok "Backend passed the /health check"
+      if sim_dashboard_routes_ready; then
+        log_ok "Simulator dashboard routes are reachable"
+      else
+        log_fail "Backend started, but simulator dashboard routes are not reachable. Run npm run build:web and restart the backend, or inspect $BACKEND_LOG_FILE."
+        exit 1
+      fi
       return
     fi
     attempt=$((attempt + 1))

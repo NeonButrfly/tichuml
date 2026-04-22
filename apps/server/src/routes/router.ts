@@ -155,7 +155,8 @@ function createServerManifest(config: ServerConfig) {
     telemetryDecisionEndpoint: TELEMETRY_DECISION_PATH,
     telemetryEventEndpoint: TELEMETRY_EVENT_PATH,
     decisionEndpoint: DECISION_REQUEST_PATH,
-    simControllerEndpoint: ADMIN_SIM_STATUS_PATH
+    simControllerEndpoint: ADMIN_SIM_STATUS_PATH,
+    simDashboardEndpoints: [...SIM_DASHBOARD_PATHS]
   };
 }
 

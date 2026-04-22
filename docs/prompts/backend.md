@@ -146,10 +146,12 @@ Prompt logs here capture backend/platform prompt intent only. GitHub issue state
   Issue [#39](https://github.com/NeonButrfly/tichuml/issues/39) tracks making the
   Linux backend host serve the built simulator controller dashboard at both
   operator entrypoints, including the Vite assets needed by direct browser
-  navigation on the backend origin.
+  navigation on the backend origin. Follow-up live validation showed the host can
+  remain on a running/stale process, so the Linux start/status flow must also
+  validate the dashboard routes after update/restart.
 - Affected systems:
   `apps/server`, `apps/web`, `scripts/backend-linux-common.sh`, simulator
-  dashboard docs, backend integration tests.
+  dashboard docs, backend integration tests, Linux status/start scripts.
 - Linked GitHub issue:
   [#39](https://github.com/NeonButrfly/tichuml/issues/39)
 - Milestone:

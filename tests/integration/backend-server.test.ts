@@ -479,6 +479,18 @@ afterEach(() => {
 });
 
 describe("backend foundation server routes", () => {
+  it("advertises simulator dashboard routes in the server manifest", async () => {
+    await withServer(async ({ baseUrl }) => {
+      const response = await fetch(`${baseUrl}/api/manifest`);
+
+      expect(response.status).toBe(200);
+      const payload = (await response.json()) as {
+        simDashboardEndpoints?: string[];
+      };
+      expect(payload.simDashboardEndpoints).toEqual(["/admin/sim", "/sim/control"]);
+    });
+  });
+
   it("rejects invalid telemetry decision payloads", async () => {
     await withServer(async ({ baseUrl }) => {
       const response = await fetch(`${baseUrl}/api/telemetry/decision`, {

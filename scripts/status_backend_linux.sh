@@ -22,6 +22,15 @@ http_status_reachable() {
   esac
 }
 
+http_status_ok() {
+  local method="$1"
+  local url="$2"
+  local body="${3:-}"
+  local status
+  status="$(curl_json_status "$method" "$url" "$body" 2>/dev/null || true)"
+  [ "$status" = "200" ]
+}
+
 print_update_status() {
   if [ ! -f "$BACKEND_UPDATE_STATUS_FILE" ]; then
     status_line "[WARN]" "No update status has been recorded yet."
@@ -161,6 +170,18 @@ main() {
     else
       status_line "[FAIL]" "/api/telemetry/event endpoint is not reachable"
     fi
+
+    if http_status_ok GET "$BACKEND_LOCAL_URL/admin/sim"; then
+      status_line "[OK]" "/admin/sim dashboard route is reachable"
+    else
+      status_line "[FAIL]" "/admin/sim dashboard route is not reachable"
+    fi
+
+    if http_status_ok GET "$BACKEND_LOCAL_URL/sim/control"; then
+      status_line "[OK]" "/sim/control dashboard route is reachable"
+    else
+      status_line "[FAIL]" "/sim/control dashboard route is not reachable"
+    fi
   else
     status_line "[WARN]" "Skipping HTTP endpoint checks because curl is missing"
   fi
@@ -175,6 +196,12 @@ main() {
     status_line "[OK]" "Node workspace dependencies exist"
   else
     status_line "[FAIL]" "Node workspace dependencies are missing"
+  fi
+
+  if [ -f "$BACKEND_REPO_ROOT/apps/web/dist/index.html" ]; then
+    status_line "[OK]" "Web dashboard bundle exists"
+  else
+    status_line "[FAIL]" "Web dashboard bundle is missing; recovery: run scripts/update_backend_linux.sh or npm run build:web"
   fi
 
   if [ -f "$BACKEND_REPO_ROOT/ml/model_registry/lightgbm_action_model.txt" ]; then
