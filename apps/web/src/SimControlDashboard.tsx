@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ADMIN_CONFIRMATION_VALUE,
   DEFAULT_BACKEND_BASE_URL,
+  normalizeBackendBaseUrl,
   type DecisionMode,
   type SimControllerRequestPayload,
   type SimControllerResponse,
@@ -9,7 +10,8 @@ import {
 } from "@tichuml/shared";
 import {
   getBackendSettingsDefaults,
-  loadBackendSettings
+  loadBackendSettings,
+  resolveBrowserBackendBaseUrl
 } from "./backend/settings";
 import {
   BackendRequestError,
@@ -29,16 +31,48 @@ type FormState = {
   confirmToken: string;
 };
 
+function resolveSameOriginBackendUrl(): string | null {
+  return resolveBrowserBackendBaseUrl(
+    typeof window === "undefined" ? undefined : window.location
+  );
+}
+
+function isLoopbackBackendUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return ["localhost", "127.0.0.1", "::1"].includes(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function shouldUseSameOriginDefault(
+  backendUrl: string,
+  sameOriginBackendUrl: string | null
+): sameOriginBackendUrl is string {
+  return (
+    sameOriginBackendUrl !== null &&
+    normalizeBackendBaseUrl(backendUrl) === DEFAULT_BACKEND_BASE_URL
+  );
+}
+
 function createInitialForm(): FormState {
   const settings =
     typeof window === "undefined"
       ? getBackendSettingsDefaults()
       : loadBackendSettings();
+  const sameOriginBackendUrl = resolveSameOriginBackendUrl();
+  const backendUrl = shouldUseSameOriginDefault(
+    settings.backendBaseUrl,
+    sameOriginBackendUrl
+  )
+    ? sameOriginBackendUrl
+    : settings.backendBaseUrl || DEFAULT_BACKEND_BASE_URL;
   return {
     provider: settings.decisionMode,
     gamesPerBatch: 1,
     telemetryEnabled: settings.telemetryEnabled,
-    backendUrl: settings.backendBaseUrl || DEFAULT_BACKEND_BASE_URL,
+    backendUrl,
     seedPrefix: "controller",
     sleepSeconds: 5,
     workerCount: 1,
@@ -69,6 +103,30 @@ function formatRelative(ts: string | null): string {
     return ts;
   }
   return `${ageSeconds}s ago`;
+}
+
+function getNetworkFallbackBackendUrl(
+  backendUrl: string,
+  caught: unknown
+): string | null {
+  if (!(caught instanceof BackendRequestError) || caught.kind !== "network") {
+    return null;
+  }
+
+  const sameOriginBackendUrl = resolveSameOriginBackendUrl();
+  if (!sameOriginBackendUrl) {
+    return null;
+  }
+
+  const normalizedBackendUrl = normalizeBackendBaseUrl(backendUrl);
+  if (
+    normalizedBackendUrl === sameOriginBackendUrl ||
+    !isLoopbackBackendUrl(normalizedBackendUrl)
+  ) {
+    return null;
+  }
+
+  return sameOriginBackendUrl;
 }
 
 function StatePill({ state, stale }: { state: string; stale?: boolean }) {
@@ -109,9 +167,28 @@ export function SimControlDashboard() {
   }, [form.confirmToken, pendingAction]);
 
   const refresh = useCallback(async () => {
+    let statusBackendUrl = form.backendUrl;
     try {
       setError(null);
-      const response = await getSimControllerStatus(form.backendUrl);
+      let response: SimControllerResponse;
+      try {
+        response = await getSimControllerStatus(statusBackendUrl);
+      } catch (caught) {
+        const fallbackBackendUrl = getNetworkFallbackBackendUrl(
+          statusBackendUrl,
+          caught
+        );
+        if (!fallbackBackendUrl) {
+          throw caught;
+        }
+
+        statusBackendUrl = fallbackBackendUrl;
+        setForm((current) => ({
+          ...current,
+          backendUrl: fallbackBackendUrl
+        }));
+        response = await getSimControllerStatus(fallbackBackendUrl);
+      }
       setStatus(response.runtime_state);
       setFeedback(response);
       setLastUpdatedAt(new Date().toISOString());
@@ -127,7 +204,7 @@ export function SimControlDashboard() {
     }
 
     try {
-      await testBackendHealth(form.backendUrl);
+      await testBackendHealth(statusBackendUrl);
       setBackendReachable(true);
     } catch {
       setBackendReachable(false);

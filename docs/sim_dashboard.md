@@ -25,7 +25,9 @@ admin controller API used by `scripts/sim-controller.sh`.
 When the dashboard is loaded directly from the backend host on port `4310`, the
 default Backend URL is the current browser origin. For example,
 `https://192.168.50.196:4310/admin/sim` defaults controller API calls to
-`https://192.168.50.196:4310`, not to the browser machine's `localhost`.
+`https://192.168.50.196:4310`, not to the browser machine's `localhost`. If a
+stale saved localhost default causes a network failure, the dashboard retries
+the status request once against the current host origin and updates the field.
 
 Always-visible controls:
 

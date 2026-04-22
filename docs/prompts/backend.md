@@ -153,7 +153,8 @@ Prompt logs here capture backend/platform prompt intent only. GitHub issue state
   remote host, it exposed a second defect: the dashboard defaulted API calls to
   `http://localhost:4310`, which is wrong for remote browsers. The dashboard
   default backend URL must use the current `:4310` page origin when served from
-  the backend host.
+  the backend host, and should recover from a stale saved localhost URL after a
+  network failure.
 - Affected systems:
   `apps/server`, `apps/web`, `scripts/backend-linux-common.sh`, simulator
   dashboard docs, backend integration tests, Linux status/start scripts.
