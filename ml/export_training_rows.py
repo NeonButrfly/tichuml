@@ -65,9 +65,27 @@ def build_query(phase: str | None, provider: str | None, limit: int | None) -> t
             actor_seat,
             decision_index,
             policy_source,
+            provider_used,
+            requested_provider,
+            fallback_used,
+            worker_id,
+            legal_action_count,
+            chosen_action_is_legal,
+            has_explanation,
+            has_candidate_scores,
+            has_state_features,
+            explanation_quality_level,
+            chosen_action_type,
+            state_hash,
+            legal_actions_hash,
+            chosen_action_hash,
             state_raw,
+            state_norm,
             legal_actions,
             chosen_action,
+            explanation,
+            candidate_scores,
+            state_features,
             metadata
         FROM decisions
         {where_clause}
@@ -92,6 +110,10 @@ def read_decisions(
 
 
 def extract_explanation_metadata(decision: dict[str, Any]) -> dict[str, Any]:
+    explanation = decision.get("explanation")
+    if isinstance(explanation, dict):
+        return explanation
+
     metadata = decision.get("metadata")
     if not isinstance(metadata, dict):
         return {}
@@ -108,10 +130,16 @@ def extract_explanation_metadata(decision: dict[str, Any]) -> dict[str, Any]:
 
 
 def build_candidate_feature_map(
-    explanation: dict[str, Any]
+    explanation: dict[str, Any],
+    decision: dict[str, Any]
 ) -> tuple[dict[str, Any], dict[tuple[Any, ...], dict[str, Any]]]:
-    state_features = explanation.get("stateFeatures")
-    candidate_scores = explanation.get("candidateScores")
+    state_features = decision.get("state_features")
+    if not isinstance(state_features, dict):
+        state_features = explanation.get("stateFeatures")
+
+    candidate_scores = decision.get("candidate_scores")
+    if not isinstance(candidate_scores, list):
+        candidate_scores = explanation.get("candidateScores")
     feature_map: dict[tuple[Any, ...], dict[str, Any]] = {}
 
     if not isinstance(candidate_scores, list):
@@ -135,8 +163,9 @@ def build_candidate_feature_map(
     )
 
 
-def build_rows(decisions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def build_rows(decisions: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
     rows: list[dict[str, Any]] = []
+    malformed_decisions = 0
 
     for decision in decisions:
         actor_seat = str(decision.get("actor_seat", ""))
@@ -145,9 +174,16 @@ def build_rows(decisions: list[dict[str, Any]]) -> list[dict[str, Any]]:
             decision.get("legal_actions"),
             actor_seat,
         )
+        if decision.get("chosen_action_is_legal") is False or not legal_actions:
+            malformed_decisions += 1
+            continue
+
         chosen_signature = action_signature(decision.get("chosen_action", {}))
         explanation = extract_explanation_metadata(decision)
-        state_features, candidate_feature_map = build_candidate_feature_map(explanation)
+        state_features, candidate_feature_map = build_candidate_feature_map(
+            explanation,
+            decision,
+        )
 
         for index, legal_action in enumerate(legal_actions):
             candidate_features = candidate_feature_map.get(action_signature(legal_action))
@@ -166,7 +202,16 @@ def build_rows(decisions: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "hand_id": str(decision.get("hand_id", "")),
                 "phase": phase,
                 "actor_seat": actor_seat,
-                "policy_source": str(decision.get("policy_source", "")),
+                "policy_source": str(
+                    decision.get("provider_used") or decision.get("policy_source", "")
+                ),
+                "requested_provider": str(decision.get("requested_provider", "")),
+                "fallback_used": bool(decision.get("fallback_used", False)),
+                "worker_id": str(decision.get("worker_id") or ""),
+                "chosen_action_type": str(decision.get("chosen_action_type", "")),
+                "state_hash": str(decision.get("state_hash", "")),
+                "legal_actions_hash": str(decision.get("legal_actions_hash", "")),
+                "chosen_action_hash": str(decision.get("chosen_action_hash", "")),
                 "decision_index": int(decision.get("decision_index", 0)),
                 "action_index": index,
                 "action_key": json.dumps(action_signature(legal_action)),
@@ -175,7 +220,43 @@ def build_rows(decisions: list[dict[str, Any]]) -> list[dict[str, Any]]:
             row.update({feature_name: features.get(feature_name, 0.0) for feature_name in FEATURE_ORDER})
             rows.append(row)
 
-    return rows
+    return rows, malformed_decisions
+
+
+def summarize_decisions(
+    decisions: list[dict[str, Any]],
+    rows_written: int,
+    malformed_decisions: int,
+) -> dict[str, Any]:
+    def has_column_flag(decision: dict[str, Any], flag: str, fallback_key: str) -> bool:
+        if isinstance(decision.get(flag), bool):
+            return bool(decision[flag])
+        value = decision.get(fallback_key)
+        return value is not None
+
+    return {
+        "decisions_read": len(decisions),
+        "rows_written": rows_written,
+        "rows_with_explanation": sum(
+            1 for decision in decisions if has_column_flag(decision, "has_explanation", "explanation")
+        ),
+        "rows_with_candidateScores": sum(
+            1
+            for decision in decisions
+            if has_column_flag(decision, "has_candidate_scores", "candidate_scores")
+        ),
+        "rows_with_stateFeatures": sum(
+            1
+            for decision in decisions
+            if has_column_flag(decision, "has_state_features", "state_features")
+        ),
+        "rows_with_chosen_action_is_legal_true": sum(
+            1
+            for decision in decisions
+            if decision.get("chosen_action_is_legal") is not False
+        ),
+        "rows_filtered_or_rejected_malformed": malformed_decisions,
+    }
 
 
 def main() -> None:
@@ -189,6 +270,11 @@ def main() -> None:
         "--schema-output",
         default=str(Path("ml/feature_schema.json")),
     )
+    parser.add_argument(
+        "--diagnostics",
+        action="store_true",
+        help="Print telemetry training-readiness counts with the export summary.",
+    )
     args = parser.parse_args()
 
     phase = resolve_phase_filter(args.phase)
@@ -198,22 +284,29 @@ def main() -> None:
         provider=args.provider,
         limit=args.limit,
     )
-    rows = build_rows(decisions)
+    rows, malformed_decisions = build_rows(decisions)
     frame = pd.DataFrame(rows)
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     frame.to_parquet(output_path, index=False)
     write_feature_schema(args.schema_output)
+    diagnostics = summarize_decisions(
+        decisions,
+        int(len(frame.index)),
+        malformed_decisions,
+    )
     print(
         json.dumps(
             {
                 "accepted": True,
                 "rows": int(len(frame.index)),
                 "decisions": len(decisions),
+                **diagnostics,
                 "phase": phase,
                 "provider": args.provider,
                 "output": str(output_path),
                 "feature_schema": str(Path(args.schema_output)),
+                "diagnostics_enabled": bool(args.diagnostics),
             }
         )
     )

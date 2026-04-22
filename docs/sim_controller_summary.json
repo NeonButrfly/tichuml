@@ -1,0 +1,30 @@
+{
+  "tracking_issue": 37,
+  "milestone": "6.5 - Local ML Integration & Reproducible Backend",
+  "api": {
+    "guard_env": "ENABLE_ADMIN_SIM_CONTROL=true",
+    "mutating_confirmation": "x-admin-confirm or body.confirm must equal CLEAR_TICHU_DB",
+    "endpoints": [
+      "POST /api/admin/sim/start",
+      "POST /api/admin/sim/pause",
+      "POST /api/admin/sim/continue",
+      "POST /api/admin/sim/stop",
+      "GET /api/admin/sim/status",
+      "POST /api/admin/sim/run-once"
+    ]
+  },
+  "dashboard_routes": ["/admin/sim", "/sim/control"],
+  "runtime_files": [
+    "state.json",
+    "controller.lock",
+    "pause",
+    "stop",
+    "controller.ndjson"
+  ],
+  "worker_support": {
+    "default_worker_count": 1,
+    "multi_worker_model": "one controller process with multiple worker tasks",
+    "telemetry_field": "worker_id"
+  },
+  "docs": ["docs/sim_controller.md", "docs/sim_dashboard.md"]
+}

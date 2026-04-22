@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import {
   applyEngineAction,
   createInitialGameState,
@@ -7,15 +10,29 @@ import {
   type EngineAction
 } from "@tichuml/engine";
 import type {
+  AdminClearResult,
   ReplayPayload,
+  SimControllerRequestPayload,
+  SimControllerResponse,
+  SimControllerRuntimeState,
   StoredTelemetryDecisionRecord,
   StoredTelemetryEventRecord,
   TelemetryDecisionPayload,
-  TelemetryEventPayload
+  TelemetryEventPayload,
+  TelemetryHealthStats
+} from "@tichuml/shared";
+import {
+  deriveTelemetryDecisionFields,
+  deriveTelemetryEventFields,
+  stableTelemetryHash
 } from "@tichuml/shared";
 import { createAppServer } from "../../apps/server/src/app";
 import type { ServerConfig } from "../../apps/server/src/config/env";
 import type { LightgbmScorer } from "../../apps/server/src/ml/lightgbm-scorer";
+import {
+  FileSimControllerService,
+  type SimControllerService
+} from "../../apps/server/src/services/sim-controller-service";
 import type { TelemetryRepository } from "../../apps/server/src/services/telemetry-repository";
 
 class InMemoryTelemetryRepository implements TelemetryRepository {
@@ -30,6 +47,7 @@ class InMemoryTelemetryRepository implements TelemetryRepository {
     const id = this.decisionId++;
     this.decisions.push({
       ...payload,
+      ...deriveTelemetryDecisionFields(payload),
       id,
       created_at: new Date().toISOString()
     });
@@ -40,6 +58,7 @@ class InMemoryTelemetryRepository implements TelemetryRepository {
     const id = this.eventId++;
     this.events.push({
       ...payload,
+      ...deriveTelemetryEventFields(payload),
       id,
       created_at: new Date().toISOString()
     });
@@ -91,6 +110,219 @@ class InMemoryTelemetryRepository implements TelemetryRepository {
       )
     };
   }
+
+  async getHealthStats(): Promise<TelemetryHealthStats> {
+    const countBy = <T extends { [key: string]: unknown }>(
+      rows: T[],
+      key: keyof T
+    ): Record<string, number> =>
+      rows.reduce<Record<string, number>>((counts, row) => {
+        const value = String(row[key] ?? "null");
+        counts[value] = (counts[value] ?? 0) + 1;
+        return counts;
+      }, {});
+
+    return {
+      decisions: this.decisions.length,
+      events: this.events.length,
+      unique_state_hashes: new Set(this.decisions.map((decision) => decision.state_hash)).size,
+      duplicate_state_hashes: 0,
+      unique_legal_actions_hashes: new Set(
+        this.decisions.map((decision) => decision.legal_actions_hash)
+      ).size,
+      duplicate_legal_actions_hashes: 0,
+      decisions_with_explanation: this.decisions.filter(
+        (decision) => decision.has_explanation
+      ).length,
+      decisions_with_candidate_scores: this.decisions.filter(
+        (decision) => decision.has_candidate_scores
+      ).length,
+      decisions_with_state_features: this.decisions.filter(
+        (decision) => decision.has_state_features
+      ).length,
+      decisions_with_legal_chosen_action: this.decisions.filter(
+        (decision) => decision.chosen_action_is_legal
+      ).length,
+      decisions_with_wish: this.decisions.filter((decision) => decision.has_wish)
+        .length,
+      decisions_can_pass: this.decisions.filter((decision) => decision.can_pass)
+        .length,
+      latest_decision_ts: this.decisions.at(-1)?.ts ?? null,
+      latest_event_ts: this.events.at(-1)?.ts ?? null,
+      decisions_by_provider: countBy(this.decisions, "provider_used"),
+      decisions_by_phase: countBy(this.decisions, "phase"),
+      decisions_by_seat: countBy(this.decisions, "actor_seat"),
+      events_by_type: countBy(this.events, "event_type"),
+      events_by_phase: countBy(this.events, "phase")
+    };
+  }
+
+  async clearTelemetry(): Promise<AdminClearResult> {
+    const row_counts = {
+      decisions: this.decisions.length,
+      events: this.events.length
+    };
+    this.decisions = [];
+    this.events = [];
+    return {
+      accepted: true,
+      action: "telemetry.clear",
+      tables_cleared: ["decisions", "events"],
+      row_counts,
+      warnings: ["Development/admin destructive endpoint used."]
+    };
+  }
+
+  async clearDatabase(): Promise<AdminClearResult> {
+    const result = await this.clearTelemetry();
+    return {
+      ...result,
+      action: "database.clear",
+      tables_cleared: ["decisions", "events", "matches"],
+      row_counts: { ...result.row_counts, matches: 0 }
+    };
+  }
+
+  async resetDatabase(): Promise<AdminClearResult> {
+    const result = await this.clearDatabase();
+    return {
+      ...result,
+      action: "database.reset"
+    };
+  }
+}
+
+function createSimState(
+  status: SimControllerRuntimeState["status"]
+): SimControllerRuntimeState {
+  const now = new Date().toISOString();
+  return {
+    status,
+    pid: null,
+    controller_id: "test-controller",
+    started_at: status === "stopped" ? null : now,
+    updated_at: now,
+    last_heartbeat: status === "stopped" ? null : now,
+    heartbeat_stale: false,
+    heartbeat_stale_after_seconds: 30,
+    requested_action: null,
+    current_batch_started_at: null,
+    last_batch_started_at: null,
+    last_batch_finished_at: null,
+    last_batch_size: 1,
+    last_batch_status: null,
+    total_batches_completed: 0,
+    total_games_completed: 0,
+    total_errors: 0,
+    last_error: null,
+    worker_count: 1,
+    running_worker_count: status === "running" ? 1 : 0,
+    paused_worker_count: status === "paused" ? 1 : 0,
+    stopped_worker_count: status === "stopped" ? 1 : 0,
+    errored_worker_count: status === "error" ? 1 : 0,
+    config: {
+      provider: "local",
+      games_per_batch: 1,
+      telemetry_enabled: false,
+      backend_url: "http://127.0.0.1",
+      seed_prefix: "test",
+      sleep_seconds: 1,
+      worker_count: 1,
+      quiet: true,
+      progress: false,
+      seat_providers: {}
+    },
+    workers: [],
+    log_path: "test.log",
+    runtime_path: "state.json",
+    lock_path: "controller.lock",
+    pause_path: "pause",
+    stop_path: "stop",
+    warnings: [],
+    recent_logs: []
+  };
+}
+
+class InMemorySimController implements SimControllerService {
+  state = createSimState("stopped");
+
+  private respond(
+    accepted: boolean,
+    action: string,
+    prior: SimControllerRuntimeState,
+    message: string,
+    warnings: string[] = []
+  ): SimControllerResponse {
+    return {
+      accepted,
+      action,
+      prior_status: prior.status,
+      current_status: this.state.status,
+      message,
+      runtime_state: this.state,
+      warnings
+    };
+  }
+
+  async start(payload: SimControllerRequestPayload): Promise<SimControllerResponse> {
+    const prior = this.state;
+    if (this.state.status === "running") {
+      return this.respond(false, "sim.start", prior, "Already running.");
+    }
+    this.state = createSimState("running");
+    this.state.worker_count = Number(payload.worker_count ?? 1);
+    this.state.running_worker_count = this.state.worker_count;
+    this.state.config.worker_count = this.state.worker_count;
+    this.state.workers = Array.from({ length: this.state.worker_count }, (_, index) => ({
+      worker_id: `worker-${index + 1}`,
+      status: "running",
+      pid: 1234 + index,
+      current_batch_started_at: this.state.started_at,
+      total_batches_completed: 0,
+      total_games_completed: 0,
+      last_heartbeat: this.state.last_heartbeat,
+      last_error: null
+    }));
+    return this.respond(true, "sim.start", prior, "Started.");
+  }
+
+  async pause(): Promise<SimControllerResponse> {
+    const prior = this.state;
+    if (this.state.status === "paused") {
+      return this.respond(true, "sim.pause", prior, "Already paused.");
+    }
+    this.state = { ...this.state, status: "paused", paused_worker_count: this.state.worker_count, running_worker_count: 0 };
+    return this.respond(true, "sim.pause", prior, "Paused.");
+  }
+
+  async continue(): Promise<SimControllerResponse> {
+    const prior = this.state;
+    const accepted = prior.status === "paused";
+    this.state = { ...this.state, status: "running", running_worker_count: this.state.worker_count, paused_worker_count: 0 };
+    return this.respond(accepted, "sim.continue", prior, accepted ? "Continued." : "Not paused.", accepted ? [] : ["Continue requested while not paused."]);
+  }
+
+  async stop(): Promise<SimControllerResponse> {
+    const prior = this.state;
+    if (this.state.status === "stopped") {
+      return this.respond(true, "sim.stop", prior, "Already stopped.");
+    }
+    this.state = createSimState("stopped");
+    return this.respond(true, "sim.stop", prior, "Stopped.");
+  }
+
+  async status(): Promise<SimControllerResponse> {
+    const prior = this.state;
+    return this.respond(true, "sim.status", prior, "Status loaded.");
+  }
+
+  async runOnce(payload: SimControllerRequestPayload): Promise<SimControllerResponse> {
+    const prior = this.state;
+    this.state = createSimState("completed");
+    this.state.total_batches_completed = 1;
+    this.state.total_games_completed = Number(payload.games ?? payload.games_per_batch ?? 1);
+    return this.respond(true, "sim.run_once", prior, "Run once completed.");
+  }
 }
 
 const TEST_SERVER_CONFIG: ServerConfig = {
@@ -102,6 +334,9 @@ const TEST_SERVER_CONFIG: ServerConfig = {
   autoBootstrapDatabase: false,
   autoMigrate: false,
   backendBaseUrl: "http://127.0.0.1",
+  destructiveAdminEndpointsEnabled: false,
+  adminSimControlEnabled: false,
+  simControllerRuntimeDir: "C:/tichu/tichuml/.runtime/test-sim-controller",
   repoRoot: "C:/tichu/tichuml",
   pythonExecutable: "python",
   lightgbmInferScript: "ml/infer.py",
@@ -113,13 +348,16 @@ async function withServer<T>(
   callback: (config: { baseUrl: string; repository: InMemoryTelemetryRepository }) => Promise<T>,
   options: {
     lightgbmScorer?: LightgbmScorer;
+    serverConfig?: Partial<ServerConfig>;
+    simController?: SimControllerService;
   } = {}
 ) {
   const repository = new InMemoryTelemetryRepository();
   const server = createAppServer({
-    serverConfig: TEST_SERVER_CONFIG,
+    serverConfig: { ...TEST_SERVER_CONFIG, ...(options.serverConfig ?? {}) },
     repository,
-    lightgbmScorer: options.lightgbmScorer
+    lightgbmScorer: options.lightgbmScorer,
+    simController: options.simController
   });
 
   await new Promise<void>((resolve) => {
@@ -160,12 +398,18 @@ function createDecisionPayload(): TelemetryDecisionPayload {
     schema_version: 2,
     engine_version: "milestone-1",
     sim_version: "milestone-2",
+    requested_provider: "server_heuristic",
+    provider_used: "server_heuristic",
+    fallback_used: false,
     policy_name: "heuristics-v1",
     policy_source: "local_heuristic",
-    state_raw: { phase: "trick_play" },
+    state_raw: { phase: "trick_play", activeSeat: "seat-1" },
     state_norm: { activeSeat: "seat-1" },
-    legal_actions: [{ type: "play_cards" }],
+    legal_actions: [{ type: "play_cards", seat: "seat-1", cardIds: ["star-2"] }],
     chosen_action: { type: "play_cards", seat: "seat-1", cardIds: ["star-2"] },
+    explanation: null,
+    candidateScores: null,
+    stateFeatures: null,
     metadata: { test: true },
     antipattern_tags: []
   };
@@ -179,9 +423,14 @@ function createEventPayload(ts: string, eventType: string): TelemetryEventPayloa
     phase: "trick_play",
     event_type: eventType,
     actor_seat: "seat-1",
+    event_index: 1,
     schema_version: 2,
     engine_version: "milestone-1",
     sim_version: "milestone-2",
+    requested_provider: "server_heuristic",
+    provider_used: "server_heuristic",
+    fallback_used: false,
+    state_norm: { phase: "trick_play" },
     payload: { type: eventType },
     metadata: {}
   };
@@ -247,6 +496,26 @@ describe("backend foundation server routes", () => {
     });
   });
 
+  it("rejects invalid telemetry event payloads", async () => {
+    await withServer(async ({ baseUrl }) => {
+      const response = await fetch(`${baseUrl}/api/telemetry/event`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ game_id: "game-1", event_type: "played" })
+      });
+
+      expect(response.status).toBe(400);
+      const payload = (await response.json()) as {
+        accepted: boolean;
+        validation_errors: Array<{ path: string }>;
+      };
+      expect(payload.accepted).toBe(false);
+      expect(payload.validation_errors.some((issue) => issue.path === "event_index")).toBe(
+        true
+      );
+    });
+  });
+
   it("stores valid telemetry payloads", async () => {
     await withServer(async ({ baseUrl, repository }) => {
       const response = await fetch(`${baseUrl}/api/telemetry/decision`, {
@@ -258,7 +527,62 @@ describe("backend foundation server routes", () => {
       expect(response.status).toBe(201);
       expect(repository.decisions).toHaveLength(1);
       expect(repository.decisions[0]?.policy_name).toBe("heuristics-v1");
+      expect(repository.decisions[0]?.chosen_action_is_legal).toBe(true);
     });
+  });
+
+  it("rejects decision telemetry when chosen_action is not legal for actor_seat", async () => {
+    await withServer(async ({ baseUrl, repository }) => {
+      const response = await fetch(`${baseUrl}/api/telemetry/decision`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...createDecisionPayload(),
+          chosen_action: { type: "play_cards", seat: "seat-1", cardIds: ["jade-9"] }
+        })
+      });
+
+      expect(response.status).toBe(400);
+      const payload = (await response.json()) as {
+        accepted: boolean;
+        validation_errors: Array<{ path: string }>;
+      };
+      expect(payload.accepted).toBe(false);
+      expect(
+        payload.validation_errors.some((issue) => issue.path === "chosen_action")
+      ).toBe(true);
+      expect(repository.decisions).toHaveLength(0);
+    });
+  });
+
+  it("rejects decision telemetry when phase and actor_seat contradict state_raw", async () => {
+    await withServer(async ({ baseUrl, repository }) => {
+      const response = await fetch(`${baseUrl}/api/telemetry/decision`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...createDecisionPayload(),
+          phase: "pass_select",
+          actor_seat: "seat-2"
+        })
+      });
+
+      expect(response.status).toBe(400);
+      const payload = (await response.json()) as {
+        accepted: boolean;
+        validation_errors: Array<{ path: string }>;
+      };
+      expect(payload.accepted).toBe(false);
+      expect(payload.validation_errors.map((issue) => issue.path)).toContain("phase");
+      expect(payload.validation_errors.map((issue) => issue.path)).toContain("actor_seat");
+      expect(repository.decisions).toHaveLength(0);
+    });
+  });
+
+  it("hashes canonical JSON deterministically regardless of object key order", () => {
+    expect(stableTelemetryHash({ b: 2, a: { d: 4, c: 3 } })).toBe(
+      stableTelemetryHash({ a: { c: 3, d: 4 }, b: 2 })
+    );
   });
 
   it("returns a heuristic action from the decision route", async () => {
@@ -359,5 +683,287 @@ describe("backend foundation server routes", () => {
       expect(replay.timeline[0]?.payload.game_id).toBe("game-1");
       expect(replay.timeline.at(-1)?.payload.event_type).toBe("hand_end");
     });
+  });
+
+  it("rejects destructive admin endpoints unless safeguards are present", async () => {
+    await withServer(async ({ baseUrl }) => {
+      const response = await fetch(`${baseUrl}/api/admin/telemetry/clear`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: "CLEAR_TICHU_DB" })
+      });
+
+      expect(response.status).toBe(400);
+      const payload = (await response.json()) as {
+        accepted: boolean;
+        validation_errors: Array<{ path: string }>;
+      };
+      expect(payload.accepted).toBe(false);
+      expect(
+        payload.validation_errors.some(
+          (issue) => issue.path === "ENABLE_DESTRUCTIVE_ADMIN_ENDPOINTS"
+        )
+      ).toBe(true);
+    });
+  });
+
+  it("clears telemetry when destructive admin safeguards are satisfied", async () => {
+    await withServer(
+      async ({ baseUrl, repository }) => {
+        await fetch(`${baseUrl}/api/telemetry/decision`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(createDecisionPayload())
+        });
+        await fetch(`${baseUrl}/api/telemetry/event`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(createEventPayload("2026-04-17T12:00:01.000Z", "played"))
+        });
+
+        const response = await fetch(`${baseUrl}/api/admin/telemetry/clear`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-admin-confirm": "CLEAR_TICHU_DB"
+          },
+          body: JSON.stringify({})
+        });
+
+        expect(response.status).toBe(200);
+        const payload = (await response.json()) as {
+          accepted: boolean;
+          row_counts: Record<string, number>;
+        };
+        expect(payload.accepted).toBe(true);
+        expect(payload.row_counts.decisions).toBe(1);
+        expect(payload.row_counts.events).toBe(1);
+        expect(repository.decisions).toHaveLength(0);
+        expect(repository.events).toHaveLength(0);
+      },
+      { serverConfig: { destructiveAdminEndpointsEnabled: true } }
+    );
+  });
+
+  it("requires confirmation for clear database even when destructive admin is enabled", async () => {
+    await withServer(
+      async ({ baseUrl }) => {
+        const response = await fetch(`${baseUrl}/api/admin/database/clear`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({})
+        });
+
+        expect(response.status).toBe(400);
+        const payload = (await response.json()) as {
+          accepted: boolean;
+          validation_errors: Array<{ path: string }>;
+        };
+        expect(payload.accepted).toBe(false);
+        expect(
+          payload.validation_errors.some(
+            (issue) => issue.path === "x-admin-confirm"
+          )
+        ).toBe(true);
+      },
+      { serverConfig: { destructiveAdminEndpointsEnabled: true } }
+    );
+  });
+
+  it("resets app-owned database tables when reset safeguards are satisfied", async () => {
+    await withServer(
+      async ({ baseUrl, repository }) => {
+        await fetch(`${baseUrl}/api/telemetry/decision`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(createDecisionPayload())
+        });
+
+        const response = await fetch(`${baseUrl}/api/admin/database/reset`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ confirm: "CLEAR_TICHU_DB" })
+        });
+
+        expect(response.status).toBe(200);
+        const payload = (await response.json()) as {
+          accepted: boolean;
+          action: string;
+          row_counts: Record<string, number>;
+        };
+        expect(payload.accepted).toBe(true);
+        expect(payload.action).toBe("database.reset");
+        expect(payload.row_counts.decisions).toBe(1);
+        expect(repository.decisions).toHaveLength(0);
+      },
+      { serverConfig: { destructiveAdminEndpointsEnabled: true } }
+    );
+  });
+
+  it("rejects simulator control endpoints unless the sim admin guard is enabled", async () => {
+    await withServer(async ({ baseUrl }) => {
+      const response = await fetch(`${baseUrl}/api/admin/sim/start`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-confirm": "CLEAR_TICHU_DB"
+        },
+        body: JSON.stringify({ worker_count: 1 })
+      });
+
+      expect(response.status).toBe(400);
+      const payload = (await response.json()) as {
+        accepted: boolean;
+        validation_errors: Array<{ path: string }>;
+      };
+      expect(payload.accepted).toBe(false);
+      expect(payload.validation_errors.map((issue) => issue.path)).toContain(
+        "ENABLE_ADMIN_SIM_CONTROL"
+      );
+    });
+  });
+
+  it("requires confirmation for simulator mutating actions", async () => {
+    await withServer(
+      async ({ baseUrl }) => {
+        const response = await fetch(`${baseUrl}/api/admin/sim/pause`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({})
+        });
+
+        expect(response.status).toBe(400);
+        const payload = (await response.json()) as {
+          accepted: boolean;
+          validation_errors: Array<{ path: string }>;
+        };
+        expect(payload.accepted).toBe(false);
+        expect(payload.validation_errors.map((issue) => issue.path)).toContain(
+          "x-admin-confirm"
+        );
+      },
+      {
+        serverConfig: { adminSimControlEnabled: true },
+        simController: new InMemorySimController()
+      }
+    );
+  });
+
+  it("exposes simulator status when sim admin control is enabled", async () => {
+    await withServer(
+      async ({ baseUrl }) => {
+        const response = await fetch(`${baseUrl}/api/admin/sim/status`);
+
+        expect(response.status).toBe(200);
+        const payload = (await response.json()) as SimControllerResponse;
+        expect(payload.accepted).toBe(true);
+        expect(payload.current_status).toBe("stopped");
+        expect(payload.runtime_state.heartbeat_stale).toBe(false);
+      },
+      {
+        serverConfig: { adminSimControlEnabled: true },
+        simController: new InMemorySimController()
+      }
+    );
+  });
+
+  it("supports simulator start, duplicate start rejection, pause, continue, stop, and run-once", async () => {
+    const simController = new InMemorySimController();
+    await withServer(
+      async ({ baseUrl }) => {
+        const headers = {
+          "Content-Type": "application/json",
+          "x-admin-confirm": "CLEAR_TICHU_DB"
+        };
+        const start = await fetch(`${baseUrl}/api/admin/sim/start`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ worker_count: 2, games_per_batch: 3 })
+        });
+        expect(start.status).toBe(200);
+        const startPayload = (await start.json()) as SimControllerResponse;
+        expect(startPayload.current_status).toBe("running");
+        expect(startPayload.runtime_state.worker_count).toBe(2);
+        expect(startPayload.runtime_state.workers).toHaveLength(2);
+
+        const duplicate = await fetch(`${baseUrl}/api/admin/sim/start`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ worker_count: 1 })
+        });
+        expect(duplicate.status).toBe(409);
+
+        const pause = await fetch(`${baseUrl}/api/admin/sim/pause`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({})
+        });
+        expect(pause.status).toBe(200);
+        expect(((await pause.json()) as SimControllerResponse).current_status).toBe(
+          "paused"
+        );
+
+        const resume = await fetch(`${baseUrl}/api/admin/sim/continue`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({})
+        });
+        expect(resume.status).toBe(200);
+        expect(((await resume.json()) as SimControllerResponse).current_status).toBe(
+          "running"
+        );
+
+        const stop = await fetch(`${baseUrl}/api/admin/sim/stop`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({})
+        });
+        expect(stop.status).toBe(200);
+        expect(((await stop.json()) as SimControllerResponse).current_status).toBe(
+          "stopped"
+        );
+
+        const runOnce = await fetch(`${baseUrl}/api/admin/sim/run-once`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ games: 1 })
+        });
+        expect(runOnce.status).toBe(200);
+        const runOncePayload = (await runOnce.json()) as SimControllerResponse;
+        expect(runOncePayload.current_status).toBe("completed");
+        expect(runOncePayload.runtime_state.total_games_completed).toBe(1);
+      },
+      {
+        serverConfig: { adminSimControlEnabled: true },
+        simController
+      }
+    );
+  });
+
+  it("recovers a stale simulator singleton lock during status checks", async () => {
+    const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), "tichuml-sim-"));
+    const staleState = createSimState("running");
+    staleState.last_heartbeat = "2020-01-01T00:00:00.000Z";
+    staleState.runtime_path = path.join(runtimeDir, "state.json");
+    staleState.lock_path = path.join(runtimeDir, "controller.lock");
+    staleState.pause_path = path.join(runtimeDir, "pause");
+    staleState.stop_path = path.join(runtimeDir, "stop");
+    staleState.log_path = path.join(runtimeDir, "controller.ndjson");
+    fs.writeFileSync(staleState.runtime_path, JSON.stringify(staleState), "utf8");
+    fs.writeFileSync(staleState.lock_path, "stale", "utf8");
+
+    const service = new FileSimControllerService({
+      ...TEST_SERVER_CONFIG,
+      adminSimControlEnabled: true,
+      simControllerRuntimeDir: runtimeDir
+    });
+    const response = await service.status();
+
+    expect(response.accepted).toBe(true);
+    expect(response.runtime_state.heartbeat_stale).toBe(true);
+    expect(response.warnings).toContain(
+      "Recovered stale simulator lock after heartbeat timeout."
+    );
+    expect(fs.existsSync(staleState.lock_path)).toBe(false);
   });
 });

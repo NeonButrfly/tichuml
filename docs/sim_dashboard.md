@@ -1,0 +1,44 @@
+# Simulator Dashboard
+
+Tracking issue: [#37](https://github.com/NeonButrfly/tichuml/issues/37)
+
+Dashboard routes:
+
+- `/admin/sim`
+- `/sim/control`
+
+The dashboard is a control surface, not a read-only page. It calls the same
+admin controller API used by `scripts/sim-controller.sh`.
+
+Always-visible controls:
+
+- Start
+- Pause
+- Continue
+- Stop
+- Run Once
+- Refresh
+
+At-a-glance state includes:
+
+- current status and stale heartbeat indicator
+- last heartbeat age
+- current batch activity
+- worker counts
+- backend health
+- action feedback with prior and current status
+
+Operational sections include:
+
+- editable config for provider, games per batch, telemetry, backend URL, seed
+  prefix, sleep seconds, worker count, and confirmation token
+- totals for batches, games, errors, and last batch status
+- last error
+- log path and runtime path
+- per-worker table
+- recent JSONL log preview
+- raw runtime JSON
+
+Mutating buttons are disabled until the confirmation token matches
+`CLEAR_TICHU_DB`. The backend still enforces `ENABLE_ADMIN_SIM_CONTROL=true` and
+the confirmation header, even if the dashboard is manually edited.

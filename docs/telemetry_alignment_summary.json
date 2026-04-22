@@ -1,0 +1,72 @@
+{
+  "tracking_issue": 35,
+  "milestone": "6.5 - Local ML Integration & Reproducible Backend",
+  "canonical_contract": "docs/telemetry_contract.md",
+  "admin_docs": "docs/admin_reset_endpoints.md",
+  "decision_source_of_truth": "decisions",
+  "event_source_of_truth": "events",
+  "admin_endpoints": [
+    "POST /api/admin/telemetry/clear",
+    "POST /api/admin/database/clear",
+    "POST /api/admin/database/reset"
+  ],
+  "safeguards": {
+    "env": "ENABLE_DESTRUCTIVE_ADMIN_ENDPOINTS=true",
+    "confirmation": "x-admin-confirm or body.confirm must equal CLEAR_TICHU_DB"
+  },
+  "canonical_fields": [
+    "game_id",
+    "hand_id",
+    "ts",
+    "phase",
+    "actor_seat",
+    "decision_index",
+    "event_index",
+    "requested_provider",
+    "provider_used",
+    "fallback_used",
+    "schema_version",
+    "engine_version",
+    "sim_version",
+    "policy_name",
+    "policy_source",
+    "state_raw",
+    "state_norm",
+    "legal_actions",
+    "chosen_action",
+    "chosen_action_is_legal",
+    "metadata",
+    "explanation",
+    "candidateScores",
+    "stateFeatures"
+  ],
+  "storage_helpers": [
+    "chosen_action_type",
+    "legal_action_count",
+    "chosen_action_is_legal",
+    "has_explanation",
+    "has_candidate_scores",
+    "has_state_features",
+    "explanation_quality_level",
+    "has_wish",
+    "wish_rank",
+    "can_pass",
+    "state_hash",
+    "legal_actions_hash",
+    "chosen_action_hash",
+    "event_hash"
+  ],
+  "health_stats": [
+    "unique_state_hashes",
+    "duplicate_state_hashes",
+    "unique_legal_actions_hashes",
+    "duplicate_legal_actions_hashes",
+    "decisions_by_provider",
+    "decisions_by_phase",
+    "decisions_by_seat",
+    "events_by_type",
+    "events_by_phase",
+    "latest_decision_ts",
+    "latest_event_ts"
+  ]
+}

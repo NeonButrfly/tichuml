@@ -1,6 +1,13 @@
 import {
   BACKEND_HEALTH_PATH,
   DECISION_REQUEST_PATH,
+  ADMIN_CONFIRMATION_VALUE,
+  ADMIN_SIM_CONTINUE_PATH,
+  ADMIN_SIM_PAUSE_PATH,
+  ADMIN_SIM_RUN_ONCE_PATH,
+  ADMIN_SIM_START_PATH,
+  ADMIN_SIM_STATUS_PATH,
+  ADMIN_SIM_STOP_PATH,
   TELEMETRY_DECISION_PATH,
   TELEMETRY_EVENT_PATH,
   normalizeBackendBaseUrl,
@@ -9,6 +16,8 @@ import {
   validateTelemetryEventPayload,
   type DecisionRequestPayload,
   type DecisionResponsePayload,
+  type SimControllerRequestPayload,
+  type SimControllerResponse,
   type TelemetryDecisionPayload,
   type TelemetryEventPayload
 } from "@tichuml/shared";
@@ -212,5 +221,49 @@ export async function postTelemetryEvent(
     },
     fetchImpl,
     TELEMETRY_EVENT_PATH
+  );
+}
+
+export async function getSimControllerStatus(
+  baseUrl: string,
+  fetchImpl: FetchLike = globalThis.fetch
+): Promise<SimControllerResponse> {
+  return fetchJson<SimControllerResponse>(
+    buildUrl(baseUrl, ADMIN_SIM_STATUS_PATH),
+    { method: "GET" },
+    fetchImpl,
+    ADMIN_SIM_STATUS_PATH
+  );
+}
+
+export async function postSimControllerAction(
+  baseUrl: string,
+  action: "start" | "pause" | "continue" | "stop" | "run-once",
+  payload: SimControllerRequestPayload = {},
+  confirmToken = ADMIN_CONFIRMATION_VALUE,
+  fetchImpl: FetchLike = globalThis.fetch
+): Promise<SimControllerResponse> {
+  const endpoint =
+    action === "start"
+      ? ADMIN_SIM_START_PATH
+      : action === "pause"
+        ? ADMIN_SIM_PAUSE_PATH
+        : action === "continue"
+          ? ADMIN_SIM_CONTINUE_PATH
+          : action === "stop"
+            ? ADMIN_SIM_STOP_PATH
+            : ADMIN_SIM_RUN_ONCE_PATH;
+  return fetchJson<SimControllerResponse>(
+    buildUrl(baseUrl, endpoint),
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-confirm": confirmToken
+      },
+      body: JSON.stringify(payload)
+    },
+    fetchImpl,
+    endpoint
   );
 }

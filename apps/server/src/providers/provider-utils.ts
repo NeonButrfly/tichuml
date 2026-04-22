@@ -222,6 +222,51 @@ export function buildChosenDecision(
   };
 }
 
+function summarizeCurrentCombination(state: GameState): JsonObject | null {
+  const combination = state.currentTrick?.currentCombination;
+  return combination
+    ? {
+        kind: combination.kind,
+        primaryRank: combination.primaryRank,
+        cardCount: combination.cardCount,
+        isBomb: combination.isBomb
+      }
+    : null;
+}
+
+function legalActionFulfillsWish(state: GameState, legalAction: LegalAction): boolean {
+  if (state.currentWish === null || legalAction.type !== "play_cards") {
+    return false;
+  }
+
+  return (
+    legalAction.combination.primaryRank === state.currentWish ||
+    legalAction.combination.actualRanks.includes(state.currentWish)
+  );
+}
+
+function buildDecisionContextMetadata(config: {
+  state: GameState;
+  actorLegalActions: LegalAction[];
+}): JsonObject {
+  const wishActive = config.state.currentWish !== null;
+  const wishSatisfiable =
+    wishActive &&
+    config.actorLegalActions.some((action) =>
+      legalActionFulfillsWish(config.state, action)
+    );
+
+  return {
+    seed: config.state.seed,
+    current_lead_seat: config.state.currentTrick?.currentWinner ?? null,
+    current_combination: summarizeCurrentCombination(config.state),
+    wish_active: wishActive,
+    current_wish: config.state.currentWish,
+    wish_satisfiable: wishSatisfiable,
+    active_wish_no_legal_fulfilling_move: wishActive && !wishSatisfiable
+  };
+}
+
 export function createTelemetryPayload(config: {
   payload: DecisionRequestPayload;
   providerUsed: RequestedDecisionProvider;
@@ -231,6 +276,28 @@ export function createTelemetryPayload(config: {
   antipatternTags?: string[];
   metadata?: JsonObject;
 }): TelemetryDecisionPayload {
+  const stateRaw = config.payload.state_raw;
+  const actorLegalActions =
+    isUsableState(stateRaw) ? extractActorLegalActions(config.payload) : [];
+  const explanation =
+    config.metadata?.explanation && typeof config.metadata.explanation === "object"
+      ? config.metadata.explanation
+      : null;
+  const candidateScores =
+    explanation &&
+    typeof explanation === "object" &&
+    "candidateScores" in explanation
+      ? ((explanation as JsonObject).candidateScores ?? null)
+      : null;
+  const stateFeatures =
+    explanation &&
+    typeof explanation === "object" &&
+    "stateFeatures" in explanation &&
+    typeof (explanation as JsonObject).stateFeatures === "object" &&
+    (explanation as JsonObject).stateFeatures !== null &&
+    !Array.isArray((explanation as JsonObject).stateFeatures)
+      ? ((explanation as JsonObject).stateFeatures as JsonObject)
+      : null;
   return {
     ts: new Date().toISOString(),
     game_id: config.payload.game_id,
@@ -241,16 +308,36 @@ export function createTelemetryPayload(config: {
     schema_version: config.payload.schema_version,
     engine_version: config.payload.engine_version,
     sim_version: config.payload.sim_version,
+    requested_provider: config.payload.requested_provider,
+    provider_used: config.providerUsed,
+    fallback_used:
+      typeof config.metadata?.fallback_used === "boolean"
+        ? config.metadata.fallback_used
+        : config.providerUsed !== config.payload.requested_provider,
     policy_name: config.policyName,
     policy_source: config.providerUsed,
     state_raw: config.payload.state_raw ?? {},
     state_norm: config.payload.state_norm,
     legal_actions: config.payload.legal_actions,
     chosen_action: config.chosenAction as unknown as JsonObject,
+    explanation,
+    candidateScores,
+    stateFeatures,
     metadata: {
       ...config.payload.metadata,
+      ...(isUsableState(stateRaw)
+        ? buildDecisionContextMetadata({
+            state: stateRaw,
+            actorLegalActions
+          })
+        : {}),
       requested_provider: config.payload.requested_provider,
+      provider_used: config.providerUsed,
       provider_reason: config.providerReason,
+      fallback_used:
+        typeof config.metadata?.fallback_used === "boolean"
+          ? config.metadata.fallback_used
+          : config.providerUsed !== config.payload.requested_provider,
       ...(config.metadata ?? {})
     } as JsonObject,
     antipattern_tags: config.antipatternTags ?? []

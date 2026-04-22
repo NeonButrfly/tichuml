@@ -17,6 +17,9 @@ export type ServerConfig = {
   autoBootstrapDatabase: boolean;
   autoMigrate: boolean;
   backendBaseUrl: string;
+  destructiveAdminEndpointsEnabled: boolean;
+  adminSimControlEnabled: boolean;
+  simControllerRuntimeDir: string;
   repoRoot: string;
   pythonExecutable: string;
   lightgbmInferScript: string;
@@ -139,6 +142,19 @@ export function loadServerConfig(
     autoMigrate: parseBooleanEnv(mergedEnv.AUTO_MIGRATE, true),
     backendBaseUrl: normalizeBackendBaseUrl(
       mergedEnv.BACKEND_BASE_URL ?? `http://localhost:${port}`
+    ),
+    destructiveAdminEndpointsEnabled: parseBooleanEnv(
+      mergedEnv.ENABLE_DESTRUCTIVE_ADMIN_ENDPOINTS,
+      false
+    ),
+    adminSimControlEnabled: parseBooleanEnv(
+      mergedEnv.ENABLE_ADMIN_SIM_CONTROL,
+      false
+    ),
+    simControllerRuntimeDir: resolveRepoPath(
+      repoRoot,
+      mergedEnv.SIM_CONTROLLER_RUNTIME_DIR,
+      path.join(".runtime", "sim-controller")
     ),
     repoRoot,
     pythonExecutable: resolvePythonExecutable(repoRoot, mergedEnv.PYTHON_EXECUTABLE),

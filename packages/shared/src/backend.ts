@@ -7,6 +7,16 @@ export const BACKEND_HEALTH_PATH = "/health";
 export const TELEMETRY_DECISION_PATH = "/api/telemetry/decision";
 export const TELEMETRY_EVENT_PATH = "/api/telemetry/event";
 export const DECISION_REQUEST_PATH = "/api/decision/request";
+export const ADMIN_TELEMETRY_CLEAR_PATH = "/api/admin/telemetry/clear";
+export const ADMIN_DATABASE_CLEAR_PATH = "/api/admin/database/clear";
+export const ADMIN_DATABASE_RESET_PATH = "/api/admin/database/reset";
+export const ADMIN_SIM_START_PATH = "/api/admin/sim/start";
+export const ADMIN_SIM_PAUSE_PATH = "/api/admin/sim/pause";
+export const ADMIN_SIM_CONTINUE_PATH = "/api/admin/sim/continue";
+export const ADMIN_SIM_STOP_PATH = "/api/admin/sim/stop";
+export const ADMIN_SIM_STATUS_PATH = "/api/admin/sim/status";
+export const ADMIN_SIM_RUN_ONCE_PATH = "/api/admin/sim/run-once";
+export const ADMIN_CONFIRMATION_VALUE = "CLEAR_TICHU_DB";
 
 export type JsonObject = Record<string, SeedJsonValue>;
 export type JsonArray = SeedJsonValue[];
@@ -45,15 +55,126 @@ export type TelemetryDecisionPayload = {
   schema_version: number;
   engine_version: string;
   sim_version: string;
+  requested_provider: string;
+  provider_used: string;
+  fallback_used: boolean;
   policy_name: string;
   policy_source: string;
   state_raw: JsonObject;
   state_norm: JsonObject | null;
   legal_actions: SeedJsonValue;
   chosen_action: JsonObject;
+  explanation: SeedJsonValue | null;
+  candidateScores: SeedJsonValue | null;
+  stateFeatures: JsonObject | null;
   metadata: JsonObject;
   antipattern_tags: SeedJsonValue;
 };
+
+export type SimControllerStatus =
+  | "stopped"
+  | "starting"
+  | "running"
+  | "pausing"
+  | "paused"
+  | "stopping"
+  | "completed"
+  | "error";
+
+export type SimWorkerStatus =
+  | "starting"
+  | "running"
+  | "paused"
+  | "stopping"
+  | "stopped"
+  | "completed"
+  | "error";
+
+export type SimControllerConfig = {
+  provider: DecisionMode;
+  games_per_batch: number;
+  telemetry_enabled: boolean;
+  backend_url: string;
+  seed_prefix: string;
+  sleep_seconds: number;
+  worker_count: number;
+  quiet: boolean;
+  progress: boolean;
+  seat_providers: Record<string, DecisionMode>;
+};
+
+export type SimWorkerRuntimeState = {
+  worker_id: string;
+  status: SimWorkerStatus;
+  pid: number | null;
+  current_batch_started_at: string | null;
+  total_batches_completed: number;
+  total_games_completed: number;
+  last_heartbeat: string | null;
+  last_error: string | null;
+};
+
+export type SimControllerRuntimeState = {
+  status: SimControllerStatus;
+  pid: number | null;
+  controller_id: string;
+  started_at: string | null;
+  updated_at: string;
+  last_heartbeat: string | null;
+  heartbeat_stale: boolean;
+  heartbeat_stale_after_seconds: number;
+  requested_action: string | null;
+  current_batch_started_at: string | null;
+  last_batch_started_at: string | null;
+  last_batch_finished_at: string | null;
+  last_batch_size: number;
+  last_batch_status: string | null;
+  total_batches_completed: number;
+  total_games_completed: number;
+  total_errors: number;
+  last_error: string | null;
+  worker_count: number;
+  running_worker_count: number;
+  paused_worker_count: number;
+  stopped_worker_count: number;
+  errored_worker_count: number;
+  config: SimControllerConfig;
+  workers: SimWorkerRuntimeState[];
+  log_path: string;
+  runtime_path: string;
+  lock_path: string;
+  pause_path: string;
+  stop_path: string;
+  warnings: string[];
+  recent_logs: string[];
+};
+
+export type SimControllerResponse = {
+  accepted: boolean;
+  action: string;
+  prior_status: SimControllerStatus;
+  current_status: SimControllerStatus;
+  message: string;
+  runtime_state: SimControllerRuntimeState;
+  warnings: string[];
+};
+
+export type SimControllerRequestPayload = Partial<{
+  provider: DecisionMode;
+  games: number;
+  games_per_batch: number;
+  telemetry_enabled: boolean;
+  telemetry: boolean;
+  backend_url: string;
+  seed: string;
+  seed_prefix: string;
+  sleep_seconds: number;
+  worker_count: number;
+  sim_threads: number;
+  quiet: boolean;
+  progress: boolean;
+  seat_providers: Record<string, DecisionMode>;
+}>;
 
 export type TelemetryEventPayload = {
   ts: string;
@@ -62,11 +183,37 @@ export type TelemetryEventPayload = {
   phase: string;
   event_type: string;
   actor_seat: string | null;
+  event_index: number;
   schema_version: number;
   engine_version: string;
   sim_version: string;
+  requested_provider: string | null;
+  provider_used: string | null;
+  fallback_used: boolean;
+  state_norm: JsonObject | null;
   payload: SeedJsonValue;
   metadata: JsonObject;
+};
+
+export type DerivedTelemetryDecisionFields = {
+  chosen_action_type: string;
+  legal_action_count: number;
+  chosen_action_is_legal: boolean;
+  has_explanation: boolean;
+  has_candidate_scores: boolean;
+  has_state_features: boolean;
+  explanation_quality_level: "none" | "basic" | "scored" | "featured";
+  has_wish: boolean;
+  wish_rank: number | null;
+  can_pass: boolean;
+  state_hash: string;
+  legal_actions_hash: string;
+  chosen_action_hash: string;
+};
+
+export type DerivedTelemetryEventFields = {
+  state_hash: string | null;
+  event_hash: string;
 };
 
 export type DecisionRequestPayload = {
@@ -96,11 +243,28 @@ export type DecisionResponsePayload = {
 
 export type StoredTelemetryDecisionRecord = TelemetryDecisionPayload & {
   id: number;
+  worker_id: string | null;
+  chosen_action_type: string;
+  legal_action_count: number;
+  has_explanation: boolean;
+  has_candidate_scores: boolean;
+  has_state_features: boolean;
+  explanation_quality_level: "none" | "basic" | "scored" | "featured";
+  chosen_action_is_legal: boolean;
+  has_wish: boolean;
+  wish_rank: number | null;
+  can_pass: boolean;
+  state_hash: string;
+  legal_actions_hash: string;
+  chosen_action_hash: string;
   created_at: string;
 };
 
 export type StoredTelemetryEventRecord = TelemetryEventPayload & {
   id: number;
+  worker_id: string | null;
+  state_hash: string | null;
+  event_hash: string;
   created_at: string;
 };
 
@@ -127,6 +291,36 @@ export type ReplayPayload = {
   decisions: StoredTelemetryDecisionRecord[];
   events: StoredTelemetryEventRecord[];
   timeline: ReplayRecord[];
+};
+
+export type AdminClearResult = {
+  accepted: boolean;
+  action: string;
+  tables_cleared: string[];
+  row_counts: Record<string, number>;
+  warnings: string[];
+};
+
+export type TelemetryHealthStats = {
+  decisions: number;
+  events: number;
+  unique_state_hashes: number;
+  duplicate_state_hashes: number;
+  unique_legal_actions_hashes: number;
+  duplicate_legal_actions_hashes: number;
+  decisions_with_explanation: number;
+  decisions_with_candidate_scores: number;
+  decisions_with_state_features: number;
+  decisions_with_legal_chosen_action: number;
+  decisions_with_wish: number;
+  decisions_can_pass: number;
+  latest_decision_ts: string | null;
+  latest_event_ts: string | null;
+  decisions_by_provider: Record<string, number>;
+  decisions_by_phase: Record<string, number>;
+  decisions_by_seat: Record<string, number>;
+  events_by_type: Record<string, number>;
+  events_by_phase: Record<string, number>;
 };
 
 type ValidatorContext = {
@@ -227,6 +421,66 @@ function expectJsonValue(
   return value;
 }
 
+function expectOptionalJsonObject(
+  context: ValidatorContext,
+  input: Record<string, unknown>,
+  key: string
+): JsonObject | null {
+  if (input[key] === undefined || input[key] === null) {
+    return null;
+  }
+
+  return expectJsonObject(context, input, key);
+}
+
+function expectOptionalJsonValue(
+  context: ValidatorContext,
+  input: Record<string, unknown>,
+  key: string
+): SeedJsonValue | null {
+  if (input[key] === undefined || input[key] === null) {
+    return null;
+  }
+
+  return expectJsonValue(context, input, key);
+}
+
+function expectOptionalString(
+  context: ValidatorContext,
+  input: Record<string, unknown>,
+  key: string
+): string | null {
+  const value = input[key];
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (typeof value !== "string" || value.trim().length === 0) {
+    pushIssue(context, key, "Expected a non-empty string.");
+    return null;
+  }
+
+  return value;
+}
+
+function expectOptionalBoolean(
+  context: ValidatorContext,
+  input: Record<string, unknown>,
+  key: string
+): boolean | null {
+  const value = input[key];
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (typeof value !== "boolean") {
+    pushIssue(context, key, "Expected a boolean.");
+    return null;
+  }
+
+  return value;
+}
+
 function expectOptionalSeat(
   context: ValidatorContext,
   input: Record<string, unknown>,
@@ -286,6 +540,249 @@ function finalizeValidation<T>(
     : { ok: false, issues: context.issues };
 }
 
+function readMetadataString(
+  metadata: JsonObject | null,
+  key: string
+): string | null {
+  const value = metadata?.[key];
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function readMetadataBoolean(
+  metadata: JsonObject | null,
+  key: string
+): boolean | null {
+  const value = metadata?.[key];
+  return typeof value === "boolean" ? value : null;
+}
+
+function readFiniteNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function toStableJson(value: unknown): string {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+
+  if (Array.isArray(value)) {
+    return `[${value.map((entry) => toStableJson(entry)).join(",")}]`;
+  }
+
+  return `{${Object.entries(value as Record<string, unknown>)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, entry]) => `${JSON.stringify(key)}:${toStableJson(entry)}`)
+    .join(",")}}`;
+}
+
+export function stableTelemetryHash(value: unknown): string {
+  const input = toStableJson(value);
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+function getActionType(action: unknown): string {
+  return isPlainObject(action) && typeof action.type === "string"
+    ? action.type
+    : "unknown";
+}
+
+function sortedStringList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string").sort()
+    : [];
+}
+
+function actionsEquivalent(candidate: unknown, chosen: unknown): boolean {
+  if (!isPlainObject(candidate) || !isPlainObject(chosen)) {
+    return false;
+  }
+
+  if (candidate.type !== chosen.type) {
+    return false;
+  }
+
+  if (
+    typeof candidate.seat === "string" &&
+    typeof chosen.seat === "string" &&
+    candidate.seat !== chosen.seat
+  ) {
+    return false;
+  }
+
+  if (candidate.type === "play_cards") {
+    return (
+      sortedStringList(candidate.cardIds).join("|") ===
+        sortedStringList(chosen.cardIds).join("|") &&
+      candidate.phoenixAsRank === chosen.phoenixAsRank
+    );
+  }
+
+  if (candidate.type === "select_pass") {
+    return (
+      candidate.seat === chosen.seat &&
+      candidate.left === chosen.left &&
+      candidate.partner === chosen.partner &&
+      candidate.right === chosen.right
+    );
+  }
+
+  if (candidate.type === "assign_dragon_trick") {
+    return candidate.recipient === chosen.recipient;
+  }
+
+  if (candidate.type === "advance_phase") {
+    return candidate.actor === chosen.actor;
+  }
+
+  return true;
+}
+
+export function extractActorScopedLegalActions(
+  legalActions: SeedJsonValue,
+  actorSeat: string
+): SeedJsonValue[] {
+  if (Array.isArray(legalActions)) {
+    return legalActions;
+  }
+
+  if (isPlainObject(legalActions)) {
+    const actorActions = legalActions[actorSeat];
+    if (Array.isArray(actorActions)) {
+      return actorActions as SeedJsonValue[];
+    }
+  }
+
+  return [];
+}
+
+function extractExplanationFromMetadata(metadata: JsonObject | null): SeedJsonValue | null {
+  const explanation = metadata?.explanation ?? metadata?.policy_explanation;
+  return explanation !== undefined && isJsonValue(explanation) ? explanation : null;
+}
+
+function extractCandidateScores(explanation: SeedJsonValue | null): SeedJsonValue | null {
+  if (isPlainObject(explanation) && isJsonValue(explanation.candidateScores)) {
+    return explanation.candidateScores;
+  }
+
+  return null;
+}
+
+function extractStateFeatures(explanation: SeedJsonValue | null): JsonObject | null {
+  if (isPlainObject(explanation) && isPlainObject(explanation.stateFeatures)) {
+    return isJsonValue(explanation.stateFeatures)
+      ? (explanation.stateFeatures as JsonObject)
+      : null;
+  }
+
+  return null;
+}
+
+export function deriveTelemetryDecisionFields(
+  payload: TelemetryDecisionPayload
+): DerivedTelemetryDecisionFields {
+  const actorActions = extractActorScopedLegalActions(
+    payload.legal_actions,
+    payload.actor_seat
+  );
+  const chosenActionType = getActionType(payload.chosen_action);
+  const chosenActionIsLegal = actorActions.some((candidate) =>
+    actionsEquivalent(candidate, payload.chosen_action)
+  );
+  const wishRank =
+    readFiniteNumber(payload.state_raw.currentWish) ??
+    readFiniteNumber(payload.metadata.current_wish) ??
+    readFiniteNumber(payload.metadata.wish_rank) ??
+    readFiniteNumber(payload.chosen_action.wishRank);
+
+  const explanationQualityLevel =
+    payload.stateFeatures !== null
+      ? "featured"
+      : Array.isArray(payload.candidateScores)
+        ? "scored"
+        : payload.explanation !== null
+          ? "basic"
+          : "none";
+
+  return {
+    chosen_action_type: chosenActionType,
+    legal_action_count: actorActions.length,
+    chosen_action_is_legal: chosenActionIsLegal,
+    has_explanation: payload.explanation !== null,
+    has_candidate_scores: Array.isArray(payload.candidateScores),
+    has_state_features: payload.stateFeatures !== null,
+    explanation_quality_level: explanationQualityLevel,
+    has_wish: wishRank !== null,
+    wish_rank: wishRank,
+    can_pass: actorActions.some((action) => getActionType(action) === "pass_turn"),
+    state_hash: stableTelemetryHash(payload.state_norm ?? payload.state_raw),
+    legal_actions_hash: stableTelemetryHash(actorActions),
+    chosen_action_hash: stableTelemetryHash(payload.chosen_action)
+  };
+}
+
+export function deriveTelemetryEventFields(
+  payload: TelemetryEventPayload
+): DerivedTelemetryEventFields {
+  return {
+    state_hash: payload.state_norm ? stableTelemetryHash(payload.state_norm) : null,
+    event_hash: stableTelemetryHash(payload.payload)
+  };
+}
+
+function validateDecisionConsistency(
+  context: ValidatorContext,
+  payload: TelemetryDecisionPayload
+): void {
+  const actorActions = extractActorScopedLegalActions(
+    payload.legal_actions,
+    payload.actor_seat
+  );
+
+  if (actorActions.length === 0) {
+    pushIssue(
+      context,
+      "legal_actions",
+      "Expected actor-scoped legal actions or a legal action map containing actor_seat."
+    );
+  } else if (
+    !actorActions.some((candidate) =>
+      actionsEquivalent(candidate, payload.chosen_action)
+    )
+  ) {
+    pushIssue(
+      context,
+      "chosen_action",
+      "chosen_action must match one of actor_seat's legal_actions."
+    );
+  }
+
+  if (
+    typeof payload.state_raw.phase === "string" &&
+    payload.state_raw.phase !== payload.phase
+  ) {
+    pushIssue(context, "phase", "phase must match state_raw.phase.");
+  }
+
+  if (
+    payload.actor_seat !== "system" &&
+    typeof payload.state_raw.activeSeat === "string" &&
+    payload.state_raw.activeSeat !== payload.actor_seat
+  ) {
+    pushIssue(
+      context,
+      "actor_seat",
+      "actor_seat must match state_raw.activeSeat when activeSeat is available."
+    );
+  }
+}
+
 export function validateTelemetryDecisionPayload(
   payload: unknown
 ): ValidationResult<TelemetryDecisionPayload> {
@@ -298,6 +795,51 @@ export function validateTelemetryDecisionPayload(
     };
   }
 
+  const metadata = expectJsonObject(context, payload, "metadata") ?? {};
+  const explanation =
+    expectOptionalJsonValue(context, payload, "explanation") ??
+    extractExplanationFromMetadata(metadata);
+  const candidateScores =
+    expectOptionalJsonValue(context, payload, "candidateScores") ??
+    extractCandidateScores(explanation);
+  const stateFeatures =
+    expectOptionalJsonObject(context, payload, "stateFeatures") ??
+    extractStateFeatures(explanation);
+  const policySourceForFallback =
+    typeof payload.policy_source === "string" && payload.policy_source.trim().length > 0
+      ? payload.policy_source
+      : "";
+  const requestedProvider =
+    expectOptionalString(context, payload, "requested_provider") ??
+    readMetadataString(metadata, "requested_provider") ??
+    policySourceForFallback ??
+    "";
+  const providerUsed =
+    expectOptionalString(context, payload, "provider_used") ??
+    readMetadataString(metadata, "provider_used") ??
+    policySourceForFallback ??
+    "";
+  const fallbackUsed =
+    expectOptionalBoolean(context, payload, "fallback_used") ??
+    readMetadataBoolean(metadata, "fallback_used") ??
+    false;
+
+  if (!requestedProvider) {
+    pushIssue(
+      context,
+      "requested_provider",
+      "Expected requested_provider as a canonical field or metadata value."
+    );
+  }
+
+  if (!providerUsed) {
+    pushIssue(
+      context,
+      "provider_used",
+      "Expected provider_used as a canonical field or metadata value."
+    );
+  }
+
   const value: TelemetryDecisionPayload = {
     ts: expectIsoDate(context, payload, "ts") ?? new Date(0).toISOString(),
     game_id: expectString(context, payload, "game_id") ?? "",
@@ -308,17 +850,28 @@ export function validateTelemetryDecisionPayload(
     schema_version: expectNumber(context, payload, "schema_version") ?? 0,
     engine_version: expectString(context, payload, "engine_version") ?? "",
     sim_version: expectString(context, payload, "sim_version") ?? "",
+    requested_provider: requestedProvider,
+    provider_used: providerUsed,
+    fallback_used: fallbackUsed,
     policy_name: expectString(context, payload, "policy_name") ?? "",
     policy_source: expectString(context, payload, "policy_source") ?? "",
     state_raw: expectJsonObject(context, payload, "state_raw") ?? {},
-    state_norm: expectJsonObject(context, payload, "state_norm", {
-      nullable: true
-    }),
+    state_norm:
+      payload.state_norm === undefined
+        ? null
+        : expectJsonObject(context, payload, "state_norm", {
+            nullable: true
+          }),
     legal_actions: expectJsonValue(context, payload, "legal_actions") ?? [],
     chosen_action: expectJsonObject(context, payload, "chosen_action") ?? {},
-    metadata: expectJsonObject(context, payload, "metadata") ?? {},
+    explanation,
+    candidateScores,
+    stateFeatures,
+    metadata,
     antipattern_tags: expectJsonValue(context, payload, "antipattern_tags") ?? []
   };
+
+  validateDecisionConsistency(context, value);
 
   return finalizeValidation(context, value);
 }
@@ -335,6 +888,7 @@ export function validateTelemetryEventPayload(
     };
   }
 
+  const metadata = expectJsonObject(context, payload, "metadata") ?? {};
   const value: TelemetryEventPayload = {
     ts: expectIsoDate(context, payload, "ts") ?? new Date(0).toISOString(),
     game_id: expectString(context, payload, "game_id") ?? "",
@@ -342,11 +896,27 @@ export function validateTelemetryEventPayload(
     phase: expectString(context, payload, "phase") ?? "",
     event_type: expectString(context, payload, "event_type") ?? "",
     actor_seat: expectOptionalSeat(context, payload, "actor_seat"),
+    event_index: expectNumber(context, payload, "event_index") ?? 0,
     schema_version: expectNumber(context, payload, "schema_version") ?? 0,
     engine_version: expectString(context, payload, "engine_version") ?? "",
     sim_version: expectString(context, payload, "sim_version") ?? "",
+    requested_provider:
+      typeof payload.requested_provider === "string"
+        ? payload.requested_provider
+        : readMetadataString(metadata, "requested_provider"),
+    provider_used:
+      typeof payload.provider_used === "string"
+        ? payload.provider_used
+        : readMetadataString(metadata, "provider_used"),
+    fallback_used:
+      typeof payload.fallback_used === "boolean"
+        ? payload.fallback_used
+        : (readMetadataBoolean(metadata, "fallback_used") ?? false),
+    state_norm: expectJsonObject(context, payload, "state_norm", {
+      nullable: true
+    }),
     payload: expectJsonValue(context, payload, "payload") ?? {},
-    metadata: expectJsonObject(context, payload, "metadata") ?? {}
+    metadata
   };
 
   return finalizeValidation(context, value);

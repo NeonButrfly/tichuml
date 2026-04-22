@@ -44,6 +44,8 @@ Issue [#31](https://github.com/NeonButrfly/tichuml/issues/31) keeps exchange tel
 
 Telemetry upload is runtime-configurable in the `Backend Settings` dialog. Disabling telemetry there stops client uploads without requiring rebuilds.
 
+The canonical telemetry contract now lives in [../telemetry_contract.md](../telemetry_contract.md). Development-only clear/reset safeguards are documented in [../admin_reset_endpoints.md](../admin_reset_endpoints.md). Issue [#35](https://github.com/NeonButrfly/tichuml/issues/35) tracks the pipeline alignment across simulator emission, backend ingestion, database storage, ML export, and admin reset behavior.
+
 ## Versioning
 
 Current telemetry metadata still exposes milestone-oriented engine and sim version fields where required by the existing schema. Those identifiers remain stable for compatibility even though broader project documentation has moved past the old milestone-only wording.

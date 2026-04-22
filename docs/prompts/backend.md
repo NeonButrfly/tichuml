@@ -91,3 +91,48 @@ Prompt logs here capture backend/platform prompt intent only. GitHub issue state
   [Linux Backend Deployment + ML Host](https://github.com/NeonButrfly/tichuml/milestone/25)
 - Status:
   Lives in GitHub, not here.
+
+## 2026-04-21 - Telemetry pipeline contract, ML storage, and guarded admin reset endpoints
+
+- Prompt signal:
+  Fully line up the telemetry pipeline across sim runner, backend ingestion, database storage, ML export, and evaluation so the data is consistent, queryable, and useful for training. Add explicit admin API endpoints to clear telemetry data or reset the development database.
+- Interpreted requirement:
+  Issue [#35](https://github.com/NeonButrfly/tichuml/issues/35) tracks a canonical telemetry contract with strict ingestion validation, actor-scoped decision legality checks, raw-plus-extracted decision/event storage, ML exporter alignment, and destructive admin endpoints protected by both env and confirmation-token safeguards.
+- Affected systems:
+  `packages/shared`, `apps/server`, `apps/sim-runner`, `apps/web/src/backend/telemetry.ts`, `infra/db/migrations`, `ml/export_training_rows.py`, telemetry/admin docs, backend telemetry tests.
+- Linked GitHub issue:
+  [#35](https://github.com/NeonButrfly/tichuml/issues/35)
+- Milestone:
+  [6.5 - Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status:
+  Lives in GitHub, not here.
+
+## 2026-04-21 - Simulator controller control plane and dashboard
+
+- Prompt signal:
+  Add a controller-style simulator control plane for background self-play execution, including a web control dashboard, simulator status surface, worker/thread support, controller script, and safe admin control endpoints.
+- Interpreted requirement:
+  Issue [#37](https://github.com/NeonButrfly/tichuml/issues/37) tracks a Linux-friendly operations layer for long-running self-play with guarded admin APIs, singleton lock semantics, pause/continue/stop at safe batch boundaries, heartbeat/runtime/log files, worker-level status, worker IDs in telemetry, and a browser dashboard plus CLI wrapper.
+- Affected systems:
+  `packages/shared`, `apps/server`, `apps/sim-runner`, `apps/web`, `scripts`, docs, backend integration tests, telemetry storage/export.
+- Linked GitHub issue:
+  [#37](https://github.com/NeonButrfly/tichuml/issues/37)
+- Milestone:
+  [6.5 - Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status:
+  Lives in GitHub, not here.
+
+## 2026-04-21 - Linux migration bootstrap shared-dist failure
+
+- Prompt signal:
+  Linux migration failed with `ERR_MODULE_NOT_FOUND` for `/opt/tichuml/node_modules/@tichuml/shared/dist/index.js` imported from `infra/db/scripts/migrate.ts`.
+- Interpreted requirement:
+  Issue [#38](https://github.com/NeonButrfly/tichuml/issues/38) tracks removing DB migration startup's dependency on built workspace package artifacts so fresh or force-synced Linux hosts can run migrations before package `dist/` output exists.
+- Affected systems:
+  `infra/db/scripts/migrate.ts`, `apps/server/src/db/migrations.ts`, Linux backend startup.
+- Linked GitHub issue:
+  [#38](https://github.com/NeonButrfly/tichuml/issues/38)
+- Milestone:
+  [Linux Backend Deployment + ML Host](https://github.com/NeonButrfly/tichuml/milestone/25)
+- Status:
+  Lives in GitHub, not here.

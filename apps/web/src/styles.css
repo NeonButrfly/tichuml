@@ -57,6 +57,257 @@ input {
   padding: 28px;
 }
 
+.sim-dashboard {
+  min-height: 100vh;
+  padding: 24px;
+  background: #101416;
+  color: #edf4f2;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+}
+
+.sim-topbar,
+.sim-hero,
+.sim-grid {
+  width: min(1280px, 100%);
+  margin: 0 auto;
+}
+
+.sim-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.sim-kicker {
+  margin: 0 0 4px;
+  color: #8fb7af;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.sim-topbar h1,
+.sim-panel h2 {
+  margin: 0;
+  letter-spacing: 0;
+}
+
+.sim-topbar__actions,
+.sim-control-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.sim-dashboard button,
+.sim-dashboard input,
+.sim-dashboard select {
+  min-height: 36px;
+  border: 1px solid #385254;
+  border-radius: 6px;
+  background: #172022;
+  color: #edf4f2;
+}
+
+.sim-dashboard button {
+  padding: 0 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.sim-dashboard button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.sim-hero {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(280px, 1fr) minmax(280px, 1fr);
+  gap: 12px;
+  align-items: stretch;
+  margin-bottom: 12px;
+}
+
+.sim-state-panel,
+.sim-panel,
+.sim-feedback,
+.sim-alert {
+  border: 1px solid #2c3f42;
+  border-radius: 8px;
+  background: #151d20;
+}
+
+.sim-state-panel {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+}
+
+.sim-state-panel > span,
+.sim-metric span,
+.sim-detail {
+  color: #a8bbb8;
+}
+
+.sim-state-panel strong {
+  font-size: 1.9rem;
+}
+
+.sim-pill {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: #2c3940;
+  color: #edf4f2;
+  font-size: 0.8rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.sim-pill--running,
+.sim-pill--completed {
+  background: #0f6f4e;
+}
+
+.sim-pill--paused,
+.sim-pill--pausing {
+  background: #8a6d16;
+}
+
+.sim-pill--error,
+.sim-pill--stale {
+  background: #9b2f36;
+}
+
+.sim-control-row,
+.sim-metrics-grid {
+  padding: 16px;
+  border: 1px solid #2c3f42;
+  border-radius: 8px;
+  background: #151d20;
+}
+
+.sim-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.sim-metrics-grid--compact {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  padding: 0;
+  border: 0;
+}
+
+.sim-metric {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border-radius: 6px;
+  background: #101719;
+}
+
+.sim-metric strong {
+  font-size: 1.2rem;
+  overflow-wrap: anywhere;
+}
+
+.sim-feedback,
+.sim-alert {
+  width: min(1280px, 100%);
+  box-sizing: border-box;
+  margin: 0 auto 12px;
+  padding: 12px 14px;
+}
+
+.sim-alert {
+  border-color: #9b2f36;
+  background: #2b1418;
+}
+
+.sim-feedback {
+  display: flex;
+  gap: 10px;
+  color: #cfe6dc;
+}
+
+.sim-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.8fr) minmax(320px, 1fr);
+  gap: 12px;
+}
+
+.sim-panel {
+  min-width: 0;
+  padding: 16px;
+}
+
+.sim-config {
+  display: grid;
+  gap: 10px;
+}
+
+.sim-config label,
+.sim-toggle {
+  display: grid;
+  gap: 5px;
+  color: #c8d7d4;
+}
+
+.sim-toggle {
+  display: flex;
+  align-items: center;
+}
+
+.sim-workers {
+  grid-column: 1 / -1;
+}
+
+.sim-workers table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+
+.sim-workers th,
+.sim-workers td {
+  border-bottom: 1px solid #2c3f42;
+  padding: 8px;
+  text-align: left;
+}
+
+.sim-dashboard pre {
+  max-height: 360px;
+  overflow: auto;
+  white-space: pre-wrap;
+  color: #d5e6e1;
+}
+
+@media (max-width: 900px) {
+  .sim-dashboard {
+    padding: 12px;
+  }
+
+  .sim-topbar,
+  .sim-hero,
+  .sim-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sim-topbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
 .topbar,
 .table-stage,
 .debug-sidebar {

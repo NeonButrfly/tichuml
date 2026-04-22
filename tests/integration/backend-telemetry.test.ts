@@ -65,6 +65,7 @@ describe("backend telemetry decision tracking", () => {
     ];
 
     for (const { action, phase } of actions) {
+      const actor = "seat" in action ? action.seat : "actor" in action ? action.actor : "system";
       emitDecisionTelemetry({
         settings: SETTINGS,
         action,
@@ -74,9 +75,14 @@ describe("backend telemetry decision tracking", () => {
         decisionIndex: 1,
         stateRaw: { ...BASE_STATE, phase } as EngineResult["nextState"],
         stateNorm: BASE_DERIVED,
-        legalActions: {} as EngineResult["legalActions"],
+        legalActions: { [actor]: [action] } as unknown as EngineResult["legalActions"],
         policyName: "test-policy",
-        policySource: "local_heuristic"
+        policySource: "local_heuristic",
+        metadata: {
+          requested_provider: "local",
+          provider_used: "local_heuristic",
+          fallback_used: false
+        }
       });
     }
 

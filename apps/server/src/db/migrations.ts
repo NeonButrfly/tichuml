@@ -2,8 +2,11 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import postgres from "postgres";
-import { defaultDatabaseUrl } from "@tichuml/shared";
 import { createDatabaseClient, type DatabaseClient } from "./postgres.js";
+
+const defaultDatabaseUrl =
+  process.env.DATABASE_URL ??
+  "postgres://tichu:tichu_dev_password@localhost:54329/tichu";
 
 export type MigrationFile = {
   id: string;

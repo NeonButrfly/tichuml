@@ -8,11 +8,13 @@ import {
   TELEMETRY_EVENT_PATH,
   TELEMETRY_DECISION_PATH,
   normalizeBackendBaseUrl,
+  extractActorScopedLegalActions,
   type DecisionMode,
   type DecisionProviderUsed,
   type DecisionRequestPayload,
   type DecisionResponsePayload,
   type JsonObject,
+  type SeedJsonValue,
   type TelemetryDecisionPayload,
   type TelemetryEventPayload
 } from "@tichuml/shared";
@@ -51,6 +53,8 @@ export type SelfPlayBatchOptions = {
   quiet?: boolean;
   progress?: boolean;
   maxDecisionsPerGame?: number;
+  workerId?: string;
+  controllerMode?: boolean;
 };
 
 export type SelfPlayGameResult = {
@@ -118,6 +122,8 @@ type PersistedEventConfig = {
   eventIndex: number;
   providerUsed: string;
   requestedProvider: string;
+  workerId?: string;
+  controllerMode?: boolean;
 };
 
 function countByKey(bucket: Record<string, number>, key: string): void {
@@ -223,6 +229,62 @@ function actionSatisfiesWish(state: GameState, legalAction: LegalAction | null):
   return legalAction.combination.primaryRank === state.currentWish;
 }
 
+function summarizeCurrentCombination(state: GameState): JsonObject | null {
+  const combination = state.currentTrick?.currentCombination;
+  return combination
+    ? {
+        kind: combination.kind,
+        primaryRank: combination.primaryRank,
+        cardCount: combination.cardCount,
+        isBomb: combination.isBomb
+      }
+    : null;
+}
+
+function buildDecisionContextMetadata(
+  state: GameState,
+  actorLegalActions: SeedJsonValue[],
+  latencyMs: number
+): JsonObject {
+  const wishActive = state.currentWish !== null;
+  const wishSatisfiable =
+    wishActive &&
+    actorLegalActions.some(
+      (action) =>
+        typeof action === "object" &&
+        action !== null &&
+        "combination" in action &&
+        typeof action.combination === "object" &&
+        action.combination !== null &&
+        ((action.combination as JsonObject).primaryRank === state.currentWish ||
+          (Array.isArray((action.combination as JsonObject).actualRanks) &&
+            ((action.combination as JsonObject).actualRanks as SeedJsonValue[]).includes(
+              state.currentWish
+            )))
+    );
+
+  return {
+    seed: state.seed,
+    latency_ms: latencyMs,
+    current_lead_seat: state.currentTrick?.currentWinner ?? null,
+    current_combination: summarizeCurrentCombination(state),
+    wish_active: wishActive,
+    current_wish: state.currentWish,
+    wish_satisfiable: wishSatisfiable,
+    active_wish_no_legal_fulfilling_move: wishActive && !wishSatisfiable
+  };
+}
+
+function buildControllerMetadata(config: {
+  workerId?: string;
+  controllerMode?: boolean;
+}): JsonObject {
+  return {
+    ...(config.workerId ? { worker_id: config.workerId } : {}),
+    ...(config.controllerMode ? { controller_mode: true } : {})
+  };
+}
+
 function buildGameId(baseSeed: string, index: number): string {
   return `selfplay-${baseSeed}-game-${String(index + 1).padStart(6, "0")}`;
 }
@@ -316,6 +378,8 @@ export function buildDecisionRequestPayload(config: {
   phase: string;
   requestedProvider: Exclude<DecisionMode, "local">;
   decisionIndex: number;
+  workerId?: string;
+  controllerMode?: boolean;
 }): DecisionRequestPayload {
   const actorSeat = getCanonicalActiveSeatFromState(config.stateRaw);
   const payload: DecisionRequestPayload = {
@@ -332,7 +396,11 @@ export function buildDecisionRequestPayload(config: {
     requested_provider: config.requestedProvider,
     metadata: {
       decision_index: config.decisionIndex,
-      simulation_mode: true
+      simulation_mode: true,
+      ...buildControllerMetadata({
+        ...(config.workerId ? { workerId: config.workerId } : {}),
+        ...(config.controllerMode ? { controllerMode: true } : {})
+      })
     } as JsonObject
   };
 
@@ -378,9 +446,17 @@ function buildLocalDecisionTelemetry(config: {
   legalActions: LegalActionMap;
   chosen: ChosenDecision;
   requestedProvider: DecisionMode | "system_local";
+  latencyMs: number;
+  workerId?: string;
+  controllerMode?: boolean;
 }): TelemetryDecisionPayload {
   const providerUsed =
     config.actorSeat === SYSTEM_ACTOR ? "system_local" : "local_heuristic";
+  const explanation = config.chosen.explanation as unknown as JsonObject;
+  const actorLegalActions = extractActorScopedLegalActions(
+    config.legalActions as unknown as JsonObject,
+    String(config.actorSeat)
+  );
 
   return {
     ts: new Date().toISOString(),
@@ -392,17 +468,32 @@ function buildLocalDecisionTelemetry(config: {
     schema_version: TELEMETRY_SCHEMA_VERSION,
     engine_version: TELEMETRY_ENGINE_VERSION,
     sim_version: TELEMETRY_SIM_VERSION,
+    requested_provider: config.requestedProvider,
+    provider_used: providerUsed,
+    fallback_used: false,
     policy_name: heuristicsV1Policy.name,
     policy_source: providerUsed,
     state_raw: config.stateRaw,
     state_norm: config.stateNorm,
-    legal_actions: config.legalActions as unknown as JsonObject,
+    legal_actions: actorLegalActions,
     chosen_action: config.chosen.action as unknown as JsonObject,
+    explanation,
+    candidateScores: config.chosen.explanation.candidateScores as unknown as JsonObject[],
+    stateFeatures:
+      config.chosen.explanation.stateFeatures === undefined
+        ? null
+        : (config.chosen.explanation.stateFeatures as unknown as JsonObject),
     metadata: {
       requested_provider: config.requestedProvider,
       provider_used: providerUsed,
       fallback_used: false,
       simulation_mode: true,
+      ...buildControllerMetadata(config),
+      ...buildDecisionContextMetadata(
+        config.stateRaw as unknown as GameState,
+        actorLegalActions,
+        config.latencyMs
+      ),
       explanation: config.chosen.explanation
     },
     antipattern_tags: config.chosen.explanation.selectedTags
@@ -440,9 +531,14 @@ async function persistEvent(
     phase: stateNorm.phase as string,
     event_type: event.type,
     actor_seat: extractActorSeatFromEvent(event, config.actorSeat),
+    event_index: config.eventIndex,
     schema_version: TELEMETRY_SCHEMA_VERSION,
     engine_version: TELEMETRY_ENGINE_VERSION,
     sim_version: TELEMETRY_SIM_VERSION,
+    requested_provider: config.requestedProvider,
+    provider_used: config.providerUsed,
+    fallback_used: config.providerUsed !== config.requestedProvider,
+    state_norm: stateNorm,
     payload: {
       engine_event: event,
       state_norm: stateNorm
@@ -451,6 +547,7 @@ async function persistEvent(
       requested_provider: config.requestedProvider,
       provider_used: config.providerUsed,
       simulation_mode: true,
+      ...buildControllerMetadata(config),
       event_index: config.eventIndex
     }
   };
@@ -472,6 +569,8 @@ async function resolveDecision(
     phase: string;
     defaultProvider: DecisionMode;
     seatProviders?: SeatProviderOverrides;
+    workerId?: string;
+    controllerMode?: boolean;
   }
 ): Promise<SimulatedDecision> {
   const startedAt = Date.now();
@@ -495,7 +594,10 @@ async function resolveDecision(
         stateNorm: config.stateNorm,
         legalActions: config.legalActions,
         chosen,
-        requestedProvider: "system_local"
+        requestedProvider: "system_local",
+        latencyMs: Date.now() - startedAt,
+        ...(config.workerId ? { workerId: config.workerId } : {}),
+        ...(config.controllerMode ? { controllerMode: true } : {})
       });
       await requestJson(
         "POST",
@@ -538,7 +640,10 @@ async function resolveDecision(
         stateNorm: config.stateNorm,
         legalActions: config.legalActions,
         chosen,
-        requestedProvider
+        requestedProvider,
+        latencyMs: Date.now() - startedAt,
+        ...(config.workerId ? { workerId: config.workerId } : {}),
+        ...(config.controllerMode ? { controllerMode: true } : {})
       });
       await requestJson(
         "POST",
@@ -573,7 +678,9 @@ async function resolveDecision(
     legalActions: getActorScopedLegalActions(config.legalActions, canonicalActor),
     phase: config.phase,
     requestedProvider,
-    decisionIndex: config.decisionIndex
+    decisionIndex: config.decisionIndex,
+    ...(config.workerId ? { workerId: config.workerId } : {}),
+    ...(config.controllerMode ? { controllerMode: true } : {})
   });
 
   const decisionResponse = await requestJson(
@@ -641,7 +748,9 @@ async function runSingleGame(
       actorSeat: SYSTEM_ACTOR,
       eventIndex: eventIndex++,
       providerUsed: "system_local",
-      requestedProvider: "system_local"
+      requestedProvider: "system_local",
+      ...(options.workerId ? { workerId: options.workerId } : {}),
+      ...(options.controllerMode ? { controllerMode: true } : {})
     });
   }
 
@@ -668,7 +777,9 @@ async function runSingleGame(
       legalActions: result.legalActions,
       phase: result.nextState.phase,
       defaultProvider: options.defaultProvider,
-      ...(options.seatProviders ? { seatProviders: options.seatProviders } : {})
+      ...(options.seatProviders ? { seatProviders: options.seatProviders } : {}),
+      ...(options.workerId ? { workerId: options.workerId } : {}),
+      ...(options.controllerMode ? { controllerMode: true } : {})
     });
 
     countByKey(providerUsage, resolved.providerUsed);
@@ -720,7 +831,9 @@ async function runSingleGame(
         actorSeat: actor,
         eventIndex: eventIndex++,
         providerUsed: resolved.providerUsed,
-        requestedProvider: resolved.requestedProvider
+        requestedProvider: resolved.requestedProvider,
+        ...(options.workerId ? { workerId: options.workerId } : {}),
+        ...(options.controllerMode ? { controllerMode: true } : {})
       });
     }
 

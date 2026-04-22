@@ -13,7 +13,16 @@ import {
   type EngineResult,
   type SeatId
 } from "@tichuml/engine";
-import type { DecisionRequestPayload, JsonObject } from "@tichuml/shared";
+import type {
+  AdminClearResult,
+  DecisionRequestPayload,
+  JsonObject,
+  TelemetryHealthStats
+} from "@tichuml/shared";
+import {
+  deriveTelemetryDecisionFields,
+  deriveTelemetryEventFields
+} from "@tichuml/shared";
 import type {
   ReplayPayload,
   StoredTelemetryDecisionRecord,
@@ -43,6 +52,7 @@ class InMemoryTelemetryRepository implements TelemetryRepository {
     const id = this.decisionId++;
     this.decisions.push({
       ...payload,
+      ...deriveTelemetryDecisionFields(payload),
       id,
       created_at: new Date().toISOString()
     });
@@ -53,6 +63,7 @@ class InMemoryTelemetryRepository implements TelemetryRepository {
     const id = this.eventId++;
     this.events.push({
       ...payload,
+      ...deriveTelemetryEventFields(payload),
       id,
       created_at: new Date().toISOString()
     });
@@ -75,6 +86,86 @@ class InMemoryTelemetryRepository implements TelemetryRepository {
       timeline: []
     };
   }
+
+  async getHealthStats(): Promise<TelemetryHealthStats> {
+    const countBy = <T extends { [key: string]: unknown }>(
+      rows: T[],
+      key: keyof T
+    ): Record<string, number> =>
+      rows.reduce<Record<string, number>>((counts, row) => {
+        const value = String(row[key] ?? "null");
+        counts[value] = (counts[value] ?? 0) + 1;
+        return counts;
+      }, {});
+
+    return {
+      decisions: this.decisions.length,
+      events: this.events.length,
+      unique_state_hashes: new Set(this.decisions.map((decision) => decision.state_hash)).size,
+      duplicate_state_hashes: 0,
+      unique_legal_actions_hashes: new Set(
+        this.decisions.map((decision) => decision.legal_actions_hash)
+      ).size,
+      duplicate_legal_actions_hashes: 0,
+      decisions_with_explanation: this.decisions.filter(
+        (decision) => decision.has_explanation
+      ).length,
+      decisions_with_candidate_scores: this.decisions.filter(
+        (decision) => decision.has_candidate_scores
+      ).length,
+      decisions_with_state_features: this.decisions.filter(
+        (decision) => decision.has_state_features
+      ).length,
+      decisions_with_legal_chosen_action: this.decisions.filter(
+        (decision) => decision.chosen_action_is_legal
+      ).length,
+      decisions_with_wish: this.decisions.filter((decision) => decision.has_wish)
+        .length,
+      decisions_can_pass: this.decisions.filter((decision) => decision.can_pass)
+        .length,
+      latest_decision_ts: this.decisions.at(-1)?.ts ?? null,
+      latest_event_ts: this.events.at(-1)?.ts ?? null,
+      decisions_by_provider: countBy(this.decisions, "provider_used"),
+      decisions_by_phase: countBy(this.decisions, "phase"),
+      decisions_by_seat: countBy(this.decisions, "actor_seat"),
+      events_by_type: countBy(this.events, "event_type"),
+      events_by_phase: countBy(this.events, "phase")
+    };
+  }
+
+  async clearTelemetry(): Promise<AdminClearResult> {
+    const row_counts = {
+      decisions: this.decisions.length,
+      events: this.events.length
+    };
+    this.decisions = [];
+    this.events = [];
+    return {
+      accepted: true,
+      action: "telemetry.clear",
+      tables_cleared: ["decisions", "events"],
+      row_counts,
+      warnings: ["Development/admin destructive endpoint used."]
+    };
+  }
+
+  async clearDatabase(): Promise<AdminClearResult> {
+    const result = await this.clearTelemetry();
+    return {
+      ...result,
+      action: "database.clear",
+      tables_cleared: ["decisions", "events", "matches"],
+      row_counts: { ...result.row_counts, matches: 0 }
+    };
+  }
+
+  async resetDatabase(): Promise<AdminClearResult> {
+    const result = await this.clearDatabase();
+    return {
+      ...result,
+      action: "database.reset"
+    };
+  }
 }
 
 const TEST_SERVER_CONFIG: ServerConfig = {
@@ -86,6 +177,9 @@ const TEST_SERVER_CONFIG: ServerConfig = {
   autoBootstrapDatabase: false,
   autoMigrate: false,
   backendBaseUrl: "http://127.0.0.1",
+  destructiveAdminEndpointsEnabled: false,
+  adminSimControlEnabled: false,
+  simControllerRuntimeDir: "C:/tichu/tichuml/.runtime/test-sim-controller",
   repoRoot: "C:/tichu/tichuml",
   pythonExecutable: "python",
   lightgbmInferScript: "ml/infer.py",
