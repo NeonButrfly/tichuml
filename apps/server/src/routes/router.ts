@@ -37,6 +37,7 @@ import {
   badRequest,
   handleCorsPreflight,
   notFound,
+  RequestBodyLimitError,
   readJsonBody,
   writeJson
 } from "../utils/http.js";
@@ -299,6 +300,8 @@ export function createRouter({
     }
 
     const url = new URL(request.url, config.backendBaseUrl);
+    const readConfiguredJsonBody = () =>
+      readJsonBody(request, { maxBytes: config.requestBodyLimitBytes });
 
     try {
       if (request.method === "GET" && url.pathname === "/admin/control") {
@@ -479,7 +482,7 @@ export function createRouter({
       }
 
       if (request.method === "POST" && url.pathname === TELEMETRY_DECISION_PATH) {
-        const parsed = validateTelemetryDecisionPayload(await readJsonBody(request));
+        const parsed = validateTelemetryDecisionPayload(await readConfiguredJsonBody());
         if (!parsed.ok) {
           badRequest(
             response,
@@ -504,7 +507,7 @@ export function createRouter({
       }
 
       if (request.method === "POST" && url.pathname === TELEMETRY_EVENT_PATH) {
-        const parsed = validateTelemetryEventPayload(await readJsonBody(request));
+        const parsed = validateTelemetryEventPayload(await readConfiguredJsonBody());
         if (!parsed.ok) {
           badRequest(
             response,
@@ -602,7 +605,7 @@ export function createRouter({
 
       if (request.method === "POST" && url.pathname === DECISION_REQUEST_PATH) {
         const startedAt = Date.now();
-        const parsed = validateDecisionRequestPayload(await readJsonBody(request));
+        const parsed = validateDecisionRequestPayload(await readConfiguredJsonBody());
         if (!parsed.ok) {
           logDecisionTrace(config, "decision_request_rejected", {
             reason: "payload_validation",
@@ -701,6 +704,20 @@ export function createRouter({
 
       notFound(response, config.allowedOrigin);
     } catch (error) {
+      if (error instanceof RequestBodyLimitError) {
+        writeJson(
+          response,
+          413,
+          {
+            accepted: false,
+            error: error.message,
+            limit_bytes: error.limitBytes,
+            received_bytes: error.receivedBytes
+          },
+          config.allowedOrigin
+        );
+        return;
+      }
       writeJson(
         response,
         500,

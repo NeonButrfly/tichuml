@@ -534,10 +534,13 @@ export class FileSimControllerService implements SimControllerService {
             : true,
       strict_telemetry: payload.strict_telemetry === true,
       trace_backend: payload.trace_backend === true,
-      telemetry_mode: payload.telemetry_mode === "full" ? "full" : "minimal",
+      telemetry_mode:
+        payload.telemetry_mode === "full" || payload.telemetry_mode === "minimal"
+          ? payload.telemetry_mode
+          : this.config.telemetryMode,
       telemetry_max_bytes: Math.max(
         1,
-        Number(payload.telemetry_max_bytes ?? 450 * 1024)
+        Number(payload.telemetry_max_bytes ?? this.config.telemetryMaxPostBytes)
       ),
       backend_url:
         typeof payload.backend_url === "string" && payload.backend_url.length > 0

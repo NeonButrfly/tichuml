@@ -75,7 +75,7 @@ function createInitialForm(): FormState {
     gamesPerBatch: 1,
     telemetryEnabled: settings.telemetryEnabled,
     telemetryMode: "minimal",
-    telemetryMaxBytes: 450 * 1024,
+    telemetryMaxBytes: 24 * 1024 * 1024,
     backendUrl,
     seedPrefix: "controller",
     sleepSeconds: 5,

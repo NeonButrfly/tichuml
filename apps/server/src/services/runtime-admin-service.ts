@@ -189,6 +189,10 @@ const CONFIG_SCHEMA: Array<{
   { key: "ENABLE_DESTRUCTIVE_ADMIN_ENDPOINTS", label: "Destructive DB APIs", category: "Admin", type: "boolean", restart_required: true, description: "Enable legacy destructive DB admin APIs.", validate: validateBoolean },
   { key: "ENABLE_ADMIN_SIM_CONTROL", label: "Simulator admin APIs", category: "Admin", type: "boolean", restart_required: true, description: "Enable simulator admin control APIs.", validate: validateBoolean },
   { key: "TRACE_DECISION_REQUESTS", label: "Decision request trace", category: "Admin", type: "boolean", restart_required: true, description: "Emit compact structured backend decision trace logs.", validate: validateBoolean },
+  { key: "REQUEST_BODY_LIMIT", label: "Request body limit", category: "Admin", type: "string", restart_required: true, description: "HTTP JSON request body limit, e.g. 25mb. Takes precedence over MAX_REQUEST_BODY_MB.", validate: validateByteSize },
+  { key: "MAX_REQUEST_BODY_MB", label: "Request body MB", category: "Admin", type: "number", restart_required: true, description: "Fallback HTTP request body limit in MiB.", validate: validatePositiveNumber },
+  { key: "TELEMETRY_MODE", label: "Telemetry mode", category: "Admin", type: "string", restart_required: false, description: "Default simulator telemetry mode: minimal or full.", validate: validateTelemetryMode },
+  { key: "TELEMETRY_MAX_POST_BYTES", label: "Telemetry max post bytes", category: "Admin", type: "number", restart_required: false, description: "Simulator-side maximum telemetry POST size before local skip.", validate: validatePositiveNumber },
   { key: "SIM_CONTROLLER_RUNTIME_DIR", label: "Sim controller runtime dir", category: "Runtime", type: "string", restart_required: true, description: "Simulator controller runtime directory." },
   { key: "AUTO_UPDATE_ON_START", label: "Auto update on start", category: "Git", type: "boolean", restart_required: false, description: "Force-sync repo on Linux startup.", validate: validateBoolean },
   { key: "GIT_BRANCH", label: "Git branch", category: "Git", type: "string", restart_required: false, description: "Git branch for force-sync/update." },
@@ -217,6 +221,25 @@ function validateBoolean(value: string): string | null {
   return /^(true|false)$/iu.test(value)
     ? null
     : "Expected true or false.";
+}
+
+function validatePositiveNumber(value: string): string | null {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0
+    ? null
+    : "Expected a positive number.";
+}
+
+function validateByteSize(value: string): string | null {
+  return value.trim() === "" || /^\d+(?:\.\d+)?\s*(b|kb|kib|mb|mib)?$/iu.test(value)
+    ? null
+    : "Expected a byte size such as 25mb or 26214400.";
+}
+
+function validateTelemetryMode(value: string): string | null {
+  return /^(minimal|full)$/iu.test(value)
+    ? null
+    : "Expected minimal or full.";
 }
 
 function normalizeBooleanValue(value: string): string {

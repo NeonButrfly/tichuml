@@ -44,7 +44,7 @@ import {
 export type SeatProviderOverrides = Partial<Record<SeatId, DecisionMode>>;
 export type TelemetryMode = "minimal" | "full";
 
-const DEFAULT_TELEMETRY_MAX_BYTES = 450 * 1024;
+const DEFAULT_TELEMETRY_MAX_BYTES = 24 * 1024 * 1024;
 
 export type SelfPlayBatchOptions = {
   games: number;
@@ -997,13 +997,18 @@ async function requestJson(
     payload_summary: summarizeBackendPayload(context?.request_kind ?? "decision", body)
   };
   const startedAt = Date.now();
-  traceBackendRequest(requestContext, "backend_request_start", {});
+  const requestBody = body ? JSON.stringify(body) : undefined;
+  const payloadBytes =
+    requestBody === undefined ? 0 : Buffer.byteLength(requestBody, "utf8");
+  traceBackendRequest(requestContext, "backend_request_start", {
+    payload_bytes: payloadBytes
+  });
   const init: RequestInit = { method };
-  if (body) {
+  if (requestBody) {
     init.headers = {
       "content-type": "application/json"
     };
-    init.body = JSON.stringify(body);
+    init.body = requestBody;
   }
   let response: Response;
   try {
@@ -1014,6 +1019,7 @@ async function requestJson(
     traceBackendRequest(requestContext, "backend_request_failure", {
       failure_kind: "network_failure",
       latency_ms: latencyMs,
+      payload_bytes: payloadBytes,
       message,
       cause: error instanceof Error ? error.name : "unknown"
     });
@@ -1040,6 +1046,7 @@ async function requestJson(
       failure_kind: "unexpected_failure",
       latency_ms: latencyMs,
       status: response.status,
+      payload_bytes: payloadBytes,
       message
     });
     throw new BackendRequestFailure(
@@ -1072,6 +1079,7 @@ async function requestJson(
       failure_kind: "backend_rejection",
       latency_ms: latencyMs,
       status: response.status,
+      payload_bytes: payloadBytes,
       ...(Object.keys(payload).length > 0 ? { body: payload } : {}),
       ...(rawBody ? { raw_body: rawBody } : {})
     });
@@ -1093,7 +1101,8 @@ async function requestJson(
   }
   traceBackendRequest(requestContext, "backend_request_success", {
     latency_ms: latencyMs,
-    status: response.status
+    status: response.status,
+    payload_bytes: payloadBytes
   });
   return {
     status: response.status,

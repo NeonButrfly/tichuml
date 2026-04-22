@@ -115,4 +115,34 @@ describe("server config env loading", () => {
 
     expect(config.backendBaseUrl).toBe("http://192.168.50.44:4310");
   });
+
+  it("loads request body and telemetry post limits from env", async () => {
+    const repoRoot = await createTempRepo();
+    await fs.writeFile(
+      path.join(repoRoot, ".env"),
+      [
+        "REQUEST_BODY_LIMIT=32mb",
+        "MAX_REQUEST_BODY_MB=12",
+        "TELEMETRY_MODE=full",
+        "TELEMETRY_MAX_POST_BYTES=1234567"
+      ].join("\n")
+    );
+
+    const config = loadServerConfig({}, { repoRoot });
+
+    expect(config.requestBodyLimitBytes).toBe(32 * 1024 * 1024);
+    expect(config.requestBodyLimitLabel).toBe("32mb");
+    expect(config.telemetryMode).toBe("full");
+    expect(config.telemetryMaxPostBytes).toBe(1234567);
+  });
+
+  it("uses MAX_REQUEST_BODY_MB when REQUEST_BODY_LIMIT is absent", async () => {
+    const repoRoot = await createTempRepo();
+    await fs.writeFile(path.join(repoRoot, ".env"), "MAX_REQUEST_BODY_MB=7\n");
+
+    const config = loadServerConfig({}, { repoRoot });
+
+    expect(config.requestBodyLimitBytes).toBe(7 * 1024 * 1024);
+    expect(config.requestBodyLimitLabel).toBe("7mb");
+  });
 });

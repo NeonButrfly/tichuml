@@ -209,12 +209,16 @@ Prompt logs here capture backend/platform prompt intent only. GitHub issue state
   minimal schema, verbose state dumps must require explicit `telemetry_mode=full`,
   simulator-side payload byte guards must skip oversize telemetry locally, and
   non-strict telemetry failures must be logged/counted without invalidating
-  completed game or batch progress.
+  completed game or batch progress. A later follow-up keeps that minimal default
+  for routine controller operation while raising configurable backend request
+  body limits and simulator post caps so explicit full telemetry can be used for
+  training/evaluation/debug runs.
 - Affected systems:
   `apps/sim-runner/src/self-play-batch.ts`, `apps/sim-runner/src/cli.ts`,
   `apps/server/src/services/sim-controller-service.ts`,
   `apps/web/src/SimControlDashboard.tsx`, `packages/shared/src/backend.ts`,
-  backend/simulator integration tests.
+  `apps/server/src/config/env.ts`, `apps/server/src/utils/http.ts`,
+  `docs/backend-telemetry-runtime.md`, backend/simulator integration tests.
 - Linked GitHub issue:
   [#41](https://github.com/NeonButrfly/tichuml/issues/41)
 - Milestone:

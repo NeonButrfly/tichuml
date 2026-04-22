@@ -1,7 +1,21 @@
 import http from "node:http";
 import type { ValidationIssue } from "@tichuml/shared";
 
-const MAX_REQUEST_BYTES = 512 * 1024;
+export const DEFAULT_REQUEST_BODY_LIMIT_BYTES = 25 * 1024 * 1024;
+
+export class RequestBodyLimitError extends Error {
+  readonly limitBytes: number;
+  readonly receivedBytes: number;
+
+  constructor(limitBytes: number, receivedBytes: number) {
+    super(
+      `Request body exceeded the supported size limit (${receivedBytes} bytes > ${limitBytes} bytes).`
+    );
+    this.name = "RequestBodyLimitError";
+    this.limitBytes = limitBytes;
+    this.receivedBytes = receivedBytes;
+  }
+}
 
 export function writeJson(
   response: http.ServerResponse,
@@ -21,16 +35,21 @@ export function writeJson(
 }
 
 export async function readJsonBody(
-  request: http.IncomingMessage
+  request: http.IncomingMessage,
+  options: { maxBytes?: number } = {}
 ): Promise<unknown> {
   const chunks: Buffer[] = [];
   let totalBytes = 0;
+  const maxBytes =
+    Number.isFinite(options.maxBytes) && options.maxBytes !== undefined && options.maxBytes > 0
+      ? Math.floor(options.maxBytes)
+      : DEFAULT_REQUEST_BODY_LIMIT_BYTES;
 
   for await (const chunk of request) {
     const bufferChunk = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     totalBytes += bufferChunk.byteLength;
-    if (totalBytes > MAX_REQUEST_BYTES) {
-      throw new Error("Request body exceeded the supported size limit.");
+    if (totalBytes > maxBytes) {
+      throw new RequestBodyLimitError(maxBytes, totalBytes);
     }
 
     chunks.push(bufferChunk);

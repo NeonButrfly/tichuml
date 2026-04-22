@@ -9,6 +9,8 @@ import type {
   SimWorkerRuntimeState
 } from "@tichuml/shared";
 
+const DEFAULT_TELEMETRY_MAX_POST_BYTES = 24 * 1024 * 1024;
+
 type ParsedArgs = {
   games: number;
   provider: DecisionMode;
@@ -53,6 +55,15 @@ function parseBoolean(value: string | undefined, fallback: boolean): boolean {
   return fallback;
 }
 
+function parseTelemetryMode(value: string | undefined): "minimal" | "full" {
+  return value === "full" ? "full" : "minimal";
+}
+
+function parsePositiveInteger(value: string | undefined, fallback: number): number {
+  const parsed = Number(value ?? fallback);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+
 function parseSeatProvider(value: string, seatProviders: SeatProviderOverrides): void {
   const [seat, provider] = value.split("=");
   if (!seat || !provider || !isSeatId(seat)) {
@@ -72,8 +83,11 @@ function parseArgs(argv: string[]): ParsedArgs {
     serverFallbackEnabled: true,
     strictTelemetry: false,
     traceBackend: false,
-    telemetryMode: "minimal",
-    telemetryMaxBytes: 450 * 1024,
+    telemetryMode: parseTelemetryMode(process.env.TELEMETRY_MODE),
+    telemetryMaxBytes: parsePositiveInteger(
+      process.env.TELEMETRY_MAX_POST_BYTES,
+      DEFAULT_TELEMETRY_MAX_POST_BYTES
+    ),
     seed: "self-play",
     seedPrefix: "self-play",
     telemetryEnabled: true,
@@ -136,7 +150,7 @@ function parseArgs(argv: string[]): ParsedArgs {
         index += 1;
         break;
       case "--telemetry-max-bytes":
-        parsed.telemetryMaxBytes = Math.max(1, Number(next ?? parsed.telemetryMaxBytes));
+        parsed.telemetryMaxBytes = parsePositiveInteger(next, parsed.telemetryMaxBytes);
         index += 1;
         break;
       case "--seed":

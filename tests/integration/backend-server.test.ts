@@ -498,6 +498,10 @@ const TEST_SERVER_CONFIG: ServerConfig = {
   adminSimControlEnabled: false,
   runtimeAdminControlEnabled: false,
   traceDecisionRequests: false,
+  requestBodyLimitBytes: 25 * 1024 * 1024,
+  requestBodyLimitLabel: "25mb",
+  telemetryMode: "minimal",
+  telemetryMaxPostBytes: 24 * 1024 * 1024,
   simControllerRuntimeDir: "C:/tichu/tichuml/.runtime/test-sim-controller",
   repoRoot: "C:/tichu/tichuml",
   pythonExecutable: "python",
@@ -579,6 +583,57 @@ function createDecisionPayload(): TelemetryDecisionPayload {
     stateFeatures: null,
     metadata: { test: true },
     antipattern_tags: []
+  };
+}
+
+function createMinimalDecisionPayload(): TelemetryDecisionPayload {
+  const chosenAction = { type: "play_cards", seat: "seat-1", cardIds: ["star-2"] };
+  return {
+    ...createDecisionPayload(),
+    state_raw: {},
+    state_norm: null,
+    legal_actions: [chosenAction],
+    chosen_action: chosenAction,
+    explanation: null,
+    candidateScores: null,
+    stateFeatures: {
+      telemetry_mode: "minimal",
+      legal_action_count: 1
+    },
+    metadata: {
+      telemetry_mode: "minimal",
+      legal_action_count: 1
+    },
+    antipattern_tags: []
+  };
+}
+
+function createFullDecisionPayload(): TelemetryDecisionPayload {
+  return {
+    ...createDecisionPayload(),
+    state_raw: {
+      phase: "trick_play",
+      activeSeat: "seat-1",
+      training_context: "x".repeat(700_000)
+    },
+    state_norm: {
+      activeSeat: "seat-1",
+      training_features: "y".repeat(700_000)
+    },
+    explanation: {
+      reason: "full telemetry training payload",
+      candidateScores: [{ action: "play", score: 1 }],
+      stateFeatures: { feature_count: 1 }
+    },
+    candidateScores: [{ action: "play", score: 1 }],
+    stateFeatures: {
+      telemetry_mode: "full",
+      feature_count: 1
+    },
+    metadata: {
+      telemetry_mode: "full",
+      training: true
+    }
   };
 }
 
@@ -823,6 +878,51 @@ describe("backend foundation server routes", () => {
       expect(repository.decisions[0]?.policy_name).toBe("heuristics-v1");
       expect(repository.decisions[0]?.chosen_action_is_legal).toBe(true);
     });
+  });
+
+  it("accepts minimal simulator decision telemetry through the backend validator", async () => {
+    await withServer(async ({ baseUrl, repository }) => {
+      const response = await fetch(`${baseUrl}/api/telemetry/decision`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(createMinimalDecisionPayload())
+      });
+
+      expect(response.status).toBe(201);
+      expect(repository.decisions).toHaveLength(1);
+      expect(repository.decisions[0]?.state_raw).toEqual({});
+      expect(repository.decisions[0]?.state_norm).toBeNull();
+      expect(repository.decisions[0]?.legal_action_count).toBe(1);
+      expect(repository.decisions[0]?.chosen_action_is_legal).toBe(true);
+    });
+  });
+
+  it("accepts full simulator decision telemetry below the configured request limit", async () => {
+    await withServer(
+      async ({ baseUrl, repository }) => {
+        const payload = createFullDecisionPayload();
+        expect(Buffer.byteLength(JSON.stringify(payload), "utf8")).toBeGreaterThan(
+          512 * 1024
+        );
+        const response = await fetch(`${baseUrl}/api/telemetry/decision`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        expect(response.status).toBe(201);
+        expect(repository.decisions).toHaveLength(1);
+        expect(repository.decisions[0]?.has_explanation).toBe(true);
+        expect(repository.decisions[0]?.has_candidate_scores).toBe(true);
+        expect(repository.decisions[0]?.has_state_features).toBe(true);
+      },
+      {
+        serverConfig: {
+          requestBodyLimitBytes: 2 * 1024 * 1024,
+          requestBodyLimitLabel: "2mb"
+        }
+      }
+    );
   });
 
   it("rejects decision telemetry when chosen_action is not legal for actor_seat", async () => {

@@ -22,6 +22,10 @@ export type ServerConfig = {
   adminSimControlEnabled: boolean;
   runtimeAdminControlEnabled: boolean;
   traceDecisionRequests: boolean;
+  requestBodyLimitBytes: number;
+  requestBodyLimitLabel: string;
+  telemetryMode: "minimal" | "full";
+  telemetryMaxPostBytes: number;
   simControllerRuntimeDir: string;
   repoRoot: string;
   pythonExecutable: string;
@@ -29,6 +33,55 @@ export type ServerConfig = {
   lightgbmModelPath: string;
   lightgbmModelMetaPath: string;
 };
+
+const DEFAULT_REQUEST_BODY_LIMIT_MB = 25;
+const DEFAULT_TELEMETRY_MAX_POST_BYTES = 24 * 1024 * 1024;
+
+function parseByteSize(value: string | undefined): number | null {
+  const rawValue = value?.trim().toLowerCase();
+  if (!rawValue) {
+    return null;
+  }
+
+  const match = rawValue.match(/^(\d+(?:\.\d+)?)\s*(b|kb|kib|mb|mib)?$/u);
+  if (!match) {
+    return null;
+  }
+
+  const amount = Number(match[1]);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return null;
+  }
+
+  const unit = match[2] ?? "b";
+  const multiplier =
+    unit === "mb" || unit === "mib"
+      ? 1024 * 1024
+      : unit === "kb" || unit === "kib"
+        ? 1024
+        : 1;
+  return Math.floor(amount * multiplier);
+}
+
+function resolveRequestBodyLimit(env: Record<string, string | undefined>): {
+  bytes: number;
+  label: string;
+} {
+  const explicitLimit = parseByteSize(env.REQUEST_BODY_LIMIT);
+  if (explicitLimit !== null) {
+    return {
+      bytes: explicitLimit,
+      label: env.REQUEST_BODY_LIMIT?.trim() || `${explicitLimit}b`
+    };
+  }
+
+  const mbValue = Number(env.MAX_REQUEST_BODY_MB ?? DEFAULT_REQUEST_BODY_LIMIT_MB);
+  const mb = Number.isFinite(mbValue) && mbValue > 0 ? mbValue : DEFAULT_REQUEST_BODY_LIMIT_MB;
+  return {
+    bytes: Math.floor(mb * 1024 * 1024),
+    label: `${mb}mb`
+  };
+}
 
 export function getRepoRoot(): string {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../");
@@ -104,6 +157,10 @@ export function loadServerConfig(
         mergedEnv.BACKEND_BASE_URL?.trim() ||
         detectedPublicUrl
       : mergedEnv.BACKEND_BASE_URL?.trim() || detectedPublicUrl;
+  const requestBodyLimit = resolveRequestBodyLimit(mergedEnv);
+  const telemetryMaxPostBytesValue = Number(
+    mergedEnv.TELEMETRY_MAX_POST_BYTES ?? DEFAULT_TELEMETRY_MAX_POST_BYTES
+  );
 
   return {
     port,
@@ -135,6 +192,13 @@ export function loadServerConfig(
       mergedEnv.TRACE_DECISION_REQUESTS,
       false
     ),
+    requestBodyLimitBytes: requestBodyLimit.bytes,
+    requestBodyLimitLabel: requestBodyLimit.label,
+    telemetryMode: mergedEnv.TELEMETRY_MODE === "full" ? "full" : "minimal",
+    telemetryMaxPostBytes:
+      Number.isFinite(telemetryMaxPostBytesValue) && telemetryMaxPostBytesValue > 0
+        ? Math.floor(telemetryMaxPostBytesValue)
+        : DEFAULT_TELEMETRY_MAX_POST_BYTES,
     simControllerRuntimeDir: resolveRepoPath(
       repoRoot,
       mergedEnv.SIM_CONTROLLER_RUNTIME_DIR,

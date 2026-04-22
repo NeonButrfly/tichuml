@@ -68,7 +68,9 @@ export async function startServer() {
       console.info("[server] listening", {
         host: serverConfig.host,
         port: serverConfig.port,
-        databaseUrl: serverConfig.databaseUrl
+        databaseUrl: serverConfig.databaseUrl,
+        requestBodyLimitBytes: serverConfig.requestBodyLimitBytes,
+        requestBodyLimit: serverConfig.requestBodyLimitLabel
       });
       resolve();
     });
