@@ -196,6 +196,32 @@ Prompt logs here capture backend/platform prompt intent only. GitHub issue state
 - Status:
   Lives in GitHub, not here.
 
+## 2026-04-22 - Oversized simulator telemetry must not block progress
+
+- Prompt signal:
+  A healthy simulator controller/backend run was making decisions but repeatedly
+  logging `/api/telemetry/decision` failures with `Request body exceeded the
+  supported size limit.`, leaving the control UI stuck at `Batches=0`,
+  `Games=0`, and `Last batch=running` while `strict_telemetry=false`.
+- Interpreted requirement:
+  Issue [#41](https://github.com/NeonButrfly/tichuml/issues/41) also tracks the
+  telemetry payload compaction follow-up: decision telemetry must default to a
+  minimal schema, verbose state dumps must require explicit `telemetry_mode=full`,
+  simulator-side payload byte guards must skip oversize telemetry locally, and
+  non-strict telemetry failures must be logged/counted without invalidating
+  completed game or batch progress.
+- Affected systems:
+  `apps/sim-runner/src/self-play-batch.ts`, `apps/sim-runner/src/cli.ts`,
+  `apps/server/src/services/sim-controller-service.ts`,
+  `apps/web/src/SimControlDashboard.tsx`, `packages/shared/src/backend.ts`,
+  backend/simulator integration tests.
+- Linked GitHub issue:
+  [#41](https://github.com/NeonButrfly/tichuml/issues/41)
+- Milestone:
+  [Linux Backend Deployment + ML Host](https://github.com/NeonButrfly/tichuml/milestone/25)
+- Status:
+  Lives in GitHub, not here.
+
 ## 2026-04-21 - Simulator controller admin dashboard routes return 404
 
 - Prompt signal:

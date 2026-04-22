@@ -42,6 +42,9 @@ import {
 } from "@tichuml/telemetry";
 
 export type SeatProviderOverrides = Partial<Record<SeatId, DecisionMode>>;
+export type TelemetryMode = "minimal" | "full";
+
+const DEFAULT_TELEMETRY_MAX_BYTES = 450 * 1024;
 
 export type SelfPlayBatchOptions = {
   games: number;
@@ -52,6 +55,8 @@ export type SelfPlayBatchOptions = {
   serverFallbackEnabled?: boolean;
   strictTelemetry?: boolean;
   traceBackend?: boolean;
+  telemetryMode?: TelemetryMode;
+  telemetryMaxBytes?: number;
   backendBaseUrl?: string;
   quiet?: boolean;
   progress?: boolean;
@@ -137,6 +142,8 @@ type PersistedEventConfig = {
   requestedProvider: string;
   strictTelemetry?: boolean;
   traceBackend?: boolean;
+  telemetryMode?: TelemetryMode;
+  telemetryMaxBytes?: number;
   quiet?: boolean;
   workerId?: string;
   controllerMode?: boolean;
@@ -199,6 +206,8 @@ type TelemetryWriteResult =
       raw_body?: string;
       cause?: string;
       latency_ms?: number;
+      payload_bytes?: number;
+      max_bytes?: number;
     };
 
 type TelemetryFailureStats = {
@@ -340,6 +349,16 @@ function summarizeLatency(
   );
 }
 
+function jsonByteLength(value: unknown): number {
+  return Buffer.byteLength(JSON.stringify(value), "utf8");
+}
+
+function resolveTelemetryMaxBytes(value: number | undefined): number {
+  return Number.isFinite(value) && value !== undefined && value > 0
+    ? Math.floor(value)
+    : DEFAULT_TELEMETRY_MAX_BYTES;
+}
+
 function recordLatency(
   bucket: Record<string, { count: number; totalMs: number }>,
   provider: string,
@@ -450,6 +469,29 @@ function buildDecisionContextMetadata(
     current_wish: state.currentWish,
     wish_satisfiable: wishSatisfiable,
     active_wish_no_legal_fulfilling_move: wishActive && !wishSatisfiable
+  };
+}
+
+function buildCompactDecisionMetadata(config: {
+  stateRaw: GameState;
+  actorLegalActions: SeedJsonValue[];
+  latencyMs: number;
+  telemetryMode: TelemetryMode;
+}): JsonObject {
+  const detail = buildDecisionContextMetadata(
+    config.stateRaw,
+    config.actorLegalActions,
+    config.latencyMs
+  );
+  return {
+    telemetry_mode: config.telemetryMode,
+    latency_ms: detail.latency_ms ?? null,
+    current_lead_seat: detail.current_lead_seat ?? null,
+    current_combination: detail.current_combination ?? null,
+    wish_active: detail.wish_active ?? false,
+    current_wish: detail.current_wish ?? null,
+    wish_satisfiable: detail.wish_satisfiable ?? false,
+    legal_action_count: config.actorLegalActions.length
   };
 }
 
@@ -661,6 +703,12 @@ function emitTelemetryFailure(
     }
     if (result.cause) {
       payload.cause = result.cause;
+    }
+    if (result.payload_bytes !== undefined) {
+      payload.payload_bytes = result.payload_bytes;
+    }
+    if (result.max_bytes !== undefined) {
+      payload.max_bytes = result.max_bytes;
     }
   }
   emitDecisionDiagnostic(config, "telemetry_persistence_failure", payload);
@@ -1087,17 +1135,28 @@ function buildLocalDecisionTelemetry(config: {
   fallbackUsed?: boolean;
   fallbackReason?: string;
   latencyMs: number;
+  telemetryMode?: TelemetryMode;
   workerId?: string;
   controllerMode?: boolean;
 }): TelemetryDecisionPayload {
   const providerUsed =
     config.actorSeat === SYSTEM_ACTOR ? "system_local" : "local_heuristic";
   const fallbackUsed = config.fallbackUsed === true;
-  const explanation = config.chosen.explanation as unknown as JsonObject;
+  const telemetryMode = config.telemetryMode ?? "minimal";
+  const fullTelemetry = telemetryMode === "full";
+  const explanation = fullTelemetry
+    ? (config.chosen.explanation as unknown as JsonObject)
+    : null;
   const actorLegalActions = extractActorScopedLegalActions(
     config.legalActions as unknown as JsonObject,
     String(config.actorSeat)
   );
+  const compactMetadata = buildCompactDecisionMetadata({
+    stateRaw: config.stateRaw as unknown as GameState,
+    actorLegalActions,
+    latencyMs: config.latencyMs,
+    telemetryMode
+  });
 
   return {
     ts: new Date().toISOString(),
@@ -1114,16 +1173,19 @@ function buildLocalDecisionTelemetry(config: {
     fallback_used: fallbackUsed,
     policy_name: heuristicsV1Policy.name,
     policy_source: providerUsed,
-    state_raw: config.stateRaw,
-    state_norm: config.stateNorm,
-    legal_actions: actorLegalActions,
+    state_raw: fullTelemetry ? config.stateRaw : {},
+    state_norm: fullTelemetry ? config.stateNorm : null,
+    legal_actions: fullTelemetry ? actorLegalActions : [config.chosen.action],
     chosen_action: config.chosen.action as unknown as JsonObject,
     explanation,
-    candidateScores: config.chosen.explanation.candidateScores as unknown as JsonObject[],
-    stateFeatures:
-      config.chosen.explanation.stateFeatures === undefined
+    candidateScores: fullTelemetry
+      ? (config.chosen.explanation.candidateScores as unknown as JsonObject[])
+      : null,
+    stateFeatures: fullTelemetry
+      ? config.chosen.explanation.stateFeatures === undefined
         ? null
-        : (config.chosen.explanation.stateFeatures as unknown as JsonObject),
+        : (config.chosen.explanation.stateFeatures as unknown as JsonObject)
+      : compactMetadata,
     metadata: {
       requested_provider: config.requestedProvider,
       provider_used: providerUsed,
@@ -1131,14 +1193,10 @@ function buildLocalDecisionTelemetry(config: {
       ...(config.fallbackReason ? { fallback_reason: config.fallbackReason } : {}),
       simulation_mode: true,
       ...buildControllerMetadata(config),
-      ...buildDecisionContextMetadata(
-        config.stateRaw as unknown as GameState,
-        actorLegalActions,
-        config.latencyMs
-      ),
-      explanation: config.chosen.explanation
+      ...compactMetadata,
+      ...(fullTelemetry ? { explanation: config.chosen.explanation } : {})
     },
-    antipattern_tags: config.chosen.explanation.selectedTags
+    antipattern_tags: fullTelemetry ? config.chosen.explanation.selectedTags : []
   };
 }
 
@@ -1162,10 +1220,26 @@ export async function safePostTelemetryDecision(config: {
   payload: TelemetryDecisionPayload;
   traceBackend?: boolean;
   quiet?: boolean;
+  maxBytes?: number;
   workerId?: string;
   controllerMode?: boolean;
 }): Promise<TelemetryWriteResult> {
   const endpoint = `${config.backendBaseUrl}${TELEMETRY_DECISION_PATH}`;
+  const payloadBytes = jsonByteLength(config.payload);
+  const maxBytes = resolveTelemetryMaxBytes(config.maxBytes);
+  if (payloadBytes > maxBytes) {
+    return {
+      ok: false,
+      endpoint,
+      method: "POST",
+      request_kind: "telemetry_decision",
+      failure_kind: "backend_rejection",
+      message: `Telemetry decision payload skipped locally because it is ${payloadBytes} bytes and exceeds ${maxBytes} bytes.`,
+      cause: "local_oversize_guard",
+      payload_bytes: payloadBytes,
+      max_bytes: maxBytes
+    };
+  }
   try {
     const result = await requestJson(
       "POST",
@@ -1203,10 +1277,26 @@ export async function safePostTelemetryEvent(config: {
   payload: TelemetryEventPayload;
   traceBackend?: boolean;
   quiet?: boolean;
+  maxBytes?: number;
   workerId?: string;
   controllerMode?: boolean;
 }): Promise<TelemetryWriteResult> {
   const endpoint = `${config.backendBaseUrl}${TELEMETRY_EVENT_PATH}`;
+  const payloadBytes = jsonByteLength(config.payload);
+  const maxBytes = resolveTelemetryMaxBytes(config.maxBytes);
+  if (payloadBytes > maxBytes) {
+    return {
+      ok: false,
+      endpoint,
+      method: "POST",
+      request_kind: "telemetry_event",
+      failure_kind: "backend_rejection",
+      message: `Telemetry event payload skipped locally because it is ${payloadBytes} bytes and exceeds ${maxBytes} bytes.`,
+      cause: "local_oversize_guard",
+      payload_bytes: payloadBytes,
+      max_bytes: maxBytes
+    };
+  }
   try {
     const result = await requestJson(
       "POST",
@@ -1246,6 +1336,8 @@ async function resolveLocalHeuristicDecision(config: {
   telemetryEnabled: boolean;
   strictTelemetry?: boolean;
   traceBackend?: boolean;
+  telemetryMode?: TelemetryMode;
+  telemetryMaxBytes?: number;
   quiet?: boolean;
   gameId: string;
   handId: string;
@@ -1289,6 +1381,7 @@ async function resolveLocalHeuristicDecision(config: {
       fallbackUsed: config.fallbackUsed,
       ...(config.fallbackReason ? { fallbackReason: config.fallbackReason } : {}),
       latencyMs,
+      telemetryMode: config.telemetryMode ?? "minimal",
       ...(config.workerId ? { workerId: config.workerId } : {}),
       ...(config.controllerMode ? { controllerMode: true } : {})
     });
@@ -1297,6 +1390,9 @@ async function resolveLocalHeuristicDecision(config: {
       payload,
       ...(config.traceBackend ? { traceBackend: true } : {}),
       ...(config.quiet ? { quiet: true } : {}),
+      ...(config.telemetryMaxBytes !== undefined
+        ? { maxBytes: config.telemetryMaxBytes }
+        : {}),
       ...(config.workerId ? { workerId: config.workerId } : {}),
       ...(config.controllerMode ? { controllerMode: true } : {})
     });
@@ -1334,13 +1430,16 @@ async function persistEvent(
     return null;
   }
 
+  const telemetryMode = config.telemetryMode ?? "minimal";
+  const fullTelemetry = telemetryMode === "full";
+  const actorSeat = extractActorSeatFromEvent(event, config.actorSeat);
   const payload: TelemetryEventPayload = {
     ts: new Date().toISOString(),
     game_id: config.gameId,
     hand_id: config.handId,
     phase: stateNorm.phase as string,
     event_type: event.type,
-    actor_seat: extractActorSeatFromEvent(event, config.actorSeat),
+    actor_seat: actorSeat,
     event_index: config.eventIndex,
     schema_version: TELEMETRY_SCHEMA_VERSION,
     engine_version: TELEMETRY_ENGINE_VERSION,
@@ -1348,12 +1447,19 @@ async function persistEvent(
     requested_provider: config.requestedProvider,
     provider_used: config.providerUsed,
     fallback_used: config.providerUsed !== config.requestedProvider,
-    state_norm: stateNorm,
-    payload: {
-      engine_event: event,
-      state_norm: stateNorm
-    },
+    state_norm: fullTelemetry ? stateNorm : null,
+    payload: fullTelemetry
+      ? {
+          engine_event: event,
+          state_norm: stateNorm
+        }
+      : {
+          event_type: event.type,
+          actor_seat: actorSeat,
+          phase: stateNorm.phase as string
+        },
     metadata: {
+      telemetry_mode: telemetryMode,
       requested_provider: config.requestedProvider,
       provider_used: config.providerUsed,
       simulation_mode: true,
@@ -1367,6 +1473,9 @@ async function persistEvent(
     payload,
     ...(config.traceBackend ? { traceBackend: true } : {}),
     ...(config.quiet ? { quiet: true } : {}),
+    ...(config.telemetryMaxBytes !== undefined
+      ? { maxBytes: config.telemetryMaxBytes }
+      : {}),
     ...(config.workerId ? { workerId: config.workerId } : {}),
     ...(config.controllerMode ? { controllerMode: true } : {})
   });
@@ -1395,6 +1504,8 @@ export async function resolveDecision(
     serverFallbackEnabled?: boolean;
     strictTelemetry?: boolean;
     traceBackend?: boolean;
+    telemetryMode?: TelemetryMode;
+    telemetryMaxBytes?: number;
     quiet?: boolean;
     workerId?: string;
     controllerMode?: boolean;
@@ -1648,6 +1759,10 @@ async function runSingleGame(
         ? { strictTelemetry: options.strictTelemetry }
         : {}),
       ...(options.traceBackend !== undefined ? { traceBackend: options.traceBackend } : {}),
+      ...(options.telemetryMode !== undefined ? { telemetryMode: options.telemetryMode } : {}),
+      ...(options.telemetryMaxBytes !== undefined
+        ? { telemetryMaxBytes: options.telemetryMaxBytes }
+        : {}),
       ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
       gameId,
       handId,
@@ -1764,6 +1879,10 @@ async function runSingleGame(
           ? { strictTelemetry: options.strictTelemetry }
           : {}),
         ...(options.traceBackend !== undefined ? { traceBackend: options.traceBackend } : {}),
+        ...(options.telemetryMode !== undefined ? { telemetryMode: options.telemetryMode } : {}),
+        ...(options.telemetryMaxBytes !== undefined
+          ? { telemetryMaxBytes: options.telemetryMaxBytes }
+          : {}),
         ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
         gameId,
         handId,

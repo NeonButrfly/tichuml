@@ -97,6 +97,8 @@ export type SimControllerConfig = {
   server_fallback_enabled: boolean;
   strict_telemetry: boolean;
   trace_backend: boolean;
+  telemetry_mode: "minimal" | "full";
+  telemetry_max_bytes: number;
   backend_url: string;
   seed_prefix: string;
   sleep_seconds: number;
@@ -172,6 +174,8 @@ export type SimControllerRequestPayload = Partial<{
   server_fallback: boolean;
   strict_telemetry: boolean;
   trace_backend: boolean;
+  telemetry_mode: "minimal" | "full";
+  telemetry_max_bytes: number;
   backend_url: string;
   seed: string;
   seed_prefix: string;

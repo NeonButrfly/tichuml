@@ -23,6 +23,7 @@ import type {
 import {
   BACKEND_HEALTH_PATH,
   DECISION_REQUEST_PATH,
+  TELEMETRY_DECISION_PATH,
   deriveTelemetryDecisionFields,
   deriveTelemetryEventFields
 } from "@tichuml/shared";
@@ -279,6 +280,64 @@ async function withRejectingDecisionServer<T>(
   }
 }
 
+async function withTelemetryDecisionServer<T>(
+  config: {
+    status?: number;
+    body?: JsonObject;
+  },
+  callback: (server: {
+    baseUrl: string;
+    capturedPayloads: TelemetryDecisionPayload[];
+  }) => Promise<T>
+): Promise<T> {
+  const capturedPayloads: TelemetryDecisionPayload[] = [];
+  const server = createServer((request, response) => {
+    response.setHeader("content-type", "application/json");
+    if (request.url === BACKEND_HEALTH_PATH && request.method === "GET") {
+      response.writeHead(200);
+      response.end(JSON.stringify({ ok: true }));
+      return;
+    }
+    if (request.url === TELEMETRY_DECISION_PATH && request.method === "POST") {
+      const chunks: Buffer[] = [];
+      request.on("data", (chunk: Buffer) => {
+        chunks.push(chunk);
+      });
+      request.on("end", () => {
+        const body = Buffer.concat(chunks).toString("utf8");
+        capturedPayloads.push(JSON.parse(body) as TelemetryDecisionPayload);
+        response.writeHead(config.status ?? 201);
+        response.end(JSON.stringify(config.body ?? { accepted: true, telemetry_id: 1 }));
+      });
+      return;
+    }
+    response.writeHead(404);
+    response.end(JSON.stringify({ error: "not found" }));
+  });
+
+  const port = nextSafeTestPort++;
+  await new Promise<void>((resolve) => {
+    server.listen(port, "127.0.0.1", () => resolve());
+  });
+
+  try {
+    return await callback({
+      baseUrl: `http://127.0.0.1:${port}`,
+      capturedPayloads
+    });
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      (server as Server).close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    });
+  }
+}
+
 function advanceToPassSelect(): EngineResult {
   let result = createInitialGameState({ seed: "server-contract-pass-select" });
   while (result.nextState.phase === "grand_tichu_window") {
@@ -516,6 +575,88 @@ describe("server_heuristic actor contract", () => {
     expect(decision.telemetryFailureStats.telemetryFailuresTotal).toBe(1);
   });
 
+  it("sends compact local decision telemetry by default", async () => {
+    await withTelemetryDecisionServer({}, async ({ baseUrl, capturedPayloads }) => {
+      const result = advanceToPassSelect();
+      const actor = getCanonicalActiveSeatFromState(result.nextState);
+      const decision = await resolveDecision({
+        backendBaseUrl: baseUrl,
+        telemetryEnabled: true,
+        strictTelemetry: false,
+        gameId: "minimal-telemetry-game",
+        handId: "minimal-telemetry-hand",
+        actor,
+        decisionIndex: 0,
+        stateRaw: result.nextState as unknown as JsonObject,
+        stateNorm: result.derivedView as unknown as JsonObject,
+        legalActions: result.legalActions,
+        phase: result.nextState.phase,
+        defaultProvider: "local"
+      });
+
+      expect(decision.providerUsed).toBe("local_heuristic");
+      expect(capturedPayloads.length).toBe(1);
+      const payload = capturedPayloads[0];
+      expect(payload.game_id).toBe("minimal-telemetry-game");
+      expect(payload.hand_id).toBe("minimal-telemetry-hand");
+      expect(payload.phase).toBe(result.nextState.phase);
+      expect(payload.actor_seat).toBe(actor);
+      expect(payload.decision_index).toBe(0);
+      expect(payload.provider_used).toBe("local_heuristic");
+      expect(payload.state_raw).toEqual({});
+      expect(payload.state_norm).toBeNull();
+      expect(payload.legal_actions).toEqual([payload.chosen_action]);
+      expect(payload.explanation).toBeNull();
+      expect(payload.candidateScores).toBeNull();
+      expect(payload.metadata).toMatchObject({
+        telemetry_mode: "minimal",
+        legal_action_count: result.legalActions[actor]?.length ?? 0
+      });
+      expect(JSON.stringify(payload).length).toBeLessThan(10_000);
+    });
+  });
+
+  it("keeps local provider decisions alive when telemetry decision POST returns 500", async () => {
+    await withTelemetryDecisionServer(
+      {
+        status: 500,
+        body: {
+          error: "Request body exceeded the supported size limit."
+        }
+      },
+      async ({ baseUrl }) => {
+        const result = advanceToPassSelect();
+        const actor = getCanonicalActiveSeatFromState(result.nextState);
+        const decision = await resolveDecision({
+          backendBaseUrl: baseUrl,
+          telemetryEnabled: true,
+          strictTelemetry: false,
+          gameId: "telemetry-500-game",
+          handId: "telemetry-500-hand",
+          actor,
+          decisionIndex: 0,
+          stateRaw: result.nextState as unknown as JsonObject,
+          stateNorm: result.derivedView as unknown as JsonObject,
+          legalActions: result.legalActions,
+          phase: result.nextState.phase,
+          defaultProvider: "local"
+        });
+
+        expect(decision.providerUsed).toBe("local_heuristic");
+        expect(decision.telemetryFailureStats.telemetryDecisionFailures).toBe(1);
+        expect(decision.telemetryFailureStats.telemetryFailuresTotal).toBe(1);
+        expect(decision.telemetryFailure).toMatchObject({
+          ok: false,
+          failure_kind: "backend_rejection",
+          status: 500,
+          body: {
+            error: "Request body exceeded the supported size limit."
+          }
+        });
+      }
+    );
+  });
+
   it("fails local provider decisions on telemetry failure only in strict mode", async () => {
     const result = advanceToPassSelect();
     const actor = getCanonicalActiveSeatFromState(result.nextState);
@@ -535,6 +676,38 @@ describe("server_heuristic actor contract", () => {
         defaultProvider: "local"
       })
     ).rejects.toThrow(/Strict telemetry decision persistence failed/);
+  });
+
+  it("skips oversized telemetry locally instead of posting it in non-strict mode", async () => {
+    await withTelemetryDecisionServer({}, async ({ baseUrl, capturedPayloads }) => {
+      const result = advanceToPassSelect();
+      const actor = getCanonicalActiveSeatFromState(result.nextState);
+      const decision = await resolveDecision({
+        backendBaseUrl: baseUrl,
+        telemetryEnabled: true,
+        strictTelemetry: false,
+        telemetryMode: "full",
+        telemetryMaxBytes: 1,
+        gameId: "oversize-guard-game",
+        handId: "oversize-guard-hand",
+        actor,
+        decisionIndex: 0,
+        stateRaw: result.nextState as unknown as JsonObject,
+        stateNorm: result.derivedView as unknown as JsonObject,
+        legalActions: result.legalActions,
+        phase: result.nextState.phase,
+        defaultProvider: "local"
+      });
+
+      expect(decision.providerUsed).toBe("local_heuristic");
+      expect(capturedPayloads).toHaveLength(0);
+      expect(decision.telemetryFailureStats.telemetryDecisionFailures).toBe(1);
+      expect(decision.telemetryFailure).toMatchObject({
+        ok: false,
+        cause: "local_oversize_guard",
+        max_bytes: 1
+      });
+    });
   });
 
   it("reports telemetry event POST failures without throwing through the safe wrapper", async () => {

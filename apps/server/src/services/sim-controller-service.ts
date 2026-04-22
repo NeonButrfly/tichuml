@@ -299,6 +299,10 @@ export class FileSimControllerService implements SimControllerService {
       String(resolved.strict_telemetry),
       "--trace-backend",
       String(resolved.trace_backend),
+      "--telemetry-mode",
+      resolved.telemetry_mode,
+      "--telemetry-max-bytes",
+      String(resolved.telemetry_max_bytes),
       "--backend-url",
       resolved.backend_url
     ];
@@ -351,6 +355,10 @@ export class FileSimControllerService implements SimControllerService {
       String(resolved.strict_telemetry),
       "--trace-backend",
       String(resolved.trace_backend),
+      "--telemetry-mode",
+      resolved.telemetry_mode,
+      "--telemetry-max-bytes",
+      String(resolved.telemetry_max_bytes),
       "--backend-url",
       resolved.backend_url,
       "--runtime-file",
@@ -526,6 +534,11 @@ export class FileSimControllerService implements SimControllerService {
             : true,
       strict_telemetry: payload.strict_telemetry === true,
       trace_backend: payload.trace_backend === true,
+      telemetry_mode: payload.telemetry_mode === "full" ? "full" : "minimal",
+      telemetry_max_bytes: Math.max(
+        1,
+        Number(payload.telemetry_max_bytes ?? 450 * 1024)
+      ),
       backend_url:
         typeof payload.backend_url === "string" && payload.backend_url.length > 0
           ? payload.backend_url

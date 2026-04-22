@@ -16,6 +16,8 @@ type ParsedArgs = {
   serverFallbackEnabled: boolean;
   strictTelemetry: boolean;
   traceBackend: boolean;
+  telemetryMode: "minimal" | "full";
+  telemetryMaxBytes: number;
   seed: string;
   seedPrefix: string;
   telemetryEnabled: boolean;
@@ -70,6 +72,8 @@ function parseArgs(argv: string[]): ParsedArgs {
     serverFallbackEnabled: true,
     strictTelemetry: false,
     traceBackend: false,
+    telemetryMode: "minimal",
+    telemetryMaxBytes: 450 * 1024,
     seed: "self-play",
     seedPrefix: "self-play",
     telemetryEnabled: true,
@@ -121,6 +125,18 @@ function parseArgs(argv: string[]): ParsedArgs {
         break;
       case "--trace-backend":
         parsed.traceBackend = parseBoolean(next, false);
+        index += 1;
+        break;
+      case "--telemetry-mode":
+        if (next === "minimal" || next === "full") {
+          parsed.telemetryMode = next;
+        } else {
+          throw new Error(`Invalid telemetry mode: ${next ?? ""}`);
+        }
+        index += 1;
+        break;
+      case "--telemetry-max-bytes":
+        parsed.telemetryMaxBytes = Math.max(1, Number(next ?? parsed.telemetryMaxBytes));
         index += 1;
         break;
       case "--seed":
@@ -245,6 +261,8 @@ function buildControllerConfig(args: ParsedArgs): SimControllerConfig {
     server_fallback_enabled: args.serverFallbackEnabled,
     strict_telemetry: args.strictTelemetry,
     trace_backend: args.traceBackend,
+    telemetry_mode: args.telemetryMode,
+    telemetry_max_bytes: args.telemetryMaxBytes,
     backend_url: args.backendBaseUrl ?? "http://localhost:4310",
     seed_prefix: args.seedPrefix,
     sleep_seconds: args.sleepSeconds,
@@ -405,6 +423,8 @@ async function runWorker(args: ParsedArgs, worker: SimWorkerRuntimeState): Promi
         serverFallbackEnabled: args.serverFallbackEnabled,
         strictTelemetry: args.strictTelemetry,
         traceBackend: args.traceBackend,
+        telemetryMode: args.telemetryMode,
+        telemetryMaxBytes: args.telemetryMaxBytes,
         ...(args.backendBaseUrl ? { backendBaseUrl: args.backendBaseUrl } : {}),
         quiet: args.quiet,
         progress: args.progress,
@@ -507,6 +527,8 @@ async function main(): Promise<void> {
       serverFallbackEnabled: args.serverFallbackEnabled,
       strictTelemetry: args.strictTelemetry,
       traceBackend: args.traceBackend,
+      telemetryMode: args.telemetryMode,
+      telemetryMaxBytes: args.telemetryMaxBytes,
       ...(args.backendBaseUrl ? { backendBaseUrl: args.backendBaseUrl } : {}),
       quiet: args.quiet,
       progress: args.progress

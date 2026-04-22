@@ -24,6 +24,8 @@ type FormState = {
   provider: DecisionMode;
   gamesPerBatch: number;
   telemetryEnabled: boolean;
+  telemetryMode: "minimal" | "full";
+  telemetryMaxBytes: number;
   backendUrl: string;
   seedPrefix: string;
   sleepSeconds: number;
@@ -72,6 +74,8 @@ function createInitialForm(): FormState {
     provider: settings.decisionMode,
     gamesPerBatch: 1,
     telemetryEnabled: settings.telemetryEnabled,
+    telemetryMode: "minimal",
+    telemetryMaxBytes: 450 * 1024,
     backendUrl,
     seedPrefix: "controller",
     sleepSeconds: 5,
@@ -85,6 +89,8 @@ function toPayload(form: FormState): SimControllerRequestPayload {
     provider: form.provider,
     games_per_batch: form.gamesPerBatch,
     telemetry_enabled: form.telemetryEnabled,
+    telemetry_mode: form.telemetryMode,
+    telemetry_max_bytes: form.telemetryMaxBytes,
     backend_url: form.backendUrl,
     seed_prefix: form.seedPrefix,
     sleep_seconds: form.sleepSeconds,
@@ -458,6 +464,35 @@ export function SimControlDashboard() {
               }
             />
             Telemetry enabled
+          </label>
+          <label>
+            Telemetry mode
+            <select
+              value={form.telemetryMode}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  telemetryMode: event.target.value === "full" ? "full" : "minimal"
+                }))
+              }
+            >
+              <option value="minimal">minimal</option>
+              <option value="full">full</option>
+            </select>
+          </label>
+          <label>
+            Telemetry max bytes
+            <input
+              type="number"
+              min={1}
+              value={form.telemetryMaxBytes}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  telemetryMaxBytes: Math.max(1, Number(event.target.value))
+                }))
+              }
+            />
           </label>
         </form>
 
