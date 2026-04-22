@@ -1,4 +1,6 @@
 import http from "node:http";
+import fs from "node:fs";
+import path from "node:path";
 import {
   BACKEND_HEALTH_PATH,
   DECISION_REQUEST_PATH,
@@ -42,6 +44,107 @@ type RouterDependencies = {
   simController: SimControllerService;
   lightgbmScorer?: LightgbmScorer;
 };
+
+const SIM_DASHBOARD_PATHS = new Set(["/admin/sim", "/sim/control"]);
+
+function getWebDistDir(config: ServerConfig): string {
+  return path.join(config.repoRoot, "apps", "web", "dist");
+}
+
+function getWebContentType(filePath: string): string {
+  switch (path.extname(filePath).toLowerCase()) {
+    case ".html":
+      return "text/html; charset=utf-8";
+    case ".js":
+      return "text/javascript; charset=utf-8";
+    case ".css":
+      return "text/css; charset=utf-8";
+    case ".json":
+      return "application/json; charset=utf-8";
+    case ".svg":
+      return "image/svg+xml";
+    case ".png":
+      return "image/png";
+    case ".jpg":
+    case ".jpeg":
+      return "image/jpeg";
+    case ".webp":
+      return "image/webp";
+    case ".ico":
+      return "image/x-icon";
+    default:
+      return "application/octet-stream";
+  }
+}
+
+function writeStaticFile(
+  response: http.ServerResponse,
+  filePath: string,
+  allowedOrigin: string,
+  options: { immutable?: boolean } = {}
+): boolean {
+  if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+    return false;
+  }
+
+  response.writeHead(200, {
+    "Content-Type": getWebContentType(filePath),
+    "Cache-Control": options.immutable
+      ? "public, max-age=31536000, immutable"
+      : "no-store",
+    "Access-Control-Allow-Origin": allowedOrigin
+  });
+  response.end(fs.readFileSync(filePath));
+  return true;
+}
+
+function resolveWebAssetPath(config: ServerConfig, pathname: string): string | null {
+  if (!pathname.startsWith("/assets/")) {
+    return null;
+  }
+
+  let decodedPathname: string;
+  try {
+    decodedPathname = decodeURIComponent(pathname);
+  } catch {
+    return null;
+  }
+
+  const distDir = getWebDistDir(config);
+  const resolvedPath = path.resolve(
+    distDir,
+    decodedPathname.replace(/^\/+/, "")
+  );
+  const distRoot = path.resolve(distDir);
+  return resolvedPath.startsWith(`${distRoot}${path.sep}`) ? resolvedPath : null;
+}
+
+function serveWebAsset(
+  response: http.ServerResponse,
+  config: ServerConfig,
+  pathname: string
+): boolean {
+  const assetPath = resolveWebAssetPath(config, pathname);
+  return assetPath
+    ? writeStaticFile(response, assetPath, config.allowedOrigin, { immutable: true })
+    : false;
+}
+
+function serveSimDashboard(
+  response: http.ServerResponse,
+  config: ServerConfig,
+  pathname: string
+): boolean {
+  if (!SIM_DASHBOARD_PATHS.has(pathname)) {
+    return false;
+  }
+
+  return writeStaticFile(
+    response,
+    path.join(getWebDistDir(config), "index.html"),
+    config.allowedOrigin
+  );
+}
 
 function createServerManifest(config: ServerConfig) {
   return {
@@ -147,6 +250,17 @@ export function createRouter({
     const url = new URL(request.url, config.backendBaseUrl);
 
     try {
+      if (request.method === "GET" && serveWebAsset(response, config, url.pathname)) {
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
+        serveSimDashboard(response, config, url.pathname)
+      ) {
+        return;
+      }
+
       if (request.method === "GET" && url.pathname === "/api/manifest") {
         writeJson(response, 200, createServerManifest(config), config.allowedOrigin);
         return;

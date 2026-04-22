@@ -870,6 +870,40 @@ describe("backend foundation server routes", () => {
     );
   });
 
+  it("serves simulator dashboard SPA routes and assets from the backend host", async () => {
+    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), "tichuml-web-dist-"));
+    const webDist = path.join(repoRoot, "apps", "web", "dist");
+    const assetDir = path.join(webDist, "assets");
+    fs.mkdirSync(assetDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(webDist, "index.html"),
+      '<!doctype html><html><body><div id="root"></div><script type="module" src="/assets/dashboard.js"></script></body></html>',
+      "utf8"
+    );
+    fs.writeFileSync(path.join(assetDir, "dashboard.js"), "console.log('sim');", "utf8");
+
+    try {
+      await withServer(
+        async ({ baseUrl }) => {
+          for (const route of ["/admin/sim", "/sim/control"]) {
+            const response = await fetch(`${baseUrl}${route}`);
+            expect(response.status).toBe(200);
+            expect(response.headers.get("content-type")).toContain("text/html");
+            expect(await response.text()).toContain('<div id="root"></div>');
+          }
+
+          const asset = await fetch(`${baseUrl}/assets/dashboard.js`);
+          expect(asset.status).toBe(200);
+          expect(asset.headers.get("content-type")).toContain("text/javascript");
+          expect(await asset.text()).toContain("console.log('sim');");
+        },
+        { serverConfig: { repoRoot } }
+      );
+    } finally {
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it("supports simulator start, duplicate start rejection, pause, continue, stop, and run-once", async () => {
     const simController = new InMemorySimController();
     await withServer(

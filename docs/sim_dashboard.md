@@ -1,11 +1,17 @@
 # Simulator Dashboard
 
-Tracking issue: [#37](https://github.com/NeonButrfly/tichuml/issues/37)
+Tracking issues: [#37](https://github.com/NeonButrfly/tichuml/issues/37),
+[#39](https://github.com/NeonButrfly/tichuml/issues/39)
 
 Dashboard routes:
 
 - `/admin/sim`
 - `/sim/control`
+
+On the Linux backend host, the server builds `apps/web/dist` and serves these
+routes from the same backend origin as the admin API so direct navigation to the
+operator URLs does not 404. The Vite asset files under `/assets/*` are also
+served by the backend host.
 
 The dashboard is a control surface, not a read-only page. It calls the same
 admin controller API used by `scripts/sim-controller.sh`.

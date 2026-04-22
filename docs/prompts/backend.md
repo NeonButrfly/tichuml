@@ -136,3 +136,24 @@ Prompt logs here capture backend/platform prompt intent only. GitHub issue state
   [Linux Backend Deployment + ML Host](https://github.com/NeonButrfly/tichuml/milestone/25)
 - Status:
   Lives in GitHub, not here.
+
+## 2026-04-21 - Simulator controller admin dashboard routes return 404
+
+- Prompt signal:
+  The sim controller is 404 at `https://192.168.50.196:4310/admin/sim` and
+  `/sim/control`.
+- Interpreted requirement:
+  Issue [#39](https://github.com/NeonButrfly/tichuml/issues/39) tracks making the
+  Linux backend host serve the built simulator controller dashboard at both
+  operator entrypoints, including the Vite assets needed by direct browser
+  navigation on the backend origin.
+- Affected systems:
+  `apps/server`, `apps/web`, `scripts/backend-linux-common.sh`, simulator
+  dashboard docs, backend integration tests.
+- Linked GitHub issue:
+  [#39](https://github.com/NeonButrfly/tichuml/issues/39)
+- Milestone:
+  None intentionally. This is a focused route-hosting bug, not a milestone-sized
+  product scope.
+- Status:
+  Lives in GitHub, not here.

@@ -400,7 +400,7 @@ install_ml_requirements_if_needed() {
 
 build_runtime_artifacts() {
   log_step "Building backend and simulator runtime artifacts"
-  (cd "$BACKEND_REPO_ROOT" && npm run build:shared && npm run build:engine && npm run build:telemetry && npm run build:ai && npm run build:server && npm run build:sim-runner)
+  (cd "$BACKEND_REPO_ROOT" && npm run build:shared && npm run build:engine && npm run build:telemetry && npm run build:ai && npm run build:server && npm run build:sim-runner && npm run build:web)
 }
 
 backend_pid() {
