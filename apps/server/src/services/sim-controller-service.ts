@@ -295,6 +295,10 @@ export class FileSimControllerService implements SimControllerService {
       String(resolved.telemetry_enabled),
       "--server-fallback",
       String(resolved.server_fallback_enabled),
+      "--strict-telemetry",
+      String(resolved.strict_telemetry),
+      "--trace-backend",
+      String(resolved.trace_backend),
       "--backend-url",
       resolved.backend_url
     ];
@@ -343,6 +347,10 @@ export class FileSimControllerService implements SimControllerService {
       String(resolved.telemetry_enabled),
       "--server-fallback",
       String(resolved.server_fallback_enabled),
+      "--strict-telemetry",
+      String(resolved.strict_telemetry),
+      "--trace-backend",
+      String(resolved.trace_backend),
       "--backend-url",
       resolved.backend_url,
       "--runtime-file",
@@ -516,6 +524,8 @@ export class FileSimControllerService implements SimControllerService {
           : typeof payload.server_fallback === "boolean"
             ? payload.server_fallback
             : true,
+      strict_telemetry: payload.strict_telemetry === true,
+      trace_backend: payload.trace_backend === true,
       backend_url:
         typeof payload.backend_url === "string" && payload.backend_url.length > 0
           ? payload.backend_url

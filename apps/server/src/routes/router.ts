@@ -28,6 +28,7 @@ import {
 import type { ServerConfig } from "../config/env.js";
 import type { LightgbmScorer } from "../ml/lightgbm-scorer.js";
 import { handleDecisionRequest } from "../services/decision-service.js";
+import { summarizeDecisionRequest } from "../providers/provider-utils.js";
 import type { RuntimeAdminService } from "../services/runtime-admin-service.js";
 import { renderRuntimeControlPanel } from "../services/runtime-control-panel.js";
 import type { SimControllerService } from "../services/sim-controller-service.js";
@@ -49,6 +50,17 @@ type RouterDependencies = {
 };
 
 const SIM_DASHBOARD_PATHS = new Set(["/admin/sim", "/sim/control"]);
+
+function logDecisionTrace(
+  config: ServerConfig,
+  event: string,
+  payload: Record<string, unknown>
+): void {
+  if (!config.traceDecisionRequests) {
+    return;
+  }
+  console.info(JSON.stringify({ ts: new Date().toISOString(), event, ...payload }));
+}
 
 function getWebDistDir(config: ServerConfig): string {
   return path.join(config.repoRoot, "apps", "web", "dist");
@@ -589,8 +601,14 @@ export function createRouter({
       }
 
       if (request.method === "POST" && url.pathname === DECISION_REQUEST_PATH) {
+        const startedAt = Date.now();
         const parsed = validateDecisionRequestPayload(await readJsonBody(request));
         if (!parsed.ok) {
+          logDecisionTrace(config, "decision_request_rejected", {
+            reason: "payload_validation",
+            validation_issues: parsed.issues,
+            latency_ms: Date.now() - startedAt
+          });
           badRequest(
             response,
             "Invalid decision request payload.",
@@ -600,22 +618,33 @@ export function createRouter({
           return;
         }
 
+        logDecisionTrace(config, "decision_request_received", {
+          ...summarizeDecisionRequest(parsed.value)
+        });
         let decisionResponse;
         try {
           decisionResponse = await handleDecisionRequest(
             repository,
             parsed.value,
-            lightgbmScorer ? { lightgbmScorer } : {}
+            {
+              ...(lightgbmScorer ? { lightgbmScorer } : {}),
+              traceDecisionRequests: config.traceDecisionRequests
+            }
           );
         } catch (error) {
           const message =
             error instanceof Error ? error.message : "Unexpected decision error.";
-          console.error("[decision] request handling failed", {
+          const event = message.startsWith("Actor mismatch:")
+            ? "decision_request_rejected"
+            : "decision_request_failed";
+          logDecisionTrace(config, event, {
             game_id: parsed.value.game_id,
             hand_id: parsed.value.hand_id,
             phase: parsed.value.phase,
             actor_seat: parsed.value.actor_seat,
-            error: message
+            requested_provider: parsed.value.requested_provider,
+            error: message,
+            latency_ms: Date.now() - startedAt
           });
           if (message.startsWith("Actor mismatch:")) {
             badRequest(response, message, config.allowedOrigin, [
@@ -625,6 +654,12 @@ export function createRouter({
           }
           throw error;
         }
+        logDecisionTrace(config, "decision_request_resolved", {
+          ...summarizeDecisionRequest(parsed.value),
+          provider_used: decisionResponse.provider_used,
+          telemetry_id: decisionResponse.telemetry_id,
+          latency_ms: Date.now() - startedAt
+        });
         writeJson(response, 200, decisionResponse, config.allowedOrigin);
         return;
       }

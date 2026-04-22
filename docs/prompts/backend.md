@@ -169,18 +169,26 @@ Prompt logs here capture backend/platform prompt intent only. GitHub issue state
   Backend-mode simulator batches were ending with `gamesPlayed: 0`,
   `decisionsRecorded: 0`, `eventsRecorded: 0`, and `errors: 10`; fix the
   simulator/backend integration so preventable `/api/decision/request` payload
-  failures do not kill every game opaquely.
+  failures do not kill every game opaquely. Follow-up evidence showed
+  `worker_error: "fetch failed"` could also come from telemetry persistence, so
+  local/fallback simulation must not depend on telemetry POST success unless a
+  strict debugging mode is explicitly enabled.
 - Interpreted requirement:
   Issue [#41](https://github.com/NeonButrfly/tichuml/issues/41) tracks full
   `state_raw` pre-send validation for backend decision providers, explicit
   structured logs for payload validation/network/backend-rejection/invalid
   response failures, and a config-driven local heuristic fallback path when
-  backend-mode decisions cannot be served safely.
+  backend-mode decisions cannot be served safely. It also tracks non-fatal
+  telemetry persistence by default, `--strict-telemetry`, `--trace-backend`,
+  `TRACE_DECISION_REQUESTS`, additive telemetry failure counters, and compact
+  decision trace metadata for future server-side ML debugging.
 - Affected systems:
   `apps/sim-runner/src/self-play-batch.ts`,
   `apps/sim-runner/src/cli.ts`,
   `apps/server/src/services/sim-controller-service.ts`,
-  `packages/shared/src/backend.ts`, backend integration tests.
+  `apps/server/src/routes/router.ts`, `apps/server/src/services/decision-service.ts`,
+  `apps/server/src/providers/*`, `packages/shared/src/backend.ts`, env examples,
+  backend integration tests.
 - Linked GitHub issue:
   [#41](https://github.com/NeonButrfly/tichuml/issues/41)
 - Milestone:

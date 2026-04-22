@@ -21,6 +21,7 @@ export type ServerConfig = {
   destructiveAdminEndpointsEnabled: boolean;
   adminSimControlEnabled: boolean;
   runtimeAdminControlEnabled: boolean;
+  traceDecisionRequests: boolean;
   simControllerRuntimeDir: string;
   repoRoot: string;
   pythonExecutable: string;
@@ -129,6 +130,10 @@ export function loadServerConfig(
     runtimeAdminControlEnabled: parseBooleanEnv(
       mergedEnv.ENABLE_RUNTIME_ADMIN_CONTROL,
       parseBooleanEnv(mergedEnv.ENABLE_ADMIN_SIM_CONTROL, false)
+    ),
+    traceDecisionRequests: parseBooleanEnv(
+      mergedEnv.TRACE_DECISION_REQUESTS,
+      false
     ),
     simControllerRuntimeDir: resolveRepoPath(
       repoRoot,

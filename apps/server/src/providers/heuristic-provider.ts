@@ -14,6 +14,7 @@ export function routeHeuristicDecision(
   options: {
     providerReason?: string;
     metadata?: Record<string, unknown>;
+    traceDecisionRequests?: boolean;
   } = {}
 ): RoutedDecision {
   if (!isUsableState(payload.state_raw)) {
@@ -27,14 +28,24 @@ export function routeHeuristicDecision(
   }
 
   const canonicalActor = validateDecisionRequestActorContract(payload);
-  console.debug("[decision] server_heuristic request", {
-    game_id: payload.game_id,
-    hand_id: payload.hand_id,
-    phase: payload.phase,
-    actor_seat: payload.actor_seat,
-    canonicalActor,
-    legal_action_keys: Object.keys(payload.legal_actions)
-  });
+  const legalActionCount = Object.values(payload.legal_actions).flat().length;
+  if (options.traceDecisionRequests) {
+    console.info(
+      JSON.stringify({
+        ts: new Date().toISOString(),
+        event: "decision_request_validated",
+        game_id: payload.game_id,
+        hand_id: payload.hand_id,
+        phase: payload.phase,
+        actor_seat: payload.actor_seat,
+        requested_provider: payload.requested_provider,
+        canonical_actor_seat: canonicalActor,
+        legal_action_keys: Object.keys(payload.legal_actions),
+        legal_action_count: legalActionCount,
+        provider_path: "server_heuristic"
+      })
+    );
+  }
 
   const providerReason =
     options.providerReason ??
@@ -75,6 +86,10 @@ export function routeHeuristicDecision(
         requested_provider: payload.requested_provider,
         provider_used: "server_heuristic",
         fallback_used: options.providerReason !== undefined,
+        canonical_actor_seat: canonicalActor,
+        legal_action_count: legalActionCount,
+        request_validated: true,
+        provider_path: "server_heuristic",
         explanation: chosen.explanation,
         ...(options.metadata ?? {})
       } as JsonObject
@@ -82,7 +97,11 @@ export function routeHeuristicDecision(
     responseMetadata: {
       explanation: chosen.explanation,
       chosen_action: chosen.action,
-      requested_provider: payload.requested_provider
+      requested_provider: payload.requested_provider,
+      canonical_actor_seat: canonicalActor,
+      legal_action_count: legalActionCount,
+      request_validated: true,
+      provider_path: "server_heuristic"
     } as JsonObject
   };
 }

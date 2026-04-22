@@ -23,7 +23,8 @@ function toLegalActionKey(
 
 export async function routeLightgbmDecision(
   payload: DecisionRequestPayload,
-  scorer: LightgbmScorer
+  scorer: LightgbmScorer,
+  options: { traceDecisionRequests?: boolean } = {}
 ): Promise<RoutedDecision> {
   const stateRaw = payload.state_raw;
   if (!isUsableState(stateRaw)) {
@@ -144,7 +145,11 @@ export async function routeLightgbmDecision(
             score: entry.score
           })),
           provider_used: "lightgbm_model",
-          fallback_used: false
+          fallback_used: false,
+          canonical_actor_seat: canonicalActor,
+          legal_action_count: actorLegalActions.length,
+          request_validated: true,
+          provider_path: "lightgbm_model"
         } as JsonObject
       }),
       responseMetadata: {
@@ -161,7 +166,11 @@ export async function routeLightgbmDecision(
           features: entry.features
         })),
         chosen_action: concreteAction,
-        requested_provider: "lightgbm_model"
+        requested_provider: "lightgbm_model",
+        canonical_actor_seat: canonicalActor,
+        legal_action_count: actorLegalActions.length,
+        request_validated: true,
+        provider_path: "lightgbm_model"
       } as JsonObject
     };
   } catch (error) {
@@ -171,8 +180,12 @@ export async function routeLightgbmDecision(
       metadata: {
         requested_provider: "lightgbm_model",
         lightgbm_error: message,
-        fallback_used: true
-      }
+        fallback_used: true,
+        provider_path: "lightgbm_model"
+      },
+      ...(options.traceDecisionRequests !== undefined
+        ? { traceDecisionRequests: options.traceDecisionRequests }
+        : {})
     });
 
     return {

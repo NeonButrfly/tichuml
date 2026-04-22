@@ -188,6 +188,7 @@ const CONFIG_SCHEMA: Array<{
   { key: "AUTO_MIGRATE", label: "Auto migrate", category: "Database", type: "boolean", restart_required: true, description: "Auto-run migrations on server startup.", validate: validateBoolean },
   { key: "ENABLE_DESTRUCTIVE_ADMIN_ENDPOINTS", label: "Destructive DB APIs", category: "Admin", type: "boolean", restart_required: true, description: "Enable legacy destructive DB admin APIs.", validate: validateBoolean },
   { key: "ENABLE_ADMIN_SIM_CONTROL", label: "Simulator admin APIs", category: "Admin", type: "boolean", restart_required: true, description: "Enable simulator admin control APIs.", validate: validateBoolean },
+  { key: "TRACE_DECISION_REQUESTS", label: "Decision request trace", category: "Admin", type: "boolean", restart_required: true, description: "Emit compact structured backend decision trace logs.", validate: validateBoolean },
   { key: "SIM_CONTROLLER_RUNTIME_DIR", label: "Sim controller runtime dir", category: "Runtime", type: "string", restart_required: true, description: "Simulator controller runtime directory." },
   { key: "AUTO_UPDATE_ON_START", label: "Auto update on start", category: "Git", type: "boolean", restart_required: false, description: "Force-sync repo on Linux startup.", validate: validateBoolean },
   { key: "GIT_BRANCH", label: "Git branch", category: "Git", type: "string", restart_required: false, description: "Git branch for force-sync/update." },
@@ -473,6 +474,7 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
         this.config.destructiveAdminEndpointsEnabled
       ),
       ENABLE_ADMIN_SIM_CONTROL: String(this.config.adminSimControlEnabled),
+      TRACE_DECISION_REQUESTS: String(this.config.traceDecisionRequests),
       SIM_CONTROLLER_RUNTIME_DIR: this.config.simControllerRuntimeDir,
       AUTO_UPDATE_ON_START: "true",
       GIT_BRANCH: "main",

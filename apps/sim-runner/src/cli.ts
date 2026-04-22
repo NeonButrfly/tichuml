@@ -14,6 +14,8 @@ type ParsedArgs = {
   provider: DecisionMode;
   backendBaseUrl?: string;
   serverFallbackEnabled: boolean;
+  strictTelemetry: boolean;
+  traceBackend: boolean;
   seed: string;
   seedPrefix: string;
   telemetryEnabled: boolean;
@@ -66,6 +68,8 @@ function parseArgs(argv: string[]): ParsedArgs {
     games: 1,
     provider: "local",
     serverFallbackEnabled: true,
+    strictTelemetry: false,
+    traceBackend: false,
     seed: "self-play",
     seedPrefix: "self-play",
     telemetryEnabled: true,
@@ -109,6 +113,14 @@ function parseArgs(argv: string[]): ParsedArgs {
       case "--server-fallback":
       case "--server-fallback-enabled":
         parsed.serverFallbackEnabled = parseBoolean(next, true);
+        index += 1;
+        break;
+      case "--strict-telemetry":
+        parsed.strictTelemetry = parseBoolean(next, false);
+        index += 1;
+        break;
+      case "--trace-backend":
+        parsed.traceBackend = parseBoolean(next, false);
         index += 1;
         break;
       case "--seed":
@@ -231,6 +243,8 @@ function buildControllerConfig(args: ParsedArgs): SimControllerConfig {
     games_per_batch: args.gamesPerBatch,
     telemetry_enabled: args.telemetryEnabled,
     server_fallback_enabled: args.serverFallbackEnabled,
+    strict_telemetry: args.strictTelemetry,
+    trace_backend: args.traceBackend,
     backend_url: args.backendBaseUrl ?? "http://localhost:4310",
     seed_prefix: args.seedPrefix,
     sleep_seconds: args.sleepSeconds,
@@ -389,6 +403,8 @@ async function runWorker(args: ParsedArgs, worker: SimWorkerRuntimeState): Promi
         seatProviders: args.seatProviders,
         telemetryEnabled: args.telemetryEnabled,
         serverFallbackEnabled: args.serverFallbackEnabled,
+        strictTelemetry: args.strictTelemetry,
+        traceBackend: args.traceBackend,
         ...(args.backendBaseUrl ? { backendBaseUrl: args.backendBaseUrl } : {}),
         quiet: args.quiet,
         progress: args.progress,
@@ -489,6 +505,8 @@ async function main(): Promise<void> {
       seatProviders: args.seatProviders,
       telemetryEnabled: args.telemetryEnabled,
       serverFallbackEnabled: args.serverFallbackEnabled,
+      strictTelemetry: args.strictTelemetry,
+      traceBackend: args.traceBackend,
       ...(args.backendBaseUrl ? { backendBaseUrl: args.backendBaseUrl } : {}),
       quiet: args.quiet,
       progress: args.progress

@@ -50,6 +50,8 @@ export type SelfPlayBatchOptions = {
   seatProviders?: SeatProviderOverrides;
   telemetryEnabled: boolean;
   serverFallbackEnabled?: boolean;
+  strictTelemetry?: boolean;
+  traceBackend?: boolean;
   backendBaseUrl?: string;
   quiet?: boolean;
   progress?: boolean;
@@ -77,6 +79,10 @@ export type SelfPlayGameResult = {
   wishSatisfiedPlays: number;
   wishActiveDecisions: number;
   invalidDecisions: number;
+  telemetryDecisionFailures: number;
+  telemetryEventFailures: number;
+  telemetryFailuresTotal: number;
+  telemetryFailureByEndpoint: Record<string, number>;
   latencyByProvider: Record<string, { count: number; totalMs: number; averageMs: number }>;
 };
 
@@ -101,6 +107,10 @@ export type SelfPlayBatchSummary = {
   bombUsageRate: number;
   wishSatisfactionRate: number | null;
   invalidDecisionCount: number;
+  telemetryDecisionFailures: number;
+  telemetryEventFailures: number;
+  telemetryFailuresTotal: number;
+  telemetryFailureByEndpoint: Record<string, number>;
   averageLatencyByProvider: Record<string, number>;
 };
 
@@ -112,6 +122,8 @@ type SimulatedDecision = {
   explanation?: ChosenDecision["explanation"];
   fallbackUsed: boolean;
   latencyMs: number;
+  telemetryFailureStats: TelemetryFailureStats;
+  telemetryFailure?: TelemetryWriteResult;
 };
 
 type PersistedEventConfig = {
@@ -123,14 +135,89 @@ type PersistedEventConfig = {
   eventIndex: number;
   providerUsed: string;
   requestedProvider: string;
+  strictTelemetry?: boolean;
+  traceBackend?: boolean;
+  quiet?: boolean;
   workerId?: string;
   controllerMode?: boolean;
+};
+
+type BackendRequestKind =
+  | "health_check"
+  | "decision"
+  | "telemetry_decision"
+  | "telemetry_event";
+
+type BackendFailureKind =
+  | "network_failure"
+  | "backend_rejection"
+  | "unexpected_failure";
+
+type BackendRequestContext = {
+  request_kind: BackendRequestKind;
+  method: string;
+  url: string;
+  worker_id?: string;
+  controller_mode?: boolean;
+  game_id?: string;
+  hand_id?: string;
+  phase?: string;
+  actor_seat?: string;
+  decision_index?: number;
+  event_index?: number;
+  requested_provider?: string;
+  trace_backend?: boolean;
+  quiet?: boolean;
+  payload_summary?: JsonObject;
+};
+
+type BackendRequestResult = {
+  status: number;
+  payload: JsonObject;
+  raw_body?: string;
+  latency_ms: number;
+};
+
+type TelemetryWriteResult =
+  | {
+      ok: true;
+      endpoint: string;
+      method: string;
+      request_kind: "telemetry_decision" | "telemetry_event";
+      status: number;
+      latency_ms: number;
+    }
+  | {
+      ok: false;
+      endpoint: string;
+      method: string;
+      request_kind: "telemetry_decision" | "telemetry_event";
+      failure_kind: BackendFailureKind;
+      status?: number;
+      message: string;
+      body?: JsonObject;
+      raw_body?: string;
+      cause?: string;
+      latency_ms?: number;
+    };
+
+type TelemetryFailureStats = {
+  telemetryDecisionFailures: number;
+  telemetryEventFailures: number;
+  telemetryFailuresTotal: number;
+  telemetryFailureByEndpoint: Record<string, number>;
+};
+
+type TelemetryFailureTracker = {
+  emittedDetailedFailures: number;
+  compactedFailures: number;
 };
 
 type DecisionFailureKind =
   | "payload_validation"
   | "network_failure"
   | "backend_rejection"
+  | "unexpected_failure"
   | "invalid_backend_response"
   | "invalid_backend_action";
 
@@ -173,7 +260,7 @@ class DecisionRequestFailure extends Error {
 
 class BackendRequestFailure extends Error {
   constructor(
-    readonly kind: "network_failure" | "backend_rejection",
+    readonly kind: BackendFailureKind,
     message: string,
     readonly details: JsonObject
   ) {
@@ -184,6 +271,41 @@ class BackendRequestFailure extends Error {
 
 function countByKey(bucket: Record<string, number>, key: string): void {
   bucket[key] = (bucket[key] ?? 0) + 1;
+}
+
+function createTelemetryFailureStats(): TelemetryFailureStats {
+  return {
+    telemetryDecisionFailures: 0,
+    telemetryEventFailures: 0,
+    telemetryFailuresTotal: 0,
+    telemetryFailureByEndpoint: {}
+  };
+}
+
+function mergeTelemetryFailureStats(
+  target: TelemetryFailureStats,
+  source: TelemetryFailureStats
+): void {
+  target.telemetryDecisionFailures += source.telemetryDecisionFailures;
+  target.telemetryEventFailures += source.telemetryEventFailures;
+  target.telemetryFailuresTotal += source.telemetryFailuresTotal;
+  mergeCounts(target.telemetryFailureByEndpoint, source.telemetryFailureByEndpoint);
+}
+
+function recordTelemetryFailure(
+  stats: TelemetryFailureStats,
+  result: TelemetryWriteResult
+): void {
+  if (result.ok) {
+    return;
+  }
+  if (result.request_kind === "telemetry_decision") {
+    stats.telemetryDecisionFailures += 1;
+  } else {
+    stats.telemetryEventFailures += 1;
+  }
+  stats.telemetryFailuresTotal += 1;
+  countByKey(stats.telemetryFailureByEndpoint, result.endpoint);
 }
 
 function createTeamScoreBucket(): Record<TeamId, number> {
@@ -376,6 +498,172 @@ function emitDecisionDiagnostic(
     return;
   }
   console.error(JSON.stringify({ ts: new Date().toISOString(), event, ...payload }));
+}
+
+function traceBackendRequest(
+  context: BackendRequestContext,
+  event: "backend_request_start" | "backend_request_success" | "backend_request_failure",
+  payload: JsonObject
+): void {
+  if (context.trace_backend !== true) {
+    return;
+  }
+  console.error(
+    JSON.stringify({
+      ts: new Date().toISOString(),
+      event,
+      request_kind: context.request_kind,
+      method: context.method,
+      url: context.url,
+      ...(context.worker_id ? { worker_id: context.worker_id } : {}),
+      ...(context.controller_mode ? { controller_mode: true } : {}),
+      ...(context.game_id ? { game_id: context.game_id } : {}),
+      ...(context.hand_id ? { hand_id: context.hand_id } : {}),
+      ...(context.phase ? { phase: context.phase } : {}),
+      ...(context.actor_seat ? { actor_seat: context.actor_seat } : {}),
+      ...(context.decision_index !== undefined ? { decision_index: context.decision_index } : {}),
+      ...(context.event_index !== undefined ? { event_index: context.event_index } : {}),
+      ...(context.requested_provider ? { requested_provider: context.requested_provider } : {}),
+      ...(context.payload_summary ? { payload_summary: context.payload_summary } : {}),
+      ...payload
+    })
+  );
+}
+
+function summarizeBackendPayload(
+  requestKind: BackendRequestKind,
+  body?: JsonObject
+): JsonObject {
+  if (!body) {
+    return {};
+  }
+  switch (requestKind) {
+    case "decision":
+      return {
+        game_id: body.game_id,
+        hand_id: body.hand_id,
+        phase: body.phase,
+        actor_seat: body.actor_seat,
+        requested_provider: body.requested_provider,
+        has_state_raw: typeof body.state_raw === "object" && body.state_raw !== null,
+        has_state_norm: typeof body.state_norm === "object" && body.state_norm !== null,
+        legal_action_keys:
+          typeof body.legal_actions === "object" && body.legal_actions !== null
+            ? Object.keys(body.legal_actions as Record<string, unknown>)
+            : []
+      } as JsonObject;
+    case "telemetry_decision":
+      return {
+        game_id: body.game_id,
+        hand_id: body.hand_id,
+        phase: body.phase,
+        actor_seat: body.actor_seat,
+        decision_index: body.decision_index,
+        requested_provider: body.requested_provider,
+        provider_used: body.provider_used,
+        fallback_used: body.fallback_used
+      } as JsonObject;
+    case "telemetry_event":
+      return {
+        game_id: body.game_id,
+        hand_id: body.hand_id,
+        phase: body.phase,
+        event_type: body.event_type,
+        event_index: body.event_index,
+        requested_provider: body.requested_provider,
+        provider_used: body.provider_used
+      } as JsonObject;
+    case "health_check":
+      return {};
+  }
+}
+
+function normalizeTelemetryFailureResult(
+  endpoint: string,
+  requestKind: "telemetry_decision" | "telemetry_event",
+  error: unknown
+): TelemetryWriteResult {
+  if (error instanceof BackendRequestFailure) {
+    const status =
+      typeof error.details.status === "number" ? error.details.status : undefined;
+    const body =
+      typeof error.details.body === "object" &&
+      error.details.body !== null &&
+      !Array.isArray(error.details.body)
+        ? (error.details.body as JsonObject)
+        : undefined;
+    const rawBody =
+      typeof error.details.raw_body === "string" ? error.details.raw_body : undefined;
+    const cause =
+      typeof error.details.cause === "string" ? error.details.cause : undefined;
+    const latencyMs =
+      typeof error.details.latency_ms === "number" ? error.details.latency_ms : undefined;
+    return {
+      ok: false,
+      endpoint,
+      method: "POST",
+      request_kind: requestKind,
+      failure_kind: error.kind,
+      ...(status !== undefined ? { status } : {}),
+      message: error.message,
+      ...(body ? { body } : {}),
+      ...(rawBody ? { raw_body: rawBody } : {}),
+      ...(cause ? { cause } : {}),
+      ...(latencyMs !== undefined ? { latency_ms: latencyMs } : {})
+    };
+  }
+
+  return {
+    ok: false,
+    endpoint,
+    method: "POST",
+    request_kind: requestKind,
+    failure_kind: "unexpected_failure",
+    message: error instanceof Error ? error.message : String(error),
+    cause: error instanceof Error ? error.name : "unknown"
+  };
+}
+
+function emitTelemetryFailure(
+  config: { quiet?: boolean; controllerMode?: boolean },
+  tracker: TelemetryFailureTracker,
+  result: TelemetryWriteResult,
+  context: JsonObject
+): void {
+  if (result.ok || !shouldEmitDiagnostic(config)) {
+    return;
+  }
+  const detailed = tracker.emittedDetailedFailures < 3;
+  if (detailed) {
+    tracker.emittedDetailedFailures += 1;
+  } else {
+    tracker.compactedFailures += 1;
+  }
+  const payload: JsonObject = {
+    request_kind: result.request_kind,
+    failure_kind: result.failure_kind,
+    endpoint: result.endpoint,
+    method: result.method,
+    message: result.message,
+    compact: !detailed,
+    suppressed_after_threshold: tracker.compactedFailures,
+    ...context
+  };
+  if (detailed) {
+    if (result.status !== undefined) {
+      payload.status = result.status;
+    }
+    if (result.body) {
+      payload.body = result.body;
+    }
+    if (result.raw_body) {
+      payload.raw_body = result.raw_body;
+    }
+    if (result.cause) {
+      payload.cause = result.cause;
+    }
+  }
+  emitDecisionDiagnostic(config, "telemetry_persistence_failure", payload);
 }
 
 function serializeError(error: unknown): JsonObject {
@@ -640,8 +928,28 @@ export function buildDecisionRequestPayload(config: {
 async function requestJson(
   method: string,
   url: string,
-  body?: JsonObject
-): Promise<{ status: number; payload: JsonObject }> {
+  body?: JsonObject,
+  context?: Omit<BackendRequestContext, "method" | "url" | "payload_summary">
+): Promise<BackendRequestResult> {
+  const requestContext: BackendRequestContext = {
+    request_kind: context?.request_kind ?? "decision",
+    method,
+    url,
+    ...(context?.worker_id ? { worker_id: context.worker_id } : {}),
+    ...(context?.controller_mode ? { controller_mode: true } : {}),
+    ...(context?.game_id ? { game_id: context.game_id } : {}),
+    ...(context?.hand_id ? { hand_id: context.hand_id } : {}),
+    ...(context?.phase ? { phase: context.phase } : {}),
+    ...(context?.actor_seat ? { actor_seat: context.actor_seat } : {}),
+    ...(context?.decision_index !== undefined ? { decision_index: context.decision_index } : {}),
+    ...(context?.event_index !== undefined ? { event_index: context.event_index } : {}),
+    ...(context?.requested_provider ? { requested_provider: context.requested_provider } : {}),
+    ...(context?.trace_backend ? { trace_backend: true } : {}),
+    ...(context?.quiet ? { quiet: true } : {}),
+    payload_summary: summarizeBackendPayload(context?.request_kind ?? "decision", body)
+  };
+  const startedAt = Date.now();
+  traceBackendRequest(requestContext, "backend_request_start", {});
   const init: RequestInit = { method };
   if (body) {
     init.headers = {
@@ -653,45 +961,116 @@ async function requestJson(
   try {
     response = await fetch(url, init);
   } catch (error) {
+    const latencyMs = Date.now() - startedAt;
+    const message = error instanceof Error ? error.message : String(error);
+    traceBackendRequest(requestContext, "backend_request_failure", {
+      failure_kind: "network_failure",
+      latency_ms: latencyMs,
+      message,
+      cause: error instanceof Error ? error.name : "unknown"
+    });
     throw new BackendRequestFailure(
       "network_failure",
-      `Request to ${url} failed before receiving a response: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
+      `Request to ${url} failed before receiving a response: ${message}`,
       {
         method,
         url,
-        cause: error instanceof Error ? error.message : String(error)
+        request_kind: requestContext.request_kind,
+        latency_ms: latencyMs,
+        cause: message
       }
     );
   }
 
-  const responseText = await response.text();
+  let responseText: string;
+  try {
+    responseText = await response.text();
+  } catch (error) {
+    const latencyMs = Date.now() - startedAt;
+    const message = error instanceof Error ? error.message : String(error);
+    traceBackendRequest(requestContext, "backend_request_failure", {
+      failure_kind: "unexpected_failure",
+      latency_ms: latencyMs,
+      status: response.status,
+      message
+    });
+    throw new BackendRequestFailure(
+      "unexpected_failure",
+      `Request to ${url} failed while reading the response body: ${message}`,
+      {
+        method,
+        url,
+        request_kind: requestContext.request_kind,
+        status: response.status,
+        latency_ms: latencyMs,
+        cause: message
+      }
+    );
+  }
+
   let payload: JsonObject = {};
+  let rawBody: string | undefined;
   if (responseText.length > 0) {
     try {
       payload = JSON.parse(responseText) as JsonObject;
     } catch {
-      payload = { raw_body: responseText };
+      rawBody = responseText;
+      payload = {};
     }
   }
+  const latencyMs = Date.now() - startedAt;
   if (!response.ok) {
+    traceBackendRequest(requestContext, "backend_request_failure", {
+      failure_kind: "backend_rejection",
+      latency_ms: latencyMs,
+      status: response.status,
+      ...(Object.keys(payload).length > 0 ? { body: payload } : {}),
+      ...(rawBody ? { raw_body: rawBody } : {})
+    });
     throw new BackendRequestFailure(
       "backend_rejection",
-      `Request to ${url} failed (${response.status}): ${JSON.stringify(payload)}`,
+      `Request to ${url} failed (${response.status}): ${
+        rawBody ?? JSON.stringify(payload)
+      }`,
       {
         method,
         url,
+        request_kind: requestContext.request_kind,
         status: response.status,
-        body: payload
+        latency_ms: latencyMs,
+        ...(Object.keys(payload).length > 0 ? { body: payload } : {}),
+        ...(rawBody ? { raw_body: rawBody } : {})
       }
     );
   }
-  return { status: response.status, payload };
+  traceBackendRequest(requestContext, "backend_request_success", {
+    latency_ms: latencyMs,
+    status: response.status
+  });
+  return {
+    status: response.status,
+    payload,
+    ...(rawBody ? { raw_body: rawBody } : {}),
+    latency_ms: latencyMs
+  };
 }
 
-async function verifyBackend(baseUrl: string): Promise<void> {
-  await requestJson("GET", `${baseUrl}${BACKEND_HEALTH_PATH}`);
+async function verifyBackend(
+  baseUrl: string,
+  options: {
+    traceBackend?: boolean;
+    quiet?: boolean;
+    workerId?: string;
+    controllerMode?: boolean;
+  } = {}
+): Promise<void> {
+  await requestJson("GET", `${baseUrl}${BACKEND_HEALTH_PATH}`, undefined, {
+    request_kind: "health_check",
+    ...(options.traceBackend ? { trace_backend: true } : {}),
+    ...(options.quiet ? { quiet: true } : {}),
+    ...(options.workerId ? { worker_id: options.workerId } : {}),
+    ...(options.controllerMode ? { controller_mode: true } : {})
+  });
 }
 
 function buildLocalDecisionTelemetry(config: {
@@ -778,9 +1157,96 @@ function extractActorSeatFromEvent(
   return candidate && candidate.startsWith("seat-") ? (candidate as SeatId) : null;
 }
 
+export async function safePostTelemetryDecision(config: {
+  backendBaseUrl: string;
+  payload: TelemetryDecisionPayload;
+  traceBackend?: boolean;
+  quiet?: boolean;
+  workerId?: string;
+  controllerMode?: boolean;
+}): Promise<TelemetryWriteResult> {
+  const endpoint = `${config.backendBaseUrl}${TELEMETRY_DECISION_PATH}`;
+  try {
+    const result = await requestJson(
+      "POST",
+      endpoint,
+      config.payload as unknown as JsonObject,
+      {
+        request_kind: "telemetry_decision",
+        game_id: config.payload.game_id,
+        hand_id: config.payload.hand_id,
+        phase: config.payload.phase,
+        actor_seat: config.payload.actor_seat,
+        decision_index: config.payload.decision_index,
+        requested_provider: config.payload.requested_provider,
+        ...(config.traceBackend ? { trace_backend: true } : {}),
+        ...(config.quiet ? { quiet: true } : {}),
+        ...(config.workerId ? { worker_id: config.workerId } : {}),
+        ...(config.controllerMode ? { controller_mode: true } : {})
+      }
+    );
+    return {
+      ok: true,
+      endpoint,
+      method: "POST",
+      request_kind: "telemetry_decision",
+      status: result.status,
+      latency_ms: result.latency_ms
+    };
+  } catch (error) {
+    return normalizeTelemetryFailureResult(endpoint, "telemetry_decision", error);
+  }
+}
+
+export async function safePostTelemetryEvent(config: {
+  backendBaseUrl: string;
+  payload: TelemetryEventPayload;
+  traceBackend?: boolean;
+  quiet?: boolean;
+  workerId?: string;
+  controllerMode?: boolean;
+}): Promise<TelemetryWriteResult> {
+  const endpoint = `${config.backendBaseUrl}${TELEMETRY_EVENT_PATH}`;
+  try {
+    const result = await requestJson(
+      "POST",
+      endpoint,
+      config.payload as unknown as JsonObject,
+      {
+        request_kind: "telemetry_event",
+        game_id: config.payload.game_id,
+        hand_id: config.payload.hand_id,
+        phase: config.payload.phase,
+        event_index: config.payload.event_index,
+        ...(config.payload.requested_provider
+          ? { requested_provider: config.payload.requested_provider }
+          : {}),
+        ...(config.payload.actor_seat ? { actor_seat: config.payload.actor_seat } : {}),
+        ...(config.traceBackend ? { trace_backend: true } : {}),
+        ...(config.quiet ? { quiet: true } : {}),
+        ...(config.workerId ? { worker_id: config.workerId } : {}),
+        ...(config.controllerMode ? { controller_mode: true } : {})
+      }
+    );
+    return {
+      ok: true,
+      endpoint,
+      method: "POST",
+      request_kind: "telemetry_event",
+      status: result.status,
+      latency_ms: result.latency_ms
+    };
+  } catch (error) {
+    return normalizeTelemetryFailureResult(endpoint, "telemetry_event", error);
+  }
+}
+
 async function resolveLocalHeuristicDecision(config: {
   backendBaseUrl: string;
   telemetryEnabled: boolean;
+  strictTelemetry?: boolean;
+  traceBackend?: boolean;
+  quiet?: boolean;
   gameId: string;
   handId: string;
   actor: SeatId | typeof SYSTEM_ACTOR;
@@ -797,6 +1263,8 @@ async function resolveLocalHeuristicDecision(config: {
   workerId?: string;
   controllerMode?: boolean;
 }): Promise<SimulatedDecision> {
+  const telemetryFailureStats = createTelemetryFailureStats();
+  let telemetryFailure: TelemetryWriteResult | undefined;
   const actorScopedLegalActions: LegalActionMap = {
     [config.actor]: config.legalActions[config.actor] ?? []
   };
@@ -824,11 +1292,23 @@ async function resolveLocalHeuristicDecision(config: {
       ...(config.workerId ? { workerId: config.workerId } : {}),
       ...(config.controllerMode ? { controllerMode: true } : {})
     });
-    await requestJson(
-      "POST",
-      `${config.backendBaseUrl}${TELEMETRY_DECISION_PATH}`,
-      payload as unknown as JsonObject
-    );
+    const result = await safePostTelemetryDecision({
+      backendBaseUrl: config.backendBaseUrl,
+      payload,
+      ...(config.traceBackend ? { traceBackend: true } : {}),
+      ...(config.quiet ? { quiet: true } : {}),
+      ...(config.workerId ? { workerId: config.workerId } : {}),
+      ...(config.controllerMode ? { controllerMode: true } : {})
+    });
+    recordTelemetryFailure(telemetryFailureStats, result);
+    if (!result.ok) {
+      telemetryFailure = result;
+      if (config.strictTelemetry === true) {
+        throw new Error(
+          `Strict telemetry decision persistence failed (${result.failure_kind}) at ${result.endpoint}: ${result.message}`
+        );
+      }
+    }
   }
 
   return {
@@ -839,7 +1319,9 @@ async function resolveLocalHeuristicDecision(config: {
     providerReason: config.providerReason,
     explanation: chosen.explanation,
     fallbackUsed: config.fallbackUsed,
-    latencyMs
+    latencyMs,
+    telemetryFailureStats,
+    ...(telemetryFailure ? { telemetryFailure } : {})
   };
 }
 
@@ -847,9 +1329,9 @@ async function persistEvent(
   event: EngineEvent,
   stateNorm: JsonObject,
   config: PersistedEventConfig
-): Promise<void> {
+): Promise<TelemetryWriteResult | null> {
   if (!config.telemetryEnabled) {
-    return;
+    return null;
   }
 
   const payload: TelemetryEventPayload = {
@@ -880,7 +1362,20 @@ async function persistEvent(
     }
   };
 
-  await requestJson("POST", `${config.backendBaseUrl}${TELEMETRY_EVENT_PATH}`, payload as unknown as JsonObject);
+  const result = await safePostTelemetryEvent({
+    backendBaseUrl: config.backendBaseUrl,
+    payload,
+    ...(config.traceBackend ? { traceBackend: true } : {}),
+    ...(config.quiet ? { quiet: true } : {}),
+    ...(config.workerId ? { workerId: config.workerId } : {}),
+    ...(config.controllerMode ? { controllerMode: true } : {})
+  });
+  if (!result.ok && config.strictTelemetry === true) {
+    throw new Error(
+      `Strict telemetry event persistence failed (${result.failure_kind}) at ${result.endpoint}: ${result.message}`
+    );
+  }
+  return result;
 }
 
 export async function resolveDecision(
@@ -898,6 +1393,8 @@ export async function resolveDecision(
     defaultProvider: DecisionMode;
     seatProviders?: SeatProviderOverrides;
     serverFallbackEnabled?: boolean;
+    strictTelemetry?: boolean;
+    traceBackend?: boolean;
     quiet?: boolean;
     workerId?: string;
     controllerMode?: boolean;
@@ -932,7 +1429,13 @@ export async function resolveDecision(
 
   const fallbackAllowed = config.serverFallbackEnabled !== false;
   const fallbackLocally = async (failure: DecisionRequestFailure): Promise<SimulatedDecision> => {
-    emitDecisionDiagnostic(config, "decision_request_failure", {
+    const event =
+      failure.kind === "payload_validation"
+        ? "decision_request_contract_failure"
+        : failure.kind === "backend_rejection"
+          ? "decision_backend_validation_failure"
+          : "decision_provider_failure";
+    emitDecisionDiagnostic(config, event, {
       kind: failure.kind,
       fallback_allowed: fallbackAllowed,
       fallback_used: fallbackAllowed,
@@ -1028,7 +1531,20 @@ export async function resolveDecision(
     decisionResponse = await requestJson(
       "POST",
       `${config.backendBaseUrl}${DECISION_REQUEST_PATH}`,
-      decisionRequestPayload as unknown as JsonObject
+      decisionRequestPayload as unknown as JsonObject,
+      {
+        request_kind: "decision",
+        game_id: config.gameId,
+        hand_id: config.handId,
+        phase: config.phase,
+        actor_seat: String(config.actor),
+        decision_index: config.decisionIndex,
+        requested_provider: requestedProvider,
+        ...(config.traceBackend ? { trace_backend: true } : {}),
+        ...(config.quiet ? { quiet: true } : {}),
+        ...(config.workerId ? { worker_id: config.workerId } : {}),
+        ...(config.controllerMode ? { controller_mode: true } : {})
+      }
     );
   } catch (error) {
     if (error instanceof BackendRequestFailure) {
@@ -1089,7 +1605,8 @@ export async function resolveDecision(
       ? { explanation: metadata.explanation as ChosenDecision["explanation"] }
       : {}),
     fallbackUsed,
-    latencyMs: Date.now() - startedAt
+    latencyMs: Date.now() - startedAt,
+    telemetryFailureStats: createTelemetryFailureStats()
   };
 }
 
@@ -1108,6 +1625,11 @@ async function runSingleGame(
   const decisionsByPhase: Record<string, number> = {};
   const eventsByPhase: Record<string, number> = {};
   const latencyByProvider: Record<string, { count: number; totalMs: number }> = {};
+  const telemetryFailureStats = createTelemetryFailureStats();
+  const telemetryFailureTracker: TelemetryFailureTracker = {
+    emittedDetailedFailures: 0,
+    compactedFailures: 0
+  };
   let fallbackCount = 0;
   let passActions = 0;
   let playActions = 0;
@@ -1118,18 +1640,33 @@ async function runSingleGame(
 
   for (const event of result.events) {
     countByKey(eventsByPhase, result.nextState.phase);
-    await persistEvent(event, result.derivedView as unknown as JsonObject, {
+    const currentEventIndex = eventIndex++;
+    const telemetryResult = await persistEvent(event, result.derivedView as unknown as JsonObject, {
       backendBaseUrl,
       telemetryEnabled: options.telemetryEnabled,
+      ...(options.strictTelemetry !== undefined
+        ? { strictTelemetry: options.strictTelemetry }
+        : {}),
+      ...(options.traceBackend !== undefined ? { traceBackend: options.traceBackend } : {}),
+      ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
       gameId,
       handId,
       actorSeat: SYSTEM_ACTOR,
-      eventIndex: eventIndex++,
+      eventIndex: currentEventIndex,
       providerUsed: "system_local",
       requestedProvider: "system_local",
       ...(options.workerId ? { workerId: options.workerId } : {}),
       ...(options.controllerMode ? { controllerMode: true } : {})
     });
+    if (telemetryResult) {
+      recordTelemetryFailure(telemetryFailureStats, telemetryResult);
+      emitTelemetryFailure(options, telemetryFailureTracker, telemetryResult, {
+        game_id: gameId,
+        hand_id: handId,
+        phase: result.nextState.phase,
+        event_index: currentEventIndex
+      });
+    }
   }
 
   while (result.nextState.phase !== "finished") {
@@ -1159,6 +1696,10 @@ async function runSingleGame(
       ...(options.serverFallbackEnabled !== undefined
         ? { serverFallbackEnabled: options.serverFallbackEnabled }
         : {}),
+      ...(options.strictTelemetry !== undefined
+        ? { strictTelemetry: options.strictTelemetry }
+        : {}),
+      ...(options.traceBackend !== undefined ? { traceBackend: options.traceBackend } : {}),
       ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
       ...(options.workerId ? { workerId: options.workerId } : {}),
       ...(options.controllerMode ? { controllerMode: true } : {})
@@ -1167,6 +1708,16 @@ async function runSingleGame(
     countByKey(providerUsage, resolved.providerUsed);
     countByKey(decisionsByPhase, result.nextState.phase);
     recordLatency(latencyByProvider, resolved.providerUsed, resolved.latencyMs);
+    mergeTelemetryFailureStats(telemetryFailureStats, resolved.telemetryFailureStats);
+    if (resolved.telemetryFailure) {
+      emitTelemetryFailure(options, telemetryFailureTracker, resolved.telemetryFailure, {
+        game_id: gameId,
+        hand_id: handId,
+        phase: result.nextState.phase,
+        actor_seat: String(actor),
+        decision_index: decisionIndex
+      });
+    }
     if (resolved.fallbackUsed) {
       fallbackCount += 1;
     }
@@ -1205,18 +1756,34 @@ async function runSingleGame(
     const nextResult = applyEngineAction(result.nextState, resolved.chosenAction);
     for (const event of nextResult.events) {
       countByKey(eventsByPhase, nextResult.nextState.phase);
-      await persistEvent(event, nextResult.derivedView as unknown as JsonObject, {
+      const currentEventIndex = eventIndex++;
+      const telemetryResult = await persistEvent(event, nextResult.derivedView as unknown as JsonObject, {
         backendBaseUrl,
         telemetryEnabled: options.telemetryEnabled,
+        ...(options.strictTelemetry !== undefined
+          ? { strictTelemetry: options.strictTelemetry }
+          : {}),
+        ...(options.traceBackend !== undefined ? { traceBackend: options.traceBackend } : {}),
+        ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
         gameId,
         handId,
         actorSeat: actor,
-        eventIndex: eventIndex++,
+        eventIndex: currentEventIndex,
         providerUsed: resolved.providerUsed,
         requestedProvider: resolved.requestedProvider,
         ...(options.workerId ? { workerId: options.workerId } : {}),
         ...(options.controllerMode ? { controllerMode: true } : {})
       });
+      if (telemetryResult) {
+        recordTelemetryFailure(telemetryFailureStats, telemetryResult);
+        emitTelemetryFailure(options, telemetryFailureTracker, telemetryResult, {
+          game_id: gameId,
+          hand_id: handId,
+          phase: nextResult.nextState.phase,
+          actor_seat: String(actor),
+          event_index: currentEventIndex
+        });
+      }
     }
 
     result = nextResult;
@@ -1251,6 +1818,7 @@ async function runSingleGame(
     wishSatisfiedPlays,
     wishActiveDecisions,
     invalidDecisions,
+    ...telemetryFailureStats,
     latencyByProvider: summarizeLatency(latencyByProvider)
   };
 }
@@ -1275,18 +1843,24 @@ export async function runSelfPlayBatch(
   ]);
 
   const usesBackendProvider = [...requestedProviders].some((provider) => provider !== "local");
-  if (options.telemetryEnabled) {
-    await verifyBackend(backendBaseUrl);
-  } else if (usesBackendProvider) {
+  if (options.telemetryEnabled || usesBackendProvider) {
     try {
-      await verifyBackend(backendBaseUrl);
+      await verifyBackend(backendBaseUrl, {
+        ...(options.traceBackend ? { traceBackend: true } : {}),
+        ...(options.quiet ? { quiet: true } : {}),
+        ...(options.workerId ? { workerId: options.workerId } : {}),
+        ...(options.controllerMode ? { controllerMode: true } : {})
+      });
     } catch (error) {
-      if (options.serverFallbackEnabled === false) {
+      const telemetryRequiresBackend = options.telemetryEnabled && options.strictTelemetry === true;
+      const providerRequiresBackend = usesBackendProvider && options.serverFallbackEnabled === false;
+      if (telemetryRequiresBackend || providerRequiresBackend) {
         throw error;
       }
       emitDecisionDiagnostic(options, "backend_health_check_failure", {
         fallback_allowed: true,
-        fallback_used: true,
+        fallback_used: usesBackendProvider,
+        telemetry_degraded: options.telemetryEnabled,
         error: serializeError(error)
       });
     }
@@ -1317,6 +1891,10 @@ export async function runSelfPlayBatch(
     bombUsageRate: 0,
     wishSatisfactionRate: null,
     invalidDecisionCount: 0,
+    telemetryDecisionFailures: 0,
+    telemetryEventFailures: 0,
+    telemetryFailuresTotal: 0,
+    telemetryFailureByEndpoint: {},
     averageLatencyByProvider: {}
   };
 
@@ -1338,6 +1916,13 @@ export async function runSelfPlayBatch(
       summary.eventsRecorded += game.events;
       summary.fallbackCount += game.fallbackCount;
       summary.invalidDecisionCount += game.invalidDecisions;
+      summary.telemetryDecisionFailures += game.telemetryDecisionFailures;
+      summary.telemetryEventFailures += game.telemetryEventFailures;
+      summary.telemetryFailuresTotal += game.telemetryFailuresTotal;
+      mergeCounts(
+        summary.telemetryFailureByEndpoint,
+        game.telemetryFailureByEndpoint
+      );
       totalDuration += game.durationMs;
       totalScoreMargin += game.scoreMargin;
       totalPassActions += game.passActions;

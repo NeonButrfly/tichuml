@@ -497,6 +497,7 @@ const TEST_SERVER_CONFIG: ServerConfig = {
   destructiveAdminEndpointsEnabled: false,
   adminSimControlEnabled: false,
   runtimeAdminControlEnabled: false,
+  traceDecisionRequests: false,
   simControllerRuntimeDir: "C:/tichu/tichuml/.runtime/test-sim-controller",
   repoRoot: "C:/tichu/tichuml",
   pythonExecutable: "python",

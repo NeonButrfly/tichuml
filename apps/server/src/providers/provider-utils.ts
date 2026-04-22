@@ -50,6 +50,33 @@ function legalActionTypesForDiagnostics(legalActions: LegalActionMap): string[] 
     .map((action) => action.type);
 }
 
+export function summarizeDecisionRequest(payload: DecisionRequestPayload): JsonObject {
+  const legalActions = payload.legal_actions as unknown as LegalActionMap;
+  const legalActionKeys =
+    typeof payload.legal_actions === "object" && payload.legal_actions !== null
+      ? Object.keys(payload.legal_actions)
+      : [];
+  let actorActionCount = 0;
+  try {
+    actorActionCount = extractActorLegalActions(payload).length;
+  } catch {
+    actorActionCount = 0;
+  }
+  return {
+    game_id: payload.game_id,
+    hand_id: payload.hand_id,
+    phase: payload.phase,
+    actor_seat: payload.actor_seat,
+    requested_provider: payload.requested_provider,
+    canonical_actor_seat: isUsableState(payload.state_raw)
+      ? getCanonicalActiveSeatFromState(payload.state_raw)
+      : null,
+    legal_action_keys: legalActionKeys,
+    legal_action_count: actorActionCount,
+    legal_action_types: legalActionTypesForDiagnostics(legalActions)
+  };
+}
+
 export function formatActorMismatchDiagnostics(config: {
   payload: DecisionRequestPayload;
   canonicalActorSeat: string;

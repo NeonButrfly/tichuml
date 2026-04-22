@@ -39,6 +39,7 @@ import {
   buildDecisionRequestPayload,
   resolveDecision,
   runSelfPlayBatch,
+  safePostTelemetryEvent,
   validateBackendDecisionRequestInput,
   validateServerHeuristicDecisionRequestContract
 } from "../../apps/sim-runner/src/self-play-batch";
@@ -185,6 +186,7 @@ const TEST_SERVER_CONFIG: ServerConfig = {
   destructiveAdminEndpointsEnabled: false,
   adminSimControlEnabled: false,
   runtimeAdminControlEnabled: false,
+  traceDecisionRequests: false,
   simControllerRuntimeDir: "C:/tichu/tichuml/.runtime/test-sim-controller",
   repoRoot: "C:/tichu/tichuml",
   pythonExecutable: "python",
@@ -303,6 +305,27 @@ function createServerHeuristicPayload(result: EngineResult): DecisionRequestPayl
     requestedProvider: "server_heuristic",
     decisionIndex: 1
   });
+}
+
+function createTelemetryEventPayload(result: EngineResult): TelemetryEventPayload {
+  return {
+    ts: new Date().toISOString(),
+    game_id: "telemetry-event-game",
+    hand_id: "telemetry-event-hand",
+    phase: result.nextState.phase,
+    event_type: "test_event",
+    actor_seat: null,
+    event_index: 0,
+    schema_version: 1,
+    engine_version: "test",
+    sim_version: "test",
+    requested_provider: "local",
+    provider_used: "local_heuristic",
+    fallback_used: false,
+    state_norm: result.derivedView as unknown as JsonObject,
+    payload: { test: true },
+    metadata: {}
+  };
 }
 
 describe("server_heuristic actor contract", () => {
@@ -461,13 +484,167 @@ describe("server_heuristic actor contract", () => {
       }
 
       const joined = capturedErrors.join("\n");
-      expect(joined).toMatch(/"event":"decision_request_failure"/);
+      expect(joined).toMatch(/"event":"decision_backend_validation_failure"/);
       expect(joined).toMatch(/"kind":"backend_rejection"/);
       expect(joined).toMatch(/"event":"decision_fallback"/);
       expect(joined).toMatch(/"provider_used":"local_heuristic"/);
       expect(joined).toMatch(/state_raw rejected by test backend/);
+      expect(joined).not.toMatch(/^fetch failed$/m);
     });
   }, 15_000);
+
+  it("keeps local provider decisions alive when telemetry decision POST fails in non-strict mode", async () => {
+    const result = advanceToPassSelect();
+    const actor = getCanonicalActiveSeatFromState(result.nextState);
+    const decision = await resolveDecision({
+      backendBaseUrl: "http://127.0.0.1:1",
+      telemetryEnabled: true,
+      strictTelemetry: false,
+      gameId: "local-telemetry-network-game",
+      handId: "local-telemetry-network-hand",
+      actor,
+      decisionIndex: 0,
+      stateRaw: result.nextState as unknown as JsonObject,
+      stateNorm: result.derivedView as unknown as JsonObject,
+      legalActions: result.legalActions,
+      phase: result.nextState.phase,
+      defaultProvider: "local"
+    });
+
+    expect(decision.providerUsed).toBe("local_heuristic");
+    expect(decision.telemetryFailureStats.telemetryDecisionFailures).toBe(1);
+    expect(decision.telemetryFailureStats.telemetryFailuresTotal).toBe(1);
+  });
+
+  it("fails local provider decisions on telemetry failure only in strict mode", async () => {
+    const result = advanceToPassSelect();
+    const actor = getCanonicalActiveSeatFromState(result.nextState);
+    await expect(
+      resolveDecision({
+        backendBaseUrl: "http://127.0.0.1:1",
+        telemetryEnabled: true,
+        strictTelemetry: true,
+        gameId: "strict-telemetry-game",
+        handId: "strict-telemetry-hand",
+        actor,
+        decisionIndex: 0,
+        stateRaw: result.nextState as unknown as JsonObject,
+        stateNorm: result.derivedView as unknown as JsonObject,
+        legalActions: result.legalActions,
+        phase: result.nextState.phase,
+        defaultProvider: "local"
+      })
+    ).rejects.toThrow(/Strict telemetry decision persistence failed/);
+  });
+
+  it("reports telemetry event POST failures without throwing through the safe wrapper", async () => {
+    const result = advanceToPassSelect();
+    const telemetryResult = await safePostTelemetryEvent({
+      backendBaseUrl: "http://127.0.0.1:1",
+      payload: createTelemetryEventPayload(result)
+    });
+
+    expect(telemetryResult.ok).toBe(false);
+    if (!telemetryResult.ok) {
+      expect(telemetryResult.request_kind).toBe("telemetry_event");
+      expect(telemetryResult.failure_kind).toBe("network_failure");
+      expect(telemetryResult.endpoint).toContain("/api/telemetry/event");
+    }
+  });
+
+  it("falls back locally when server_heuristic is unreachable and fallback is enabled", async () => {
+    const result = advanceToPassSelect();
+    const actor = getCanonicalActiveSeatFromState(result.nextState);
+    const capturedErrors: string[] = [];
+    const errorSpy = vi.spyOn(console, "error").mockImplementation((value) => {
+      capturedErrors.push(typeof value === "string" ? value : JSON.stringify(value));
+    });
+    try {
+      const decision = await resolveDecision({
+        backendBaseUrl: "http://127.0.0.1:1",
+        telemetryEnabled: false,
+        gameId: "server-network-fallback-game",
+        handId: "server-network-fallback-hand",
+        actor,
+        decisionIndex: 0,
+        stateRaw: result.nextState as unknown as JsonObject,
+        stateNorm: result.derivedView as unknown as JsonObject,
+        legalActions: result.legalActions,
+        phase: result.nextState.phase,
+        defaultProvider: "server_heuristic",
+        serverFallbackEnabled: true
+      });
+
+      expect(decision.providerUsed).toBe("local_heuristic");
+      expect(decision.fallbackUsed).toBe(true);
+    } finally {
+      errorSpy.mockRestore();
+    }
+
+    const joined = capturedErrors.join("\n");
+    expect(joined).toMatch(/"event":"decision_provider_failure"/);
+    expect(joined).toMatch(/"kind":"network_failure"/);
+    expect(joined).toMatch(/"event":"decision_fallback"/);
+  });
+
+  it("returns backend decision success metadata without changing the response contract", async () => {
+    await withServer(async ({ baseUrl, repository }) => {
+      const request = createServerHeuristicPayload(advanceToPassSelect());
+      const response = await fetch(`${baseUrl}${DECISION_REQUEST_PATH}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(request)
+      });
+      const payload = (await response.json()) as JsonObject;
+
+      expect(response.status).toBe(200);
+      expect(payload.provider_used).toBe("server_heuristic");
+      expect(payload.telemetry_id).toBe(1);
+      expect(repository.decisions.length).toBe(1);
+      expect(payload.metadata).toMatchObject({
+        canonical_actor_seat: request.actor_seat,
+        request_validated: true,
+        provider_path: "server_heuristic"
+      });
+      expect((payload.metadata as JsonObject).legal_action_count).toBeGreaterThan(0);
+    });
+  });
+
+  it("preserves informative backend actor mismatch rejection bodies", async () => {
+    await withServer(async ({ baseUrl }) => {
+      const request = {
+        ...createServerHeuristicPayload(advanceToPassSelect()),
+        actor_seat: "seat-2"
+      };
+      const response = await fetch(`${baseUrl}${DECISION_REQUEST_PATH}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(request)
+      });
+      const payload = (await response.json()) as JsonObject;
+
+      expect(response.status).toBe(400);
+      expect(String(payload.error)).toMatch(/Actor mismatch/);
+      expect(JSON.stringify(payload.validation_errors)).toMatch(/request\.actor_seat=seat-2/);
+    });
+  });
+
+  it("keeps additive telemetry failure summary fields present for old consumers", async () => {
+    const summary = await runSelfPlayBatch({
+      games: 0,
+      baseSeed: "summary-shape",
+      defaultProvider: "local",
+      telemetryEnabled: false,
+      quiet: true,
+      progress: false
+    });
+
+    expect(summary.gamesPlayed).toBe(0);
+    expect(summary.telemetryDecisionFailures).toBe(0);
+    expect(summary.telemetryEventFailures).toBe(0);
+    expect(summary.telemetryFailuresTotal).toBe(0);
+    expect(summary.telemetryFailureByEndpoint).toEqual({});
+  });
 
   it("keeps local self-play independent from backend provider fallback handling", async () => {
     const result = advanceToPassSelect();
