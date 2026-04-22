@@ -187,6 +187,8 @@ const TEST_SERVER_CONFIG: ServerConfig = {
   lightgbmModelMetaPath: "ml/model_registry/lightgbm_action_model.meta.json"
 };
 
+let nextSafeTestPort = 43210;
+
 async function withServer<T>(
   callback: (config: { baseUrl: string; repository: InMemoryTelemetryRepository }) => Promise<T>
 ): Promise<T> {
@@ -196,8 +198,9 @@ async function withServer<T>(
     repository
   });
 
+  const port = nextSafeTestPort++;
   await new Promise<void>((resolve) => {
-    server.listen(0, "127.0.0.1", () => resolve());
+    server.listen(port, "127.0.0.1", () => resolve());
   });
 
   const address = server.address();
