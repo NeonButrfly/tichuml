@@ -7,6 +7,7 @@ import {
   normalizeBackendBaseUrl,
   parseBooleanEnv
 } from "@tichuml/shared";
+import { parseEnvFile } from "./env-file.js";
 
 export type ServerConfig = {
   port: number;
@@ -30,39 +31,6 @@ export type ServerConfig = {
 
 export function getRepoRoot(): string {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../");
-}
-
-function parseEnvFile(filePath: string): Record<string, string> {
-  if (!fs.existsSync(filePath)) {
-    return {};
-  }
-
-  const content = fs.readFileSync(filePath, "utf8");
-  const parsed: Record<string, string> = {};
-
-  for (const rawLine of content.split(/\r?\n/u)) {
-    const line = rawLine.trim();
-    if (line.length === 0 || line.startsWith("#")) {
-      continue;
-    }
-
-    const separatorIndex = line.indexOf("=");
-    if (separatorIndex <= 0) {
-      continue;
-    }
-
-    const key = line.slice(0, separatorIndex).trim();
-    let value = line.slice(separatorIndex + 1).trim();
-    if (
-      (value.startsWith("\"") && value.endsWith("\"")) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
-    parsed[key] = value;
-  }
-
-  return parsed;
 }
 
 function loadRepoEnvDefaults(repoRoot: string): Record<string, string> {

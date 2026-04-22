@@ -85,22 +85,8 @@ load_repo_env() {
   log_info "Loading backend environment from $BACKEND_REPO_ROOT/.env"
   ensure_env_file
 
-  set -a
-  # shellcheck disable=SC1091
-  . "$BACKEND_REPO_ROOT/.env"
-  set +a
-
-  export REPO_URL="${REPO_URL:-https://github.com/NeonButrfly/tichuml.git}"
-  export GIT_BRANCH="${GIT_BRANCH:-main}"
-  export AUTO_UPDATE_ON_START="${AUTO_UPDATE_ON_START:-true}"
-  export PORT="${PORT:-4310}"
-  export HOST="${HOST:-0.0.0.0}"
-  export BACKEND_HOST_IP="${BACKEND_HOST_IP:-192.168.50.36}"
-  export BACKEND_PUBLIC_URL="${BACKEND_PUBLIC_URL:-http://$BACKEND_HOST_IP:$PORT}"
-  export BACKEND_LOCAL_URL="${BACKEND_LOCAL_URL:-http://127.0.0.1:$PORT}"
-  export POSTGRES_USER="${POSTGRES_USER:-tichu}"
-  export POSTGRES_DB="${POSTGRES_DB:-tichu}"
-  export POSTGRES_PORT="${POSTGRES_PORT:-54329}"
+  require_command node
+  eval "$(node "$BACKEND_REPO_ROOT/scripts/runtime-config.mjs" export-shell "$BACKEND_REPO_ROOT/.env")"
 }
 
 docker_info_error() {

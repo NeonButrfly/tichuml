@@ -75,9 +75,7 @@ if [ ! -f .env ]; then
   cp .env.example .env
 fi
 
-set -a
-. ./.env
-set +a
+eval "$(node scripts/runtime-config.mjs export-shell .env)"
 
 log_step "Ensuring Docker is running"
 ensure_docker_running

@@ -1,8 +1,14 @@
 import { execFile, spawn } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import type { ServerConfig } from "../config/env.js";
+import {
+  detectSystemIps,
+  formatEnvValue,
+  parseEnvText,
+  writeEnvText,
+  writeFileAtomic
+} from "../config/env-file.js";
 
 type CommandResult = {
   ok: boolean;
@@ -48,6 +54,9 @@ export type RuntimeAdminStatus = {
     backend_public_url: string;
     backend_local_url: string;
     backend_base_url: string;
+    detected_primary_ip: string | null;
+    detected_system_ips: string[];
+    backend_host_ip_override: string | null;
     sim_controller_runtime_dir: string;
     update_status_file: string;
     update_status_json_file: string;
@@ -69,14 +78,22 @@ export type RuntimeAdminStatus = {
 export type RuntimeConfigEntry = {
   key: string;
   value: string;
+  effective_value: string;
+  detected_value: string | undefined;
+  overridden: boolean;
   editable: boolean;
   restart_required: boolean;
   description: string;
+  input: "text" | "boolean";
 };
 
 export type RuntimeConfigPayload = {
   env_file: string;
   effective: Record<string, string>;
+  detected: {
+    primary_ip: string | null;
+    system_ips: string[];
+  };
   entries: RuntimeConfigEntry[];
   pending_restart: boolean;
   runtime_differs_from_disk_config: boolean;
@@ -109,6 +126,7 @@ const EDITABLE_ENV: Array<{
   key: string;
   restart_required: boolean;
   description: string;
+  input?: "text" | "boolean";
   validate?: (value: string) => string | null;
 }> = [
   { key: "PORT", restart_required: true, description: "Backend HTTP port.", validate: validatePort },
@@ -123,13 +141,13 @@ const EDITABLE_ENV: Array<{
   { key: "POSTGRES_DB", restart_required: true, description: "Postgres database name." },
   { key: "POSTGRES_USER", restart_required: true, description: "Postgres username." },
   { key: "POSTGRES_PORT", restart_required: true, description: "Host Postgres port.", validate: validatePort },
-  { key: "AUTO_BOOTSTRAP_DATABASE", restart_required: true, description: "Auto-create database on startup.", validate: validateBoolean },
-  { key: "AUTO_MIGRATE", restart_required: true, description: "Auto-run migrations on server startup.", validate: validateBoolean },
-  { key: "ENABLE_DESTRUCTIVE_ADMIN_ENDPOINTS", restart_required: true, description: "Enable destructive DB admin APIs.", validate: validateBoolean },
-  { key: "ENABLE_ADMIN_SIM_CONTROL", restart_required: true, description: "Enable simulator admin control APIs.", validate: validateBoolean },
-  { key: "ENABLE_RUNTIME_ADMIN_CONTROL", restart_required: true, description: "Enable mutating runtime admin APIs.", validate: validateBoolean },
+  { key: "AUTO_BOOTSTRAP_DATABASE", restart_required: true, description: "Auto-create database on startup.", input: "boolean", validate: validateBoolean },
+  { key: "AUTO_MIGRATE", restart_required: true, description: "Auto-run migrations on server startup.", input: "boolean", validate: validateBoolean },
+  { key: "ENABLE_DESTRUCTIVE_ADMIN_ENDPOINTS", restart_required: true, description: "Enable destructive DB admin APIs.", input: "boolean", validate: validateBoolean },
+  { key: "ENABLE_ADMIN_SIM_CONTROL", restart_required: true, description: "Enable simulator admin control APIs.", input: "boolean", validate: validateBoolean },
+  { key: "ENABLE_RUNTIME_ADMIN_CONTROL", restart_required: true, description: "Enable mutating runtime admin APIs.", input: "boolean", validate: validateBoolean },
   { key: "SIM_CONTROLLER_RUNTIME_DIR", restart_required: true, description: "Simulator controller runtime directory." },
-  { key: "AUTO_UPDATE_ON_START", restart_required: false, description: "Force-sync repo on Linux startup.", validate: validateBoolean },
+  { key: "AUTO_UPDATE_ON_START", restart_required: false, description: "Force-sync repo on Linux startup.", input: "boolean", validate: validateBoolean },
   { key: "GIT_BRANCH", restart_required: false, description: "Git branch for force-sync/update." },
   { key: "REPO_URL", restart_required: false, description: "Git remote URL for force-sync/update." },
   { key: "PYTHON_EXECUTABLE", restart_required: true, description: "Python executable for ML inference." },
@@ -153,9 +171,13 @@ function validatePort(value: string): string | null {
 }
 
 function validateBoolean(value: string): string | null {
-  return /^(true|false|1|0|yes|no|on|off)$/iu.test(value)
+  return /^(true|false)$/iu.test(value)
     ? null
-    : "Expected a boolean value.";
+    : "Expected true or false.";
+}
+
+function normalizeBooleanValue(value: string): string {
+  return value.toLowerCase() === "true" ? "true" : "false";
 }
 
 function command(
@@ -197,66 +219,6 @@ async function commandText(
 ): Promise<string | null> {
   const result = await command(file, args, cwd ? { cwd } : {});
   return result.ok ? result.stdout : null;
-}
-
-function stripEnvQuotes(value: string): string {
-  const trimmed = value.trim();
-  if (
-    (trimmed.startsWith("'") && trimmed.endsWith("'")) ||
-    (trimmed.startsWith('"') && trimmed.endsWith('"'))
-  ) {
-    return trimmed.slice(1, -1);
-  }
-  return trimmed;
-}
-
-function parseEnvText(text: string): {
-  values: Record<string, string>;
-  lines: Array<{ raw: string; key?: string; value?: string }>;
-} {
-  const values: Record<string, string> = {};
-  const lines = text.split(/\r?\n/u).map((raw) => {
-    const trimmed = raw.trim();
-    if (!trimmed || trimmed.startsWith("#")) {
-      return { raw };
-    }
-    const match = raw.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/u);
-    if (!match) {
-      return { raw };
-    }
-    const key = match[1] ?? "";
-    const value = stripEnvQuotes(match[2] ?? "");
-    values[key] = value;
-    return { raw, key, value };
-  });
-  return { values, lines };
-}
-
-function shellQuote(value: string): string {
-  if (/^[A-Za-z0-9_./:@%+=,-]*$/u.test(value) && value.length > 0) {
-    return value;
-  }
-  return `'${value.replace(/'/gu, "'\\''")}'`;
-}
-
-function writeEnvText(
-  parsed: ReturnType<typeof parseEnvText>,
-  values: Record<string, string>
-): string {
-  const written = new Set<string>();
-  const lines = parsed.lines.map((entry) => {
-    if (!entry.key || !(entry.key in values)) {
-      return entry.raw;
-    }
-    written.add(entry.key);
-    return `${entry.key}=${shellQuote(values[entry.key] ?? "")}`;
-  });
-  for (const key of EDITABLE_ENV.map((entry) => entry.key)) {
-    if (key in values && !written.has(key)) {
-      lines.push(`${key}=${shellQuote(values[key] ?? "")}`);
-    }
-  }
-  return `${lines.join("\n").replace(/\n+$/u, "")}\n`;
 }
 
 function readJsonFile<T>(filePath: string): T | null {
@@ -371,12 +333,26 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
   }
 
   private effectiveConfigValues(): Record<string, string> {
+    const disk = this.readEnvValues();
+    const detected = detectSystemIps();
+    const hostIp = disk.BACKEND_HOST_IP?.trim() || detected.primary || "127.0.0.1";
+    const port = disk.PORT?.trim() || String(this.config.port);
+    const localUrl = disk.BACKEND_LOCAL_URL?.trim() || `http://127.0.0.1:${port}`;
+    const publicUrl =
+      disk.BACKEND_PUBLIC_URL?.trim() || `http://${hostIp}:${port}`;
+
     return {
       PORT: String(this.config.port),
       HOST: this.config.host,
+      BACKEND_HOST_IP: hostIp,
+      BACKEND_PUBLIC_URL: publicUrl,
+      BACKEND_LOCAL_URL: localUrl,
       DATABASE_URL: this.config.databaseUrl,
       PG_BOOTSTRAP_URL: this.config.pgBootstrapUrl,
       CORS_ALLOW_ORIGIN: this.config.allowedOrigin,
+      POSTGRES_DB: disk.POSTGRES_DB ?? "tichu",
+      POSTGRES_USER: disk.POSTGRES_USER ?? "tichu",
+      POSTGRES_PORT: disk.POSTGRES_PORT ?? "54329",
       AUTO_BOOTSTRAP_DATABASE: String(this.config.autoBootstrapDatabase),
       AUTO_MIGRATE: String(this.config.autoMigrate),
       BACKEND_BASE_URL: this.config.backendBaseUrl,
@@ -384,7 +360,11 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
         this.config.destructiveAdminEndpointsEnabled
       ),
       ENABLE_ADMIN_SIM_CONTROL: String(this.config.adminSimControlEnabled),
+      ENABLE_RUNTIME_ADMIN_CONTROL: String(this.config.runtimeAdminControlEnabled),
       SIM_CONTROLLER_RUNTIME_DIR: this.config.simControllerRuntimeDir,
+      AUTO_UPDATE_ON_START: disk.AUTO_UPDATE_ON_START ?? "true",
+      GIT_BRANCH: disk.GIT_BRANCH ?? "main",
+      REPO_URL: disk.REPO_URL ?? "https://github.com/NeonButrfly/tichuml.git",
       PYTHON_EXECUTABLE: this.config.pythonExecutable,
       LIGHTGBM_INFER_SCRIPT: this.config.lightgbmInferScript,
       LIGHTGBM_MODEL_PATH: this.config.lightgbmModelPath,
@@ -409,6 +389,9 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
     const pid = await this.readBackendPid();
     const listeners = await this.portListeners();
     const compose = await this.composeCommand();
+    const diskEnv = this.readEnvValues();
+    const effectiveConfig = this.effectiveConfigValues();
+    const detectedIps = detectSystemIps();
     const localBase = `http://127.0.0.1:${this.config.port}`;
     const dockerVersion = await commandText("docker", ["--version"]);
     const composeVersion = compose
@@ -431,7 +414,7 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
         })
       : null;
     const pgReady = compose
-      ? await command(compose.file, [...compose.args, "-f", path.join(this.config.repoRoot, "docker-compose.yml"), "exec", "-T", "postgres", "pg_isready", "-U", this.readEnvValues().POSTGRES_USER ?? "tichu", "-d", this.readEnvValues().POSTGRES_DB ?? "tichu"], {
+      ? await command(compose.file, [...compose.args, "-f", path.join(this.config.repoRoot, "docker-compose.yml"), "exec", "-T", "postgres", "pg_isready", "-U", diskEnv.POSTGRES_USER ?? "tichu", "-d", diskEnv.POSTGRES_DB ?? "tichu"], {
           cwd: this.config.repoRoot
         })
       : null;
@@ -488,9 +471,12 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
       },
       runtime: {
         repo_root: this.config.repoRoot,
-        backend_public_url: this.readEnvValues().BACKEND_PUBLIC_URL ?? this.config.backendBaseUrl,
-        backend_local_url: this.readEnvValues().BACKEND_LOCAL_URL ?? localBase,
+        backend_public_url: effectiveConfig.BACKEND_PUBLIC_URL ?? this.config.backendBaseUrl,
+        backend_local_url: effectiveConfig.BACKEND_LOCAL_URL ?? localBase,
         backend_base_url: this.config.backendBaseUrl,
+        detected_primary_ip: detectedIps.primary,
+        detected_system_ips: detectedIps.addresses,
+        backend_host_ip_override: diskEnv.BACKEND_HOST_IP ?? null,
         sim_controller_runtime_dir: this.config.simControllerRuntimeDir,
         update_status_file: path.join(this.runtimeDir(), "backend-update-status.env"),
         update_status_json_file: this.updateStatusJsonPath(),
@@ -515,15 +501,29 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
   async readConfig(): Promise<RuntimeConfigPayload> {
     const disk = this.readEnvValues();
     const effective = this.effectiveConfigValues();
+    const detected = detectSystemIps();
     return {
       env_file: this.envPath(),
       effective,
+      detected: {
+        primary_ip: detected.primary,
+        system_ips: detected.addresses
+      },
       entries: EDITABLE_ENV.map((entry) => ({
         key: entry.key,
-        value: disk[entry.key] ?? effective[entry.key] ?? "",
+        value: disk[entry.key] ?? (entry.key === "BACKEND_HOST_IP" ? "" : effective[entry.key] ?? ""),
+        effective_value: effective[entry.key] ?? "",
+        detected_value:
+          entry.key === "BACKEND_HOST_IP"
+            ? detected.primary ?? ""
+            : entry.key === "BACKEND_PUBLIC_URL"
+              ? `http://${disk.BACKEND_HOST_IP?.trim() || detected.primary || "127.0.0.1"}:${disk.PORT?.trim() || String(this.config.port)}`
+              : undefined,
+        overridden: entry.key in disk && (disk[entry.key] ?? "").length > 0,
         editable: true,
         restart_required: entry.restart_required,
-        description: entry.description
+        description: entry.description,
+        input: entry.input ?? "text"
       })),
       pending_restart: this.pendingRestart(),
       runtime_differs_from_disk_config: this.runtimeDiffersFromDisk()
@@ -553,8 +553,10 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
       if (validationError) {
         throw new Error(`${key}: ${validationError}`);
       }
-      if ((nextValues[key] ?? "") !== rawValue) {
-        nextValues[key] = rawValue;
+      const value =
+        metadata?.input === "boolean" ? normalizeBooleanValue(rawValue) : rawValue;
+      if ((nextValues[key] ?? "") !== value) {
+        nextValues[key] = value;
         changedKeys.push(key);
       }
     }
@@ -564,14 +566,21 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
       if (fs.existsSync(this.envPath())) {
         fs.copyFileSync(this.envPath(), backup);
       }
-      fs.writeFileSync(this.envPath(), writeEnvText(parsed, nextValues), "utf8");
+      writeFileAtomic(
+        this.envPath(),
+        writeEnvText(
+          parsed,
+          nextValues,
+          EDITABLE_ENV.map((entry) => entry.key)
+        )
+      );
     }
 
     const restartRequired = changedKeys.some(
       (key) => EDITABLE_ENV.find((entry) => entry.key === key)?.restart_required
     );
     fs.mkdirSync(this.runtimeDir(), { recursive: true });
-    fs.writeFileSync(
+    writeFileAtomic(
       this.configStatusPath(),
       `${JSON.stringify(
         {
@@ -582,7 +591,6 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
         null,
         2
       )}\n`,
-      "utf8"
     );
 
     return {
@@ -600,29 +608,26 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
   }
 
   async runAction(action: string): Promise<RuntimeActionResult> {
-    const scripts = {
-      start_backend: "scripts/start_backend_linux.sh",
-      stop_backend: "scripts/stop_backend_linux.sh --backend-only",
-      restart_backend:
-        "scripts/stop_backend_linux.sh --backend-only && scripts/start_backend_linux.sh",
-      full_restart:
-        "scripts/stop_backend_linux.sh --full && scripts/start_backend_linux.sh",
-      start_postgres:
-        ". scripts/backend-linux-common.sh && load_repo_env && ensure_runtime_dirs && ensure_docker_running && start_postgres && wait_for_postgres",
-      stop_postgres:
-        ". scripts/backend-linux-common.sh && load_repo_env && ensure_runtime_dirs && stop_postgres",
-      apply_config_restart:
-        "scripts/stop_backend_linux.sh --backend-only && scripts/start_backend_linux.sh"
-    } as Record<string, string>;
+    const supportedActions = new Set([
+      "start_backend",
+      "stop_backend",
+      "restart_backend",
+      "full_restart",
+      "start_postgres",
+      "stop_postgres",
+      "update_repo",
+      "clear_db",
+      "apply_config_restart"
+    ]);
 
-    const script = scripts[action];
-    if (!script) {
+    if (!supportedActions.has(action)) {
       throw new Error(`Unsupported runtime action: ${action}`);
     }
 
     fs.mkdirSync(this.runtimeDir(), { recursive: true });
     const logPath = this.actionLogPath();
-    const commandText = `printf '%s\\n' '${nowIso()} action=${action} start' >> ${shellQuote(logPath)}; ${script} >> ${shellQuote(logPath)} 2>&1; status=$?; printf '%s\\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ) action=${action} exit=$status" >> ${shellQuote(logPath)}`;
+    const scriptPath = path.join(this.config.repoRoot, "scripts", "runtime_action_linux.sh");
+    const commandText = `printf '%s\\n' '${nowIso()} action=${action} start' >> ${formatEnvValue(logPath)}; bash ${formatEnvValue(scriptPath)} ${formatEnvValue(action)} >> ${formatEnvValue(logPath)} 2>&1; status=$?; printf '%s\\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ) action=${action} exit=$status" >> ${formatEnvValue(logPath)}`;
     const child = spawn("bash", ["-lc", commandText], {
       cwd: this.config.repoRoot,
       detached: true,

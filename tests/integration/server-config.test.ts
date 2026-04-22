@@ -79,4 +79,24 @@ describe("server config env loading", () => {
 
     expect(config.runtimeAdminControlEnabled).toBe(true);
   });
+
+  it("parses quoted env values without shell sourcing", async () => {
+    const repoRoot = await createTempRepo();
+    await fs.writeFile(
+      path.join(repoRoot, ".env"),
+      [
+        'DATABASE_URL="postgres://quoted:pw@localhost:5433/root db"',
+        "CORS_ALLOW_ORIGIN='http://host name:5173'",
+        "PORT=5002 # inline comment"
+      ].join("\n")
+    );
+
+    const config = loadServerConfig({}, { repoRoot });
+
+    expect(config.databaseUrl).toBe(
+      "postgres://quoted:pw@localhost:5433/root db"
+    );
+    expect(config.allowedOrigin).toBe("http://host name:5173");
+    expect(config.port).toBe(5002);
+  });
 });

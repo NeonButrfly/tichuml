@@ -190,3 +190,33 @@ Prompt logs here capture backend/platform prompt intent only. GitHub issue state
   [Linux Backend Deployment + ML Host](https://github.com/NeonButrfly/tichuml/milestone/25)
 - Status:
   Lives in GitHub, not here.
+
+## 2026-04-22 - Runtime control panel config persistence and end-to-end controls
+
+- Prompt signal:
+  The backend admin/control panel loses config changes on refresh, renders
+  booleans as free text, lacks clear IP override semantics, has a broken git
+  panel, and exposes non-working or placeholder controls for backend,
+  Postgres, repo update, DB reset, and status refresh.
+- Interpreted requirement:
+  Issue [#40](https://github.com/NeonButrfly/tichuml/issues/40) also tracks the
+  reliability follow-up: `.env` remains the single disk-backed runtime config
+  source, but both backend and Linux scripts must parse/escape it structurally
+  instead of naïvely shell-sourcing it. The control panel must round-trip config
+  changes through guarded APIs with atomic writes, boolean dropdown validation,
+  detected-versus-overridden host IP display, real git status/update controls,
+  confirmation-gated database reset with migrations, action progress, and
+  live status refresh while preserving Ubuntu/Debian and Oracle/RHEL flows.
+- Affected systems:
+  `apps/server/src/config`, `apps/server/src/services/runtime-admin-service.ts`,
+  `apps/server/src/services/runtime-control-panel.ts`,
+  `apps/server/src/routes/router.ts`, `scripts/backend-linux-common.sh`,
+  `scripts/start_backend_linux.sh`, `scripts/runtime-config.mjs`,
+  `scripts/runtime_action_linux.sh`, `.env.example`, docs, backend integration
+  tests.
+- Linked GitHub issue:
+  [#40](https://github.com/NeonButrfly/tichuml/issues/40)
+- Milestone:
+  [Linux Backend Deployment + ML Host](https://github.com/NeonButrfly/tichuml/milestone/25)
+- Status:
+  Lives in GitHub, not here.

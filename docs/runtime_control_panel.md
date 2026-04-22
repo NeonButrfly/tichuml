@@ -88,17 +88,38 @@ The page includes buttons for:
 - Start backend
 - Stop backend
 - Restart backend
+- Full restart
 - Start Postgres
 - Stop Postgres
-- Full restart
+- Update Repo
+- Clear DB
 - Apply config + restart
+- Refresh status
+
+Stop, restart, full restart, repo update, and DB reset open progress dialogs.
+`Clear DB` requires an explicit Yes/No confirmation and then resets the
+Postgres `public` schema before rerunning migrations. Mutating actions are
+logged to `.runtime/actions.ndjson` and the panel polls live status/logs while
+the action runs.
 
 ## Config Editing
 
-The control panel reads and writes the repo-root `.env` file. It validates known
-keys, rejects multiline values, writes shell-safe values, keeps unsupported keys
-out of the edit path, and records pending restart state in
-`.runtime/config-status.json`.
+The repo-root `.env` file is the single authoritative disk-backed runtime config
+source. The backend reads it with the same structured env parser used by the
+control-panel writer, not by shell evaluation. Linux scripts load config through
+`scripts/runtime-config.mjs`, which parses `.env` and emits escaped exports for
+known runtime defaults, avoiding direct `.env` sourcing.
+
+The control panel validates known keys, rejects multiline values, writes
+atomically, preserves comments and key order where possible, keeps unsupported
+keys out of the edit path, and records pending restart state in
+`.runtime/config-status.json`. Boolean values render as `true` / `false`
+dropdowns and are rejected if submitted as anything else.
+
+`BACKEND_HOST_IP` is a manual override. When it is blank or absent, scripts and
+the panel detect the primary non-loopback IPv4 address and use that value for
+default public URLs. The UI shows both the detected IP and the active override
+state so refreshes do not hide which value is actually in use.
 
 Most server/runtime settings require restart because they are loaded at process
 startup. The control panel marks restart-required settings and provides an

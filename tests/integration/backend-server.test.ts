@@ -336,13 +336,18 @@ class InMemoryRuntimeAdmin implements RuntimeAdminService {
   config: RuntimeConfigPayload = {
     env_file: "C:/tichu/tichuml/.env",
     effective: { PORT: "4310" },
+    detected: { primary_ip: "192.168.50.32", system_ips: ["192.168.50.32"] },
     entries: [
       {
         key: "PORT",
         value: "4310",
+        effective_value: "4310",
+        detected_value: undefined,
+        overridden: true,
         editable: true,
         restart_required: true,
-        description: "Backend HTTP port."
+        description: "Backend HTTP port.",
+        input: "text"
       }
     ],
     pending_restart: false,
@@ -385,6 +390,9 @@ class InMemoryRuntimeAdmin implements RuntimeAdminService {
         backend_public_url: "http://localhost:4310",
         backend_local_url: "http://127.0.0.1:4310",
         backend_base_url: "http://localhost:4310",
+        detected_primary_ip: "192.168.50.32",
+        detected_system_ips: ["192.168.50.32"],
+        backend_host_ip_override: null,
         sim_controller_runtime_dir: ".runtime/sim-controller",
         update_status_file: ".runtime/backend-update-status.env",
         update_status_json_file: ".runtime/backend-update-status.json",
@@ -657,6 +665,30 @@ describe("backend foundation server routes", () => {
         const payload = (await response.json()) as RuntimeActionResult;
         expect(payload.accepted).toBe(true);
         expect(payload.action).toBe("restart_backend");
+      },
+      { serverConfig: { runtimeAdminControlEnabled: true } }
+    );
+  });
+
+  it("runs named runtime action endpoints when safeguards are satisfied", async () => {
+    await withServer(
+      async ({ baseUrl }) => {
+        const response = await fetch(
+          `${baseUrl}/api/admin/runtime/actions/update-repo`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-admin-confirm": "CLEAR_TICHU_DB"
+            },
+            body: JSON.stringify({})
+          }
+        );
+
+        expect(response.status).toBe(202);
+        const payload = (await response.json()) as RuntimeActionResult;
+        expect(payload.accepted).toBe(true);
+        expect(payload.action).toBe("update_repo");
       },
       { serverConfig: { runtimeAdminControlEnabled: true } }
     );

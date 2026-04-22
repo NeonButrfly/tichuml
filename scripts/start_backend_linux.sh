@@ -5,11 +5,8 @@ set -euo pipefail
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 START_REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
 
-if [ -f "$START_REPO_ROOT/.env" ]; then
-  set -a
-  # shellcheck disable=SC1091
-  . "$START_REPO_ROOT/.env"
-  set +a
+if [ -f "$START_REPO_ROOT/.env" ] && command -v node >/dev/null 2>&1; then
+  eval "$(node "$START_REPO_ROOT/scripts/runtime-config.mjs" export-shell "$START_REPO_ROOT/.env")"
 fi
 
 if [ "$(uname -s)" = "Linux" ]; then

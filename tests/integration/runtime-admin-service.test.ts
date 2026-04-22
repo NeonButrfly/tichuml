@@ -73,7 +73,7 @@ describe("runtime admin config manager", () => {
     const envText = await fs.readFile(path.join(repoRoot, ".env"), "utf8");
     expect(envText).toContain("# keep this comment");
     expect(envText).toContain("PORT=4311");
-    expect(envText).toContain("BACKEND_PUBLIC_URL='http://host name:4311'");
+    expect(envText).toContain('BACKEND_PUBLIC_URL="http://host name:4311"');
     const status = JSON.parse(
       await fs.readFile(path.join(repoRoot, ".runtime", "config-status.json"), "utf8")
     ) as { pending_restart: boolean };
@@ -90,5 +90,42 @@ describe("runtime admin config manager", () => {
         BACKEND_PUBLIC_URL: "http://ok\nMALICIOUS=true"
       })
     ).rejects.toThrow(/cannot contain newlines/u);
+  });
+
+  it("renders boolean config as boolean entries and rejects non-boolean values", async () => {
+    const repoRoot = await createTempRepo();
+    await fs.writeFile(
+      path.join(repoRoot, ".env"),
+      "ENABLE_RUNTIME_ADMIN_CONTROL=true\nAUTO_MIGRATE=false\n"
+    );
+    const service = new FileRuntimeAdminService(createConfig(repoRoot));
+
+    const config = await service.readConfig();
+    expect(config.entries.find((entry) => entry.key === "AUTO_MIGRATE")?.input).toBe(
+      "boolean"
+    );
+    expect(
+      config.entries.find((entry) => entry.key === "ENABLE_RUNTIME_ADMIN_CONTROL")
+        ?.value
+    ).toBe("true");
+
+    await expect(
+      service.saveConfig({
+        AUTO_MIGRATE: "yes"
+      })
+    ).rejects.toThrow(/Expected true or false/u);
+  });
+
+  it("uses detected host IPs when no override is saved", async () => {
+    const repoRoot = await createTempRepo();
+    await fs.writeFile(path.join(repoRoot, ".env"), "PORT=4310\n");
+    const service = new FileRuntimeAdminService(createConfig(repoRoot));
+
+    const config = await service.readConfig();
+    const hostIp = config.entries.find((entry) => entry.key === "BACKEND_HOST_IP");
+
+    expect(hostIp?.value).toBe("");
+    expect(hostIp?.effective_value).toBeTruthy();
+    expect(hostIp?.overridden).toBe(false);
   });
 });

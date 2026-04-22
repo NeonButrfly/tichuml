@@ -326,7 +326,8 @@ export function createRouter({
       if (
         request.method === "POST" &&
         (url.pathname === "/api/admin/runtime/config" ||
-          url.pathname === "/api/admin/runtime/action")
+          url.pathname === "/api/admin/runtime/action" ||
+          url.pathname.startsWith("/api/admin/runtime/actions/"))
       ) {
         const guard = await assertRuntimeAdminRequest(request, config);
         if (!guard.ok) {
@@ -350,6 +351,19 @@ export function createRouter({
             response,
             200,
             await runtimeAdmin.saveConfig(values),
+            config.allowedOrigin
+          );
+          return;
+        }
+
+        if (url.pathname.startsWith("/api/admin/runtime/actions/")) {
+          const action = url.pathname
+            .slice("/api/admin/runtime/actions/".length)
+            .replace(/-/gu, "_");
+          writeJson(
+            response,
+            202,
+            await runtimeAdmin.runAction(action),
             config.allowedOrigin
           );
           return;
