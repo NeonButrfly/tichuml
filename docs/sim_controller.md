@@ -1,6 +1,9 @@
 # Simulator Controller
 
-Tracking issue: [#37](https://github.com/NeonButrfly/tichuml/issues/37)
+Tracking issues:
+
+- [#37](https://github.com/NeonButrfly/tichuml/issues/37)
+- [#44](https://github.com/NeonButrfly/tichuml/issues/44)
 
 The simulator controller is an admin/operator control plane for background
 self-play on the Linux backend. Existing one-shot `npm run sim` behavior remains
@@ -48,8 +51,23 @@ Files:
 - `stop`: stop request file
 - `controller.ndjson`: structured JSONL log
 
-The controller recovers stale locks when the last heartbeat is older than the
-configured stale threshold.
+Runtime state now uses schema version `2` and separates live controller state
+from historical summaries:
+
+- live: `status`, `pid`, `controller_session_id`, `current_batch_started_at`,
+  `workers`, `last_heartbeat`, `active_run_seed`
+- historical: `last_batch_*`, `last_error`, `last_shutdown_reason`,
+  `last_exit_code`, `last_exit_signal`, `last_run_seed`
+
+On service startup, the backend reconciles stale runtime state before serving
+status or starting a new controller session. If the persisted controller PID or
+session is dead, the service immediately rewrites `state.json` to a non-running
+state, clears live workers and heartbeats, clears the active batch, moves any
+live run seed to `last_run_seed`, and marks the historical batch as
+`interrupted` instead of leaving the runtime stuck on `running`.
+
+Workers shown in the dashboard must belong to the current
+`controller_session_id` only.
 
 ## Pause / Continue
 
@@ -64,6 +82,28 @@ process path when the backend owns it, removes stale control files/locks, and
 rewrites runtime state to `stopped` with no worker rows. Completed totals remain
 in the aggregate counters, but stopped/completed workers are not kept as stale
 table rows in the dashboard.
+
+If the controller exits because of `SIGTERM` / exit code `143`, that is stored
+historically as a terminated/interrupted shutdown. It is not left behind as a
+live `running` session.
+
+## Run Seed Semantics
+
+Issue [#44](https://github.com/NeonButrfly/tichuml/issues/44) also clarifies
+the simulator seed flow:
+
+- each controller run resolves exactly one `active_run_seed`
+- automatic mode uses the existing multi-source entropy pipeline once at run
+  start
+- manual mode only applies when `manual_seed_override_enabled=true`
+- batch seeds are deterministic child seeds derived from the resolved run seed
+  plus the derivation namespace, worker id, and batch index
+- the dashboard shows `Current run seed` read-only while a run is active
+- historical seed information moves to `last_run_seed` after stop/restart
+
+`seed_prefix` remains as a compatibility field in shared config/runtime data,
+but the authoritative operator meaning is `seed_namespace`: an internal
+derivation namespace, not the primary run seed.
 
 ## Worker Count
 

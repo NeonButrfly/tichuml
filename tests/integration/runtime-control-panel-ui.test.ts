@@ -235,11 +235,17 @@ describe("runtime and simulator control GUI contracts", () => {
 
     expect(source).toMatch(/Provider\s*<select/su);
     expect(source).toMatch(/Telemetry mode\s*<select/su);
+    expect(source).toContain("Seed mode");
+    expect(source).toContain("Current run seed");
+    expect(source).toContain("Manual seed override");
+    expect(source).toContain("Derivation namespace");
+    expect(source).not.toContain("Seed prefix");
     expect(source).toContain('type="number"');
     expect(source).toContain('type="checkbox"');
     expect(source).not.toContain("getNetworkFallbackBackendUrl");
     expect(styles).toContain(".sim-workers");
     expect(styles).toContain("overflow-x: auto");
     expect(styles).toContain("overflow-wrap: anywhere");
+    expect(styles).toContain(".sim-seed-panel");
   });
 });

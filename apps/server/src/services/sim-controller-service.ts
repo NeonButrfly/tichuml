@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import {
   DEFAULT_BACKEND_BASE_URL,
@@ -9,11 +10,23 @@ import {
   type SimControllerResponse,
   type SimControllerRuntimeState,
   type SimControllerStatus,
+  type SimRunSeedInfo,
   type SimWorkerRuntimeState
 } from "@tichuml/shared";
+import {
+  generateEntropySeed
+} from "../entropy/index.js";
 import type { ServerConfig } from "../config/env.js";
 
 const STALE_AFTER_SECONDS = 30;
+const RUNTIME_SCHEMA_VERSION = 2;
+const ACTIVE_CONTROLLER_STATUSES = new Set<SimControllerStatus>([
+  "starting",
+  "running",
+  "pausing",
+  "paused",
+  "stopping"
+]);
 
 export interface SimControllerService {
   start(payload: SimControllerRequestPayload): Promise<SimControllerResponse>;
@@ -53,6 +66,51 @@ function isFreshHeartbeat(state: SimControllerRuntimeState): boolean {
   return Number.isFinite(ageMs) && ageMs <= STALE_AFTER_SECONDS * 1000;
 }
 
+function isPidAlive(pid: number | null): boolean {
+  if (!pid || !Number.isInteger(pid) || pid <= 0) {
+    return false;
+  }
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function hasLiveSessionState(state: SimControllerRuntimeState): boolean {
+  return (
+    ACTIVE_CONTROLLER_STATUSES.has(state.status) ||
+    state.current_batch_started_at !== null ||
+    state.active_run_seed !== null ||
+    state.workers.length > 0 ||
+    state.last_batch_status === "running"
+  );
+}
+
+function normalizeBatchHistoryStatus(
+  priorStatus: string | null,
+  interrupted: boolean
+): string | null {
+  if (interrupted) {
+    return "interrupted";
+  }
+  if (priorStatus === "running") {
+    return "stopped";
+  }
+  return priorStatus;
+}
+
+type ResolvedControllerRun = {
+  config: SimControllerConfig;
+  controllerSessionId: string;
+  runSeedInfo: SimRunSeedInfo;
+};
+
+type SimControllerServiceDeps = {
+  generateRunEntropySeed?: typeof generateEntropySeed;
+};
+
 function readJsonFile<T>(filePath: string): T | null {
   if (!fs.existsSync(filePath)) {
     return null;
@@ -78,12 +136,20 @@ function readRecentLogs(logPath: string, limit = 30): string[] {
   return fs.readFileSync(logPath, "utf8").trim().split(/\r?\n/u).slice(-limit);
 }
 
+function readLockPid(lockPath: string): number | null {
+  const payload = readJsonFile<{ pid?: number }>(lockPath);
+  return typeof payload?.pid === "number" && Number.isInteger(payload.pid)
+    ? payload.pid
+    : null;
+}
+
 function defaultWorkerState(status: SimControllerStatus): SimWorkerRuntimeState[] {
   return status === "stopped" || status === "completed"
     ? []
     : [
         {
           worker_id: "worker-01",
+          controller_session_id: null,
           status: status === "paused" ? "paused" : "stopped",
           pid: null,
           current_batch_started_at: null,
@@ -98,8 +164,12 @@ function defaultWorkerState(status: SimControllerStatus): SimWorkerRuntimeState[
 export class FileSimControllerService implements SimControllerService {
   private child: ChildProcess | null = null;
   private readonly paths: ControllerPaths;
+  private readonly generateRunEntropySeed: typeof generateEntropySeed;
 
-  constructor(private readonly config: ServerConfig) {
+  constructor(
+    private readonly config: ServerConfig,
+    deps: SimControllerServiceDeps = {}
+  ) {
     this.paths = {
       runtimePath: path.join(config.simControllerRuntimeDir, "state.json"),
       lockPath: path.join(config.simControllerRuntimeDir, "controller.lock"),
@@ -107,31 +177,38 @@ export class FileSimControllerService implements SimControllerService {
       stopPath: path.join(config.simControllerRuntimeDir, "stop"),
       logPath: path.join(config.simControllerRuntimeDir, "controller.ndjson")
     };
+    this.generateRunEntropySeed =
+      deps.generateRunEntropySeed ?? generateEntropySeed;
+    this.reconcilePersistedState();
   }
 
   async start(payload: SimControllerRequestPayload): Promise<SimControllerResponse> {
+    const warnings = this.reconcilePersistedState();
     const prior = this.readState();
-    const warnings = this.recoverStaleLock(prior);
-    const current = this.readState();
     if (
       fs.existsSync(this.paths.lockPath) &&
-      current.status !== "stopped" &&
-      current.status !== "error"
+      prior.status !== "stopped" &&
+      prior.status !== "completed" &&
+      prior.status !== "error"
     ) {
       return this.response({
         accepted: false,
         action: "sim.start",
         prior,
-        current,
+        current: prior,
         message: "Simulator controller is already running.",
         warnings
       });
     }
 
     this.clearControlFiles();
-    const resolved = this.resolveConfig(payload);
+    const resolved = await this.resolveControllerRun(payload);
     this.writeState({
-      ...this.createState("starting", resolved),
+      ...this.createState("starting", resolved.config, {
+        controllerSessionId: resolved.controllerSessionId,
+        activeRunSeed: resolved.runSeedInfo,
+        lastRunSeed: prior.last_run_seed
+      }),
       requested_action: "start",
       warnings
     });
@@ -142,7 +219,7 @@ export class FileSimControllerService implements SimControllerService {
       action: "sim.start",
       prior,
       current: next,
-      message: `Simulator controller starting with ${resolved.worker_count} worker(s).`,
+      message: `Simulator controller starting with ${resolved.config.worker_count} worker(s).`,
       warnings
     });
   }
@@ -162,7 +239,12 @@ export class FileSimControllerService implements SimControllerService {
 
     fs.mkdirSync(path.dirname(this.paths.pausePath), { recursive: true });
     fs.writeFileSync(this.paths.pausePath, nowIso(), "utf8");
-    const current = { ...prior, status: "pausing" as const, requested_action: "pause", updated_at: nowIso() };
+    const current = {
+      ...prior,
+      status: "pausing" as const,
+      requested_action: "pause",
+      updated_at: nowIso()
+    };
     this.writeState(current);
     return this.response({
       accepted: true,
@@ -179,7 +261,12 @@ export class FileSimControllerService implements SimControllerService {
     if (fs.existsSync(this.paths.pausePath)) {
       fs.unlinkSync(this.paths.pausePath);
     }
-    const current = { ...prior, status: "running" as const, requested_action: "continue", updated_at: nowIso() };
+    const current = {
+      ...prior,
+      status: "running" as const,
+      requested_action: "continue",
+      updated_at: nowIso()
+    };
     this.writeState(current);
     return this.response({
       accepted: prior.status === "paused" || prior.status === "pausing",
@@ -217,7 +304,9 @@ export class FileSimControllerService implements SimControllerService {
     if (fs.existsSync(this.paths.lockPath)) {
       fs.rmSync(this.paths.lockPath, { force: true });
     }
-    const current = this.toStoppedState(prior);
+    const current = this.toStoppedState(prior, {
+      last_shutdown_reason: "operator_stop"
+    });
     this.writeState(current);
     return this.response({
       accepted: true,
@@ -230,8 +319,8 @@ export class FileSimControllerService implements SimControllerService {
   }
 
   async status(): Promise<SimControllerResponse> {
+    const warnings = this.reconcilePersistedState();
     const prior = this.readState();
-    const warnings = this.recoverStaleLock(prior);
     const current = this.readState();
     return this.response({
       accepted: true,
@@ -244,8 +333,8 @@ export class FileSimControllerService implements SimControllerService {
   }
 
   async runOnce(payload: SimControllerRequestPayload): Promise<SimControllerResponse> {
+    const warnings = this.reconcilePersistedState();
     const prior = this.readState();
-    const warnings = this.recoverStaleLock(prior);
     if (fs.existsSync(this.paths.lockPath)) {
       return this.response({
         accepted: false,
@@ -257,19 +346,35 @@ export class FileSimControllerService implements SimControllerService {
       });
     }
 
-    const resolved = this.resolveConfig({
+    const resolved = await this.resolveControllerRun({
       ...payload,
       games_per_batch: payload.games ?? payload.games_per_batch ?? 1,
       worker_count: 1
     });
-    const running = this.createState("running", resolved);
+    const running = this.createState("running", resolved.config, {
+      controllerSessionId: resolved.controllerSessionId,
+      activeRunSeed: resolved.runSeedInfo,
+      lastRunSeed: prior.last_run_seed
+    });
     running.requested_action = "run-once";
     this.writeState(running);
     const exitCode = await this.runOneShot(resolved);
-    const current = this.createState(exitCode === 0 ? "completed" : "error", resolved);
-    current.requested_action = "run-once";
-    current.last_error =
-      exitCode === 0 ? null : `Run-once simulator exited with code ${exitCode}.`;
+    const current = {
+      ...this.toStoppedState(running, {
+        status: exitCode === 0 ? "completed" : "error",
+        last_batch_finished_at: nowIso(),
+        last_batch_status: exitCode === 0 ? "completed" : "error",
+        total_batches_completed: exitCode === 0 ? 1 : 0,
+        total_games_completed: exitCode === 0 ? resolved.config.games_per_batch : 0,
+        last_shutdown_reason: exitCode === 0 ? "run_once_completed" : "run_once_failed",
+        last_exit_code: exitCode,
+        last_error:
+          exitCode === 0
+            ? null
+            : `Run-once simulator exited with code ${exitCode}.`
+      }),
+      requested_action: "run-once"
+    };
     this.writeState(current);
     return this.response({
       accepted: exitCode === 0,
@@ -284,48 +389,48 @@ export class FileSimControllerService implements SimControllerService {
     });
   }
 
-  private async runOneShot(resolved: SimControllerConfig): Promise<number> {
+  private async runOneShot(resolved: ResolvedControllerRun): Promise<number> {
     const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
     const args = [
       "run",
       "sim",
       "--",
       "--games",
-      String(resolved.games_per_batch),
+      String(resolved.config.games_per_batch),
       "--provider",
-      resolved.provider,
+      resolved.config.provider,
       "--seed",
-      resolved.seed_prefix,
+      resolved.runSeedInfo.resolved_run_seed,
       "--telemetry",
-      String(resolved.telemetry_enabled),
+      String(resolved.config.telemetry_enabled),
       "--server-fallback",
-      String(resolved.server_fallback_enabled),
+      String(resolved.config.server_fallback_enabled),
       "--strict-telemetry",
-      String(resolved.strict_telemetry),
+      String(resolved.config.strict_telemetry),
       "--trace-backend",
-      String(resolved.trace_backend),
+      String(resolved.config.trace_backend),
       "--telemetry-mode",
-      resolved.telemetry_mode,
+      resolved.config.telemetry_mode,
       "--telemetry-max-bytes",
-      String(resolved.telemetry_max_bytes),
+      String(resolved.config.telemetry_max_bytes),
       "--telemetry-timeout-ms",
-      String(resolved.telemetry_timeout_ms),
+      String(resolved.config.telemetry_timeout_ms),
       "--telemetry-retry-attempts",
-      String(resolved.telemetry_retry_attempts),
+      String(resolved.config.telemetry_retry_attempts),
       "--telemetry-retry-delay-ms",
-      String(resolved.telemetry_retry_delay_ms),
+      String(resolved.config.telemetry_retry_delay_ms),
       "--telemetry-backoff-ms",
-      String(resolved.telemetry_backoff_ms),
+      String(resolved.config.telemetry_backoff_ms),
       "--backend-url",
-      resolved.backend_url
+      resolved.config.backend_url
     ];
-    for (const [seat, provider] of Object.entries(resolved.seat_providers)) {
+    for (const [seat, provider] of Object.entries(resolved.config.seat_providers)) {
       args.push("--seat-provider", `${seat}=${provider}`);
     }
-    if (resolved.quiet) {
+    if (resolved.config.quiet) {
       args.push("--quiet");
     }
-    if (resolved.progress) {
+    if (resolved.config.progress) {
       args.push("--progress");
     }
 
@@ -343,7 +448,7 @@ export class FileSimControllerService implements SimControllerService {
     });
   }
 
-  private spawnController(resolved: SimControllerConfig): void {
+  private spawnController(resolved: ResolvedControllerRun): void {
     const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
     const args = [
       "run",
@@ -351,37 +456,39 @@ export class FileSimControllerService implements SimControllerService {
       "--",
       "--forever",
       "--provider",
-      resolved.provider,
+      resolved.config.provider,
       "--games-per-batch",
-      String(resolved.games_per_batch),
+      String(resolved.config.games_per_batch),
       "--sleep-seconds",
-      String(resolved.sleep_seconds),
+      String(resolved.config.sleep_seconds),
       "--worker-count",
-      String(resolved.worker_count),
+      String(resolved.config.worker_count),
+      "--seed",
+      resolved.runSeedInfo.resolved_run_seed,
       "--seed-prefix",
-      resolved.seed_prefix,
+      resolved.config.seed_namespace,
       "--telemetry",
-      String(resolved.telemetry_enabled),
+      String(resolved.config.telemetry_enabled),
       "--server-fallback",
-      String(resolved.server_fallback_enabled),
+      String(resolved.config.server_fallback_enabled),
       "--strict-telemetry",
-      String(resolved.strict_telemetry),
+      String(resolved.config.strict_telemetry),
       "--trace-backend",
-      String(resolved.trace_backend),
+      String(resolved.config.trace_backend),
       "--telemetry-mode",
-      resolved.telemetry_mode,
+      resolved.config.telemetry_mode,
       "--telemetry-max-bytes",
-      String(resolved.telemetry_max_bytes),
+      String(resolved.config.telemetry_max_bytes),
       "--telemetry-timeout-ms",
-      String(resolved.telemetry_timeout_ms),
+      String(resolved.config.telemetry_timeout_ms),
       "--telemetry-retry-attempts",
-      String(resolved.telemetry_retry_attempts),
+      String(resolved.config.telemetry_retry_attempts),
       "--telemetry-retry-delay-ms",
-      String(resolved.telemetry_retry_delay_ms),
+      String(resolved.config.telemetry_retry_delay_ms),
       "--telemetry-backoff-ms",
-      String(resolved.telemetry_backoff_ms),
+      String(resolved.config.telemetry_backoff_ms),
       "--backend-url",
-      resolved.backend_url,
+      resolved.config.backend_url,
       "--runtime-file",
       this.paths.runtimePath,
       "--lock-file",
@@ -393,13 +500,13 @@ export class FileSimControllerService implements SimControllerService {
       "--log-file",
       this.paths.logPath
     ];
-    for (const [seat, provider] of Object.entries(resolved.seat_providers)) {
+    for (const [seat, provider] of Object.entries(resolved.config.seat_providers)) {
       args.push("--seat-provider", `${seat}=${provider}`);
     }
-    if (resolved.quiet) {
+    if (resolved.config.quiet) {
       args.push("--quiet");
     }
-    if (resolved.progress) {
+    if (resolved.config.progress) {
       args.push("--progress");
     }
 
@@ -410,26 +517,35 @@ export class FileSimControllerService implements SimControllerService {
       stdio: ["ignore", logFd, logFd],
       env: {
         ...process.env,
-        BACKEND_BASE_URL: resolved.backend_url,
-        TELEMETRY_POST_TIMEOUT_MS: String(resolved.telemetry_timeout_ms),
-        TELEMETRY_RETRY_ATTEMPTS: String(resolved.telemetry_retry_attempts),
-        TELEMETRY_RETRY_DELAY_MS: String(resolved.telemetry_retry_delay_ms),
-        TELEMETRY_BACKOFF_MS: String(resolved.telemetry_backoff_ms)
+        BACKEND_BASE_URL: resolved.config.backend_url,
+        TELEMETRY_POST_TIMEOUT_MS: String(resolved.config.telemetry_timeout_ms),
+        TELEMETRY_RETRY_ATTEMPTS: String(resolved.config.telemetry_retry_attempts),
+        TELEMETRY_RETRY_DELAY_MS: String(resolved.config.telemetry_retry_delay_ms),
+        TELEMETRY_BACKOFF_MS: String(resolved.config.telemetry_backoff_ms),
+        SIM_CONTROLLER_SESSION_ID: resolved.controllerSessionId,
+        SIM_RUN_SEED_INFO_JSON: JSON.stringify(resolved.runSeedInfo)
       }
     });
 
     this.child.once("exit", (code, signal) => {
       fs.closeSync(logFd);
       const state = this.readState();
-      const errored = code !== 0 && code !== null;
-      this.writeState({
-        ...state,
-        status: errored ? "error" : "stopped",
-        pid: null,
-        requested_action: null,
-        updated_at: nowIso(),
-        last_error: errored ? `Simulator exited with code ${code} signal ${signal ?? ""}` : state.last_error
-      });
+      const interrupted = signal === "SIGTERM" || code === 143;
+      const errored = !interrupted && code !== 0 && code !== null;
+      this.writeState(
+        this.toStoppedState(state, {
+          last_shutdown_reason: interrupted
+            ? "terminated"
+            : errored
+              ? "error_exit"
+              : "completed",
+          last_exit_code: code ?? null,
+          last_exit_signal: signal ?? null,
+          last_error: errored
+            ? `Simulator exited with code ${code} signal ${signal ?? ""}`.trim()
+            : state.last_error
+        })
+      );
       this.child = null;
     });
   }
@@ -442,31 +558,81 @@ export class FileSimControllerService implements SimControllerService {
     }
   }
 
-  private recoverStaleLock(state: SimControllerRuntimeState): string[] {
-    if (!fs.existsSync(this.paths.lockPath)) {
-      return [];
-    }
-    if (isFreshHeartbeat(state)) {
-      return [];
+  private reconcilePersistedState(): string[] {
+    const stored = readJsonFile<SimControllerRuntimeState>(this.paths.runtimePath);
+    const warnings: string[] = [];
+    const lockPid = readLockPid(this.paths.lockPath);
+    const lockAlive = isPidAlive(lockPid);
+
+    if (!stored) {
+      if (fs.existsSync(this.paths.lockPath) && !lockAlive) {
+        fs.rmSync(this.paths.lockPath, { force: true });
+      }
+      return warnings;
     }
 
-    fs.unlinkSync(this.paths.lockPath);
-    const warning = "Recovered stale simulator lock after heartbeat timeout.";
-    this.writeState({
-      ...state,
-      status: "error",
-      heartbeat_stale: true,
-      warnings: [...state.warnings, warning],
-      last_error: state.last_error ?? warning,
-      updated_at: nowIso()
-    });
-    return [warning];
+    let current = this.normalizeState(stored);
+    let changed = false;
+
+    if (fs.existsSync(this.paths.lockPath) && !lockAlive) {
+      fs.rmSync(this.paths.lockPath, { force: true });
+      warnings.push(
+        "Recovered stale simulator lock after detecting a dead controller process."
+      );
+      changed = true;
+    }
+
+    const controllerAlive = isPidAlive(current.pid);
+    const heartbeatExpired =
+      ACTIVE_CONTROLLER_STATUSES.has(current.status) &&
+      current.last_heartbeat !== null &&
+      !isFreshHeartbeat(current);
+    const staleWorkerSession =
+      current.controller_session_id === null ||
+      current.workers.some(
+        (worker) => worker.controller_session_id !== current.controller_session_id
+      );
+
+    if (
+      hasLiveSessionState(current) &&
+      (!controllerAlive || heartbeatExpired || staleWorkerSession)
+    ) {
+      const reason = heartbeatExpired
+        ? "Recovered stale simulator session after heartbeat timeout."
+        : "Recovered stale simulator session from dead persisted controller state.";
+      warnings.push(reason);
+      current = {
+        ...this.toStoppedState(current, {
+          last_shutdown_reason: "stale_recovery",
+          last_batch_status: normalizeBatchHistoryStatus(
+            current.last_batch_status,
+            current.current_batch_started_at !== null ||
+              current.last_batch_status === "running"
+          ),
+          last_batch_finished_at:
+            current.current_batch_started_at !== null
+              ? nowIso()
+              : current.last_batch_finished_at
+        }),
+        warnings: [...current.warnings, reason]
+      };
+      changed = true;
+    }
+
+    if (changed) {
+      this.writeState(current);
+    }
+
+    return warnings;
   }
 
   private readState(): SimControllerRuntimeState {
     const state = readJsonFile<SimControllerRuntimeState>(this.paths.runtimePath);
     const current = state ?? this.createState("stopped", this.resolveConfig({}));
-    const heartbeatStale = current.last_heartbeat ? !isFreshHeartbeat(current) : false;
+    const heartbeatStale =
+      ACTIVE_CONTROLLER_STATUSES.has(current.status) && current.last_heartbeat
+        ? !isFreshHeartbeat(current)
+        : false;
     return this.normalizeState({
       ...current,
       heartbeat_stale: heartbeatStale,
@@ -480,28 +646,37 @@ export class FileSimControllerService implements SimControllerService {
 
   private createState(
     status: SimControllerStatus,
-    config: SimControllerConfig
+    config: SimControllerConfig,
+    options: {
+      controllerSessionId?: string;
+      activeRunSeed?: SimRunSeedInfo | null;
+      lastRunSeed?: SimRunSeedInfo | null;
+    } = {}
   ): SimControllerRuntimeState {
+    const timestamp = nowIso();
     const workers =
       status === "starting"
         ? Array.from({ length: config.worker_count }, (_, index) => ({
             worker_id: `worker-${String(index + 1).padStart(2, "0")}`,
+            controller_session_id: options.controllerSessionId ?? null,
             status: "starting" as const,
             pid: null,
             current_batch_started_at: null,
             total_batches_completed: 0,
             total_games_completed: 0,
-            last_heartbeat: nowIso(),
+            last_heartbeat: timestamp,
             last_error: null
           }))
         : defaultWorkerState(status);
     return {
+      runtime_schema_version: RUNTIME_SCHEMA_VERSION,
       status,
       pid: this.child?.pid ?? null,
       controller_id: "sim-controller",
-      started_at: status === "stopped" ? null : nowIso(),
-      updated_at: nowIso(),
-      last_heartbeat: status === "stopped" ? null : nowIso(),
+      controller_session_id: options.controllerSessionId ?? null,
+      started_at: status === "stopped" ? null : timestamp,
+      updated_at: timestamp,
+      last_heartbeat: status === "stopped" ? null : timestamp,
       heartbeat_stale: false,
       heartbeat_stale_after_seconds: STALE_AFTER_SECONDS,
       requested_action: null,
@@ -514,6 +689,11 @@ export class FileSimControllerService implements SimControllerService {
       total_games_completed: 0,
       total_errors: 0,
       last_error: null,
+      last_shutdown_reason: null,
+      last_exit_code: null,
+      last_exit_signal: null,
+      active_run_seed: options.activeRunSeed ?? null,
+      last_run_seed: options.lastRunSeed ?? null,
       telemetry_decision_failures: 0,
       telemetry_event_failures: 0,
       telemetry_failures_total: 0,
@@ -534,6 +714,66 @@ export class FileSimControllerService implements SimControllerService {
       stop_path: this.paths.stopPath,
       warnings: [],
       recent_logs: []
+    };
+  }
+
+  private async resolveControllerRun(
+    payload: SimControllerRequestPayload
+  ): Promise<ResolvedControllerRun> {
+    const config = this.resolveConfig(payload);
+    return {
+      config,
+      controllerSessionId: randomUUID(),
+      runSeedInfo: await this.resolveRunSeed(config, payload)
+    };
+  }
+
+  private async resolveRunSeed(
+    config: SimControllerConfig,
+    payload: SimControllerRequestPayload
+  ): Promise<SimRunSeedInfo> {
+    const manualOverrideEnabled =
+      payload.manual_seed_override_enabled === true ||
+      (payload.manual_seed_override_enabled !== false &&
+        typeof payload.seed === "string" &&
+        payload.seed.trim().length > 0);
+    const manualOverrideSeed =
+      typeof payload.manual_seed_override === "string" &&
+      payload.manual_seed_override.trim().length > 0
+        ? payload.manual_seed_override.trim()
+        : typeof payload.seed === "string" && payload.seed.trim().length > 0
+          ? payload.seed.trim()
+          : null;
+
+    if (manualOverrideEnabled && manualOverrideSeed) {
+      return {
+        mode: "manual_override",
+        resolved_run_seed: manualOverrideSeed,
+        derivation_namespace: config.seed_namespace,
+        manual_override_enabled: true,
+        manual_override_seed: manualOverrideSeed,
+        generated_at: nowIso(),
+        entropy_game_id: null,
+        audit_hash_hex: null,
+        primary_provider: "manual_override",
+        local_fallback_used: null,
+        source_summary: null
+      };
+    }
+
+    const entropy = await this.generateRunEntropySeed({ roundIndex: 0 });
+    return {
+      mode: "automatic_entropy",
+      resolved_run_seed: entropy.shuffleSeedHex,
+      derivation_namespace: config.seed_namespace,
+      manual_override_enabled: false,
+      manual_override_seed: null,
+      generated_at: nowIso(),
+      entropy_game_id: entropy.gameId,
+      audit_hash_hex: entropy.auditHashHex,
+      primary_provider: entropy.provenance.primaryProvider,
+      local_fallback_used: entropy.provenance.localFallbackUsed,
+      source_summary: entropy.sourceSummary
     };
   }
 
@@ -609,11 +849,33 @@ export class FileSimControllerService implements SimControllerService {
           : this.config.simDefaultBackendUrl ||
             this.config.backendBaseUrl ||
             DEFAULT_BACKEND_BASE_URL,
-      seed_prefix:
-        typeof payload.seed_prefix === "string" && payload.seed_prefix.length > 0
-          ? payload.seed_prefix
+      seed_namespace:
+        typeof payload.seed_namespace === "string" &&
+        payload.seed_namespace.length > 0
+          ? payload.seed_namespace
+          : typeof payload.seed_prefix === "string" &&
+              payload.seed_prefix.length > 0
+            ? payload.seed_prefix
+            : "controller",
+      manual_seed_override_enabled:
+        payload.manual_seed_override_enabled === true ||
+        (payload.manual_seed_override_enabled !== false &&
+          typeof payload.seed === "string" &&
+          payload.seed.trim().length > 0),
+      manual_seed_override:
+        typeof payload.manual_seed_override === "string" &&
+        payload.manual_seed_override.length > 0
+          ? payload.manual_seed_override
           : typeof payload.seed === "string" && payload.seed.length > 0
             ? payload.seed
+            : "",
+      seed_prefix:
+        typeof payload.seed_namespace === "string" &&
+        payload.seed_namespace.length > 0
+          ? payload.seed_namespace
+          : typeof payload.seed_prefix === "string" &&
+              payload.seed_prefix.length > 0
+            ? payload.seed_prefix
             : "controller",
       sleep_seconds: Math.max(0, Number(payload.sleep_seconds ?? 5)),
       worker_count: workerCount,
@@ -649,18 +911,42 @@ export class FileSimControllerService implements SimControllerService {
   private normalizeState(
     state: SimControllerRuntimeState
   ): SimControllerRuntimeState {
+    const normalizedConfig: SimControllerConfig = {
+      ...state.config,
+      seed_namespace: state.config.seed_namespace ?? state.config.seed_prefix ?? "controller",
+      manual_seed_override_enabled:
+        state.config.manual_seed_override_enabled ?? false,
+      manual_seed_override: state.config.manual_seed_override ?? ""
+    };
     const workersById = new Map<string, SimWorkerRuntimeState>();
     for (const worker of state.workers) {
-      workersById.set(worker.worker_id, worker);
+      workersById.set(worker.worker_id, {
+        ...worker,
+        controller_session_id: worker.controller_session_id ?? null
+      });
     }
-    const workers =
-      state.status === "stopped" || state.status === "completed"
-        ? []
-        : [...workersById.values()];
+    const sessionWorkers = [...workersById.values()].filter(
+      (worker) =>
+        state.controller_session_id === null
+          ? worker.controller_session_id === null
+          :
+        worker.controller_session_id === state.controller_session_id
+    );
+    const workers = ACTIVE_CONTROLLER_STATUSES.has(state.status)
+      ? sessionWorkers
+      : [];
     return {
       ...state,
+      runtime_schema_version: state.runtime_schema_version ?? RUNTIME_SCHEMA_VERSION,
+      controller_session_id: state.controller_session_id ?? null,
       pid: state.status === "stopped" ? null : state.pid,
+      config: normalizedConfig,
       workers,
+      last_shutdown_reason: state.last_shutdown_reason ?? null,
+      last_exit_code: state.last_exit_code ?? null,
+      last_exit_signal: state.last_exit_signal ?? null,
+      active_run_seed: state.active_run_seed ?? null,
+      last_run_seed: state.last_run_seed ?? null,
       telemetry_decision_failures: state.telemetry_decision_failures ?? 0,
       telemetry_event_failures: state.telemetry_event_failures ?? 0,
       telemetry_failures_total: state.telemetry_failures_total ?? 0,
@@ -680,17 +966,32 @@ export class FileSimControllerService implements SimControllerService {
   }
 
   private toStoppedState(
-    prior: SimControllerRuntimeState
+    prior: SimControllerRuntimeState,
+    overrides: Partial<SimControllerRuntimeState> = {}
   ): SimControllerRuntimeState {
+    const interrupted =
+      prior.current_batch_started_at !== null || prior.last_batch_status === "running";
     return {
       ...prior,
       status: "stopped",
       pid: null,
+      controller_session_id: null,
+      started_at: null,
       last_heartbeat: null,
       heartbeat_stale: false,
       requested_action: null,
       current_batch_started_at: null,
       updated_at: nowIso(),
+      last_batch_finished_at:
+        interrupted && prior.last_batch_finished_at === null
+          ? nowIso()
+          : prior.last_batch_finished_at,
+      last_batch_status: normalizeBatchHistoryStatus(
+        prior.last_batch_status,
+        interrupted
+      ),
+      active_run_seed: null,
+      last_run_seed: prior.active_run_seed ?? prior.last_run_seed,
       workers: [],
       worker_count: 0,
       running_worker_count: 0,
@@ -702,7 +1003,8 @@ export class FileSimControllerService implements SimControllerService {
       telemetry_failures_total: prior.telemetry_failures_total ?? 0,
       telemetry_failure_by_endpoint: prior.telemetry_failure_by_endpoint ?? {},
       telemetry_failure_by_kind: prior.telemetry_failure_by_kind ?? {},
-      telemetry_backoff_until: prior.telemetry_backoff_until ?? null
+      telemetry_backoff_until: prior.telemetry_backoff_until ?? null,
+      ...overrides
     };
   }
 

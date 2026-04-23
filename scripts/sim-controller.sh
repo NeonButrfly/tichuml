@@ -8,7 +8,9 @@ PROVIDER="local"
 GAMES_PER_BATCH="1"
 TELEMETRY="true"
 BACKEND_URL="$API_URL"
-SEED_PREFIX="controller"
+SEED_NAMESPACE="controller"
+MANUAL_SEED_OVERRIDE_ENABLED="false"
+MANUAL_SEED_OVERRIDE=""
 SLEEP_SECONDS="5"
 WORKER_COUNT="1"
 QUIET="true"
@@ -57,8 +59,13 @@ while [ "$#" -gt 0 ]; do
       BACKEND_URL="$2"
       shift 2
       ;;
-    --seed|--seed-prefix)
-      SEED_PREFIX="$2"
+    --seed)
+      MANUAL_SEED_OVERRIDE_ENABLED="true"
+      MANUAL_SEED_OVERRIDE="$2"
+      shift 2
+      ;;
+    --seed-prefix)
+      SEED_NAMESPACE="$2"
       shift 2
       ;;
     --sleep-seconds)
@@ -90,7 +97,11 @@ if [ -z "$ACTION" ]; then
   GAMES_PER_BATCH="$(prompt "Games per batch" "$GAMES_PER_BATCH")"
   TELEMETRY="$(prompt "Telemetry enabled" "$TELEMETRY")"
   BACKEND_URL="$(prompt "Backend URL" "$BACKEND_URL")"
-  SEED_PREFIX="$(prompt "Seed prefix" "$SEED_PREFIX")"
+  MANUAL_SEED_OVERRIDE_ENABLED="$(prompt "Manual seed override enabled" "$MANUAL_SEED_OVERRIDE_ENABLED")"
+  if [ "$MANUAL_SEED_OVERRIDE_ENABLED" = "true" ]; then
+    MANUAL_SEED_OVERRIDE="$(prompt "Manual override seed" "$MANUAL_SEED_OVERRIDE")"
+  fi
+  SEED_NAMESPACE="$(prompt "Derivation namespace" "$SEED_NAMESPACE")"
   SLEEP_SECONDS="$(prompt "Sleep seconds" "$SLEEP_SECONDS")"
   WORKER_COUNT="$(prompt "Worker count" "$WORKER_COUNT")"
 fi
@@ -117,7 +128,9 @@ PAYLOAD=$(cat <<JSON
   "games_per_batch": $GAMES_PER_BATCH,
   "telemetry_enabled": $TELEMETRY,
   "backend_url": "$BACKEND_URL",
-  "seed_prefix": "$SEED_PREFIX",
+  "seed_namespace": "$SEED_NAMESPACE",
+  "manual_seed_override_enabled": $MANUAL_SEED_OVERRIDE_ENABLED,
+  "manual_seed_override": "$MANUAL_SEED_OVERRIDE",
   "sleep_seconds": $SLEEP_SECONDS,
   "worker_count": $WORKER_COUNT,
   "quiet": $QUIET,

@@ -273,6 +273,32 @@ input {
   align-items: center;
 }
 
+.sim-seed-panel,
+.sim-advanced {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #2c3f42;
+  border-radius: 6px;
+  background: #101719;
+}
+
+.sim-seed-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sim-seed-label {
+  color: #a8bbb8;
+}
+
+.sim-advanced summary {
+  cursor: pointer;
+  color: #c8d7d4;
+}
+
 .sim-workers {
   grid-column: 1 / -1;
   overflow-x: auto;

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { spawn } from "node:child_process";
 import {
   applyEngineAction,
   createInitialGameState,
@@ -41,6 +42,7 @@ import {
   type SimControllerService
 } from "../../apps/server/src/services/sim-controller-service";
 import type { TelemetryRepository } from "../../apps/server/src/services/telemetry-repository";
+import { deriveControllerBatchBaseSeed } from "../../apps/sim-runner/src/cli";
 
 class InMemoryTelemetryRepository implements TelemetryRepository {
   decisions: StoredTelemetryDecisionRecord[] = [];
@@ -204,9 +206,11 @@ function createSimState(
 ): SimControllerRuntimeState {
   const now = new Date().toISOString();
   return {
+    runtime_schema_version: 2,
     status,
     pid: null,
     controller_id: "test-controller",
+    controller_session_id: null,
     started_at: status === "stopped" ? null : now,
     updated_at: now,
     last_heartbeat: status === "stopped" ? null : now,
@@ -222,6 +226,11 @@ function createSimState(
     total_games_completed: 0,
     total_errors: 0,
     last_error: null,
+    last_shutdown_reason: null,
+    last_exit_code: null,
+    last_exit_signal: null,
+    active_run_seed: null,
+    last_run_seed: null,
     telemetry_decision_failures: 0,
     telemetry_event_failures: 0,
     telemetry_failures_total: 0,
@@ -247,6 +256,9 @@ function createSimState(
       telemetry_retry_delay_ms: 250,
       telemetry_backoff_ms: 15000,
       backend_url: "http://127.0.0.1",
+      seed_namespace: "test",
+      manual_seed_override_enabled: false,
+      manual_seed_override: "",
       seed_prefix: "test",
       sleep_seconds: 1,
       worker_count: 1,
@@ -292,11 +304,13 @@ class InMemorySimController implements SimControllerService {
       return this.respond(false, "sim.start", prior, "Already running.");
     }
     this.state = createSimState("running");
+    this.state.controller_session_id = "memory-session";
     this.state.worker_count = Number(payload.worker_count ?? 1);
     this.state.running_worker_count = this.state.worker_count;
     this.state.config.worker_count = this.state.worker_count;
     this.state.workers = Array.from({ length: this.state.worker_count }, (_, index) => ({
       worker_id: `worker-${index + 1}`,
+      controller_session_id: "memory-session",
       status: "running",
       pid: 1234 + index,
       current_batch_started_at: this.state.started_at,
@@ -1396,35 +1410,266 @@ describe("backend foundation server routes", () => {
 
   it("recovers a stale simulator singleton lock during status checks", async () => {
     const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), "tichuml-sim-"));
-    const staleState = createSimState("running");
-    staleState.last_heartbeat = "2020-01-01T00:00:00.000Z";
-    staleState.runtime_path = path.join(runtimeDir, "state.json");
-    staleState.lock_path = path.join(runtimeDir, "controller.lock");
-    staleState.pause_path = path.join(runtimeDir, "pause");
-    staleState.stop_path = path.join(runtimeDir, "stop");
-    staleState.log_path = path.join(runtimeDir, "controller.ndjson");
-    fs.writeFileSync(staleState.runtime_path, JSON.stringify(staleState), "utf8");
-    fs.writeFileSync(staleState.lock_path, "stale", "utf8");
+    try {
+      const staleState = createSimState("running");
+      staleState.controller_session_id = "stale-session";
+      staleState.last_heartbeat = "2020-01-01T00:00:00.000Z";
+      staleState.current_batch_started_at = "2020-01-01T00:00:00.000Z";
+      staleState.last_batch_status = "running";
+      staleState.runtime_path = path.join(runtimeDir, "state.json");
+      staleState.lock_path = path.join(runtimeDir, "controller.lock");
+      staleState.pause_path = path.join(runtimeDir, "pause");
+      staleState.stop_path = path.join(runtimeDir, "stop");
+      staleState.log_path = path.join(runtimeDir, "controller.ndjson");
+      staleState.workers = [
+        {
+          worker_id: "worker-01",
+          controller_session_id: "stale-session",
+          status: "running",
+          pid: 999999,
+          current_batch_started_at: staleState.current_batch_started_at,
+          total_batches_completed: 1,
+          total_games_completed: 4,
+          last_heartbeat: staleState.last_heartbeat,
+          last_error: null
+        }
+      ];
+      fs.writeFileSync(staleState.runtime_path, JSON.stringify(staleState), "utf8");
+      fs.writeFileSync(
+        staleState.lock_path,
+        JSON.stringify({ pid: 999999, created_at: staleState.updated_at }),
+        "utf8"
+      );
 
-    const service = new FileSimControllerService({
-      ...TEST_SERVER_CONFIG,
-      adminSimControlEnabled: true,
-      simControllerRuntimeDir: runtimeDir
-    });
-    const response = await service.status();
+      const service = new FileSimControllerService({
+        ...TEST_SERVER_CONFIG,
+        adminSimControlEnabled: true,
+        simControllerRuntimeDir: runtimeDir
+      });
+      const response = await service.status();
 
-    expect(response.accepted).toBe(true);
-    expect(response.runtime_state.heartbeat_stale).toBe(true);
-    expect(response.warnings).toContain(
-      "Recovered stale simulator lock after heartbeat timeout."
-    );
-    expect(fs.existsSync(staleState.lock_path)).toBe(false);
+      expect(response.accepted).toBe(true);
+      expect(response.runtime_state.status).toBe("stopped");
+      expect(response.runtime_state.heartbeat_stale).toBe(false);
+      expect(response.runtime_state.workers).toHaveLength(0);
+      expect(response.runtime_state.worker_count).toBe(0);
+      expect(response.runtime_state.current_batch_started_at).toBeNull();
+      expect(response.runtime_state.last_batch_status).toBe("interrupted");
+      expect(response.runtime_state.last_shutdown_reason).toBe("stale_recovery");
+      expect(fs.existsSync(staleState.lock_path)).toBe(false);
+    } finally {
+      fs.rmSync(runtimeDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rewrites stale runtime state immediately and preserves historical errors", async () => {
+    const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), "tichuml-sim-"));
+    try {
+      const staleState = createSimState("error");
+      staleState.pid = null;
+      staleState.controller_session_id = "dead-session";
+      staleState.current_batch_started_at = "2020-01-01T00:00:00.000Z";
+      staleState.last_batch_started_at = "2020-01-01T00:00:00.000Z";
+      staleState.last_batch_status = "running";
+      staleState.last_error = "previous telemetry write failed";
+      staleState.active_run_seed = {
+        mode: "automatic_entropy",
+        resolved_run_seed: "seed-active",
+        derivation_namespace: "controller",
+        manual_override_enabled: false,
+        manual_override_seed: null,
+        generated_at: staleState.updated_at,
+        entropy_game_id: "entropy-1",
+        audit_hash_hex: "audit-1",
+        primary_provider: "local_crypto",
+        local_fallback_used: true,
+        source_summary: {
+          attempted: 1,
+          succeeded: 1,
+          failed: 0,
+          minimumRequired: 1,
+          metMinimum: true
+        }
+      };
+      staleState.runtime_path = path.join(runtimeDir, "state.json");
+      staleState.lock_path = path.join(runtimeDir, "controller.lock");
+      staleState.pause_path = path.join(runtimeDir, "pause");
+      staleState.stop_path = path.join(runtimeDir, "stop");
+      staleState.log_path = path.join(runtimeDir, "controller.ndjson");
+      staleState.workers = [
+        {
+          worker_id: "worker-01",
+          controller_session_id: "dead-session",
+          status: "running",
+          pid: 999999,
+          current_batch_started_at: staleState.current_batch_started_at,
+          total_batches_completed: 7,
+          total_games_completed: 70,
+          last_heartbeat: "2020-01-01T00:00:10.000Z",
+          last_error: "stale worker"
+        }
+      ];
+      fs.writeFileSync(staleState.runtime_path, JSON.stringify(staleState), "utf8");
+
+      const service = new FileSimControllerService({
+        ...TEST_SERVER_CONFIG,
+        adminSimControlEnabled: true,
+        simControllerRuntimeDir: runtimeDir
+      });
+      const status = await service.status();
+      const persisted = JSON.parse(
+        fs.readFileSync(path.join(runtimeDir, "state.json"), "utf8")
+      ) as SimControllerRuntimeState;
+
+      expect(status.runtime_state.status).toBe("stopped");
+      expect(status.runtime_state.workers).toHaveLength(0);
+      expect(status.runtime_state.running_worker_count).toBe(0);
+      expect(status.runtime_state.current_batch_started_at).toBeNull();
+      expect(status.runtime_state.last_error).toBe("previous telemetry write failed");
+      expect(status.runtime_state.active_run_seed).toBeNull();
+      expect(status.runtime_state.last_run_seed?.resolved_run_seed).toBe("seed-active");
+      expect(persisted.status).toBe("stopped");
+      expect(persisted.workers).toHaveLength(0);
+      expect(persisted.current_batch_started_at).toBeNull();
+      expect(persisted.last_batch_status).toBe("interrupted");
+    } finally {
+      fs.rmSync(runtimeDir, { recursive: true, force: true });
+    }
+  });
+
+  it("resolves exactly one controller run seed and derives deterministic batch seeds from it", async () => {
+    const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), "tichuml-sim-"));
+    try {
+      let entropyCalls = 0;
+      const service = new FileSimControllerService({
+        ...TEST_SERVER_CONFIG,
+        adminSimControlEnabled: true,
+        simControllerRuntimeDir: runtimeDir
+      }, {
+        async generateRunEntropySeed() {
+          entropyCalls += 1;
+          return {
+            finalSeed: Buffer.from("01".repeat(64), "hex"),
+            finalSeedHex: "01".repeat(64),
+            finalSeedBase64: Buffer.from("01".repeat(64), "hex").toString("base64"),
+            shuffleSeed: Buffer.from("ab".repeat(32), "hex"),
+            shuffleSeedHex: "ab".repeat(32),
+            auditHashHex: "cd".repeat(32),
+            gameId: "entropy-game",
+            unixTimeMs: 1,
+            sources: [],
+            sourceSummary: {
+              attempted: 1,
+              succeeded: 1,
+              failed: 0,
+              minimumRequired: 1,
+              metMinimum: true
+            },
+            provenance: {
+              version: 2,
+              context: {
+                gameId: "entropy-game",
+                roundIndex: 0,
+                createdAt: "2026-04-23T00:00:00.000Z",
+                unixTimeMs: 1
+              },
+              attemptedProviders: ["local_crypto"],
+              successfulProviders: ["local_crypto"],
+              primaryProvider: "local_crypto",
+              localFallbackUsed: true,
+              finalSeed: "01".repeat(64),
+              finalSeedHex: "01".repeat(64),
+              finalSeedBase64: Buffer.from("01".repeat(64), "hex").toString("base64"),
+              shuffleSeedHex: "ab".repeat(32),
+              auditHashHex: "cd".repeat(32),
+              sourceSummary: {
+                attempted: 1,
+                succeeded: 1,
+                failed: 0,
+                minimumRequired: 1,
+                metMinimum: true
+              },
+              derivation: {
+                schemaVersion: 1,
+                domainTag: "TICHU_ENTROPY_V1",
+                finalSeedAlgorithm: "SHA3-512",
+                shuffleSeedAlgorithm: "HKDF-SHA256",
+                auditAlgorithm: "SHA-256",
+                sortedSourceIds: ["local_crypto"],
+                canonicalPayloadHashes: [],
+                localCryptoIncluded: true
+              },
+              sources: []
+            }
+          };
+        }
+      });
+      const automatic = (await (service as unknown as {
+        resolveControllerRun(payload: SimControllerRequestPayload): Promise<{
+          controllerSessionId: string;
+          runSeedInfo: NonNullable<SimControllerRuntimeState["active_run_seed"]>;
+          config: SimControllerRuntimeState["config"];
+        }>;
+      }).resolveControllerRun({
+        games_per_batch: 2,
+        worker_count: 2
+      })) as {
+        controllerSessionId: string;
+        runSeedInfo: NonNullable<SimControllerRuntimeState["active_run_seed"]>;
+        config: SimControllerRuntimeState["config"];
+      };
+
+      expect(automatic.controllerSessionId).toBeTruthy();
+      expect(automatic.runSeedInfo.mode).toBe("automatic_entropy");
+      expect(automatic.runSeedInfo.resolved_run_seed).toBe("ab".repeat(32));
+      expect(entropyCalls).toBe(1);
+      const batchSeedA = deriveControllerBatchBaseSeed({
+        resolvedRunSeed: automatic.runSeedInfo.resolved_run_seed,
+        derivationNamespace: automatic.runSeedInfo.derivation_namespace,
+        workerId: "worker-01",
+        batchIndex: 0
+      });
+      const batchSeedB = deriveControllerBatchBaseSeed({
+        resolvedRunSeed: automatic.runSeedInfo.resolved_run_seed,
+        derivationNamespace: automatic.runSeedInfo.derivation_namespace,
+        workerId: "worker-01",
+        batchIndex: 1
+      });
+      expect(batchSeedA).not.toBe(automatic.runSeedInfo.resolved_run_seed);
+      expect(batchSeedA).not.toBe(batchSeedB);
+
+      const manual = await (service as unknown as {
+        resolveControllerRun(payload: SimControllerRequestPayload): Promise<{
+          runSeedInfo: NonNullable<SimControllerRuntimeState["active_run_seed"]>;
+          config: SimControllerRuntimeState["config"];
+        }>;
+      }).resolveControllerRun({
+        games_per_batch: 1,
+        worker_count: 1,
+        manual_seed_override_enabled: true,
+        manual_seed_override: "manual-seed-123",
+        seed_namespace: "sim-run"
+      });
+      expect(manual.runSeedInfo.mode).toBe("manual_override");
+      expect(manual.runSeedInfo.resolved_run_seed).toBe("manual-seed-123");
+      expect(manual.config.manual_seed_override_enabled).toBe(true);
+      expect(manual.config.manual_seed_override).toBe("manual-seed-123");
+      expect(entropyCalls).toBe(1);
+    } finally {
+      fs.rmSync(runtimeDir, { recursive: true, force: true });
+    }
   });
 
   it("normalizes duplicate worker rows and clears workers on stop", async () => {
     const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), "tichuml-sim-"));
+    const liveProcess = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000);"], {
+      stdio: "ignore",
+      windowsHide: true
+    });
     try {
       const runningState = createSimState("running");
+      runningState.pid = liveProcess.pid ?? null;
+      runningState.controller_session_id = "running-session";
       runningState.runtime_path = path.join(runtimeDir, "state.json");
       runningState.lock_path = path.join(runtimeDir, "controller.lock");
       runningState.pause_path = path.join(runtimeDir, "pause");
@@ -1433,6 +1678,7 @@ describe("backend foundation server routes", () => {
       runningState.workers = [
         {
           worker_id: "worker-01",
+          controller_session_id: "running-session",
           status: "running",
           pid: null,
           current_batch_started_at: runningState.started_at,
@@ -1443,6 +1689,7 @@ describe("backend foundation server routes", () => {
         },
         {
           worker_id: "worker-01",
+          controller_session_id: "running-session",
           status: "running",
           pid: null,
           current_batch_started_at: runningState.started_at,
@@ -1494,6 +1741,7 @@ describe("backend foundation server routes", () => {
       expect(stoppedAgain.runtime_state.workers).toHaveLength(0);
       expect(stoppedAgain.runtime_state.worker_count).toBe(0);
     } finally {
+      liveProcess.kill();
       fs.rmSync(runtimeDir, { recursive: true, force: true });
     }
   });

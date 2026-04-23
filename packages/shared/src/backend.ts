@@ -1,4 +1,8 @@
-import type { SeedJsonValue } from "./seed.js";
+import type {
+  SeedJsonValue,
+  SeedProviderName,
+  SeedSourceSummary
+} from "./seed.js";
 
 export const DEFAULT_SERVER_PORT = 4310;
 export const DEFAULT_BACKEND_BASE_URL = `http://localhost:${DEFAULT_SERVER_PORT}`;
@@ -90,6 +94,22 @@ export type SimWorkerStatus =
   | "completed"
   | "error";
 
+export type SimSeedMode = "automatic_entropy" | "manual_override";
+
+export type SimRunSeedInfo = {
+  mode: SimSeedMode;
+  resolved_run_seed: string;
+  derivation_namespace: string;
+  manual_override_enabled: boolean;
+  manual_override_seed: string | null;
+  generated_at: string;
+  entropy_game_id: string | null;
+  audit_hash_hex: string | null;
+  primary_provider: SeedProviderName | "manual_override" | null;
+  local_fallback_used: boolean | null;
+  source_summary: SeedSourceSummary | null;
+};
+
 export type SimControllerConfig = {
   provider: DecisionMode;
   games_per_batch: number;
@@ -104,6 +124,9 @@ export type SimControllerConfig = {
   telemetry_retry_delay_ms: number;
   telemetry_backoff_ms: number;
   backend_url: string;
+  seed_namespace: string;
+  manual_seed_override_enabled: boolean;
+  manual_seed_override: string;
   seed_prefix: string;
   sleep_seconds: number;
   worker_count: number;
@@ -114,6 +137,7 @@ export type SimControllerConfig = {
 
 export type SimWorkerRuntimeState = {
   worker_id: string;
+  controller_session_id: string | null;
   status: SimWorkerStatus;
   pid: number | null;
   current_batch_started_at: string | null;
@@ -124,9 +148,11 @@ export type SimWorkerRuntimeState = {
 };
 
 export type SimControllerRuntimeState = {
+  runtime_schema_version: number;
   status: SimControllerStatus;
   pid: number | null;
   controller_id: string;
+  controller_session_id: string | null;
   started_at: string | null;
   updated_at: string;
   last_heartbeat: string | null;
@@ -142,6 +168,11 @@ export type SimControllerRuntimeState = {
   total_games_completed: number;
   total_errors: number;
   last_error: string | null;
+  last_shutdown_reason: string | null;
+  last_exit_code: number | null;
+  last_exit_signal: string | null;
+  active_run_seed: SimRunSeedInfo | null;
+  last_run_seed: SimRunSeedInfo | null;
   telemetry_decision_failures: number;
   telemetry_event_failures: number;
   telemetry_failures_total: number;
@@ -192,7 +223,10 @@ export type SimControllerRequestPayload = Partial<{
   telemetry_backoff_ms: number;
   backend_url: string;
   seed: string;
+  seed_namespace: string;
   seed_prefix: string;
+  manual_seed_override_enabled: boolean;
+  manual_seed_override: string;
   sleep_seconds: number;
   worker_count: number;
   sim_threads: number;

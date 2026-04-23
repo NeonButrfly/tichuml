@@ -461,3 +461,27 @@ supported size limit.`, leaving the control UI stuck at `Batches=0`,
   [Linux Backend Deployment + ML Host](https://github.com/NeonButrfly/tichuml/milestone/25)
 - Status:
   Lives in GitHub, not here.
+
+## 2026-04-23 - Simulator controller stale runtime recovery and run-seed semantics
+
+- Prompt signal:
+  Fix the simulator controller stale-state bug completely, and clean up seed
+  generation/UI semantics so dead controller sessions do not leave ghost workers
+  or a misleading active batch after restart.
+- Interpreted requirement:
+  Issue [#44](https://github.com/NeonButrfly/tichuml/issues/44) tracks runtime
+  reconciliation on backend/controller startup, session-scoped worker rows,
+  immediate stale-state rewrites, historical-vs-live run state separation, and
+  the clarified seed model: one resolved run seed per simulator run from the
+  configured entropy set unless a manual override toggle is explicitly enabled.
+- Affected systems:
+  `apps/server/src/services/sim-controller-service.ts`,
+  `apps/sim-runner/src/cli.ts`, `apps/web/src/SimControlDashboard.tsx`,
+  `packages/shared/src/backend.ts`, `scripts/sim-controller.sh`,
+  simulator/controller docs, integration tests.
+- Linked GitHub issue:
+  [#44](https://github.com/NeonButrfly/tichuml/issues/44)
+- Milestone:
+  [Linux Backend Deployment + ML Host](https://github.com/NeonButrfly/tichuml/milestone/25)
+- Status:
+  Lives in GitHub, not here.

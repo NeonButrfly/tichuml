@@ -31,7 +31,9 @@ type FormState = {
   telemetryRetryDelayMs: number;
   telemetryBackoffMs: number;
   backendUrl: string;
-  seedPrefix: string;
+  seedNamespace: string;
+  manualSeedOverrideEnabled: boolean;
+  manualSeedOverride: string;
   sleepSeconds: number;
   workerCount: number;
   confirmToken: string;
@@ -86,7 +88,9 @@ function createInitialForm(): FormState {
     telemetryRetryDelayMs: 250,
     telemetryBackoffMs: 15_000,
     backendUrl,
-    seedPrefix: "controller",
+    seedNamespace: "controller",
+    manualSeedOverrideEnabled: false,
+    manualSeedOverride: "",
     sleepSeconds: 5,
     workerCount: 1,
     confirmToken: ADMIN_CONFIRMATION_VALUE
@@ -105,7 +109,9 @@ function toPayload(form: FormState): SimControllerRequestPayload {
     telemetry_retry_delay_ms: form.telemetryRetryDelayMs,
     telemetry_backoff_ms: form.telemetryBackoffMs,
     backend_url: form.backendUrl,
-    seed_prefix: form.seedPrefix,
+    seed_namespace: form.seedNamespace,
+    manual_seed_override_enabled: form.manualSeedOverrideEnabled,
+    manual_seed_override: form.manualSeedOverride,
     sleep_seconds: form.sleepSeconds,
     worker_count: form.workerCount,
     quiet: true,
@@ -140,10 +146,21 @@ function formFromRuntimeConfig(
     telemetryRetryDelayMs: config.telemetry_retry_delay_ms,
     telemetryBackoffMs: config.telemetry_backoff_ms,
     backendUrl: config.backend_url,
-    seedPrefix: config.seed_prefix,
+    seedNamespace: config.seed_namespace ?? config.seed_prefix,
+    manualSeedOverrideEnabled: config.manual_seed_override_enabled ?? false,
+    manualSeedOverride: config.manual_seed_override ?? "",
     sleepSeconds: config.sleep_seconds,
     workerCount: config.worker_count
   };
+}
+
+function formatSeedMode(
+  seed: SimControllerRuntimeState["active_run_seed"] | SimControllerRuntimeState["last_run_seed"]
+): string {
+  if (!seed) {
+    return "Automatic entropy";
+  }
+  return seed.mode === "manual_override" ? "Manual override" : "Automatic entropy";
 }
 
 function StatePill({ state, stale }: { state: string; stale?: boolean }) {
@@ -275,6 +292,13 @@ export function SimControlDashboard() {
     status?.status === "paused" ||
     status?.status === "pausing" ||
     status?.status === "starting";
+  const liveWorkers = status?.workers ?? [];
+  const currentBatchActive =
+    (status?.status === "running" ||
+      status?.status === "pausing" ||
+      status?.status === "paused" ||
+      status?.status === "starting") &&
+    status?.current_batch_started_at !== null;
 
   const updateForm = useCallback((update: (current: FormState) => FormState) => {
     setForm((current) => update(current));
@@ -359,11 +383,11 @@ export function SimControlDashboard() {
           </button>
         </div>
         <div className="sim-metrics-grid">
-          <Metric label="Workers" value={status?.worker_count ?? form.workerCount} />
+          <Metric label="Workers" value={status?.worker_count ?? 0} />
           <Metric label="Running" value={status?.running_worker_count ?? 0} />
           <Metric label="Paused" value={status?.paused_worker_count ?? 0} />
           <Metric label="Errored" value={status?.errored_worker_count ?? 0} />
-          <Metric label="Current batch" value={status?.current_batch_started_at ? "active" : "idle"} />
+          <Metric label="Current batch" value={currentBatchActive ? "active" : "none"} />
           <Metric label="Backend" value={backendReachable === null ? "unknown" : backendReachable ? "ok" : "down"} />
           <Metric label="Telemetry failures" value={status?.telemetry_failures_total ?? 0} />
           <Metric label="Backoff" value={status?.telemetry_backoff_until ? "active" : "none"} />
@@ -451,15 +475,61 @@ export function SimControlDashboard() {
               }
             />
           </label>
-          <label>
-            Seed prefix
-            <input
-              value={form.seedPrefix}
-              onChange={(event) =>
-                updateForm((current) => ({ ...current, seedPrefix: event.target.value }))
-              }
-            />
-          </label>
+          <div className="sim-seed-panel">
+            <div className="sim-seed-row">
+              <span className="sim-seed-label">Seed mode</span>
+              <strong>{formatSeedMode(status?.active_run_seed ?? status?.last_run_seed ?? null)}</strong>
+            </div>
+            <label>
+              Current run seed
+              <input
+                readOnly
+                value={status?.active_run_seed?.resolved_run_seed ?? ""}
+                placeholder="No active run"
+              />
+            </label>
+            <label className="sim-toggle">
+              <input
+                type="checkbox"
+                checked={form.manualSeedOverrideEnabled}
+                onChange={(event) =>
+                  updateForm((current) => ({
+                    ...current,
+                    manualSeedOverrideEnabled: event.target.checked
+                  }))
+                }
+              />
+              Manual seed override
+            </label>
+            <label>
+              Override seed
+              <input
+                value={form.manualSeedOverride}
+                disabled={!form.manualSeedOverrideEnabled}
+                onChange={(event) =>
+                  updateForm((current) => ({
+                    ...current,
+                    manualSeedOverride: event.target.value
+                  }))
+                }
+              />
+            </label>
+            <details className="sim-advanced">
+              <summary>Advanced derivation</summary>
+              <label>
+                Derivation namespace
+                <input
+                  value={form.seedNamespace}
+                  onChange={(event) =>
+                    updateForm((current) => ({
+                      ...current,
+                      seedNamespace: event.target.value
+                    }))
+                  }
+                />
+              </label>
+            </details>
+          </div>
           <label>
             Confirmation token
             <input
@@ -577,7 +647,27 @@ export function SimControlDashboard() {
             <Metric label="Errors" value={status?.total_errors ?? 0} />
             <Metric label="Last batch" value={status?.last_batch_status ?? "n/a"} />
           </div>
+          <p className="sim-detail">
+            Current run seed: {status?.active_run_seed?.resolved_run_seed ?? "none"}
+          </p>
+          <p className="sim-detail">
+            Last run seed: {status?.last_run_seed?.resolved_run_seed ?? "none"}
+          </p>
+          <p className="sim-detail">
+            Seed mode: {formatSeedMode(status?.active_run_seed ?? status?.last_run_seed ?? null)}
+          </p>
+          <p className="sim-detail">
+            Entropy summary:{" "}
+            {status?.active_run_seed?.source_summary
+              ? JSON.stringify(status.active_run_seed.source_summary)
+              : status?.last_run_seed?.source_summary
+                ? JSON.stringify(status.last_run_seed.source_summary)
+                : "manual override / none"}
+          </p>
           <p className="sim-detail">Last error: {status?.last_error ?? "none"}</p>
+          <p className="sim-detail">
+            Last shutdown reason: {status?.last_shutdown_reason ?? "none"}
+          </p>
           <p className="sim-detail">Telemetry by kind: {JSON.stringify(status?.telemetry_failure_by_kind ?? {})}</p>
           <p className="sim-detail">Telemetry by endpoint: {JSON.stringify(status?.telemetry_failure_by_endpoint ?? {})}</p>
           <p className="sim-detail">Telemetry backoff until: {status?.telemetry_backoff_until ?? "none"}</p>
@@ -601,16 +691,22 @@ export function SimControlDashboard() {
               </tr>
             </thead>
             <tbody>
-              {(status?.workers ?? []).map((worker) => (
-                <tr key={worker.worker_id}>
-                  <td>{worker.worker_id}</td>
-                  <td>{worker.status}</td>
-                  <td>{worker.pid ?? "n/a"}</td>
-                  <td>{worker.total_batches_completed}</td>
-                  <td>{worker.total_games_completed}</td>
-                  <td>{formatRelative(worker.last_heartbeat)}</td>
+              {liveWorkers.length > 0 ? (
+                liveWorkers.map((worker) => (
+                  <tr key={worker.worker_id}>
+                    <td>{worker.worker_id}</td>
+                    <td>{worker.status}</td>
+                    <td>{worker.pid ?? "n/a"}</td>
+                    <td>{worker.total_batches_completed}</td>
+                    <td>{worker.total_games_completed}</td>
+                    <td>{formatRelative(worker.last_heartbeat)}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={6}>No active workers.</td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </section>
