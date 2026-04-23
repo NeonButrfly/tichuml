@@ -32,6 +32,21 @@ Backend URL on network failure; stale or unreachable values remain visible so
 operators can fix the effective endpoint instead of unknowingly posting to a
 fallback host.
 
+The dashboard intentionally keeps two backend URLs separate:
+
+- Control API base URL: the browser-to-backend origin used for
+  `/api/admin/sim/*` and health checks. On the backend-hosted dashboard this is
+  the current page origin, such as `https://192.168.50.196:4310`.
+- Controller Backend URL: the editable runtime value sent as `backend_url` when
+  starting or running the simulator. This is the URL the backend-host controller
+  and workers use for decision/telemetry calls, often
+  `http://127.0.0.1:4310`.
+
+Status refresh may adopt the effective controller Backend URL returned by the
+runtime config, but it must not reuse that value for browser admin API calls.
+Otherwise a remote browser can accidentally start polling its own localhost
+after the controller reports a local-first backend URL.
+
 Always-visible controls:
 
 - Start

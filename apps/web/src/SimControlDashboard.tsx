@@ -43,6 +43,16 @@ function resolveSameOriginBackendUrl(): string | null {
   );
 }
 
+export function resolveSimDashboardControlApiBaseUrl(config: {
+  settingsBackendBaseUrl: string;
+  sameOriginBackendUrl: string | null;
+}): string {
+  return (
+    config.sameOriginBackendUrl ??
+    (config.settingsBackendBaseUrl || DEFAULT_BACKEND_BASE_URL)
+  );
+}
+
 function shouldUseSameOriginDefault(
   backendUrl: string,
   sameOriginBackendUrl: string | null
@@ -156,6 +166,16 @@ function Metric({ label, value }: { label: string; value: string | number | null
 export function SimControlDashboard() {
   const [form, setForm] = useState<FormState>(() => createInitialForm());
   const [status, setStatus] = useState<SimControllerRuntimeState | null>(null);
+  const [controlApiBaseUrl] = useState(() => {
+    const settings =
+      typeof window === "undefined"
+        ? getBackendSettingsDefaults()
+        : loadBackendSettings();
+    return resolveSimDashboardControlApiBaseUrl({
+      settingsBackendBaseUrl: settings.backendBaseUrl,
+      sameOriginBackendUrl: resolveSameOriginBackendUrl()
+    });
+  });
   const [feedback, setFeedback] = useState<SimControllerResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [backendReachable, setBackendReachable] = useState<boolean | null>(null);
@@ -175,10 +195,9 @@ export function SimControlDashboard() {
   }, [form.confirmToken, pendingAction]);
 
   const refresh = useCallback(async () => {
-    let statusBackendUrl = form.backendUrl;
     try {
       setError(null);
-      const response = await getSimControllerStatus(statusBackendUrl);
+      const response = await getSimControllerStatus(controlApiBaseUrl);
       setStatus(response.runtime_state);
       setFeedback(response);
       if (!formDirty) {
@@ -199,19 +218,19 @@ export function SimControlDashboard() {
     }
 
     try {
-      await testBackendHealth(statusBackendUrl);
+      await testBackendHealth(controlApiBaseUrl);
       setBackendReachable(true);
     } catch {
       setBackendReachable(false);
     }
-  }, [form.backendUrl, formDirty]);
+  }, [controlApiBaseUrl, formDirty]);
 
   async function runAction(action: "start" | "pause" | "continue" | "stop" | "run-once") {
     setPendingAction(action);
     try {
       setError(null);
       const response = await postSimControllerAction(
-        form.backendUrl,
+        controlApiBaseUrl,
         action,
         toPayload(form),
         form.confirmToken
@@ -563,6 +582,7 @@ export function SimControlDashboard() {
           <p className="sim-detail">Telemetry by endpoint: {JSON.stringify(status?.telemetry_failure_by_endpoint ?? {})}</p>
           <p className="sim-detail">Telemetry backoff until: {status?.telemetry_backoff_until ?? "none"}</p>
           <p className="sim-detail">Last updated: {lastUpdatedAt ?? "never"}</p>
+          <p className="sim-detail">Control API: {controlApiBaseUrl}</p>
           <p className="sim-detail">Log path: {status?.log_path ?? "n/a"}</p>
           <p className="sim-detail">Runtime path: {status?.runtime_path ?? "n/a"}</p>
         </section>

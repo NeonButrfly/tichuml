@@ -417,3 +417,24 @@ supported size limit.`, leaving the control UI stuck at `Batches=0`,
   [Linux Backend Deployment + ML Host](https://github.com/NeonButrfly/tichuml/milestone/25)
 - Status:
   Lives in GitHub, not here.
+
+## 2026-04-23 - Simulator dashboard admin API URL drift
+
+- Prompt signal:
+  `/admin/sim` and the sim runner dashboard are still not actually working even
+  after `/admin/control` fixes.
+- Interpreted requirement:
+  Issue [#42](https://github.com/NeonButrfly/tichuml/issues/42) also covers the
+  simulator dashboard route: the browser admin API base URL must stay separate
+  from the controller/sim-runner `backend_url` runtime setting. A remote browser
+  served from `https://192.168.50.196:4310/admin/sim` must keep polling
+  `https://192.168.50.196:4310/api/admin/sim/*` even when the controller's
+  effective backend URL is local-first `http://127.0.0.1:4310`.
+- Affected systems:
+  `apps/web/src/SimControlDashboard.tsx`, sim dashboard docs, integration tests.
+- Linked GitHub issue:
+  [#42](https://github.com/NeonButrfly/tichuml/issues/42)
+- Milestone:
+  [Linux Backend Deployment + ML Host](https://github.com/NeonButrfly/tichuml/milestone/25)
+- Status:
+  Lives in GitHub, not here.
