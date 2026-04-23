@@ -7,6 +7,10 @@ import {
   type RuntimeAdminService
 } from "./services/runtime-admin-service.js";
 import { FileSimControllerService, type SimControllerService } from "./services/sim-controller-service.js";
+import {
+  TelemetryIngestQueue,
+  type TelemetryQueueConfig
+} from "./services/telemetry-ingest-queue.js";
 import type { TelemetryRepository } from "./services/telemetry-repository.js";
 
 export function createAppServer(config: {
@@ -15,12 +19,20 @@ export function createAppServer(config: {
   lightgbmScorer?: LightgbmScorer;
   simController?: SimControllerService;
   runtimeAdmin?: RuntimeAdminService;
+  telemetryQueue?: TelemetryIngestQueue;
 }): http.Server {
   const simController =
     config.simController ?? new FileSimControllerService(config.serverConfig);
   const runtimeAdmin =
     config.runtimeAdmin ?? new FileRuntimeAdminService(config.serverConfig);
-  return http.createServer(
+  const telemetryQueue =
+    config.telemetryQueue ??
+    new TelemetryIngestQueue(config.repository, {
+      maxDepth: config.serverConfig.telemetryIngestQueueMaxDepth,
+      batchSize: config.serverConfig.telemetryPersistenceBatchSize,
+      concurrency: config.serverConfig.telemetryPersistenceConcurrency
+    } satisfies TelemetryQueueConfig);
+  const server = http.createServer(
     createRouter(
       config.lightgbmScorer
         ? {
@@ -28,14 +40,20 @@ export function createAppServer(config: {
             repository: config.repository,
             lightgbmScorer: config.lightgbmScorer,
             simController,
-            runtimeAdmin
+            runtimeAdmin,
+            telemetryQueue
           }
         : {
             config: config.serverConfig,
             repository: config.repository,
             simController,
-            runtimeAdmin
+            runtimeAdmin,
+            telemetryQueue
           }
     )
   );
+  server.on("close", () => {
+    void telemetryQueue.drain();
+  });
+  return server;
 }

@@ -121,8 +121,23 @@ on initial load, explicit reset, or successful save.
 
 The backend returns a typed config schema for each item: key, type, category,
 editability, restart requirement, description, saved value, effective value,
-detected value, override flag, and override value. Boolean values render as
-`true` / `false` dropdowns and are rejected if submitted as anything else.
+detected value, override flag, override value, and option lists for enum fields.
+Boolean values render as `true` / `false` dropdowns. Enum values such as
+`TELEMETRY_MODE` and `SIM_PROVIDER` also render as dropdowns and are rejected if
+submitted outside their allowed values.
+
+Simulator/controller defaults persisted by the runtime config API include:
+
+- `SIM_PROVIDER`
+- `SIM_BACKEND_URL`
+- `SIM_WORKER_COUNT`
+- `SIM_GAMES_PER_BATCH`
+- `TELEMETRY_MODE`
+- `TELEMETRY_MAX_POST_BYTES`
+- `TELEMETRY_POST_TIMEOUT_MS`
+- `TELEMETRY_INGEST_QUEUE_MAX_DEPTH`
+- `TELEMETRY_PERSISTENCE_BATCH_SIZE`
+- `TELEMETRY_PERSISTENCE_CONCURRENCY`
 
 Automated fields use override toggles. The persisted `.env` stores only
 `*_OVERRIDE_ENABLED` and `*_OVERRIDE` values. Detected values are never written
@@ -137,8 +152,14 @@ include `detectedEthernet`, `detectedWireless`, and `detectedDefault`, and all
 runtime URL defaults flow from the same effective values.
 
 Most server/runtime settings require restart because they are loaded at process
-startup. The control panel marks restart-required settings and provides an
-apply-and-restart action.
+startup. Restart pending is computed from actual disk-versus-loaded runtime
+config deltas and is shown as `Yes` or `No`, never as a health failure. The
+control panel marks restart-required settings and provides an apply-and-restart
+action.
+
+The Git panel distinguishes clean, dirty, ahead, behind, and unknown states.
+Clean is healthy; dirty or ahead/behind states are explicit operator states, not
+generic failures.
 
 ## Runtime Files
 

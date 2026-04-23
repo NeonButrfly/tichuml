@@ -33,6 +33,19 @@ function createConfig(repoRoot: string): ServerConfig {
     destructiveAdminEndpointsEnabled: false,
     adminSimControlEnabled: false,
     runtimeAdminControlEnabled: true,
+    traceDecisionRequests: false,
+    requestBodyLimitBytes: 25 * 1024 * 1024,
+    requestBodyLimitLabel: "25mb",
+    telemetryMode: "minimal",
+    telemetryMaxPostBytes: 24 * 1024 * 1024,
+    telemetryPostTimeoutMs: 10000,
+    telemetryIngestQueueMaxDepth: 5000,
+    telemetryPersistenceBatchSize: 100,
+    telemetryPersistenceConcurrency: 2,
+    simDefaultProvider: "local",
+    simDefaultBackendUrl: "http://localhost:4310",
+    simDefaultWorkerCount: 1,
+    simDefaultGamesPerBatch: 1,
     simControllerRuntimeDir: path.join(repoRoot, ".runtime", "sim-controller"),
     repoRoot,
     pythonExecutable: "python",
@@ -161,5 +174,40 @@ describe("runtime admin config manager", () => {
     expect(result.locked).toBe(true);
     const envText = await fs.readFile(path.join(repoRoot, ".env"), "utf8");
     expect(envText).toContain("ENABLE_RUNTIME_ADMIN_CONTROL=false");
+  });
+
+  it("persists simulator and telemetry runtime defaults with restart-pending based on real deltas", async () => {
+    const repoRoot = await createTempRepo();
+    await fs.writeFile(path.join(repoRoot, ".env"), "ENABLE_RUNTIME_ADMIN_CONTROL=true\n");
+    const service = new FileRuntimeAdminService(createConfig(repoRoot));
+
+    const before = await service.readConfig();
+    expect(before.pending_restart).toBe(false);
+    expect(before.entries.find((entry) => entry.key === "SIM_PROVIDER")?.input).toBe(
+      "select"
+    );
+    expect(before.entries.find((entry) => entry.key === "TELEMETRY_MODE")?.input).toBe(
+      "select"
+    );
+
+    const result = await service.saveConfig({
+      SIM_PROVIDER: "server_heuristic",
+      SIM_WORKER_COUNT: "3",
+      SIM_GAMES_PER_BATCH: "5",
+      SIM_BACKEND_URL: "http://192.168.50.44:4310",
+      TELEMETRY_MODE: "full",
+      TELEMETRY_MAX_POST_BYTES: "123456"
+    });
+
+    expect(result.accepted).toBe(true);
+    expect(result.restart_required).toBe(true);
+    expect(result.config.pending_restart).toBe(true);
+    const envText = await fs.readFile(path.join(repoRoot, ".env"), "utf8");
+    expect(envText).toContain("SIM_PROVIDER=server_heuristic");
+    expect(envText).toContain("SIM_WORKER_COUNT=3");
+    expect(envText).toContain("SIM_GAMES_PER_BATCH=5");
+    expect(envText).toContain("SIM_BACKEND_URL=http://192.168.50.44:4310");
+    expect(envText).toContain("TELEMETRY_MODE=full");
+    expect(envText).toContain("TELEMETRY_MAX_POST_BYTES=123456");
   });
 });

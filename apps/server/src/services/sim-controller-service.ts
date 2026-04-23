@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { spawn, type ChildProcess } from "node:child_process";
+import { execFile, spawn, type ChildProcess } from "node:child_process";
 import {
   DEFAULT_BACKEND_BASE_URL,
   type DecisionMode,
@@ -79,7 +79,7 @@ function readRecentLogs(logPath: string, limit = 30): string[] {
 }
 
 function defaultWorkerState(status: SimControllerStatus): SimWorkerRuntimeState[] {
-  return status === "stopped"
+  return status === "stopped" || status === "completed"
     ? []
     : [
         {
@@ -212,14 +212,19 @@ export class FileSimControllerService implements SimControllerService {
 
     fs.mkdirSync(path.dirname(this.paths.stopPath), { recursive: true });
     fs.writeFileSync(this.paths.stopPath, nowIso(), "utf8");
-    const current = { ...prior, status: "stopping" as const, requested_action: "stop", updated_at: nowIso() };
+    await this.terminateControllerProcess(prior.pid);
+    this.clearControlFiles();
+    if (fs.existsSync(this.paths.lockPath)) {
+      fs.rmSync(this.paths.lockPath, { force: true });
+    }
+    const current = this.toStoppedState(prior);
     this.writeState(current);
     return this.response({
       accepted: true,
       action: "sim.stop",
       prior,
       current,
-      message: "Stop requested; workers will stop after the current safe batch boundary.",
+      message: "Simulator controller stopped and worker state cleared.",
       warnings: []
     });
   }
@@ -442,15 +447,15 @@ export class FileSimControllerService implements SimControllerService {
     const state = readJsonFile<SimControllerRuntimeState>(this.paths.runtimePath);
     const current = state ?? this.createState("stopped", this.resolveConfig({}));
     const heartbeatStale = current.last_heartbeat ? !isFreshHeartbeat(current) : false;
-    return {
+    return this.normalizeState({
       ...current,
       heartbeat_stale: heartbeatStale,
       recent_logs: readRecentLogs(this.paths.logPath)
-    };
+    });
   }
 
   private writeState(state: SimControllerRuntimeState): void {
-    writeJsonFile(this.paths.runtimePath, state);
+    writeJsonFile(this.paths.runtimePath, this.normalizeState(state));
   }
 
   private createState(
@@ -507,14 +512,24 @@ export class FileSimControllerService implements SimControllerService {
   }
 
   private resolveConfig(payload: SimControllerRequestPayload): SimControllerConfig {
-    const provider = isDecisionMode(payload.provider) ? payload.provider : "local";
+    const provider = isDecisionMode(payload.provider)
+      ? payload.provider
+      : this.config.simDefaultProvider;
     const gamesPerBatch = Math.max(
       1,
-      Number(payload.games_per_batch ?? payload.games ?? 1)
+      Number(
+        payload.games_per_batch ??
+          payload.games ??
+          this.config.simDefaultGamesPerBatch
+      )
     );
     const workerCount = Math.max(
       1,
-      Number(payload.worker_count ?? payload.sim_threads ?? 1)
+      Number(
+        payload.worker_count ??
+          payload.sim_threads ??
+          this.config.simDefaultWorkerCount
+      )
     );
 
     return {
@@ -545,7 +560,9 @@ export class FileSimControllerService implements SimControllerService {
       backend_url:
         typeof payload.backend_url === "string" && payload.backend_url.length > 0
           ? payload.backend_url
-          : this.config.backendBaseUrl || DEFAULT_BACKEND_BASE_URL,
+          : this.config.simDefaultBackendUrl ||
+            this.config.backendBaseUrl ||
+            DEFAULT_BACKEND_BASE_URL,
       seed_prefix:
         typeof payload.seed_prefix === "string" && payload.seed_prefix.length > 0
           ? payload.seed_prefix
@@ -582,4 +599,79 @@ export class FileSimControllerService implements SimControllerService {
       warnings: config.warnings
     };
   }
+
+  private normalizeState(
+    state: SimControllerRuntimeState
+  ): SimControllerRuntimeState {
+    const workersById = new Map<string, SimWorkerRuntimeState>();
+    for (const worker of state.workers) {
+      workersById.set(worker.worker_id, worker);
+    }
+    const workers =
+      state.status === "stopped" || state.status === "completed"
+        ? []
+        : [...workersById.values()];
+    return {
+      ...state,
+      pid: state.status === "stopped" ? null : state.pid,
+      workers,
+      worker_count: workers.length,
+      running_worker_count: workers.filter((worker) => worker.status === "running")
+        .length,
+      paused_worker_count: workers.filter((worker) => worker.status === "paused")
+        .length,
+      stopped_worker_count: workers.filter((worker) => worker.status === "stopped")
+        .length,
+      errored_worker_count: workers.filter((worker) => worker.status === "error")
+        .length
+    };
+  }
+
+  private toStoppedState(
+    prior: SimControllerRuntimeState
+  ): SimControllerRuntimeState {
+    return {
+      ...prior,
+      status: "stopped",
+      pid: null,
+      last_heartbeat: null,
+      heartbeat_stale: false,
+      requested_action: null,
+      current_batch_started_at: null,
+      updated_at: nowIso(),
+      workers: [],
+      worker_count: 0,
+      running_worker_count: 0,
+      paused_worker_count: 0,
+      stopped_worker_count: 0,
+      errored_worker_count: 0
+    };
+  }
+
+  private async terminateControllerProcess(pid: number | null): Promise<void> {
+    const child = this.child;
+    if (child?.pid) {
+      await terminateProcessTree(child.pid);
+      this.child = null;
+      return;
+    }
+    if (pid) {
+      await terminateProcessTree(pid);
+    }
+  }
+}
+
+function terminateProcessTree(pid: number): Promise<void> {
+  return new Promise((resolve) => {
+    if (process.platform === "win32") {
+      execFile("taskkill", ["/PID", String(pid), "/T", "/F"], () => resolve());
+      return;
+    }
+    try {
+      process.kill(pid, "SIGTERM");
+    } catch {
+      // The controller may already have exited after seeing the stop marker.
+    }
+    resolve();
+  });
 }

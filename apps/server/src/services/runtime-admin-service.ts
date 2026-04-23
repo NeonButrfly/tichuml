@@ -100,7 +100,8 @@ export type RuntimeConfigEntry = {
   detected_value: string | undefined;
   overridden: boolean;
   restart_required: boolean;
-  input: "text" | "number" | "boolean";
+  input: "text" | "number" | "boolean" | "select";
+  options?: string[];
 };
 
 export type RuntimeConfigPayload = {
@@ -170,6 +171,7 @@ const CONFIG_SCHEMA: Array<{
   restart_required: boolean;
   description: string;
   automated?: boolean;
+  options?: string[];
   validate?: (value: string) => string | null;
 }> = [
   { key: "PORT", label: "Port", category: "Network", type: "number", restart_required: true, description: "Backend HTTP port.", validate: validatePort },
@@ -191,8 +193,16 @@ const CONFIG_SCHEMA: Array<{
   { key: "TRACE_DECISION_REQUESTS", label: "Decision request trace", category: "Admin", type: "boolean", restart_required: true, description: "Emit compact structured backend decision trace logs.", validate: validateBoolean },
   { key: "REQUEST_BODY_LIMIT", label: "Request body limit", category: "Admin", type: "string", restart_required: true, description: "HTTP JSON request body limit, e.g. 25mb. Takes precedence over MAX_REQUEST_BODY_MB.", validate: validateByteSize },
   { key: "MAX_REQUEST_BODY_MB", label: "Request body MB", category: "Admin", type: "number", restart_required: true, description: "Fallback HTTP request body limit in MiB.", validate: validatePositiveNumber },
-  { key: "TELEMETRY_MODE", label: "Telemetry mode", category: "Admin", type: "string", restart_required: false, description: "Default simulator telemetry mode: minimal or full.", validate: validateTelemetryMode },
+  { key: "TELEMETRY_MODE", label: "Telemetry mode", category: "Admin", type: "string", restart_required: true, description: "Default simulator telemetry mode: minimal or full.", options: ["minimal", "full"], validate: validateTelemetryMode },
   { key: "TELEMETRY_MAX_POST_BYTES", label: "Telemetry max post bytes", category: "Admin", type: "number", restart_required: false, description: "Simulator-side maximum telemetry POST size before local skip.", validate: validatePositiveNumber },
+  { key: "TELEMETRY_POST_TIMEOUT_MS", label: "Telemetry POST timeout ms", category: "Admin", type: "number", restart_required: true, description: "Client-side telemetry POST timeout before best-effort failure handling.", validate: validatePositiveNumber },
+  { key: "TELEMETRY_INGEST_QUEUE_MAX_DEPTH", label: "Telemetry queue depth", category: "Admin", type: "number", restart_required: true, description: "Maximum backend telemetry items accepted before queue-pressure drops.", validate: validatePositiveNumber },
+  { key: "TELEMETRY_PERSISTENCE_BATCH_SIZE", label: "Telemetry batch size", category: "Admin", type: "number", restart_required: true, description: "Maximum telemetry items per backend persistence batch.", validate: validatePositiveNumber },
+  { key: "TELEMETRY_PERSISTENCE_CONCURRENCY", label: "Telemetry concurrency", category: "Admin", type: "number", restart_required: true, description: "Concurrent backend telemetry persistence batches.", validate: validatePositiveNumber },
+  { key: "SIM_PROVIDER", label: "Provider", category: "Simulator", type: "string", restart_required: true, description: "Default simulator provider.", options: ["local", "server_heuristic", "lightgbm_model"], validate: validateDecisionMode },
+  { key: "SIM_BACKEND_URL", label: "Backend URL", category: "Simulator", type: "string", restart_required: true, description: "Default backend URL for simulator/controller calls.", validate: validateUrl },
+  { key: "SIM_WORKER_COUNT", label: "Worker count", category: "Simulator", type: "number", restart_required: true, description: "Default simulator controller worker count.", validate: validatePositiveNumber },
+  { key: "SIM_GAMES_PER_BATCH", label: "Games per batch", category: "Simulator", type: "number", restart_required: true, description: "Default simulator controller games per batch.", validate: validatePositiveNumber },
   { key: "SIM_CONTROLLER_RUNTIME_DIR", label: "Sim controller runtime dir", category: "Runtime", type: "string", restart_required: true, description: "Simulator controller runtime directory." },
   { key: "AUTO_UPDATE_ON_START", label: "Auto update on start", category: "Git", type: "boolean", restart_required: false, description: "Force-sync repo on Linux startup.", validate: validateBoolean },
   { key: "GIT_BRANCH", label: "Git branch", category: "Git", type: "string", restart_required: false, description: "Git branch for force-sync/update." },
@@ -240,6 +250,12 @@ function validateTelemetryMode(value: string): string | null {
   return /^(minimal|full)$/iu.test(value)
     ? null
     : "Expected minimal or full.";
+}
+
+function validateDecisionMode(value: string): string | null {
+  return /^(local|server_heuristic|lightgbm_model)$/iu.test(value)
+    ? null
+    : "Expected local, server_heuristic, or lightgbm_model.";
 }
 
 function normalizeBooleanValue(value: string): string {
@@ -498,6 +514,26 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
       ),
       ENABLE_ADMIN_SIM_CONTROL: String(this.config.adminSimControlEnabled),
       TRACE_DECISION_REQUESTS: String(this.config.traceDecisionRequests),
+      REQUEST_BODY_LIMIT: this.config.requestBodyLimitLabel,
+      MAX_REQUEST_BODY_MB: String(
+        Math.round(this.config.requestBodyLimitBytes / (1024 * 1024))
+      ),
+      TELEMETRY_MODE: this.config.telemetryMode,
+      TELEMETRY_MAX_POST_BYTES: String(this.config.telemetryMaxPostBytes),
+      TELEMETRY_POST_TIMEOUT_MS: String(this.config.telemetryPostTimeoutMs),
+      TELEMETRY_INGEST_QUEUE_MAX_DEPTH: String(
+        this.config.telemetryIngestQueueMaxDepth
+      ),
+      TELEMETRY_PERSISTENCE_BATCH_SIZE: String(
+        this.config.telemetryPersistenceBatchSize
+      ),
+      TELEMETRY_PERSISTENCE_CONCURRENCY: String(
+        this.config.telemetryPersistenceConcurrency
+      ),
+      SIM_PROVIDER: this.config.simDefaultProvider,
+      SIM_BACKEND_URL: this.config.simDefaultBackendUrl,
+      SIM_WORKER_COUNT: String(this.config.simDefaultWorkerCount),
+      SIM_GAMES_PER_BATCH: String(this.config.simDefaultGamesPerBatch),
       SIM_CONTROLLER_RUNTIME_DIR: this.config.simControllerRuntimeDir,
       AUTO_UPDATE_ON_START: "true",
       GIT_BRANCH: "main",
@@ -523,19 +559,81 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
     const disk = this.readEnvValues();
     const effective = this.effectiveConfigValues();
     return CONFIG_SCHEMA.some((entry) => {
-      if (entry.automated) {
-        const override = this.getOverrideState(disk, entry.key);
-        return override.enabled && override.value !== effective[entry.key];
+      if (!entry.restart_required) {
+        return false;
       }
-      return entry.restart_required && entry.key in disk
-        ? disk[entry.key] !== effective[entry.key]
-        : false;
+      if (entry.automated && !this.getOverrideState(disk, entry.key).enabled) {
+        return false;
+      }
+      const runtimeValue = this.getLoadedRuntimeValue(entry.key);
+      if (runtimeValue === undefined) {
+        return false;
+      }
+      return (effective[entry.key] ?? "") !== runtimeValue;
     });
   }
 
   private pendingRestart(): boolean {
-    const status = readJsonFile<{ pending_restart?: boolean }>(this.configStatusPath());
-    return status?.pending_restart === true || this.runtimeDiffersFromDisk();
+    return this.runtimeDiffersFromDisk();
+  }
+
+  private getLoadedRuntimeValue(key: string): string | undefined {
+    switch (key) {
+      case "PORT":
+        return String(this.config.port);
+      case "HOST":
+        return this.config.host;
+      case "BACKEND_BASE_URL":
+        return this.config.backendBaseUrl;
+      case "CORS_ALLOW_ORIGIN":
+        return this.config.allowedOrigin;
+      case "DATABASE_URL":
+        return this.config.databaseUrl;
+      case "PG_BOOTSTRAP_URL":
+        return this.config.pgBootstrapUrl;
+      case "AUTO_BOOTSTRAP_DATABASE":
+        return String(this.config.autoBootstrapDatabase);
+      case "AUTO_MIGRATE":
+        return String(this.config.autoMigrate);
+      case "ENABLE_DESTRUCTIVE_ADMIN_ENDPOINTS":
+        return String(this.config.destructiveAdminEndpointsEnabled);
+      case "ENABLE_ADMIN_SIM_CONTROL":
+        return String(this.config.adminSimControlEnabled);
+      case "TRACE_DECISION_REQUESTS":
+        return String(this.config.traceDecisionRequests);
+      case "REQUEST_BODY_LIMIT":
+        return this.config.requestBodyLimitLabel;
+      case "TELEMETRY_MODE":
+        return this.config.telemetryMode;
+      case "TELEMETRY_POST_TIMEOUT_MS":
+        return String(this.config.telemetryPostTimeoutMs);
+      case "TELEMETRY_INGEST_QUEUE_MAX_DEPTH":
+        return String(this.config.telemetryIngestQueueMaxDepth);
+      case "TELEMETRY_PERSISTENCE_BATCH_SIZE":
+        return String(this.config.telemetryPersistenceBatchSize);
+      case "TELEMETRY_PERSISTENCE_CONCURRENCY":
+        return String(this.config.telemetryPersistenceConcurrency);
+      case "SIM_PROVIDER":
+        return this.config.simDefaultProvider;
+      case "SIM_BACKEND_URL":
+        return this.config.simDefaultBackendUrl;
+      case "SIM_WORKER_COUNT":
+        return String(this.config.simDefaultWorkerCount);
+      case "SIM_GAMES_PER_BATCH":
+        return String(this.config.simDefaultGamesPerBatch);
+      case "SIM_CONTROLLER_RUNTIME_DIR":
+        return this.config.simControllerRuntimeDir;
+      case "PYTHON_EXECUTABLE":
+        return this.config.pythonExecutable;
+      case "LIGHTGBM_INFER_SCRIPT":
+        return this.config.lightgbmInferScript;
+      case "LIGHTGBM_MODEL_PATH":
+        return this.config.lightgbmModelPath;
+      case "LIGHTGBM_MODEL_META_PATH":
+        return this.config.lightgbmModelMetaPath;
+      default:
+        return undefined;
+    }
   }
 
   async isAdminSafetyLocked(): Promise<boolean> {
@@ -714,11 +812,14 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
           overridden: entry.automated ? override.enabled : true,
           restart_required: entry.restart_required,
           input:
-            entry.type === "boolean"
-              ? "boolean"
-              : entry.type === "number"
-                ? "number"
-                : "text"
+            entry.options !== undefined
+              ? "select"
+              : entry.type === "boolean"
+                ? "boolean"
+                : entry.type === "number"
+                  ? "number"
+                  : "text",
+          ...(entry.options ? { options: entry.options } : {})
         };
       }),
       pending_restart: this.pendingRestart(),

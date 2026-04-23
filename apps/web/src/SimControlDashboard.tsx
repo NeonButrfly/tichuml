@@ -111,6 +111,24 @@ function formatRelative(ts: string | null): string {
   return `${ageSeconds}s ago`;
 }
 
+function formFromRuntimeConfig(
+  current: FormState,
+  config: SimControllerRuntimeState["config"]
+): FormState {
+  return {
+    ...current,
+    provider: config.provider,
+    gamesPerBatch: config.games_per_batch,
+    telemetryEnabled: config.telemetry_enabled,
+    telemetryMode: config.telemetry_mode,
+    telemetryMaxBytes: config.telemetry_max_bytes,
+    backendUrl: config.backend_url,
+    seedPrefix: config.seed_prefix,
+    sleepSeconds: config.sleep_seconds,
+    workerCount: config.worker_count
+  };
+}
+
 function getNetworkFallbackBackendUrl(
   backendUrl: string,
   caught: unknown
@@ -161,6 +179,7 @@ export function SimControlDashboard() {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const [formDirty, setFormDirty] = useState(false);
 
   const controlsDisabledReason = useMemo(() => {
     if (pendingAction) {
@@ -197,6 +216,11 @@ export function SimControlDashboard() {
       }
       setStatus(response.runtime_state);
       setFeedback(response);
+      if (!formDirty) {
+        setForm((current) =>
+          formFromRuntimeConfig(current, response.runtime_state.config)
+        );
+      }
       setLastUpdatedAt(new Date().toISOString());
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Failed to load status.");
@@ -215,7 +239,7 @@ export function SimControlDashboard() {
     } catch {
       setBackendReachable(false);
     }
-  }, [form.backendUrl]);
+  }, [form.backendUrl, formDirty]);
 
   async function runAction(action: "start" | "pause" | "continue" | "stop" | "run-once") {
     setPendingAction(action);
@@ -229,6 +253,8 @@ export function SimControlDashboard() {
       );
       setFeedback(response);
       setStatus(response.runtime_state);
+      setForm((current) => formFromRuntimeConfig(current, response.runtime_state.config));
+      setFormDirty(false);
       setLastUpdatedAt(new Date().toISOString());
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Control action failed.");
@@ -265,6 +291,11 @@ export function SimControlDashboard() {
     status?.status === "paused" ||
     status?.status === "pausing" ||
     status?.status === "starting";
+
+  const updateForm = useCallback((update: (current: FormState) => FormState) => {
+    setForm((current) => update(current));
+    setFormDirty(true);
+  }, []);
 
   return (
     <main className="sim-dashboard">
@@ -372,7 +403,7 @@ export function SimControlDashboard() {
             <select
               value={form.provider}
               onChange={(event) =>
-                setForm((current) => ({
+                updateForm((current) => ({
                   ...current,
                   provider: event.target.value as DecisionMode
                 }))
@@ -390,7 +421,7 @@ export function SimControlDashboard() {
               min={1}
               value={form.gamesPerBatch}
               onChange={(event) =>
-                setForm((current) => ({
+                updateForm((current) => ({
                   ...current,
                   gamesPerBatch: Math.max(1, Number(event.target.value))
                 }))
@@ -404,7 +435,7 @@ export function SimControlDashboard() {
               min={1}
               value={form.workerCount}
               onChange={(event) =>
-                setForm((current) => ({
+                updateForm((current) => ({
                   ...current,
                   workerCount: Math.max(1, Number(event.target.value))
                 }))
@@ -418,7 +449,7 @@ export function SimControlDashboard() {
               min={0}
               value={form.sleepSeconds}
               onChange={(event) =>
-                setForm((current) => ({
+                updateForm((current) => ({
                   ...current,
                   sleepSeconds: Math.max(0, Number(event.target.value))
                 }))
@@ -430,7 +461,7 @@ export function SimControlDashboard() {
             <input
               value={form.backendUrl}
               onChange={(event) =>
-                setForm((current) => ({ ...current, backendUrl: event.target.value }))
+                updateForm((current) => ({ ...current, backendUrl: event.target.value }))
               }
             />
           </label>
@@ -439,7 +470,7 @@ export function SimControlDashboard() {
             <input
               value={form.seedPrefix}
               onChange={(event) =>
-                setForm((current) => ({ ...current, seedPrefix: event.target.value }))
+                updateForm((current) => ({ ...current, seedPrefix: event.target.value }))
               }
             />
           </label>
@@ -448,7 +479,7 @@ export function SimControlDashboard() {
             <input
               value={form.confirmToken}
               onChange={(event) =>
-                setForm((current) => ({ ...current, confirmToken: event.target.value }))
+                updateForm((current) => ({ ...current, confirmToken: event.target.value }))
               }
             />
           </label>
@@ -457,7 +488,7 @@ export function SimControlDashboard() {
               type="checkbox"
               checked={form.telemetryEnabled}
               onChange={(event) =>
-                setForm((current) => ({
+                updateForm((current) => ({
                   ...current,
                   telemetryEnabled: event.target.checked
                 }))
@@ -470,7 +501,7 @@ export function SimControlDashboard() {
             <select
               value={form.telemetryMode}
               onChange={(event) =>
-                setForm((current) => ({
+                updateForm((current) => ({
                   ...current,
                   telemetryMode: event.target.value === "full" ? "full" : "minimal"
                 }))
@@ -487,7 +518,7 @@ export function SimControlDashboard() {
               min={1}
               value={form.telemetryMaxBytes}
               onChange={(event) =>
-                setForm((current) => ({
+                updateForm((current) => ({
                   ...current,
                   telemetryMaxBytes: Math.max(1, Number(event.target.value))
                 }))

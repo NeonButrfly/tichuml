@@ -124,7 +124,15 @@ describe("server config env loading", () => {
         "REQUEST_BODY_LIMIT=32mb",
         "MAX_REQUEST_BODY_MB=12",
         "TELEMETRY_MODE=full",
-        "TELEMETRY_MAX_POST_BYTES=1234567"
+        "TELEMETRY_MAX_POST_BYTES=1234567",
+        "TELEMETRY_POST_TIMEOUT_MS=1234",
+        "TELEMETRY_INGEST_QUEUE_MAX_DEPTH=234",
+        "TELEMETRY_PERSISTENCE_BATCH_SIZE=12",
+        "TELEMETRY_PERSISTENCE_CONCURRENCY=3",
+        "SIM_PROVIDER=server_heuristic",
+        "SIM_BACKEND_URL=http://192.168.50.44:4310",
+        "SIM_WORKER_COUNT=4",
+        "SIM_GAMES_PER_BATCH=9"
       ].join("\n")
     );
 
@@ -134,6 +142,14 @@ describe("server config env loading", () => {
     expect(config.requestBodyLimitLabel).toBe("32mb");
     expect(config.telemetryMode).toBe("full");
     expect(config.telemetryMaxPostBytes).toBe(1234567);
+    expect(config.telemetryPostTimeoutMs).toBe(1234);
+    expect(config.telemetryIngestQueueMaxDepth).toBe(234);
+    expect(config.telemetryPersistenceBatchSize).toBe(12);
+    expect(config.telemetryPersistenceConcurrency).toBe(3);
+    expect(config.simDefaultProvider).toBe("server_heuristic");
+    expect(config.simDefaultBackendUrl).toBe("http://192.168.50.44:4310");
+    expect(config.simDefaultWorkerCount).toBe(4);
+    expect(config.simDefaultGamesPerBatch).toBe(9);
   });
 
   it("uses MAX_REQUEST_BODY_MB when REQUEST_BODY_LIMIT is absent", async () => {

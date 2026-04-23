@@ -324,3 +324,34 @@ supported size limit.`, leaving the control UI stuck at `Batches=0`,
   [Linux Backend Deployment + ML Host](https://github.com/NeonButrfly/tichuml/milestone/25)
 - Status:
   Lives in GitHub, not here.
+
+## 2026-04-22 - Runtime/admin/controller telemetry final hardening
+
+- Prompt signal:
+  Audit the backend/admin/runtime/controller/simulator path end-to-end and fix
+  the last sim-run telemetry failure without creating a new telemetry system.
+- Interpreted requirement:
+  Issues [#35](https://github.com/NeonButrfly/tichuml/issues/35),
+  [#40](https://github.com/NeonButrfly/tichuml/issues/40), and
+  [#41](https://github.com/NeonButrfly/tichuml/issues/41) cover the final
+  hardening: existing shared telemetry stays authoritative; backend telemetry
+  ingest validates fast then uses a bounded persistence queue; simulator stop
+  must clear stale worker rows; runtime config must persist simulator and
+  telemetry defaults; restart-pending and git state must reflect real operator
+  states; and telemetry failures must not affect gameplay, simulator batches,
+  or controller accounting unless strict telemetry debugging is explicitly
+  enabled.
+- Affected systems:
+  `packages/telemetry`, `apps/server`, `apps/sim-runner`, `apps/web`,
+  telemetry/runtime/controller docs, backend integration tests.
+- Linked GitHub issues:
+  [#35](https://github.com/NeonButrfly/tichuml/issues/35),
+  [#40](https://github.com/NeonButrfly/tichuml/issues/40),
+  [#41](https://github.com/NeonButrfly/tichuml/issues/41)
+- Milestone:
+  [Linux Backend Deployment + ML Host](https://github.com/NeonButrfly/tichuml/milestone/25)
+  for runtime/controller work and
+  [6.5 - Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+  for telemetry architecture.
+- Status:
+  Lives in GitHub, not here.

@@ -20,6 +20,7 @@ import type {
   RequestedDecisionProvider,
   TelemetryDecisionPayload
 } from "@tichuml/shared";
+import { buildTelemetryDecisionPayloads } from "@tichuml/telemetry";
 
 export type RoutedDecision = {
   providerUsed: RequestedDecisionProvider;
@@ -325,31 +326,31 @@ export function createTelemetryPayload(config: {
     !Array.isArray((explanation as JsonObject).stateFeatures)
       ? ((explanation as JsonObject).stateFeatures as JsonObject)
       : null;
-  return {
-    ts: new Date().toISOString(),
-    game_id: config.payload.game_id,
-    hand_id: config.payload.hand_id,
+  const fallbackUsed =
+    typeof config.metadata?.fallback_used === "boolean"
+      ? config.metadata.fallback_used
+      : config.providerUsed !== config.payload.requested_provider;
+  return buildTelemetryDecisionPayloads({
+    source: "gameplay",
+    mode: "full",
+    gameId: config.payload.game_id,
+    handId: config.payload.hand_id,
     phase: config.payload.phase,
-    actor_seat: config.payload.actor_seat,
-    decision_index: getDecisionIndex(config.payload),
-    schema_version: config.payload.schema_version,
-    engine_version: config.payload.engine_version,
-    sim_version: config.payload.sim_version,
-    requested_provider: config.payload.requested_provider,
-    provider_used: config.providerUsed,
-    fallback_used:
-      typeof config.metadata?.fallback_used === "boolean"
-        ? config.metadata.fallback_used
-        : config.providerUsed !== config.payload.requested_provider,
-    policy_name: config.policyName,
-    policy_source: config.providerUsed,
-    state_raw: config.payload.state_raw ?? {},
-    state_norm: config.payload.state_norm,
-    legal_actions: config.payload.legal_actions,
-    chosen_action: config.chosenAction as unknown as JsonObject,
+    actorSeat: config.payload.actor_seat,
+    decisionIndex: getDecisionIndex(config.payload),
+    stateRaw: config.payload.state_raw ?? {},
+    stateNorm: config.payload.state_norm,
+    legalActions: config.payload.legal_actions,
+    chosenAction: config.chosenAction as unknown as JsonObject,
+    policyName: config.policyName,
+    policySource: config.providerUsed,
+    requestedProvider: config.payload.requested_provider,
+    providerUsed: config.providerUsed,
+    fallbackUsed,
     explanation,
     candidateScores,
     stateFeatures,
+    antipatternTags: config.antipatternTags ?? [],
     metadata: {
       ...config.payload.metadata,
       ...(isUsableState(stateRaw)
@@ -361,12 +362,8 @@ export function createTelemetryPayload(config: {
       requested_provider: config.payload.requested_provider,
       provider_used: config.providerUsed,
       provider_reason: config.providerReason,
-      fallback_used:
-        typeof config.metadata?.fallback_used === "boolean"
-          ? config.metadata.fallback_used
-          : config.providerUsed !== config.payload.requested_provider,
+      fallback_used: fallbackUsed,
       ...(config.metadata ?? {})
-    } as JsonObject,
-    antipattern_tags: config.antipatternTags ?? []
-  };
+    } as JsonObject
+  }).full;
 }

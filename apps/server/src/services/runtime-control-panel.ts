@@ -23,7 +23,8 @@ export function renderRuntimeControlPanel(): string {
       .panel { grid-column: span 6; border: 1px solid #243c42; background: #0b171a; border-radius: 8px; padding: 16px; }
       .wide { grid-column: span 12; }
       .third { grid-column: span 4; }
-      .row { display: grid; grid-template-columns: 220px 1fr; gap: 8px; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,.06); }
+      .row { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 8px; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,.06); min-width: 0; }
+      .row span { min-width: 0; overflow-wrap: anywhere; }
       .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #304047; color: #d5e0df; font-size: 12px; }
       .ok { background: #0f5132; color: #c9f7df; }
       .bad { background: #6f1d1b; color: #ffd8d6; }
@@ -33,7 +34,7 @@ export function renderRuntimeControlPanel(): string {
       .config-meta { color: #9fb4b8; font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
       .category { margin: 18px 0 6px; color: #d5e0df; font-weight: 700; }
       small { color: #9fb4b8; }
-      pre { overflow: auto; max-height: 320px; background: #050b0d; padding: 12px; border-radius: 6px; border: 1px solid #21353a; }
+      pre { overflow: auto; max-height: 320px; background: #050b0d; padding: 12px; border-radius: 6px; border: 1px solid #21353a; white-space: pre-wrap; overflow-wrap: anywhere; }
       #message { margin: 12px 0; min-height: 24px; color: #b9f3d0; }
       dialog { border: 1px solid #31565d; border-radius: 8px; background: #0b171a; color: #edf7f3; width: min(600px, calc(100vw - 32px)); }
       dialog::backdrop { background: rgba(0, 0, 0, .62); }
@@ -85,6 +86,7 @@ export function renderRuntimeControlPanel(): string {
       const $ = (id) => document.getElementById(id);
       const html = (value) => String(value ?? "n/a").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
       const badge = (ok) => '<span class="badge ' + (ok === true ? 'ok' : ok === false ? 'bad' : 'warn') + '">' + (ok === true ? 'OK' : ok === false ? 'FAIL' : 'UNKNOWN') + '</span>';
+      const yesNo = (value) => value ? 'Yes' : 'No';
       const row = (k, v) => '<div class="row"><strong>' + html(k) + '</strong><span>' + (v ?? 'n/a') + '</span></div>';
       let latestStatus = null;
       let savedConfig = null;
@@ -122,14 +124,27 @@ export function renderRuntimeControlPanel(): string {
         }
       }
 
+      function gitState(status) {
+        if (status.git.dirty === null || status.git.ahead === null || status.git.behind === null) {
+          return '<span class="badge warn">UNKNOWN</span>';
+        }
+        if (status.git.dirty) {
+          return '<span class="badge warn">DIRTY</span>';
+        }
+        if (status.git.ahead > 0 || status.git.behind > 0) {
+          return '<span class="badge warn">' + html('ahead ' + status.git.ahead + ' / behind ' + status.git.behind) + '</span>';
+        }
+        return '<span class="badge ok">CLEAN</span>';
+      }
+
       function renderStatus(status) {
         latestStatus = status;
         $('backend').innerHTML = row('Running', badge(status.backend.running)) + row('Health', badge(status.endpoints.health?.ok)) + row('PID', html(status.backend.pid)) + row('Uptime', status.backend.uptime_seconds ? html(status.backend.uptime_seconds + 's') : 'n/a') + row('Port listeners', html(status.backend.port_listeners.join(', ') || 'none'));
         $('postgres').innerHTML = row('Container', badge(status.postgres.container_running)) + row('Ready', badge(status.postgres.ready)) + row('Detail', html(status.postgres.detail));
-        $('runtime').innerHTML = row('Public URL', html(status.runtime.backend_public_url)) + row('Local URL', html(status.runtime.backend_local_url)) + row('Ethernet IP', html(status.runtime.detected_ethernet || 'none')) + row('Wireless IP', html(status.runtime.detected_wireless || 'none')) + row('Default IP', html(status.runtime.detected_default)) + row('IP override', html(status.runtime.backend_host_ip_override || 'none')) + row('Pending restart', badge(!status.runtime.config_pending_restart)) + row('Venv', badge(status.runtime.python_venv_exists)) + row('Node deps', badge(status.runtime.node_modules_exists)) + row('LightGBM model', badge(status.runtime.lightgbm_model_exists));
-        $('safety').innerHTML = row('State', status.admin_safety.locked ? badge(false) + ' Locked' : badge(true) + ' Unlocked') + row('Blocked actions', html(status.admin_safety.blocked_actions.join(', ') || 'none')) + row('Restart pending', badge(!status.runtime.config_pending_restart));
+        $('runtime').innerHTML = row('Public URL', html(status.runtime.backend_public_url)) + row('Local URL', html(status.runtime.backend_local_url)) + row('Ethernet IP', html(status.runtime.detected_ethernet || 'none')) + row('Wireless IP', html(status.runtime.detected_wireless || 'none')) + row('Default IP', html(status.runtime.detected_default)) + row('IP override', html(status.runtime.backend_host_ip_override || 'none')) + row('Pending restart', html(yesNo(status.runtime.config_pending_restart))) + row('Venv', badge(status.runtime.python_venv_exists)) + row('Node deps', badge(status.runtime.node_modules_exists)) + row('LightGBM model', badge(status.runtime.lightgbm_model_exists));
+        $('safety').innerHTML = row('State', status.admin_safety.locked ? badge(false) + ' Locked' : badge(true) + ' Unlocked') + row('Blocked actions', html(status.admin_safety.blocked_actions.join(', ') || 'none')) + row('Restart pending', html(yesNo(status.runtime.config_pending_restart)));
         $('safetyActions').innerHTML = status.admin_safety.locked ? '<button id="unlockSafety">Disable lock</button>' : '<button id="lockSafety">Enable lock</button>';
-        $('git').innerHTML = row('Branch', html(status.git.branch)) + row('Local commit', html(status.git.local_commit)) + row('Remote commit', html(status.git.remote_commit)) + row('Ahead / behind', html(status.git.ahead + ' / ' + status.git.behind)) + row('Dirty state', badge(status.git.dirty === false) + ' ' + (status.git.dirty ? 'dirty' : 'clean'));
+        $('git').innerHTML = row('State', gitState(status)) + row('Branch', html(status.git.branch)) + row('Local commit', html(status.git.local_commit)) + row('Remote commit', html(status.git.remote_commit)) + row('Ahead / behind', html(status.git.ahead + ' / ' + status.git.behind)) + row('Dirty state', html(status.git.dirty === null ? 'unknown' : status.git.dirty ? 'dirty' : 'clean'));
         $('endpoints').innerHTML = Object.entries(status.endpoints).map(([k,v]) => row(k, badge(v.ok) + ' ' + html(v.label) + ' ' + html(v.detail))).join('');
         $('tools').innerHTML = Object.entries(status.tools).map(([k,v]) => row(k, badge(v.ok) + ' ' + html(v.label))).join('');
         $('backendLog').textContent = status.recent_logs.backend.join('\\n') || 'No backend log lines.';
@@ -141,6 +156,9 @@ export function renderRuntimeControlPanel(): string {
         if (entry.type === 'boolean') {
           const boolValue = String(state.savedValue).toLowerCase() === 'true' ? 'true' : 'false';
           return '<select data-key="' + html(entry.key) + '" data-field="savedValue"><option value="true"' + (boolValue === 'true' ? ' selected' : '') + '>true</option><option value="false"' + (boolValue === 'false' ? ' selected' : '') + '>false</option></select>';
+        }
+        if (entry.input === 'select' && Array.isArray(entry.options)) {
+          return '<select data-key="' + html(entry.key) + '" data-field="savedValue">' + entry.options.map((option) => '<option value="' + html(option) + '"' + (String(state.savedValue) === String(option) ? ' selected' : '') + '>' + html(option) + '</option>').join('') + '</select>';
         }
         return '<input data-key="' + html(entry.key) + '" data-field="savedValue" type="' + (entry.type === 'number' ? 'number' : 'text') + '" value="' + html(value) + '"' + (state.overrideEnabled === false ? ' disabled' : '') + '>';
       }

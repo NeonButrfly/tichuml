@@ -22,6 +22,9 @@ export type NormalizedTelemetryConfig = {
   traceBackend: boolean;
   mode: TelemetryMode;
   maxBytes: number;
+  timeoutMs: number;
+  retryAttempts: number;
+  retryDelayMs: number;
   backendBaseUrl: string;
   source: TelemetrySource;
   quiet: boolean;
@@ -35,6 +38,9 @@ export type TelemetryConfigInput = {
   traceBackend?: boolean | undefined;
   mode?: TelemetryMode | undefined;
   maxBytes?: number | undefined;
+  timeoutMs?: number | undefined;
+  retryAttempts?: number | undefined;
+  retryDelayMs?: number | undefined;
   backendBaseUrl?: string | undefined;
   source?: TelemetrySource | undefined;
   quiet?: boolean | undefined;

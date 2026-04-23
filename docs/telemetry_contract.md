@@ -17,7 +17,7 @@ The tag is stored in payload `metadata.source` and `metadata.telemetry_source` s
 
 ## Ingestion
 
-Decision telemetry is ingested at `POST /api/telemetry/decision`. Event telemetry is ingested at `POST /api/telemetry/event`. Both routes validate payload shape before storage and reject malformed payloads with `accepted: false` plus `validation_errors`.
+Decision telemetry is ingested at `POST /api/telemetry/decision`. Event telemetry is ingested at `POST /api/telemetry/event`. Both routes validate payload shape synchronously and reject malformed payloads with `accepted: false` plus `validation_errors`. Valid telemetry returns after enqueue with `accepted: true`, `queued`, `dropped`, and `queue_depth`; Postgres persistence runs behind a bounded queue with batching and concurrency limits so ingest latency does not block gameplay or simulator progress.
 
 ## Decision Payload
 
@@ -104,8 +104,8 @@ produce comparable hashes.
 `GET /api/telemetry/health` returns decision/event totals, unique and duplicate
 state/action-set hash counts, provider/phase/seat/type aggregates, rich-metadata
 coverage, legal chosen-action coverage, wish/pass counts, and latest telemetry
-timestamps. This endpoint is intended for operator checks and training-readiness
-diagnostics, not as a UI contract.
+timestamps plus backend queue stats. This endpoint is intended for operator
+checks and training-readiness diagnostics, not as a UI contract.
 
 ## ML Export
 

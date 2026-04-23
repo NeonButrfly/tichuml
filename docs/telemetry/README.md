@@ -57,6 +57,7 @@ The canonical telemetry contract now lives in [../telemetry_contract.md](../tele
 - minimal/full/adaptive policy selection
 - byte measurement, downgrade, and skip behavior
 - shared POST behavior for `/api/telemetry/decision` and `/api/telemetry/event`
+- POST timeout/retry behavior
 - non-fatal failure results, strict-mode errors, and structured diagnostics
 
 Existing producers are intentionally thin:
@@ -77,6 +78,11 @@ Oversize handling is centralized:
 - full payloads preserve rich training data when explicitly requested
 - full payloads downgrade to minimal when the configured byte cap is exceeded
 - payloads that still exceed the cap are skipped locally and logged as machine-readable diagnostics
+
+Backend ingest validates synchronously, then persists through a bounded queue.
+Queue pressure and persistence failures are logged as machine-readable backend
+diagnostics and exposed through `/api/telemetry/health` queue stats; they do not
+make non-strict gameplay or self-play fail.
 
 ## Versioning
 

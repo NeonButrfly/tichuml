@@ -57,6 +57,14 @@ Pause writes the pause file and stops scheduling new batches. Workers complete
 the current safe batch boundary, then report `paused`. Continue removes the
 pause file and preserves counters.
 
+## Stop
+
+Stop is idempotent. It writes the stop marker, terminates the tracked controller
+process path when the backend owns it, removes stale control files/locks, and
+rewrites runtime state to `stopped` with no worker rows. Completed totals remain
+in the aggregate counters, but stopped/completed workers are not kept as stale
+table rows in the dashboard.
+
 ## Worker Count
 
 `worker_count` controls concurrent simulator worker tasks inside one controller.
@@ -66,6 +74,18 @@ stable IDs such as `worker-01`.
 
 Worker IDs are included in decision/event telemetry metadata as `worker_id` and
 are extracted into database `worker_id` columns for querying.
+
+Default controller values come from the runtime config/env layer:
+
+- `SIM_PROVIDER`
+- `SIM_BACKEND_URL`
+- `SIM_WORKER_COUNT`
+- `SIM_GAMES_PER_BATCH`
+- `TELEMETRY_MODE`
+- `TELEMETRY_MAX_POST_BYTES`
+
+Dashboard status refreshes adopt the effective runtime controller config unless
+the operator has unsaved edits in the form.
 
 ## CLI Script
 

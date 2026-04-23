@@ -337,10 +337,11 @@ function buildRuntimeState(
     .at(-1) ?? nowIso();
   const running = workers.filter((worker) => worker.status === "running").length;
   const paused = workers.filter((worker) => worker.status === "paused").length;
-  const stopped = workers.filter(
+  const stoppedWorkers = workers.filter(
     (worker) => worker.status === "stopped" || worker.status === "completed"
-  ).length;
+  );
   const errored = workers.filter((worker) => worker.status === "error").length;
+  const displayWorkers = status === "stopped" ? [] : workers;
   const allBatchStarts = workers
     .map((worker) => worker.current_batch_started_at)
     .filter((value): value is string => value !== null)
@@ -378,13 +379,13 @@ function buildRuntimeState(
     total_errors: workers.filter((worker) => worker.last_error !== null).length,
     last_error:
       workers.find((worker) => worker.last_error !== null)?.last_error ?? null,
-    worker_count: workers.length,
-    running_worker_count: running,
-    paused_worker_count: paused,
-    stopped_worker_count: stopped,
-    errored_worker_count: errored,
+    worker_count: displayWorkers.length,
+    running_worker_count: status === "stopped" ? 0 : running,
+    paused_worker_count: status === "stopped" ? 0 : paused,
+    stopped_worker_count: status === "stopped" ? 0 : stoppedWorkers.length,
+    errored_worker_count: status === "stopped" ? 0 : errored,
     config: buildControllerConfig(args),
-    workers,
+    workers: displayWorkers,
     log_path: path.resolve(args.logFile),
     runtime_path: path.resolve(args.runtimeFile),
     lock_path: path.resolve(args.lockFile),

@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import {
   DEFAULT_SERVER_PORT,
   defaultDatabaseUrl,
+  type DecisionMode,
   normalizeBackendBaseUrl,
   parseBooleanEnv
 } from "@tichuml/shared";
@@ -26,6 +27,14 @@ export type ServerConfig = {
   requestBodyLimitLabel: string;
   telemetryMode: "minimal" | "full";
   telemetryMaxPostBytes: number;
+  telemetryPostTimeoutMs: number;
+  telemetryIngestQueueMaxDepth: number;
+  telemetryPersistenceBatchSize: number;
+  telemetryPersistenceConcurrency: number;
+  simDefaultProvider: DecisionMode;
+  simDefaultBackendUrl: string;
+  simDefaultWorkerCount: number;
+  simDefaultGamesPerBatch: number;
   simControllerRuntimeDir: string;
   repoRoot: string;
   pythonExecutable: string;
@@ -36,6 +45,18 @@ export type ServerConfig = {
 
 const DEFAULT_REQUEST_BODY_LIMIT_MB = 25;
 const DEFAULT_TELEMETRY_MAX_POST_BYTES = 24 * 1024 * 1024;
+const DEFAULT_TELEMETRY_POST_TIMEOUT_MS = 10_000;
+
+function parsePositiveInteger(value: string | undefined, fallback: number): number {
+  const parsed = Number(value ?? fallback);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+
+function parseDecisionMode(value: string | undefined): DecisionMode {
+  return value === "server_heuristic" || value === "lightgbm_model"
+    ? value
+    : "local";
+}
 
 function parseByteSize(value: string | undefined): number | null {
   const rawValue = value?.trim().toLowerCase();
@@ -158,9 +179,14 @@ export function loadServerConfig(
         detectedPublicUrl
       : mergedEnv.BACKEND_BASE_URL?.trim() || detectedPublicUrl;
   const requestBodyLimit = resolveRequestBodyLimit(mergedEnv);
-  const telemetryMaxPostBytesValue = Number(
-    mergedEnv.TELEMETRY_MAX_POST_BYTES ?? DEFAULT_TELEMETRY_MAX_POST_BYTES
+  const telemetryMaxPostBytes = parsePositiveInteger(
+    mergedEnv.TELEMETRY_MAX_POST_BYTES,
+    DEFAULT_TELEMETRY_MAX_POST_BYTES
   );
+  const simBackendUrl =
+    mergedEnv.SIM_BACKEND_URL?.trim() ||
+    mergedEnv.BACKEND_URL?.trim() ||
+    backendBaseUrl;
 
   return {
     port,
@@ -195,10 +221,30 @@ export function loadServerConfig(
     requestBodyLimitBytes: requestBodyLimit.bytes,
     requestBodyLimitLabel: requestBodyLimit.label,
     telemetryMode: mergedEnv.TELEMETRY_MODE === "full" ? "full" : "minimal",
-    telemetryMaxPostBytes:
-      Number.isFinite(telemetryMaxPostBytesValue) && telemetryMaxPostBytesValue > 0
-        ? Math.floor(telemetryMaxPostBytesValue)
-        : DEFAULT_TELEMETRY_MAX_POST_BYTES,
+    telemetryMaxPostBytes,
+    telemetryPostTimeoutMs: parsePositiveInteger(
+      mergedEnv.TELEMETRY_POST_TIMEOUT_MS,
+      DEFAULT_TELEMETRY_POST_TIMEOUT_MS
+    ),
+    telemetryIngestQueueMaxDepth: parsePositiveInteger(
+      mergedEnv.TELEMETRY_INGEST_QUEUE_MAX_DEPTH,
+      5000
+    ),
+    telemetryPersistenceBatchSize: parsePositiveInteger(
+      mergedEnv.TELEMETRY_PERSISTENCE_BATCH_SIZE,
+      100
+    ),
+    telemetryPersistenceConcurrency: parsePositiveInteger(
+      mergedEnv.TELEMETRY_PERSISTENCE_CONCURRENCY,
+      2
+    ),
+    simDefaultProvider: parseDecisionMode(mergedEnv.SIM_PROVIDER),
+    simDefaultBackendUrl: normalizeBackendBaseUrl(simBackendUrl),
+    simDefaultWorkerCount: parsePositiveInteger(mergedEnv.SIM_WORKER_COUNT, 1),
+    simDefaultGamesPerBatch: parsePositiveInteger(
+      mergedEnv.SIM_GAMES_PER_BATCH,
+      1
+    ),
     simControllerRuntimeDir: resolveRepoPath(
       repoRoot,
       mergedEnv.SIM_CONTROLLER_RUNTIME_DIR,

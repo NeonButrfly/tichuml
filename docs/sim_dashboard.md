@@ -58,6 +58,13 @@ Operational sections include:
 - recent JSONL log preview
 - raw runtime JSON
 
+Status refresh adopts the effective controller config returned by the backend
+until the operator edits the form. This keeps the dashboard aligned with
+persisted runtime defaults while preserving unsaved edits during auto-refresh.
+
+Stop responses should move the dashboard to `stopped` with no stale worker rows.
+Historical batch/game totals remain in aggregate fields.
+
 Mutating buttons are disabled until the confirmation token matches
 `CLEAR_TICHU_DB`. The backend still enforces `ENABLE_ADMIN_SIM_CONTROL=true` and
 the confirmation header, even if the dashboard is manually edited.

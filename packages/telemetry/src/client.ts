@@ -76,15 +76,41 @@ async function postPayload(config: {
 }): Promise<TelemetryWriteResult> {
   const endpoint = buildEndpoint(config.telemetryConfig, config.requestKind);
   const startedAt = Date.now();
-  let response: Response;
+  let response: Response | undefined;
+  let lastFailure: unknown;
   try {
-    response = await config.fetchImpl(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(config.payload)
-    });
+    for (
+      let attempt = 0;
+      attempt <= config.telemetryConfig.retryAttempts;
+      attempt += 1
+    ) {
+      const controller = new AbortController();
+      const timeout = setTimeout(
+        () => controller.abort(),
+        config.telemetryConfig.timeoutMs
+      );
+      try {
+        response = await config.fetchImpl(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(config.payload),
+          signal: controller.signal
+        });
+        break;
+      } catch (error) {
+        lastFailure = error;
+        if (attempt >= config.telemetryConfig.retryAttempts) {
+          throw error;
+        }
+        await new Promise((resolve) =>
+          setTimeout(resolve, config.telemetryConfig.retryDelayMs)
+        );
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const result: TelemetryWriteResult = {
@@ -114,6 +140,25 @@ async function postPayload(config: {
           controllerMode: config.telemetryConfig.controllerMode
         })
       ]
+    };
+    return maybeThrow(config.telemetryConfig, result);
+  }
+  if (response === undefined) {
+    const error = lastFailure ?? new Error("Telemetry request failed.");
+    const message = error instanceof Error ? error.message : String(error);
+    const result: TelemetryWriteResult = {
+      ok: false,
+      endpoint,
+      method: "POST",
+      request_kind: config.requestKind,
+      outcome: "failed",
+      failure_kind: "network_failure",
+      message,
+      cause: error instanceof Error ? error.name : "unknown",
+      latency_ms: Date.now() - startedAt,
+      payload_bytes: config.payloadBytes,
+      max_bytes: config.telemetryConfig.maxBytes,
+      diagnostics: config.diagnostics
     };
     return maybeThrow(config.telemetryConfig, result);
   }

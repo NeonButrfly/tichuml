@@ -502,6 +502,14 @@ const TEST_SERVER_CONFIG: ServerConfig = {
   requestBodyLimitLabel: "25mb",
   telemetryMode: "minimal",
   telemetryMaxPostBytes: 24 * 1024 * 1024,
+  telemetryPostTimeoutMs: 10000,
+  telemetryIngestQueueMaxDepth: 5000,
+  telemetryPersistenceBatchSize: 100,
+  telemetryPersistenceConcurrency: 2,
+  simDefaultProvider: "local",
+  simDefaultBackendUrl: "http://127.0.0.1",
+  simDefaultWorkerCount: 1,
+  simDefaultGamesPerBatch: 1,
   simControllerRuntimeDir: "C:/tichu/tichuml/.runtime/test-sim-controller",
   repoRoot: "C:/tichu/tichuml",
   pythonExecutable: "python",
@@ -873,7 +881,7 @@ describe("backend foundation server routes", () => {
         body: JSON.stringify(createDecisionPayload())
       });
 
-      expect(response.status).toBe(201);
+      expect(response.status).toBe(202);
       expect(repository.decisions).toHaveLength(1);
       expect(repository.decisions[0]?.policy_name).toBe("heuristics-v1");
       expect(repository.decisions[0]?.chosen_action_is_legal).toBe(true);
@@ -888,7 +896,7 @@ describe("backend foundation server routes", () => {
         body: JSON.stringify(createMinimalDecisionPayload())
       });
 
-      expect(response.status).toBe(201);
+      expect(response.status).toBe(202);
       expect(repository.decisions).toHaveLength(1);
       expect(repository.decisions[0]?.state_raw).toEqual({});
       expect(repository.decisions[0]?.state_norm).toBeNull();
@@ -910,7 +918,7 @@ describe("backend foundation server routes", () => {
           body: JSON.stringify(payload)
         });
 
-        expect(response.status).toBe(201);
+        expect(response.status).toBe(202);
         expect(repository.decisions).toHaveLength(1);
         expect(repository.decisions[0]?.has_explanation).toBe(true);
         expect(repository.decisions[0]?.has_candidate_scores).toBe(true);
@@ -1393,5 +1401,60 @@ describe("backend foundation server routes", () => {
       "Recovered stale simulator lock after heartbeat timeout."
     );
     expect(fs.existsSync(staleState.lock_path)).toBe(false);
+  });
+
+  it("normalizes duplicate worker rows and clears workers on stop", async () => {
+    const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), "tichuml-sim-"));
+    try {
+      const runningState = createSimState("running");
+      runningState.runtime_path = path.join(runtimeDir, "state.json");
+      runningState.lock_path = path.join(runtimeDir, "controller.lock");
+      runningState.pause_path = path.join(runtimeDir, "pause");
+      runningState.stop_path = path.join(runtimeDir, "stop");
+      runningState.log_path = path.join(runtimeDir, "controller.ndjson");
+      runningState.workers = [
+        {
+          worker_id: "worker-01",
+          status: "running",
+          pid: null,
+          current_batch_started_at: runningState.started_at,
+          total_batches_completed: 1,
+          total_games_completed: 2,
+          last_heartbeat: runningState.last_heartbeat,
+          last_error: null
+        },
+        {
+          worker_id: "worker-01",
+          status: "running",
+          pid: null,
+          current_batch_started_at: runningState.started_at,
+          total_batches_completed: 1,
+          total_games_completed: 2,
+          last_heartbeat: runningState.last_heartbeat,
+          last_error: null
+        }
+      ];
+      fs.mkdirSync(runtimeDir, { recursive: true });
+      fs.writeFileSync(
+        runningState.runtime_path,
+        JSON.stringify(runningState),
+        "utf8"
+      );
+
+      const service = new FileSimControllerService({
+        ...TEST_SERVER_CONFIG,
+        adminSimControlEnabled: true,
+        simControllerRuntimeDir: runtimeDir
+      });
+      const status = await service.status();
+      expect(status.runtime_state.workers).toHaveLength(1);
+
+      const stopped = await service.stop();
+      expect(stopped.current_status).toBe("stopped");
+      expect(stopped.runtime_state.workers).toHaveLength(0);
+      expect(stopped.runtime_state.worker_count).toBe(0);
+    } finally {
+      fs.rmSync(runtimeDir, { recursive: true, force: true });
+    }
   });
 });

@@ -32,6 +32,7 @@ import { summarizeDecisionRequest } from "../providers/provider-utils.js";
 import type { RuntimeAdminService } from "../services/runtime-admin-service.js";
 import { renderRuntimeControlPanel } from "../services/runtime-control-panel.js";
 import type { SimControllerService } from "../services/sim-controller-service.js";
+import type { TelemetryIngestQueue } from "../services/telemetry-ingest-queue.js";
 import type { TelemetryRepository } from "../services/telemetry-repository.js";
 import {
   badRequest,
@@ -47,6 +48,7 @@ type RouterDependencies = {
   repository: TelemetryRepository;
   simController: SimControllerService;
   runtimeAdmin: RuntimeAdminService;
+  telemetryQueue: TelemetryIngestQueue;
   lightgbmScorer?: LightgbmScorer;
 };
 
@@ -287,6 +289,7 @@ export function createRouter({
   repository,
   simController,
   runtimeAdmin,
+  telemetryQueue,
   lightgbmScorer
 }: RouterDependencies): http.RequestListener {
   return async (request, response) => {
@@ -448,7 +451,8 @@ export function createRouter({
           200,
           {
             accepted: true,
-            stats: await repository.getHealthStats()
+            stats: await repository.getHealthStats(),
+            queue: telemetryQueue.stats()
           },
           config.allowedOrigin
         );
@@ -493,13 +497,16 @@ export function createRouter({
           return;
         }
 
-        const id = await repository.insertDecision(parsed.value);
+        const queued = telemetryQueue.enqueueDecision(parsed.value);
         writeJson(
           response,
-          201,
+          202,
           {
             accepted: true,
-            telemetry_id: id
+            queued: queued.queued,
+            dropped: queued.dropped,
+            queue_depth: queued.queue_depth,
+            ...(queued.drop_reason ? { drop_reason: queued.drop_reason } : {})
           },
           config.allowedOrigin
         );
@@ -518,13 +525,16 @@ export function createRouter({
           return;
         }
 
-        const id = await repository.insertEvent(parsed.value);
+        const queued = telemetryQueue.enqueueEvent(parsed.value);
         writeJson(
           response,
-          201,
+          202,
           {
             accepted: true,
-            telemetry_id: id
+            queued: queued.queued,
+            dropped: queued.dropped,
+            queue_depth: queued.queue_depth,
+            ...(queued.drop_reason ? { drop_reason: queued.drop_reason } : {})
           },
           config.allowedOrigin
         );

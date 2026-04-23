@@ -40,6 +40,24 @@ export function normalizeTelemetryConfig(
       Number.isFinite(maxBytes) && maxBytes !== undefined && maxBytes > 0
         ? Math.floor(maxBytes)
         : DEFAULT_TELEMETRY_MAX_BYTES,
+    timeoutMs:
+      Number.isFinite(input.timeoutMs) &&
+      input.timeoutMs !== undefined &&
+      input.timeoutMs > 0
+        ? Math.floor(input.timeoutMs)
+        : 10_000,
+    retryAttempts:
+      Number.isFinite(input.retryAttempts) &&
+      input.retryAttempts !== undefined &&
+      input.retryAttempts > 0
+        ? Math.floor(input.retryAttempts)
+        : 1,
+    retryDelayMs:
+      Number.isFinite(input.retryDelayMs) &&
+      input.retryDelayMs !== undefined &&
+      input.retryDelayMs >= 0
+        ? Math.floor(input.retryDelayMs)
+        : 100,
     backendBaseUrl: normalizeBackendBaseUrl(backendBaseUrl),
     source: input.source ?? defaults.source,
     quiet: input.quiet ?? false,
