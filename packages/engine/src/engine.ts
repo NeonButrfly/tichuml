@@ -41,11 +41,14 @@ import {
   fulfillsWish,
   listCombinationInterpretations
 } from "./combination.js";
+import { createThrottledStructuredLogger } from "./logging.js";
 
 const EMPTY_MATCH_SCORE: Record<TeamId, number> = {
   "team-0": 0,
   "team-1": 0
 };
+
+const logEngineDiagnostic = createThrottledStructuredLogger();
 
 function createEmptyHandMap(): Record<SeatId, Card[]> {
   return {
@@ -417,13 +420,17 @@ function logActiveStraightResponseActions(
     return;
   }
 
-  console.info("[engine] Straight response availability", {
-    activeSeat: state.activeSeat,
-    leadCombo: state.currentTrick.currentCombination.key,
-    legalResponseCount: activeActions.filter(isPlayLegalAction).length,
-    normalizedResponseList: summarizeLegalPlayActions(activeActions),
-    canPass: activeActions.some((action) => action.type === "pass_turn"),
-    wishState: state.currentWish
+  logEngineDiagnostic({
+    level: "info",
+    message: "[engine] Straight response availability",
+    payload: {
+      activeSeat: state.activeSeat,
+      leadCombo: state.currentTrick.currentCombination.key,
+      legalResponseCount: activeActions.filter(isPlayLegalAction).length,
+      normalizedResponseList: summarizeLegalPlayActions(activeActions),
+      canPass: activeActions.some((action) => action.type === "pass_turn"),
+      wishState: state.currentWish
+    }
   });
 }
 
@@ -456,12 +463,17 @@ function applyWishConstraintToPlayActions(
   const holdsWishRank = state.hands[seat].some(
     (card) => card.kind === "standard" && card.rank === wishedRank
   );
-  console.warn("[engine] Active wish had no legal fulfilling moves; using unfiltered legal moves.", {
-    seat,
-    wishedRank,
-    legalMoveCount: legalMoves.length,
-    holdsWishRank,
-    currentCombination: state.currentTrick?.currentCombination.key ?? null
+  logEngineDiagnostic({
+    level: "warn",
+    message:
+      "[engine] Active wish had no legal fulfilling moves; using unfiltered legal moves.",
+    payload: {
+      seat,
+      wishedRank,
+      legalMoveCount: legalMoves.length,
+      holdsWishRank,
+      currentCombination: state.currentTrick?.currentCombination.key ?? null
+    }
   });
   return legalMoves;
 }
@@ -631,14 +643,16 @@ export function getLegalActions(state: GameState): LegalActionMap {
     const activeSeatActions = legalActions[state.activeSeat] ?? [];
 
     if (activeSeatActions.length === 0 && state.currentTrick) {
-      console.error(
-        "[engine] Active seat had no legal trick actions; forcing pass fallback.",
-        {
+      logEngineDiagnostic({
+        level: "error",
+        message:
+          "[engine] Active seat had no legal trick actions; forcing pass fallback.",
+        payload: {
           seat: state.activeSeat,
           wishedRank: state.currentWish,
           currentCombination: state.currentTrick.currentCombination.key
         }
-      );
+      });
       pushAction(state.activeSeat, createPassTurnLegalAction(state.activeSeat));
     }
 

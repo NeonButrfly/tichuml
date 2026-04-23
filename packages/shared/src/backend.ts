@@ -657,7 +657,78 @@ function sortedStringList(value: unknown): string[] {
     : [];
 }
 
-function actionsEquivalent(candidate: unknown, chosen: unknown): boolean {
+function readActionStringField(
+  action: Record<string, unknown>,
+  key: string
+): string | null {
+  const value = action[key];
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function isSelectPassTemplateAction(
+  action: Record<string, unknown>
+): boolean {
+  return (
+    action.type === "select_pass" &&
+    Array.isArray(action.availableCardIds) &&
+    Array.isArray(action.requiredTargets)
+  );
+}
+
+function isConcreteSelectPassAction(
+  action: Record<string, unknown>
+): boolean {
+  return (
+    action.type === "select_pass" &&
+    typeof action.left === "string" &&
+    typeof action.partner === "string" &&
+    typeof action.right === "string"
+  );
+}
+
+function validateSelectPassTemplateAction(
+  candidate: Record<string, unknown>,
+  chosen: Record<string, unknown>
+): boolean {
+  if (!isSelectPassTemplateAction(candidate)) {
+    return false;
+  }
+
+  const candidateSeat = readActionStringField(candidate, "seat");
+  const chosenSeat = readActionStringField(chosen, "seat");
+  if (
+    candidateSeat !== null &&
+    chosenSeat !== null &&
+    candidateSeat !== chosenSeat
+  ) {
+    return false;
+  }
+
+  const requiredTargets = sortedStringList(candidate.requiredTargets);
+  const selectedTargets = ["left", "partner", "right"] as const;
+  if (selectedTargets.some((target) => !requiredTargets.includes(target))) {
+    return false;
+  }
+
+  const selectedCards = selectedTargets.map((target) =>
+    readActionStringField(chosen, target)
+  );
+  if (selectedCards.some((cardId) => cardId === null)) {
+    return false;
+  }
+
+  const chosenCardIds = selectedCards.filter(
+    (cardId): cardId is string => cardId !== null
+  );
+  if (new Set(chosenCardIds).size !== chosenCardIds.length) {
+    return false;
+  }
+
+  const availableCardIds = new Set(sortedStringList(candidate.availableCardIds));
+  return chosenCardIds.every((cardId) => availableCardIds.has(cardId));
+}
+
+function concreteActionsEquivalent(candidate: unknown, chosen: unknown): boolean {
   if (!isPlainObject(candidate) || !isPlainObject(chosen)) {
     return false;
   }
@@ -683,6 +754,9 @@ function actionsEquivalent(candidate: unknown, chosen: unknown): boolean {
   }
 
   if (candidate.type === "select_pass") {
+    if (!isConcreteSelectPassAction(candidate)) {
+      return false;
+    }
     return (
       candidate.seat === chosen.seat &&
       candidate.left === chosen.left &&
@@ -700,6 +774,28 @@ function actionsEquivalent(candidate: unknown, chosen: unknown): boolean {
   }
 
   return true;
+}
+
+function chosenActionMatchesLegalAction(
+  candidate: unknown,
+  chosen: unknown
+): boolean {
+  if (!isPlainObject(candidate) || !isPlainObject(chosen)) {
+    return false;
+  }
+
+  if (candidate.type !== chosen.type) {
+    return false;
+  }
+
+  if (
+    candidate.type === "select_pass" &&
+    validateSelectPassTemplateAction(candidate, chosen)
+  ) {
+    return true;
+  }
+
+  return concreteActionsEquivalent(candidate, chosen);
 }
 
 export function extractActorScopedLegalActions(
@@ -752,7 +848,7 @@ export function deriveTelemetryDecisionFields(
   );
   const chosenActionType = getActionType(payload.chosen_action);
   const chosenActionIsLegal = actorActions.some((candidate) =>
-    actionsEquivalent(candidate, payload.chosen_action)
+    chosenActionMatchesLegalAction(candidate, payload.chosen_action)
   );
   const wishRank =
     readFiniteNumber(payload.state_raw.currentWish) ??
@@ -812,7 +908,7 @@ function validateDecisionConsistency(
     );
   } else if (
     !actorActions.some((candidate) =>
-      actionsEquivalent(candidate, payload.chosen_action)
+      chosenActionMatchesLegalAction(candidate, payload.chosen_action)
     )
   ) {
     pushIssue(

@@ -135,6 +135,8 @@ export type SelfPlayBatchSummary = {
   averageLatencyByProvider: Record<string, number>;
 };
 
+type TelemetryDispatchMode = "await" | "background";
+
 type SimulatedDecision = {
   chosenAction: EngineAction;
   providerUsed: DecisionProviderUsed | "system_local";
@@ -164,6 +166,8 @@ type PersistedEventConfig = {
   telemetryRetryAttempts?: number;
   telemetryRetryDelayMs?: number;
   telemetryBackoffMs?: number;
+  telemetryDispatch?: TelemetryDispatchMode;
+  telemetryDispatcher?: BackgroundTelemetryDispatcher;
   quiet?: boolean;
   workerId?: string;
   controllerMode?: boolean;
@@ -220,6 +224,193 @@ function telemetryTransportConfig(config: {
       ? { backoffMs: config.telemetryBackoffMs }
       : {})
   };
+}
+
+class BackgroundTelemetryDispatcher {
+  private readonly maxConcurrency = 2;
+  private readonly maxQueueDepth = 128;
+  private readonly pending = new Set<Promise<void>>();
+  private readonly controllers = new Set<AbortController>();
+  private readonly queue: Array<{
+    send: (signal: AbortSignal) => Promise<TelemetryWriteResult>;
+    context: JsonObject;
+    requestKind: TelemetryWriteResult["request_kind"];
+  }> = [];
+  private readonly stats = createTelemetryFailureStats();
+  private readonly tracker = createTelemetryFailureTracker();
+  private readonly idleResolvers = new Set<() => void>();
+  private telemetryBackoffUntil: string | null = null;
+  private lastFailure?: TelemetryWriteResult;
+  private inFlight = 0;
+
+  constructor(
+    private readonly diagnosticsConfig: {
+      quiet?: boolean;
+      controllerMode?: boolean;
+    }
+  ) {}
+
+  private recordFailure(
+    result: TelemetryWriteResult,
+    context: JsonObject
+  ): void {
+    recordTelemetryFailure(this.stats, result);
+    this.lastFailure = result;
+    if (!result.ok && result.backoff_until) {
+      this.telemetryBackoffUntil = result.backoff_until;
+    }
+    emitTelemetryFailureDiagnostic(
+      this.diagnosticsConfig,
+      this.tracker,
+      result,
+      context
+    );
+  }
+
+  private resolveIdle(): void {
+    if (this.queue.length > 0 || this.inFlight > 0) {
+      return;
+    }
+    for (const resolver of this.idleResolvers) {
+      resolver();
+    }
+    this.idleResolvers.clear();
+  }
+
+  private pump(): void {
+    while (
+      this.queue.length > 0 &&
+      this.inFlight < this.maxConcurrency
+    ) {
+      const next = this.queue.shift();
+      if (!next) {
+        break;
+      }
+      this.inFlight += 1;
+      const controller = new AbortController();
+      this.controllers.add(controller);
+      let task: Promise<void> | null = null;
+      task = (async () => {
+        try {
+          const result = await next.send(controller.signal);
+          if (!result.ok) {
+            this.recordFailure(result, next.context);
+          }
+        } catch (error) {
+          this.recordFailure(
+            {
+              ok: false,
+              endpoint: "background://telemetry",
+              method: "POST",
+              request_kind: next.requestKind,
+              outcome: "failed",
+              failure_kind: "unexpected_failure",
+              message:
+                error instanceof Error ? error.message : String(error),
+              diagnostics: []
+            },
+            next.context
+          );
+        } finally {
+          this.controllers.delete(controller);
+          this.inFlight -= 1;
+          if (task) {
+            this.pending.delete(task);
+          }
+          this.pump();
+          this.resolveIdle();
+        }
+      })();
+      this.pending.add(task);
+    }
+  }
+
+  schedule(config: {
+    send: (signal: AbortSignal) => Promise<TelemetryWriteResult>;
+    context: JsonObject;
+    requestKind: TelemetryWriteResult["request_kind"];
+  }): void {
+    if (this.queue.length + this.inFlight >= this.maxQueueDepth) {
+      this.recordFailure(
+        {
+          ok: false,
+          endpoint: "background://telemetry",
+          method: "POST",
+          request_kind: config.requestKind,
+          outcome: "failed",
+          failure_kind: "unexpected_failure",
+          message:
+            "Telemetry background queue is full; dropped queued telemetry.",
+          diagnostics: []
+        },
+        {
+          ...config.context,
+          cause: "background_queue_full"
+        }
+      );
+      return;
+    }
+
+    this.queue.push(config);
+    this.pump();
+  }
+
+  async flush(timeoutMs: number): Promise<void> {
+    if (this.queue.length === 0 && this.inFlight === 0) {
+      return;
+    }
+
+    let timedOut = false;
+    await Promise.race([
+      new Promise<void>((resolve) => {
+        this.idleResolvers.add(resolve);
+        this.resolveIdle();
+      }),
+      new Promise<void>((resolve) =>
+        setTimeout(() => {
+          timedOut = true;
+          resolve();
+        }, timeoutMs)
+      )
+    ]);
+
+    if (!timedOut) {
+      return;
+    }
+
+    for (const controller of this.controllers) {
+      controller.abort();
+    }
+    this.queue.length = 0;
+    await Promise.allSettled(this.pending);
+  }
+
+  snapshot(): {
+    stats: TelemetryFailureStats;
+    telemetryBackoffUntil: string | null;
+    lastFailure?: TelemetryWriteResult;
+  } {
+    return {
+      stats: this.stats,
+      telemetryBackoffUntil: this.telemetryBackoffUntil,
+      ...(this.lastFailure ? { lastFailure: this.lastFailure } : {})
+    };
+  }
+}
+
+function resolveTelemetryDispatchMode(config: {
+  strictTelemetry?: boolean;
+  telemetryDispatch?: TelemetryDispatchMode;
+  telemetryDispatcher?: BackgroundTelemetryDispatcher;
+}): TelemetryDispatchMode {
+  if (
+    config.strictTelemetry === true ||
+    config.telemetryDispatch !== "background" ||
+    !config.telemetryDispatcher
+  ) {
+    return "await";
+  }
+  return "background";
 }
 
 type BackendRequestKind =
@@ -1076,6 +1267,8 @@ async function resolveLocalHeuristicDecision(config: {
   fallbackUsed: boolean;
   fallbackReason?: string;
   startedAt: number;
+  telemetryDispatch?: TelemetryDispatchMode;
+  telemetryDispatcher?: BackgroundTelemetryDispatcher;
   workerId?: string;
   controllerMode?: boolean;
 }): Promise<SimulatedDecision> {
@@ -1102,6 +1295,8 @@ async function resolveLocalHeuristicDecision(config: {
   if (config.telemetryEnabled) {
     const providerUsed =
       config.actor === SYSTEM_ACTOR ? "system_local" : "local_heuristic";
+    const telemetrySource: "controller" | "selfplay" =
+      config.controllerMode ? "controller" : "selfplay";
     const payloads = buildSelfPlayDecisionTelemetry({
       gameId: config.gameId,
       handId: config.handId,
@@ -1125,35 +1320,83 @@ async function resolveLocalHeuristicDecision(config: {
       ...(config.workerId ? { workerId: config.workerId } : {}),
       ...(config.controllerMode ? { controllerMode: true } : {})
     });
-    const telemetryStartedAt = Date.now();
-    const result = await emitTelemetryDecision({
-      telemetry: {
-        enabled: true,
-        strictTelemetry: config.strictTelemetry === true,
-        backendBaseUrl: config.backendBaseUrl,
-        traceBackend: config.traceBackend,
-        quiet: config.quiet,
-        mode: config.telemetryMode ?? "minimal",
-        maxBytes: config.telemetryMaxBytes,
-        ...telemetryTransportConfig(config),
-        source: config.controllerMode ? "controller" : "selfplay",
-        workerId: config.workerId,
-        controllerMode: config.controllerMode
-      },
-      payloads
-    });
-    emitDiagnosticsTiming(config, "telemetry_emit_decision", telemetryStartedAt, {
-      game_id: config.gameId,
-      hand_id: config.handId,
-      phase: config.phase,
-      actor_seat: String(config.actor),
-      decision_index: config.decisionIndex,
-      requested_provider: config.requestedProvider,
-      provider_used: providerUsed
-    });
-    recordTelemetryFailure(telemetryFailureStats, result);
-    if (!result.ok) {
-      telemetryFailure = result;
+    const telemetryConfig = {
+      enabled: true,
+      strictTelemetry: config.strictTelemetry === true,
+      backendBaseUrl: config.backendBaseUrl,
+      traceBackend: config.traceBackend,
+      quiet: config.quiet,
+      mode: config.telemetryMode ?? "minimal",
+      maxBytes: config.telemetryMaxBytes,
+      ...telemetryTransportConfig(config),
+      source: telemetrySource,
+      workerId: config.workerId,
+      controllerMode: config.controllerMode
+    };
+    const dispatchMode = resolveTelemetryDispatchMode(config);
+    if (
+      dispatchMode === "background" &&
+      config.telemetryDispatcher
+    ) {
+      config.telemetryDispatcher.schedule({
+        requestKind: "telemetry_decision",
+        context: {
+          game_id: config.gameId,
+          hand_id: config.handId,
+          phase: config.phase,
+          actor_seat: String(config.actor),
+          decision_index: config.decisionIndex,
+          requested_provider: config.requestedProvider,
+          provider_used: providerUsed
+        },
+        send: async (signal) => {
+          const telemetryStartedAt = Date.now();
+          const result = await emitTelemetryDecision({
+            telemetry: telemetryConfig,
+            payloads,
+            signal
+          });
+          emitDiagnosticsTiming(
+            config,
+            "telemetry_emit_decision",
+            telemetryStartedAt,
+            {
+              game_id: config.gameId,
+              hand_id: config.handId,
+              phase: config.phase,
+              actor_seat: String(config.actor),
+              decision_index: config.decisionIndex,
+              requested_provider: config.requestedProvider,
+              provider_used: providerUsed
+            }
+          );
+          return result;
+        }
+      });
+    } else {
+      const telemetryStartedAt = Date.now();
+      const result = await emitTelemetryDecision({
+        telemetry: telemetryConfig,
+        payloads
+      });
+      emitDiagnosticsTiming(
+        config,
+        "telemetry_emit_decision",
+        telemetryStartedAt,
+        {
+          game_id: config.gameId,
+          hand_id: config.handId,
+          phase: config.phase,
+          actor_seat: String(config.actor),
+          decision_index: config.decisionIndex,
+          requested_provider: config.requestedProvider,
+          provider_used: providerUsed
+        }
+      );
+      recordTelemetryFailure(telemetryFailureStats, result);
+      if (!result.ok) {
+        telemetryFailure = result;
+      }
     }
   }
 
@@ -1193,21 +1436,62 @@ async function persistEvent(
     ...(config.workerId ? { workerId: config.workerId } : {}),
     ...(config.controllerMode ? { controllerMode: true } : {})
   });
+  const telemetrySource: "controller" | "selfplay" =
+    config.controllerMode ? "controller" : "selfplay";
+  const telemetryConfig = {
+    enabled: true,
+    strictTelemetry: config.strictTelemetry === true,
+    backendBaseUrl: config.backendBaseUrl,
+    traceBackend: config.traceBackend,
+    quiet: config.quiet,
+    mode: config.telemetryMode ?? "minimal",
+    maxBytes: config.telemetryMaxBytes,
+    ...telemetryTransportConfig(config),
+    source: telemetrySource,
+    workerId: config.workerId,
+    controllerMode: config.controllerMode
+  };
+  const dispatchMode = resolveTelemetryDispatchMode(config);
+  if (
+    dispatchMode === "background" &&
+    config.telemetryDispatcher
+  ) {
+    config.telemetryDispatcher.schedule({
+      requestKind: "telemetry_event",
+      context: {
+        game_id: config.gameId,
+        hand_id: config.handId,
+        phase: String(stateNorm.phase ?? ""),
+        actor_seat: String(config.actorSeat),
+        event_index: config.eventIndex,
+        requested_provider: config.requestedProvider,
+        provider_used: config.providerUsed
+      },
+      send: async (signal) => {
+        const telemetryStartedAt = Date.now();
+        const result = await emitTelemetryEvent({
+          telemetry: telemetryConfig,
+          payloads,
+          signal
+        });
+        emitDiagnosticsTiming(config, "telemetry_emit_event", telemetryStartedAt, {
+          game_id: config.gameId,
+          hand_id: config.handId,
+          phase: String(stateNorm.phase ?? ""),
+          actor_seat: String(config.actorSeat),
+          event_index: config.eventIndex,
+          requested_provider: config.requestedProvider,
+          provider_used: config.providerUsed
+        });
+        return result;
+      }
+    });
+    return null;
+  }
+
   const telemetryStartedAt = Date.now();
   const result = await emitTelemetryEvent({
-    telemetry: {
-      enabled: true,
-      strictTelemetry: config.strictTelemetry === true,
-      backendBaseUrl: config.backendBaseUrl,
-      traceBackend: config.traceBackend,
-      quiet: config.quiet,
-      mode: config.telemetryMode ?? "minimal",
-      maxBytes: config.telemetryMaxBytes,
-      ...telemetryTransportConfig(config),
-      source: config.controllerMode ? "controller" : "selfplay",
-      workerId: config.workerId,
-      controllerMode: config.controllerMode
-    },
+    telemetry: telemetryConfig,
     payloads
   });
   emitDiagnosticsTiming(config, "telemetry_emit_event", telemetryStartedAt, {
@@ -1244,6 +1528,8 @@ export async function resolveDecision(config: {
   telemetryRetryAttempts?: number;
   telemetryRetryDelayMs?: number;
   telemetryBackoffMs?: number;
+  telemetryDispatch?: TelemetryDispatchMode;
+  telemetryDispatcher?: BackgroundTelemetryDispatcher;
   quiet?: boolean;
   workerId?: string;
   controllerMode?: boolean;
@@ -1528,6 +1814,13 @@ async function runSingleGame(
     {};
   const telemetryFailureStats = createTelemetryFailureStats();
   const telemetryFailureTracker = createTelemetryFailureTracker();
+  const telemetryDispatcher =
+    options.telemetryEnabled && options.strictTelemetry !== true
+      ? new BackgroundTelemetryDispatcher({
+          ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
+          ...(options.controllerMode ? { controllerMode: true } : {})
+        })
+      : undefined;
   let telemetryBackoffUntil: string | null = null;
   let fallbackCount = 0;
   let passActions = 0;
@@ -1537,168 +1830,13 @@ async function runSingleGame(
   let wishActiveDecisions = 0;
   let invalidDecisions = 0;
 
-  for (const event of result.events) {
-    countByKey(eventsByPhase, result.nextState.phase);
-    const currentEventIndex = eventIndex++;
-    const telemetryResult = await persistEvent(
-      event,
-      result.derivedView as unknown as JsonObject,
-      {
-        backendBaseUrl,
-        telemetryEnabled: options.telemetryEnabled,
-        ...(options.strictTelemetry !== undefined
-          ? { strictTelemetry: options.strictTelemetry }
-          : {}),
-        ...(options.traceBackend !== undefined
-          ? { traceBackend: options.traceBackend }
-          : {}),
-        ...(options.telemetryMode !== undefined
-          ? { telemetryMode: options.telemetryMode }
-          : {}),
-        ...(options.telemetryMaxBytes !== undefined
-          ? { telemetryMaxBytes: options.telemetryMaxBytes }
-          : {}),
-        ...telemetryTransportConfig(options),
-        ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
-        gameId,
-        handId,
-        actorSeat: SYSTEM_ACTOR,
-        eventIndex: currentEventIndex,
-        providerUsed: "system_local",
-        requestedProvider: "system_local",
-        ...(options.workerId ? { workerId: options.workerId } : {}),
-        ...(options.controllerMode ? { controllerMode: true } : {})
-      }
-    );
-    if (telemetryResult) {
-      recordTelemetryFailure(telemetryFailureStats, telemetryResult);
-      if (!telemetryResult.ok && telemetryResult.backoff_until) {
-        telemetryBackoffUntil = telemetryResult.backoff_until;
-      }
-      emitTelemetryFailureDiagnostic(
-        options,
-        telemetryFailureTracker,
-        telemetryResult,
-        {
-          game_id: gameId,
-          hand_id: handId,
-          phase: result.nextState.phase,
-          event_index: currentEventIndex
-        }
-      );
-    }
-  }
-
-  while (result.nextState.phase !== "finished") {
-    if (
-      options.maxDecisionsPerGame !== undefined &&
-      decisionIndex >= options.maxDecisionsPerGame
-    ) {
-      throw new Error(
-        `Soft lock protection tripped after ${options.maxDecisionsPerGame} decisions for ${gameId}.`
-      );
-    }
-
-    const actor = resolveNextActor(result.legalActions, result.nextState);
-    const resolved = await resolveDecision({
-      backendBaseUrl,
-      telemetryEnabled: options.telemetryEnabled,
-      gameId,
-      handId,
-      actor,
-      decisionIndex,
-      stateRaw: result.nextState as unknown as JsonObject,
-      stateNorm: result.derivedView as unknown as JsonObject,
-      legalActions: result.legalActions,
-      phase: result.nextState.phase,
-      defaultProvider: options.defaultProvider,
-      ...(options.seatProviders
-        ? { seatProviders: options.seatProviders }
-        : {}),
-      ...(options.serverFallbackEnabled !== undefined
-        ? { serverFallbackEnabled: options.serverFallbackEnabled }
-        : {}),
-      ...(options.strictTelemetry !== undefined
-        ? { strictTelemetry: options.strictTelemetry }
-        : {}),
-      ...(options.traceBackend !== undefined
-        ? { traceBackend: options.traceBackend }
-        : {}),
-      ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
-      ...telemetryTransportConfig(options),
-      ...(options.workerId ? { workerId: options.workerId } : {}),
-      ...(options.controllerMode ? { controllerMode: true } : {})
-    });
-
-    countByKey(providerUsage, resolved.providerUsed);
-    countByKey(decisionsByPhase, result.nextState.phase);
-    recordLatency(latencyByProvider, resolved.providerUsed, resolved.latencyMs);
-    mergeTelemetryFailureStats(
-      telemetryFailureStats,
-      resolved.telemetryFailureStats
-    );
-    if (resolved.telemetryFailure) {
-      if (!resolved.telemetryFailure.ok && resolved.telemetryFailure.backoff_until) {
-        telemetryBackoffUntil = resolved.telemetryFailure.backoff_until;
-      }
-      emitTelemetryFailureDiagnostic(
-        options,
-        telemetryFailureTracker,
-        resolved.telemetryFailure,
-        {
-          game_id: gameId,
-          hand_id: handId,
-          phase: result.nextState.phase,
-          actor_seat: String(actor),
-          decision_index: decisionIndex
-        }
-      );
-    }
-    if (resolved.fallbackUsed) {
-      fallbackCount += 1;
-    }
-
-    const matchedLegalAction = findMatchingLegalAction(
-      result.legalActions,
-      actor,
-      resolved.chosenAction
-    );
-
-    if (!matchedLegalAction) {
-      invalidDecisions += 1;
-      throw new Error(
-        `Resolved action for actor ${actor} did not match a legal action: ${JSON.stringify(resolved.chosenAction)}`
-      );
-    }
-
-    if (matchedLegalAction.type === "pass_turn") {
-      passActions += 1;
-    }
-
-    if (matchedLegalAction.type === "play_cards") {
-      playActions += 1;
-      const combination = getChosenCombination(matchedLegalAction);
-      if (combination?.isBomb) {
-        bombPlays += 1;
-      }
-      if (result.nextState.currentWish !== null) {
-        wishActiveDecisions += 1;
-        if (actionSatisfiesWish(result.nextState, matchedLegalAction)) {
-          wishSatisfiedPlays += 1;
-        }
-      }
-    }
-
-    const nextResult = applyEngineAction(
-      result.nextState,
-      resolved.chosenAction
-    );
-    for (const event of nextResult.events) {
-      countByKey(eventsByPhase, nextResult.nextState.phase);
+  try {
+    for (const event of result.events) {
+      countByKey(eventsByPhase, result.nextState.phase);
       const currentEventIndex = eventIndex++;
       const telemetryResult = await persistEvent(
         event,
-        nextResult.derivedView as unknown as JsonObject,
+        result.derivedView as unknown as JsonObject,
         {
           backendBaseUrl,
           telemetryEnabled: options.telemetryEnabled,
@@ -1715,13 +1853,15 @@ async function runSingleGame(
             ? { telemetryMaxBytes: options.telemetryMaxBytes }
             : {}),
           ...telemetryTransportConfig(options),
+          telemetryDispatch: telemetryDispatcher ? "background" : "await",
+          ...(telemetryDispatcher ? { telemetryDispatcher } : {}),
           ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
           gameId,
           handId,
-          actorSeat: actor,
+          actorSeat: SYSTEM_ACTOR,
           eventIndex: currentEventIndex,
-          providerUsed: resolved.providerUsed,
-          requestedProvider: resolved.requestedProvider,
+          providerUsed: "system_local",
+          requestedProvider: "system_local",
           ...(options.workerId ? { workerId: options.workerId } : {}),
           ...(options.controllerMode ? { controllerMode: true } : {})
         }
@@ -1738,16 +1878,188 @@ async function runSingleGame(
           {
             game_id: gameId,
             hand_id: handId,
-            phase: nextResult.nextState.phase,
-            actor_seat: String(actor),
+            phase: result.nextState.phase,
             event_index: currentEventIndex
           }
         );
       }
     }
 
-    result = nextResult;
-    decisionIndex += 1;
+    while (result.nextState.phase !== "finished") {
+      if (
+        options.maxDecisionsPerGame !== undefined &&
+        decisionIndex >= options.maxDecisionsPerGame
+      ) {
+        throw new Error(
+          `Soft lock protection tripped after ${options.maxDecisionsPerGame} decisions for ${gameId}.`
+        );
+      }
+
+      const actor = resolveNextActor(result.legalActions, result.nextState);
+      const resolved = await resolveDecision({
+        backendBaseUrl,
+        telemetryEnabled: options.telemetryEnabled,
+        gameId,
+        handId,
+        actor,
+        decisionIndex,
+        stateRaw: result.nextState as unknown as JsonObject,
+        stateNorm: result.derivedView as unknown as JsonObject,
+        legalActions: result.legalActions,
+        phase: result.nextState.phase,
+        defaultProvider: options.defaultProvider,
+        ...(options.seatProviders
+          ? { seatProviders: options.seatProviders }
+          : {}),
+        ...(options.serverFallbackEnabled !== undefined
+          ? { serverFallbackEnabled: options.serverFallbackEnabled }
+          : {}),
+        ...(options.strictTelemetry !== undefined
+          ? { strictTelemetry: options.strictTelemetry }
+          : {}),
+        ...(options.traceBackend !== undefined
+          ? { traceBackend: options.traceBackend }
+          : {}),
+        telemetryDispatch: telemetryDispatcher ? "background" : "await",
+        ...(telemetryDispatcher ? { telemetryDispatcher } : {}),
+        ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
+        ...telemetryTransportConfig(options),
+        ...(options.workerId ? { workerId: options.workerId } : {}),
+        ...(options.controllerMode ? { controllerMode: true } : {})
+      });
+
+      countByKey(providerUsage, resolved.providerUsed);
+      countByKey(decisionsByPhase, result.nextState.phase);
+      recordLatency(latencyByProvider, resolved.providerUsed, resolved.latencyMs);
+      mergeTelemetryFailureStats(
+        telemetryFailureStats,
+        resolved.telemetryFailureStats
+      );
+      if (resolved.telemetryFailure) {
+        if (!resolved.telemetryFailure.ok && resolved.telemetryFailure.backoff_until) {
+          telemetryBackoffUntil = resolved.telemetryFailure.backoff_until;
+        }
+        emitTelemetryFailureDiagnostic(
+          options,
+          telemetryFailureTracker,
+          resolved.telemetryFailure,
+          {
+            game_id: gameId,
+            hand_id: handId,
+            phase: result.nextState.phase,
+            actor_seat: String(actor),
+            decision_index: decisionIndex
+          }
+        );
+      }
+      if (resolved.fallbackUsed) {
+        fallbackCount += 1;
+      }
+
+      const matchedLegalAction = findMatchingLegalAction(
+        result.legalActions,
+        actor,
+        resolved.chosenAction
+      );
+
+      if (!matchedLegalAction) {
+        invalidDecisions += 1;
+        throw new Error(
+          `Resolved action for actor ${actor} did not match a legal action: ${JSON.stringify(resolved.chosenAction)}`
+        );
+      }
+
+      if (matchedLegalAction.type === "pass_turn") {
+        passActions += 1;
+      }
+
+      if (matchedLegalAction.type === "play_cards") {
+        playActions += 1;
+        const combination = getChosenCombination(matchedLegalAction);
+        if (combination?.isBomb) {
+          bombPlays += 1;
+        }
+        if (result.nextState.currentWish !== null) {
+          wishActiveDecisions += 1;
+          if (actionSatisfiesWish(result.nextState, matchedLegalAction)) {
+            wishSatisfiedPlays += 1;
+          }
+        }
+      }
+
+      const nextResult = applyEngineAction(
+        result.nextState,
+        resolved.chosenAction
+      );
+      for (const event of nextResult.events) {
+        countByKey(eventsByPhase, nextResult.nextState.phase);
+        const currentEventIndex = eventIndex++;
+        const telemetryResult = await persistEvent(
+          event,
+          nextResult.derivedView as unknown as JsonObject,
+          {
+            backendBaseUrl,
+            telemetryEnabled: options.telemetryEnabled,
+            ...(options.strictTelemetry !== undefined
+              ? { strictTelemetry: options.strictTelemetry }
+              : {}),
+            ...(options.traceBackend !== undefined
+              ? { traceBackend: options.traceBackend }
+              : {}),
+            ...(options.telemetryMode !== undefined
+              ? { telemetryMode: options.telemetryMode }
+              : {}),
+            ...(options.telemetryMaxBytes !== undefined
+              ? { telemetryMaxBytes: options.telemetryMaxBytes }
+              : {}),
+            ...telemetryTransportConfig(options),
+            telemetryDispatch: telemetryDispatcher ? "background" : "await",
+            ...(telemetryDispatcher ? { telemetryDispatcher } : {}),
+            ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
+            gameId,
+            handId,
+            actorSeat: actor,
+            eventIndex: currentEventIndex,
+            providerUsed: resolved.providerUsed,
+            requestedProvider: resolved.requestedProvider,
+            ...(options.workerId ? { workerId: options.workerId } : {}),
+            ...(options.controllerMode ? { controllerMode: true } : {})
+          }
+        );
+        if (telemetryResult) {
+          recordTelemetryFailure(telemetryFailureStats, telemetryResult);
+          if (!telemetryResult.ok && telemetryResult.backoff_until) {
+            telemetryBackoffUntil = telemetryResult.backoff_until;
+          }
+          emitTelemetryFailureDiagnostic(
+            options,
+            telemetryFailureTracker,
+            telemetryResult,
+            {
+              game_id: gameId,
+              hand_id: handId,
+              phase: nextResult.nextState.phase,
+              actor_seat: String(actor),
+              event_index: currentEventIndex
+            }
+          );
+        }
+      }
+
+      result = nextResult;
+      decisionIndex += 1;
+    }
+  } finally {
+    if (telemetryDispatcher) {
+      await telemetryDispatcher.flush(
+        Math.max(100, Math.min(options.telemetryTimeoutMs ?? 1_000, 500))
+      );
+      const telemetrySnapshot = telemetryDispatcher.snapshot();
+      mergeTelemetryFailureStats(telemetryFailureStats, telemetrySnapshot.stats);
+      if (telemetrySnapshot.telemetryBackoffUntil) {
+        telemetryBackoffUntil = telemetrySnapshot.telemetryBackoffUntil;
+      }
+    }
   }
 
   const teamScores = cloneTeamScores(result.nextState.roundSummary?.teamScores);

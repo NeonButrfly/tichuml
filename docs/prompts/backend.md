@@ -513,3 +513,39 @@ supported size limit.`, leaving the control UI stuck at `Batches=0`,
   [Linux Backend Deployment + ML Host](https://github.com/NeonButrfly/tichuml/milestone/25)
 - Status:
   Lives in GitHub, not here.
+
+## 2026-04-23 - Simulator telemetry select_pass validation and hot-loop slowdown
+
+- Prompt signal:
+  Fix simulator telemetry validation and hot-loop slowdown without regressing
+  gameplay, stale runtime recovery, seed handling, diagnostics, or controller
+  behavior. `select_pass` telemetry was failing because the shared validator was
+  comparing a resolved chosen action against template legal-action constraints as
+  if they were identical objects, while simulator telemetry POSTs and retries
+  still ran directly in the decision loop.
+- Interpreted requirement:
+  Issues [#41](https://github.com/NeonButrfly/tichuml/issues/41),
+  [#43](https://github.com/NeonButrfly/tichuml/issues/43), and
+  [#45](https://github.com/NeonButrfly/tichuml/issues/45) cover the follow-up:
+  shared telemetry validation must distinguish template legal actions from
+  concrete chosen actions, especially for `select_pass`; simulator telemetry
+  must move behind a non-blocking background dispatcher so HTTP timeouts,
+  retries, and backoff never sit in the decision hot loop; repeated identical
+  engine or telemetry diagnostics must be throttled; and diagnostics artifacts
+  must explicitly count chosen-action mismatches, telemetry client-validation
+  failures, transport failures, and repeated signatures so hot-loop regressions
+  are obvious from machine-readable output.
+- Affected systems:
+  `packages/shared/src/backend.ts`, `packages/telemetry/src/builders.ts`,
+  `packages/telemetry/src/client.ts`, `packages/engine/src/engine.ts`,
+  `packages/engine/src/logging.ts`, `apps/sim-runner/src/self-play-batch.ts`,
+  `apps/sim-runner/src/sim-diagnostics.ts`, telemetry/diagnostics docs, and
+  integration tests.
+- Linked GitHub issues:
+  [#41](https://github.com/NeonButrfly/tichuml/issues/41),
+  [#43](https://github.com/NeonButrfly/tichuml/issues/43),
+  [#45](https://github.com/NeonButrfly/tichuml/issues/45)
+- Milestone:
+  [Linux Backend Deployment + ML Host](https://github.com/NeonButrfly/tichuml/milestone/25)
+- Status:
+  Lives in GitHub, not here.

@@ -356,6 +356,13 @@ function actionsEquivalent(candidate: JsonObject, chosen: JsonObject): boolean {
   }
 
   if (candidateType === "select_pass") {
+    if (
+      typeof candidate.left !== "string" ||
+      typeof candidate.partner !== "string" ||
+      typeof candidate.right !== "string"
+    ) {
+      return false;
+    }
     return (
       candidate.seat === chosen.seat &&
       candidate.left === chosen.left &&

@@ -228,6 +228,15 @@ describe("sim diagnostics harness helpers", () => {
       accumulator,
       "stderr",
       JSON.stringify({
+        ts: "2026-04-23T00:00:00.500Z",
+        event: "telemetry_chosen_action_mismatch",
+        failure_kind: "client_validation"
+      })
+    );
+    processDiagnosticsLine(
+      accumulator,
+      "stderr",
+      JSON.stringify({
         ts: "2026-04-23T00:00:00.000Z",
         event: "telemetry_failure",
         failure_kind: "network_failure",
@@ -291,6 +300,8 @@ describe("sim diagnostics harness helpers", () => {
 
     expect(summary.counters.telemetry_send_attempts).toBe(1);
     expect(summary.counters.telemetry_failure_count).toBe(2);
+    expect(summary.counters.telemetry_chosen_action_mismatch).toBe(1);
+    expect(summary.counters.telemetry_transport_failed).toBe(1);
     expect(summary.counters.telemetry_backoff_suppressed).toBe(1);
     expect(summary.runtime.stale_recovery_detected).toBe(true);
     expect(summary.runtime.anomalies).toContain("inactive_status_with_workers");

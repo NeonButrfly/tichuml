@@ -97,7 +97,7 @@ Each run summary records:
 - backend preflight result
 - total games completed and decisions recorded
 - fallback counts/rates
-- telemetry attempts, successes, failures, backoff suppression, downgrade/skip counters
+- telemetry attempts, successes, failures, chosen-action mismatches, client-validation failures, transport failures, backoff suppression, downgrade/skip counters
 - repeated log signatures
 - throughput metrics
 - runtime anomalies and final controller state for controller runs
@@ -111,6 +111,9 @@ The harness parses live output into classified events, including:
 - `payload_validation`
 - `decision_fallback`
 - `telemetry_failure`
+- `telemetry_chosen_action_mismatch`
+- `telemetry_client_validation_failed`
+- `telemetry_transport_failed`
 - `telemetry_backoff_suppressed`
 - `activeSeat=null`
 - `diagnostic_timing`
@@ -127,6 +130,9 @@ The comparison file rolls up each run into:
 - decisions/sec
 - fallback rate
 - telemetry failure rate
+- chosen-action mismatch count
+- client-validation failure count
+- transport failure count
 - repeated-log volume
 - clean vs degraded state
 

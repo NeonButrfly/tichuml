@@ -37,6 +37,10 @@ type EndpointBackoff = {
 };
 
 const endpointBackoffs = new Map<string, EndpointBackoff>();
+const mismatchDiagnosticState = new Map<
+  string,
+  { lastLoggedAt: number; suppressedCount: number }
+>();
 
 function diagnosticsEnabled(): boolean {
   const value =
@@ -65,6 +69,29 @@ function hasChosenActionValidationIssue(issues: ValidationIssue[]): boolean {
   return issues.some((issue) => issue.path === "chosen_action");
 }
 
+function takeSuppressedMismatchCount(signature: string): number {
+  const existing = mismatchDiagnosticState.get(signature);
+  return existing?.suppressedCount ?? 0;
+}
+
+function shouldLogMismatchDiagnostic(
+  signature: string,
+  throttleMs = 5_000
+): boolean {
+  const now = Date.now();
+  const existing = mismatchDiagnosticState.get(signature);
+  if (!existing || now - existing.lastLoggedAt >= throttleMs) {
+    mismatchDiagnosticState.set(signature, {
+      lastLoggedAt: now,
+      suppressedCount: 0
+    });
+    return true;
+  }
+  existing.suppressedCount += 1;
+  mismatchDiagnosticState.set(signature, existing);
+  return false;
+}
+
 function logChosenActionMismatchDiagnostic(config: {
   telemetryConfig: NormalizedTelemetryConfig;
   payload: TelemetryDecisionPayload | TelemetryEventPayload;
@@ -73,6 +100,21 @@ function logChosenActionMismatchDiagnostic(config: {
   message: string;
 }): void {
   if (!("chosen_action" in config.payload)) {
+    return;
+  }
+
+  const signature = JSON.stringify({
+    source: config.telemetryConfig.source,
+    endpoint: buildEndpoint(config.telemetryConfig, "telemetry_decision"),
+    issues: config.issues.map((issue) => `${issue.path}:${issue.message}`),
+    game_id: config.payload.game_id,
+    hand_id: config.payload.hand_id,
+    phase: config.payload.phase,
+    actor_seat: config.payload.actor_seat,
+    decision_index: config.payload.decision_index
+  });
+  const suppressedCount = takeSuppressedMismatchCount(signature);
+  if (!shouldLogMismatchDiagnostic(signature)) {
     return;
   }
 
@@ -102,9 +144,27 @@ function logChosenActionMismatchDiagnostic(config: {
       payload_bytes: config.payloadBytes,
       max_bytes: config.telemetryConfig.maxBytes,
       worker_id: config.telemetryConfig.workerId ?? null,
-      controller_mode: config.telemetryConfig.controllerMode === true
+      controller_mode: config.telemetryConfig.controllerMode === true,
+      suppressed_duplicates_since_last_log: suppressedCount
     })
   );
+}
+
+function createRequestSignal(config: {
+  timeoutMs: number;
+  requestSignal?: AbortSignal;
+}): { signal: AbortSignal; cleanup: () => void } {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
+  const forwardAbort = () => controller.abort();
+  config.requestSignal?.addEventListener("abort", forwardAbort, { once: true });
+  return {
+    signal: controller.signal,
+    cleanup() {
+      clearTimeout(timeout);
+      config.requestSignal?.removeEventListener("abort", forwardAbort);
+    }
+  };
 }
 
 function emitDiagnosticsTiming(config: {
@@ -217,6 +277,7 @@ async function postPayload(config: {
   outcome: "posted" | "downgraded";
   diagnostics: TelemetryWriteResult["diagnostics"];
   fetchImpl: TelemetryClientFetch;
+  requestSignal?: AbortSignal;
 }): Promise<TelemetryWriteResult> {
   const endpoint = buildEndpoint(config.telemetryConfig, config.requestKind);
   const backoff = getEndpointBackoff(endpoint);
@@ -262,11 +323,10 @@ async function postPayload(config: {
       attempt <= config.telemetryConfig.retryAttempts;
       attempt += 1
     ) {
-      const controller = new AbortController();
-      const timeout = setTimeout(
-        () => controller.abort(),
-        config.telemetryConfig.timeoutMs
-      );
+      const requestSignal = createRequestSignal({
+        timeoutMs: config.telemetryConfig.timeoutMs,
+        ...(config.requestSignal ? { requestSignal: config.requestSignal } : {})
+      });
       try {
         response = await config.fetchImpl(endpoint, {
           method: "POST",
@@ -274,7 +334,7 @@ async function postPayload(config: {
             "Content-Type": "application/json"
           },
           body: JSON.stringify(config.payload),
-          signal: controller.signal
+          signal: requestSignal.signal
         });
         break;
       } catch (error) {
@@ -286,7 +346,7 @@ async function postPayload(config: {
           setTimeout(resolve, config.telemetryConfig.retryDelayMs)
         );
       } finally {
-        clearTimeout(timeout);
+        requestSignal.cleanup();
       }
     }
   } catch (error) {
@@ -530,6 +590,7 @@ async function emitTelemetry(config: {
   full: TelemetryDecisionPayload | TelemetryEventPayload;
   minimal: TelemetryDecisionPayload | TelemetryEventPayload;
   fetchImpl?: TelemetryClientFetch | undefined;
+  signal?: AbortSignal;
 }): Promise<TelemetryWriteResult> {
   const telemetryConfig = normalizeTelemetryConfig(config.telemetry, {
     source: config.defaultSource
@@ -627,7 +688,8 @@ async function emitTelemetry(config: {
     payloadBytes: selected.payloadBytes,
     outcome: selected.outcome === "downgraded" ? "downgraded" : "posted",
     diagnostics: selected.diagnostics,
-    fetchImpl: config.fetchImpl ?? globalThis.fetch.bind(globalThis)
+    fetchImpl: config.fetchImpl ?? globalThis.fetch.bind(globalThis),
+    ...(config.signal ? { requestSignal: config.signal } : {})
   });
   emitDiagnosticsTiming({
     telemetryConfig,
@@ -647,6 +709,7 @@ export async function emitTelemetryDecision(config: {
   telemetry: TelemetryConfigInput;
   payloads: TelemetryDecisionBuildResult;
   fetchImpl?: TelemetryClientFetch | undefined;
+  signal?: AbortSignal;
 }): Promise<TelemetryWriteResult> {
   return emitTelemetry({
     telemetry: config.telemetry,
@@ -654,7 +717,8 @@ export async function emitTelemetryDecision(config: {
     requestKind: "telemetry_decision",
     full: config.payloads.full,
     minimal: config.payloads.minimal,
-    fetchImpl: config.fetchImpl
+    fetchImpl: config.fetchImpl,
+    ...(config.signal ? { signal: config.signal } : {})
   });
 }
 
@@ -662,6 +726,7 @@ export async function emitTelemetryEvent(config: {
   telemetry: TelemetryConfigInput;
   payloads: TelemetryEventBuildResult;
   fetchImpl?: TelemetryClientFetch | undefined;
+  signal?: AbortSignal;
 }): Promise<TelemetryWriteResult> {
   return emitTelemetry({
     telemetry: config.telemetry,
@@ -669,7 +734,8 @@ export async function emitTelemetryEvent(config: {
     requestKind: "telemetry_event",
     full: config.payloads.full,
     minimal: config.payloads.minimal,
-    fetchImpl: config.fetchImpl
+    fetchImpl: config.fetchImpl,
+    ...(config.signal ? { signal: config.signal } : {})
   });
 }
 

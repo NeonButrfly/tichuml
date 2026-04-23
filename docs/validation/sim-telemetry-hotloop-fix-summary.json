@@ -1,0 +1,84 @@
+{
+  "generated_at": "2026-04-23T19:55:00.000Z",
+  "issue_refs": ["#41", "#43", "#45"],
+  "focus": "Fix select_pass telemetry validation drift and remove telemetry transport work from the simulator decision hot loop.",
+  "root_cause": {
+    "validation": "Shared telemetry legality checking treated select_pass legal actions as fully materialized actions even though engine legal actions are templates with availableCardIds and requiredTargets while chosen_action is the resolved left/partner/right selection.",
+    "performance": "Simulator self-play still awaited telemetry POST validation/transport behavior directly in the decision/event path, and the first async refactor still allowed unbounded background fan-out."
+  },
+  "focused_repro_benchmark": {
+    "scenario": "Bounded local self-play with telemetry enabled and a synthetic 300ms transport failure on every telemetry request.",
+    "pre_change_snapshot": {
+      "commit": "7f77bfd",
+      "message": "chore: snapshot before telemetry hot-loop fixes",
+      "duration_ms": 2587,
+      "errors": 1,
+      "telemetry_failures_total": 0
+    },
+    "post_change": {
+      "duration_ms": 1441,
+      "errors": 1,
+      "telemetry_failures_total": 0
+    },
+    "speedup_ratio": 1.8
+  },
+  "post_fix_runtime_checks": {
+    "exact_command_games_1_local_telemetry": {
+      "command": "npm run sim -- --games 1 --provider local --telemetry true --quiet true --progress false",
+      "duration_ms": 144205,
+      "games_played": 1,
+      "decisions_recorded": 73,
+      "telemetry_failures_total": 169,
+      "telemetry_failure_by_kind": {
+        "unexpected_failure": 41,
+        "network_failure": 4,
+        "backoff_suppressed": 124
+      },
+      "telemetry_failure_by_endpoint": {
+        "background://telemetry": 41,
+        "http://localhost:4310/api/telemetry/event": 72,
+        "http://localhost:4310/api/telemetry/decision": 56
+      },
+      "client_validation_or_chosen_action_mismatch_present": false
+    },
+    "telemetry_tax_check": {
+      "telemetry_true_duration_ms": 144205,
+      "telemetry_false_duration_ms": 141606,
+      "delta_ms": 2599,
+      "note": "On this machine the local heuristic path still dominates full-game runtime; the hot-loop fix removes validation mismatch spam and blocking retries, but whole-game wall clock remains driven mainly by local heuristic latency."
+    },
+    "diagnostics_quick_matrix": {
+      "session_root": "C:\\Users\\Keifm\\AppData\\Local\\Temp\\tichuml-sim-diag-20260423-hotloop\\2026-04-23T20-13-28-732Z",
+      "comparison_path": "C:\\Users\\Keifm\\AppData\\Local\\Temp\\tichuml-sim-diag-20260423-hotloop\\2026-04-23T20-13-28-732Z\\comparison.json",
+      "report_path": "C:\\Users\\Keifm\\AppData\\Local\\Temp\\tichuml-sim-diag-20260423-hotloop\\2026-04-23T20-13-28-732Z\\REPORT.md",
+      "local_telemetry_on": {
+        "duration_ms": 20284,
+        "games_completed": 0,
+        "clean": false,
+        "degraded": true
+      },
+      "server_heuristic_telemetry_off": {
+        "duration_ms": 20390,
+        "games_completed": 0,
+        "clean": false,
+        "degraded": true
+      }
+    },
+    "not_completed_due_to_runtime_cost": [
+      "npm run sim -- --games 100 --provider local --telemetry true",
+      "npm run sim -- --games 100 --provider server_heuristic --telemetry false"
+    ]
+  },
+  "tests_and_builds": [
+    "npm run build:shared",
+    "npm run build:engine",
+    "npm run build:telemetry",
+    "npm run build:sim-runner",
+    "npm run build:server",
+    "npm run build:web",
+    "npx vitest run tests/integration/central-telemetry.test.ts --reporter verbose",
+    "npx vitest run tests/integration/sim-diagnostics.test.ts --reporter verbose",
+    "npx vitest run tests/integration/engine-logging.test.ts --reporter verbose",
+    "npx vitest run tests/integration/server-heuristic-contract.test.ts tests/integration/backend-telemetry.test.ts --reporter verbose"
+  ]
+}

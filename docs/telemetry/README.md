@@ -81,6 +81,13 @@ diagnostic with the state identifiers, full `chosen_action`, and full
 `legal_actions`, then follows the configured non-strict or strict failure
 policy.
 
+Template-like legal actions are validated as templates, not as fully materialized
+concrete actions. `select_pass` is the current example: legal actions expose
+`availableCardIds` plus `requiredTargets`, while the chosen action records the
+resolved `left` / `partner` / `right` selection. Shared validation now treats a
+`select_pass` choice as legal when it satisfies the template constraints for the
+same seat instead of requiring object equality against the template.
+
 ## Failure Policy
 
 Telemetry is best-effort by default. With `strictTelemetry=false`, telemetry upload, validation, backend, network, and oversize failures return structured results and diagnostics without throwing into gameplay, UI turns, selfplay decisions, controller loops, or worker shutdown. `strictTelemetry=true` is reserved for targeted debugging and may surface a `TelemetryError`.
@@ -102,6 +109,13 @@ failure, the shared client backs off that endpoint and returns
 `backoff_suppressed` results until the backoff window expires instead of posting
 every decision into the same unreachable route. Simulator/controller runtime
 state surfaces these counters and the active backoff deadline.
+
+The simulator path keeps telemetry off the decision hot loop. Self-play batches
+schedule decision and event telemetry onto a background dispatcher, continue
+gameplay immediately, then flush only briefly at batch/game boundaries. In
+non-strict mode the dispatcher may abort or drop straggling telemetry instead
+of stalling game completion, batch completion, controller accounting, or worker
+shutdown.
 
 ## Versioning
 

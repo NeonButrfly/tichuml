@@ -31,6 +31,21 @@ const PASS_ACTION = {
   seat: "seat-0"
 } as EngineAction;
 
+const SELECT_PASS_TEMPLATE = {
+  type: "select_pass",
+  seat: "seat-0",
+  availableCardIds: ["star-2", "jade-3", "sword-4", "pagoda-5"],
+  requiredTargets: ["left", "partner", "right"]
+} as JsonObject;
+
+const SELECT_PASS_ACTION = {
+  type: "select_pass",
+  seat: "seat-0",
+  left: "star-2",
+  partner: "jade-3",
+  right: "sword-4"
+} as JsonObject;
+
 const COMPACT_PLAY_ACTION = {
   type: "play_cards",
   seat: "seat-0",
@@ -108,6 +123,46 @@ function buildDecisionPayloads() {
   });
 }
 
+function buildSelectPassPayload(
+  chosenAction: JsonObject = SELECT_PASS_ACTION
+): TelemetryDecisionPayload {
+  return {
+    ts: new Date().toISOString(),
+    game_id: "game-select-pass",
+    hand_id: "hand-select-pass",
+    phase: "pass_select",
+    actor_seat: "seat-0",
+    decision_index: 1,
+    schema_version: 2,
+    engine_version: "test-engine",
+    sim_version: "test-sim",
+    requested_provider: "local",
+    provider_used: "local_heuristic",
+    fallback_used: false,
+    policy_name: "test-policy",
+    policy_source: "local_heuristic",
+    state_raw: {
+      phase: "pass_select",
+      activeSeat: "seat-0"
+    },
+    state_norm: {
+      phase: "pass_select"
+    },
+    legal_actions: {
+      "seat-0": [SELECT_PASS_TEMPLATE]
+    },
+    chosen_action: chosenAction,
+    explanation: null,
+    candidateScores: null,
+    stateFeatures: null,
+    metadata: {
+      source: "selfplay",
+      telemetry_mode: "minimal"
+    },
+    antipattern_tags: []
+  };
+}
+
 describe("central telemetry subsystem", () => {
   it("builds validator-compatible minimal and full decision payloads centrally", () => {
     const payloads = buildDecisionPayloads();
@@ -159,6 +214,58 @@ describe("central telemetry subsystem", () => {
     expect(validateTelemetryDecisionPayload(payloads.minimal)).toMatchObject({
       ok: true
     });
+  });
+
+  it("accepts valid select_pass chosen_action against template legal actions", () => {
+    const result = validateTelemetryDecisionPayload(buildSelectPassPayload());
+
+    expect(result).toMatchObject({ ok: true });
+  });
+
+  it("rejects select_pass choices that use cards outside the template constraints", () => {
+    const invalid = validateTelemetryDecisionPayload(
+      buildSelectPassPayload({
+        ...SELECT_PASS_ACTION,
+        right: "phoenix"
+      })
+    );
+
+    expect(invalid.ok).toBe(false);
+    if (!invalid.ok) {
+      expect(JSON.stringify(invalid.issues)).toContain(
+        "chosen_action must match one of actor_seat's legal_actions"
+      );
+    }
+  });
+
+  it("rejects select_pass choices with duplicate cards or missing required targets", () => {
+    const duplicate = validateTelemetryDecisionPayload(
+      buildSelectPassPayload({
+        ...SELECT_PASS_ACTION,
+        partner: "star-2"
+      })
+    );
+    const missingTarget = validateTelemetryDecisionPayload(
+      buildSelectPassPayload({
+        type: "select_pass",
+        seat: "seat-0",
+        left: "star-2",
+        partner: "jade-3"
+      })
+    );
+
+    expect(duplicate.ok).toBe(false);
+    expect(missingTarget.ok).toBe(false);
+    if (!duplicate.ok) {
+      expect(JSON.stringify(duplicate.issues)).toContain(
+        "chosen_action must match one of actor_seat's legal_actions"
+      );
+    }
+    if (!missingTarget.ok) {
+      expect(JSON.stringify(missingTarget.issues)).toContain(
+        "chosen_action must match one of actor_seat's legal_actions"
+      );
+    }
   });
 
   it("keeps fallback chosen_action schema identical to legal_actions", () => {
@@ -572,6 +679,80 @@ describe("central telemetry subsystem", () => {
     });
 
     expect(summary.errors).toBe(1);
+  });
+
+  it("runs a bounded local telemetry-enabled sim without select_pass mismatch spam", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      return {
+        ok: true,
+        status: url.endsWith("/health") ? 200 : 201,
+        async text() {
+          return JSON.stringify(
+            url.endsWith("/health")
+              ? { ok: true }
+              : { accepted: true, telemetry_id: 1 }
+          );
+        }
+      };
+    });
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      const summary = await runSelfPlayBatch({
+        games: 1,
+        baseSeed: "select-pass-telemetry-ok",
+        defaultProvider: "local",
+        telemetryEnabled: true,
+        strictTelemetry: false,
+        telemetryMode: "minimal",
+        backendBaseUrl: "http://127.0.0.1:4310",
+        quiet: true,
+        progress: false,
+        maxDecisionsPerGame: 5
+      });
+
+      expect(summary.errors).toBe(1);
+      expect(summary.telemetryFailuresTotal).toBe(0);
+      expect(
+        errorSpy.mock.calls.some((call) =>
+          String(call[0]).includes("telemetry_chosen_action_mismatch")
+        )
+      ).toBe(false);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("does not let async telemetry failures stall local selfplay throughput", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        await new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("slow telemetry failure")), 300)
+        )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const startedAt = Date.now();
+    const summary = await runSelfPlayBatch({
+      games: 1,
+      baseSeed: "async-telemetry-failure",
+      defaultProvider: "local",
+      telemetryEnabled: true,
+      strictTelemetry: false,
+      telemetryMode: "minimal",
+      backendBaseUrl: "http://127.0.0.1:4310",
+      telemetryRetryAttempts: 0,
+      quiet: true,
+      progress: false,
+      maxDecisionsPerGame: 3
+    });
+    const elapsedMs = Date.now() - startedAt;
+
+    expect(summary.errors).toBe(1);
+    expect(fetchMock).toHaveBeenCalled();
+    expect(elapsedMs).toBeLessThan(1_500);
   });
 
   it("keeps old producer modules thin instead of owning duplicate builders", () => {

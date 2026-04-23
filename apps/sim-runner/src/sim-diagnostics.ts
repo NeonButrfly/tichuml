@@ -105,6 +105,9 @@ export type DiagnosticsSummary = {
   counters: {
     decision_request_contract_failure: number;
     payload_validation: number;
+    telemetry_chosen_action_mismatch: number;
+    telemetry_client_validation_failed: number;
+    telemetry_transport_failed: number;
     fallback_count: number;
     fallback_rate: number;
     decision_provider_failures: number;
@@ -224,6 +227,9 @@ export type DiagnosticsAccumulator = {
   counters: {
     decision_request_contract_failure: number;
     payload_validation: number;
+    telemetry_chosen_action_mismatch: number;
+    telemetry_client_validation_failed: number;
+    telemetry_transport_failed: number;
     fallback_count: number;
     decision_provider_failures: number;
     telemetry_send_attempts: number;
@@ -490,6 +496,9 @@ export function createDiagnosticsAccumulator(
     counters: {
       decision_request_contract_failure: 0,
       payload_validation: 0,
+      telemetry_chosen_action_mismatch: 0,
+      telemetry_client_validation_failed: 0,
+      telemetry_transport_failed: 0,
       fallback_count: 0,
       decision_provider_failures: 0,
       telemetry_send_attempts: 0,
@@ -537,11 +546,25 @@ function updateTelemetryDiagnostics(
         classifications.push("telemetry_success");
         break;
       case "telemetry_transport_failed":
-      case "telemetry_backend_rejected":
-      case "telemetry_client_validation_failed":
+        accumulator.counters.telemetry_transport_failed += 1;
         if (options.countFailureAttempts) {
           accumulator.counters.telemetry_send_attempts += 1;
         }
+        classifications.push("telemetry_transport_failed");
+        classifications.push("telemetry_failure");
+        break;
+      case "telemetry_backend_rejected":
+        if (options.countFailureAttempts) {
+          accumulator.counters.telemetry_send_attempts += 1;
+        }
+        classifications.push("telemetry_failure");
+        break;
+      case "telemetry_client_validation_failed":
+        accumulator.counters.telemetry_client_validation_failed += 1;
+        if (options.countFailureAttempts) {
+          accumulator.counters.telemetry_send_attempts += 1;
+        }
+        classifications.push("telemetry_client_validation_failed");
         classifications.push("telemetry_failure");
         break;
       case "telemetry_backoff_suppressed":
@@ -649,6 +672,36 @@ export function processDiagnosticsLine(
         accumulator.counters.telemetry_success_count += 1;
         classifications.push("telemetry_success");
         break;
+      case "telemetry_transport_failed":
+        accumulator.counters.telemetry_failure_count += 1;
+        accumulator.counters.telemetry_transport_failed += 1;
+        accumulator.counters.telemetry_send_attempts += 1;
+        if (typeof parsed.endpoint === "string") {
+          countByKey(accumulator.telemetryFailureByEndpoint, parsed.endpoint);
+        }
+        classifications.push("telemetry_transport_failed");
+        classifications.push("telemetry_failure");
+        break;
+      case "telemetry_client_validation_failed":
+        accumulator.counters.telemetry_failure_count += 1;
+        accumulator.counters.telemetry_client_validation_failed += 1;
+        accumulator.counters.telemetry_send_attempts += 1;
+        accumulator.counters.payload_validation += 1;
+        if (typeof parsed.endpoint === "string") {
+          countByKey(accumulator.telemetryFailureByEndpoint, parsed.endpoint);
+        }
+        classifications.push("telemetry_client_validation_failed");
+        classifications.push("payload_validation");
+        classifications.push("telemetry_failure");
+        break;
+      case "telemetry_backend_rejected":
+        accumulator.counters.telemetry_failure_count += 1;
+        accumulator.counters.telemetry_send_attempts += 1;
+        if (typeof parsed.endpoint === "string") {
+          countByKey(accumulator.telemetryFailureByEndpoint, parsed.endpoint);
+        }
+        classifications.push("telemetry_failure");
+        break;
       case "telemetry_payload_downgraded":
       case "telemetry_payload_trimmed":
         accumulator.counters.telemetry_oversize_downgraded += 1;
@@ -665,6 +718,8 @@ export function processDiagnosticsLine(
       case "telemetry_chosen_action_mismatch":
         accumulator.counters.payload_validation += 1;
         classifications.push("payload_validation");
+        accumulator.counters.telemetry_chosen_action_mismatch += 1;
+        classifications.push("telemetry_chosen_action_mismatch");
         break;
       case "diagnostic_timing":
         if (
@@ -951,6 +1006,12 @@ export function finalizeDiagnosticsSummary(config: {
       decision_request_contract_failure:
         accumulator.counters.decision_request_contract_failure,
       payload_validation: accumulator.counters.payload_validation,
+      telemetry_chosen_action_mismatch:
+        accumulator.counters.telemetry_chosen_action_mismatch,
+      telemetry_client_validation_failed:
+        accumulator.counters.telemetry_client_validation_failed,
+      telemetry_transport_failed:
+        accumulator.counters.telemetry_transport_failed,
       fallback_count: fallbackCount,
       fallback_rate: roundNumber(fallbackRate, 4),
       decision_provider_failures: accumulator.counters.decision_provider_failures,
@@ -1232,7 +1293,7 @@ export function renderDiagnosticsReport(
     left.label.localeCompare(right.label)
   )) {
     lines.push(
-      `- ${summary.label}: ${summary.provider} / ${summary.target}, duration ${summary.duration_seconds}s, games/sec ${summary.throughput.games_per_sec}, fallback ${roundNumber(summary.counters.fallback_rate * 100, 2)}%, telemetry failure ${roundNumber(summary.counters.telemetry_failure_rate * 100, 2)}%, ${summary.clean ? "clean" : "degraded"}`
+      `- ${summary.label}: ${summary.provider} / ${summary.target}, duration ${summary.duration_seconds}s, games/sec ${summary.throughput.games_per_sec}, fallback ${roundNumber(summary.counters.fallback_rate * 100, 2)}%, telemetry failure ${roundNumber(summary.counters.telemetry_failure_rate * 100, 2)}%, chosen mismatch ${summary.counters.telemetry_chosen_action_mismatch}, client validation ${summary.counters.telemetry_client_validation_failed}, transport ${summary.counters.telemetry_transport_failed}, ${summary.clean ? "clean" : "degraded"}`
     );
   }
   lines.push("");
