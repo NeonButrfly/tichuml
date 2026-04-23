@@ -239,6 +239,12 @@ input {
   color: #cfe6dc;
 }
 
+.sim-feedback span,
+.sim-detail {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .sim-grid {
   display: grid;
   grid-template-columns: minmax(280px, 0.8fr) minmax(320px, 1fr);
@@ -269,6 +275,7 @@ input {
 
 .sim-workers {
   grid-column: 1 / -1;
+  overflow-x: auto;
 }
 
 .sim-workers table {
@@ -288,6 +295,7 @@ input {
   max-height: 360px;
   overflow: auto;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
   color: #d5e6e1;
 }
 

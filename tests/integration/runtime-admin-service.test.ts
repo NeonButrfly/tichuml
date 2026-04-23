@@ -189,9 +189,15 @@ describe("runtime admin config manager", () => {
     expect(before.entries.find((entry) => entry.key === "SIM_PROVIDER")?.input).toBe(
       "select"
     );
+    expect(before.entries.find((entry) => entry.key === "SIM_PROVIDER")?.type).toBe(
+      "select"
+    );
     expect(before.entries.find((entry) => entry.key === "TELEMETRY_MODE")?.input).toBe(
       "select"
     );
+    expect(
+      before.entries.find((entry) => entry.key === "TELEMETRY_MODE")?.type
+    ).toBe("select");
 
     const result = await service.saveConfig({
       SIM_PROVIDER: "server_heuristic",
@@ -220,5 +226,27 @@ describe("runtime admin config manager", () => {
     expect(envText).toContain("TELEMETRY_RETRY_ATTEMPTS=4");
     expect(envText).toContain("TELEMETRY_RETRY_DELAY_MS=345");
     expect(envText).toContain("TELEMETRY_BACKOFF_MS=4567");
+
+    const reloaded = await service.readConfig();
+    expect(reloaded.entries.find((entry) => entry.key === "SIM_PROVIDER")?.savedValue).toBe(
+      "server_heuristic"
+    );
+    expect(reloaded.entries.find((entry) => entry.key === "SIM_WORKER_COUNT")?.savedValue).toBe(
+      "3"
+    );
+    expect(
+      reloaded.entries.find((entry) => entry.key === "SIM_GAMES_PER_BATCH")
+        ?.savedValue
+    ).toBe("5");
+    expect(reloaded.entries.find((entry) => entry.key === "SIM_BACKEND_URL")?.savedValue).toBe(
+      "http://192.168.50.44:4310"
+    );
+    expect(
+      reloaded.entries.find((entry) => entry.key === "TELEMETRY_MODE")?.savedValue
+    ).toBe("full");
+    expect(
+      reloaded.entries.find((entry) => entry.key === "TELEMETRY_MAX_POST_BYTES")
+        ?.savedValue
+    ).toBe("123456");
   });
 });

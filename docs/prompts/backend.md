@@ -386,3 +386,34 @@ supported size limit.`, leaving the control UI stuck at `Batches=0`,
   [Linux Backend Deployment + ML Host](https://github.com/NeonButrfly/tichuml/milestone/25)
 - Status:
   Lives in GitHub, not here.
+
+## 2026-04-23 - Admin runtime/controller GUI state drift and telemetry reliability gate
+
+- Prompt signal:
+  Patch the current TichuML worktree end to end so telemetry reliability,
+  admin/runtime/controller GUI controls, config persistence, Stop behavior,
+  restart-pending display, git status mapping, and status panel layout all match
+  actual backend/controller state.
+- Interpreted requirement:
+  Issue [#42](https://github.com/NeonButrfly/tichuml/issues/42) tracks the GUI
+  acceptance gate: constrained fields such as provider and telemetry mode must be
+  dropdowns, numeric fields must be numeric inputs, booleans must not be free
+  text, saved settings must reload from the effective runtime config, Stop must
+  clear worker rows idempotently, restart pending must be Yes/No only, git dirty
+  or ahead/behind states must not be rendered as healthy-command failures, and
+  status panels must stay compact without duplicate status blocks. Issue
+  [#41](https://github.com/NeonButrfly/tichuml/issues/41) remains the telemetry
+  transport/retry/backoff tracker.
+- Affected systems:
+  `apps/server/src/services/runtime-admin-service.ts`,
+  `apps/server/src/services/runtime-control-panel.ts`,
+  `apps/server/src/services/sim-controller-service.ts`,
+  `apps/web/src/SimControlDashboard.tsx`, `apps/web/src/styles.css`,
+  `packages/telemetry`, runtime/simulator/telemetry docs, integration tests.
+- Linked GitHub issues:
+  [#41](https://github.com/NeonButrfly/tichuml/issues/41),
+  [#42](https://github.com/NeonButrfly/tichuml/issues/42)
+- Milestone:
+  [Linux Backend Deployment + ML Host](https://github.com/NeonButrfly/tichuml/milestone/25)
+- Status:
+  Lives in GitHub, not here.

@@ -1,3 +1,38 @@
+export type RuntimeGitStatusInput = {
+  dirty: boolean | null;
+  ahead: number | null;
+  behind: number | null;
+};
+
+export type RuntimeGitStatusView = {
+  state: "current" | "dirty" | "diverged" | "unknown";
+  label: string;
+  tone: "ok" | "warn";
+};
+
+export function classifyRuntimeGitStatus(
+  git: RuntimeGitStatusInput
+): RuntimeGitStatusView {
+  if (git.dirty === null || git.ahead === null || git.behind === null) {
+    return { state: "unknown", label: "UNKNOWN", tone: "warn" };
+  }
+  if (git.dirty) {
+    return { state: "dirty", label: "DIRTY", tone: "warn" };
+  }
+  if (git.ahead > 0 || git.behind > 0) {
+    return {
+      state: "diverged",
+      label: `ahead ${git.ahead} / behind ${git.behind}`,
+      tone: "warn"
+    };
+  }
+  return { state: "current", label: "CLEAN / CURRENT", tone: "ok" };
+}
+
+export function formatRuntimeYesNo(value: boolean): "Yes" | "No" {
+  return value ? "Yes" : "No";
+}
+
 export function renderRuntimeControlPanel(): string {
   return `<!doctype html>
 <html lang="en">
@@ -25,12 +60,12 @@ export function renderRuntimeControlPanel(): string {
       .third { grid-column: span 4; }
       .row { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 8px; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,.06); min-width: 0; }
       .row span { min-width: 0; overflow-wrap: anywhere; }
-      .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #304047; color: #d5e0df; font-size: 12px; }
+      .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #304047; color: #d5e0df; font-size: 12px; max-width: 100%; overflow-wrap: anywhere; }
       .ok { background: #0f5132; color: #c9f7df; }
       .bad { background: #6f1d1b; color: #ffd8d6; }
       .warn { background: #6b4e16; color: #ffe6ad; }
       .actions { display: flex; flex-wrap: wrap; gap: 8px; }
-      .config-row { display: grid; grid-template-columns: minmax(190px, 250px) 120px minmax(240px, 1fr) 240px; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.06); }
+      .config-row { display: grid; grid-template-columns: minmax(190px, 250px) 120px minmax(240px, 1fr) minmax(190px, 240px); gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.06); min-width: 0; }
       .config-meta { color: #9fb4b8; font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
       .category { margin: 18px 0 6px; color: #d5e0df; font-weight: 700; }
       small { color: #9fb4b8; }
@@ -62,7 +97,7 @@ export function renderRuntimeControlPanel(): string {
       <section class="panel"><h2>Actions</h2><div class="actions" id="actions"></div></section>
       <section class="panel"><h2>Endpoints</h2><div id="endpoints"></div></section>
       <section class="panel"><h2>Tools</h2><div id="tools"></div></section>
-      <section class="panel wide"><h2>Config</h2><div id="config"></div><div class="actions"><button id="saveConfig">Save Config</button><button id="resetConfig">Reset form</button><button data-action="apply-config-restart">Apply config + restart</button></div></section>
+      <section class="panel wide"><h2>Config</h2><div id="config"></div><div class="actions"><button id="saveConfig">Save Config</button><button id="resetConfig">Reset form</button></div></section>
       <section class="panel"><h2>Backend Log</h2><pre id="backendLog"></pre></section>
       <section class="panel"><h2>Action Log</h2><pre id="actionLog"></pre></section>
     </main>
@@ -134,7 +169,7 @@ export function renderRuntimeControlPanel(): string {
         if (status.git.ahead > 0 || status.git.behind > 0) {
           return '<span class="badge warn">' + html('ahead ' + status.git.ahead + ' / behind ' + status.git.behind) + '</span>';
         }
-        return '<span class="badge ok">CLEAN</span>';
+        return '<span class="badge ok">CLEAN / CURRENT</span>';
       }
 
       function renderStatus(status) {
@@ -142,7 +177,7 @@ export function renderRuntimeControlPanel(): string {
         $('backend').innerHTML = row('Running', badge(status.backend.running)) + row('Health', badge(status.endpoints.health?.ok)) + row('PID', html(status.backend.pid)) + row('Uptime', status.backend.uptime_seconds ? html(status.backend.uptime_seconds + 's') : 'n/a') + row('Port listeners', html(status.backend.port_listeners.join(', ') || 'none'));
         $('postgres').innerHTML = row('Container', badge(status.postgres.container_running)) + row('Ready', badge(status.postgres.ready)) + row('Detail', html(status.postgres.detail));
         $('runtime').innerHTML = row('Public URL', html(status.runtime.backend_public_url)) + row('Local URL', html(status.runtime.backend_local_url)) + row('Ethernet IP', html(status.runtime.detected_ethernet || 'none')) + row('Wireless IP', html(status.runtime.detected_wireless || 'none')) + row('Default IP', html(status.runtime.detected_default)) + row('IP override', html(status.runtime.backend_host_ip_override || 'none')) + row('Pending restart', html(yesNo(status.runtime.config_pending_restart))) + row('Venv', badge(status.runtime.python_venv_exists)) + row('Node deps', badge(status.runtime.node_modules_exists)) + row('LightGBM model', badge(status.runtime.lightgbm_model_exists));
-        $('safety').innerHTML = row('State', status.admin_safety.locked ? badge(false) + ' Locked' : badge(true) + ' Unlocked') + row('Blocked actions', html(status.admin_safety.blocked_actions.join(', ') || 'none')) + row('Restart pending', html(yesNo(status.runtime.config_pending_restart)));
+        $('safety').innerHTML = row('State', status.admin_safety.locked ? '<span class="badge warn">LOCKED</span>' : '<span class="badge ok">UNLOCKED</span>') + row('Blocked actions', html(status.admin_safety.blocked_actions.join(', ') || 'none'));
         $('safetyActions').innerHTML = status.admin_safety.locked ? '<button id="unlockSafety">Disable lock</button>' : '<button id="lockSafety">Enable lock</button>';
         $('git').innerHTML = row('State', gitState(status)) + row('Branch', html(status.git.branch)) + row('Local commit', html(status.git.local_commit)) + row('Remote commit', html(status.git.remote_commit)) + row('Ahead / behind', html(status.git.ahead + ' / ' + status.git.behind)) + row('Dirty state', html(status.git.dirty === null ? 'unknown' : status.git.dirty ? 'dirty' : 'clean'));
         $('endpoints').innerHTML = Object.entries(status.endpoints).map(([k,v]) => row(k, badge(v.ok) + ' ' + html(v.label) + ' ' + html(v.detail))).join('');

@@ -1,6 +1,7 @@
 # Linux Runtime Control Panel
 
-Tracking issue: [#40](https://github.com/NeonButrfly/tichuml/issues/40)
+Tracking issues: [#40](https://github.com/NeonButrfly/tichuml/issues/40),
+[#42](https://github.com/NeonButrfly/tichuml/issues/42)
 
 The Linux backend host exposes a trusted-operator control panel at:
 
@@ -123,8 +124,10 @@ The backend returns a typed config schema for each item: key, type, category,
 editability, restart requirement, description, saved value, effective value,
 detected value, override flag, override value, and option lists for enum fields.
 Boolean values render as `true` / `false` dropdowns. Enum values such as
-`TELEMETRY_MODE` and `SIM_PROVIDER` also render as dropdowns and are rejected if
-submitted outside their allowed values.
+`TELEMETRY_MODE` and `SIM_PROVIDER` are typed as `select`, render as dropdowns,
+and are rejected if submitted outside their allowed values. Numeric settings
+render as numeric inputs; free-text controls are reserved for unconstrained
+strings such as URLs and paths.
 
 Simulator/controller defaults persisted by the runtime config API include:
 
@@ -167,9 +170,11 @@ config deltas and is shown as `Yes` or `No`, never as a health failure. The
 control panel marks restart-required settings and provides an apply-and-restart
 action.
 
-The Git panel distinguishes clean, dirty, ahead, behind, and unknown states.
-Clean is healthy; dirty or ahead/behind states are explicit operator states, not
-generic failures.
+The Git panel distinguishes clean/current, dirty, ahead/behind, and unknown
+states. Clean/current is healthy; dirty or ahead/behind states are explicit
+operator states, not generic failures. Restart pending is displayed only as
+`Yes` or `No` in the runtime panel and is not duplicated as a second health
+status block.
 
 ## Runtime Files
 

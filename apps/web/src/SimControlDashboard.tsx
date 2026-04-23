@@ -43,15 +43,6 @@ function resolveSameOriginBackendUrl(): string | null {
   );
 }
 
-function isLoopbackBackendUrl(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return ["localhost", "127.0.0.1", "::1"].includes(url.hostname);
-  } catch {
-    return false;
-  }
-}
-
 function shouldUseSameOriginDefault(
   backendUrl: string,
   sameOriginBackendUrl: string | null
@@ -145,30 +136,6 @@ function formFromRuntimeConfig(
   };
 }
 
-function getNetworkFallbackBackendUrl(
-  backendUrl: string,
-  caught: unknown
-): string | null {
-  if (!(caught instanceof BackendRequestError) || caught.kind !== "network") {
-    return null;
-  }
-
-  const sameOriginBackendUrl = resolveSameOriginBackendUrl();
-  if (!sameOriginBackendUrl) {
-    return null;
-  }
-
-  const normalizedBackendUrl = normalizeBackendBaseUrl(backendUrl);
-  if (
-    normalizedBackendUrl === sameOriginBackendUrl ||
-    !isLoopbackBackendUrl(normalizedBackendUrl)
-  ) {
-    return null;
-  }
-
-  return sameOriginBackendUrl;
-}
-
 function StatePill({ state, stale }: { state: string; stale?: boolean }) {
   return (
     <span className={`sim-pill sim-pill--${stale ? "stale" : state}`}>
@@ -211,25 +178,7 @@ export function SimControlDashboard() {
     let statusBackendUrl = form.backendUrl;
     try {
       setError(null);
-      let response: SimControllerResponse;
-      try {
-        response = await getSimControllerStatus(statusBackendUrl);
-      } catch (caught) {
-        const fallbackBackendUrl = getNetworkFallbackBackendUrl(
-          statusBackendUrl,
-          caught
-        );
-        if (!fallbackBackendUrl) {
-          throw caught;
-        }
-
-        statusBackendUrl = fallbackBackendUrl;
-        setForm((current) => ({
-          ...current,
-          backendUrl: fallbackBackendUrl
-        }));
-        response = await getSimControllerStatus(fallbackBackendUrl);
-      }
+      const response = await getSimControllerStatus(statusBackendUrl);
       setStatus(response.runtime_state);
       setFeedback(response);
       if (!formDirty) {

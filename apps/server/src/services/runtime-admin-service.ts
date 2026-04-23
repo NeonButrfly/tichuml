@@ -86,7 +86,7 @@ export type RuntimeConfigEntry = {
   key: string;
   label: string;
   category: string;
-  type: "string" | "number" | "boolean" | "action" | "derived";
+  type: "string" | "number" | "boolean" | "select" | "action" | "derived";
   editable: boolean;
   requiresRestart: boolean;
   description: string;
@@ -167,7 +167,7 @@ const CONFIG_SCHEMA: Array<{
   key: string;
   label: string;
   category: string;
-  type: "string" | "number" | "boolean" | "derived";
+  type: "string" | "number" | "boolean" | "select" | "derived";
   restart_required: boolean;
   description: string;
   automated?: boolean;
@@ -193,7 +193,7 @@ const CONFIG_SCHEMA: Array<{
   { key: "TRACE_DECISION_REQUESTS", label: "Decision request trace", category: "Admin", type: "boolean", restart_required: true, description: "Emit compact structured backend decision trace logs.", validate: validateBoolean },
   { key: "REQUEST_BODY_LIMIT", label: "Request body limit", category: "Admin", type: "string", restart_required: true, description: "HTTP JSON request body limit, e.g. 25mb. Takes precedence over MAX_REQUEST_BODY_MB.", validate: validateByteSize },
   { key: "MAX_REQUEST_BODY_MB", label: "Request body MB", category: "Admin", type: "number", restart_required: true, description: "Fallback HTTP request body limit in MiB.", validate: validatePositiveNumber },
-  { key: "TELEMETRY_MODE", label: "Telemetry mode", category: "Admin", type: "string", restart_required: true, description: "Default simulator telemetry mode: minimal or full.", options: ["minimal", "full"], validate: validateTelemetryMode },
+  { key: "TELEMETRY_MODE", label: "Telemetry mode", category: "Admin", type: "select", restart_required: true, description: "Default simulator telemetry mode: minimal or full.", options: ["minimal", "full"], validate: validateTelemetryMode },
   { key: "TELEMETRY_MAX_POST_BYTES", label: "Telemetry max post bytes", category: "Admin", type: "number", restart_required: false, description: "Simulator-side maximum telemetry POST size before local skip.", validate: validatePositiveNumber },
   { key: "TELEMETRY_POST_TIMEOUT_MS", label: "Telemetry POST timeout ms", category: "Admin", type: "number", restart_required: true, description: "Client-side telemetry POST timeout before best-effort failure handling.", validate: validatePositiveNumber },
   { key: "TELEMETRY_RETRY_ATTEMPTS", label: "Telemetry retries", category: "Admin", type: "number", restart_required: true, description: "Network retry attempts for each telemetry POST before backoff.", validate: validatePositiveNumber },
@@ -202,7 +202,7 @@ const CONFIG_SCHEMA: Array<{
   { key: "TELEMETRY_INGEST_QUEUE_MAX_DEPTH", label: "Telemetry queue depth", category: "Admin", type: "number", restart_required: true, description: "Maximum backend telemetry items accepted before queue-pressure drops.", validate: validatePositiveNumber },
   { key: "TELEMETRY_PERSISTENCE_BATCH_SIZE", label: "Telemetry batch size", category: "Admin", type: "number", restart_required: true, description: "Maximum telemetry items per backend persistence batch.", validate: validatePositiveNumber },
   { key: "TELEMETRY_PERSISTENCE_CONCURRENCY", label: "Telemetry concurrency", category: "Admin", type: "number", restart_required: true, description: "Concurrent backend telemetry persistence batches.", validate: validatePositiveNumber },
-  { key: "SIM_PROVIDER", label: "Provider", category: "Simulator", type: "string", restart_required: true, description: "Default simulator provider.", options: ["local", "server_heuristic", "lightgbm_model"], validate: validateDecisionMode },
+  { key: "SIM_PROVIDER", label: "Provider", category: "Simulator", type: "select", restart_required: true, description: "Default simulator provider.", options: ["local", "server_heuristic", "lightgbm_model"], validate: validateDecisionMode },
   { key: "SIM_BACKEND_URL", label: "Backend URL", category: "Simulator", type: "string", restart_required: true, description: "Default backend URL for simulator/controller calls.", validate: validateUrl },
   { key: "SIM_WORKER_COUNT", label: "Worker count", category: "Simulator", type: "number", restart_required: true, description: "Default simulator controller worker count.", validate: validatePositiveNumber },
   { key: "SIM_GAMES_PER_BATCH", label: "Games per batch", category: "Simulator", type: "number", restart_required: true, description: "Default simulator controller games per batch.", validate: validatePositiveNumber },

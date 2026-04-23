@@ -1487,6 +1487,12 @@ describe("backend foundation server routes", () => {
       expect(stopped.current_status).toBe("stopped");
       expect(stopped.runtime_state.workers).toHaveLength(0);
       expect(stopped.runtime_state.worker_count).toBe(0);
+
+      const stoppedAgain = await service.stop();
+      expect(stoppedAgain.accepted).toBe(true);
+      expect(stoppedAgain.current_status).toBe("stopped");
+      expect(stoppedAgain.runtime_state.workers).toHaveLength(0);
+      expect(stoppedAgain.runtime_state.worker_count).toBe(0);
     } finally {
       fs.rmSync(runtimeDir, { recursive: true, force: true });
     }

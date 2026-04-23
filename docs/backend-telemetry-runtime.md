@@ -103,4 +103,8 @@ listener is reachable only through loopback from the controller process.
 
 The public/operator URL remains `BACKEND_BASE_URL` / `BACKEND_PUBLIC_URL`.
 Set `SIM_BACKEND_URL` explicitly only when the simulator process must post to a
-different reachable backend.
+different reachable backend. The simulator dashboard chooses the browser origin
+as the initial remote default when served from the backend host, but it does not
+silently rewrite an already configured Backend URL after a transport failure.
+Runtime/admin status, controller launch args, sim-runner CLI config, and the
+shared telemetry client should therefore show the same effective endpoint.

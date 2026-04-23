@@ -1,7 +1,8 @@
 # Simulator Dashboard
 
 Tracking issues: [#37](https://github.com/NeonButrfly/tichuml/issues/37),
-[#39](https://github.com/NeonButrfly/tichuml/issues/39)
+[#39](https://github.com/NeonButrfly/tichuml/issues/39),
+[#42](https://github.com/NeonButrfly/tichuml/issues/42)
 
 Dashboard routes:
 
@@ -25,9 +26,11 @@ admin controller API used by `scripts/sim-controller.sh`.
 When the dashboard is loaded directly from the backend host on port `4310`, the
 default Backend URL is the current browser origin. For example,
 `https://192.168.50.196:4310/admin/sim` defaults controller API calls to
-`https://192.168.50.196:4310`, not to the browser machine's `localhost`. If a
-stale saved localhost default causes a network failure, the dashboard retries
-the status request once against the current host origin and updates the field.
+`https://192.168.50.196:4310`, not to the browser machine's `localhost`.
+After initial default selection the dashboard does not silently rewrite the
+Backend URL on network failure; stale or unreachable values remain visible so
+operators can fix the effective endpoint instead of unknowingly posting to a
+fallback host.
 
 Always-visible controls:
 
@@ -52,6 +55,8 @@ Operational sections include:
 
 - editable config for provider, games per batch, telemetry, backend URL, seed
   prefix, sleep seconds, worker count, and confirmation token
+- dropdown controls for provider and telemetry mode, numeric controls for
+  counts/timeouts/byte limits, and a checkbox for telemetry enabled
 - totals for batches, games, errors, and last batch status
 - last error
 - telemetry failures by kind and by endpoint
