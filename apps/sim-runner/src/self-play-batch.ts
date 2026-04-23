@@ -169,6 +169,32 @@ type PersistedEventConfig = {
   controllerMode?: boolean;
 };
 
+function diagnosticsEnabled(): boolean {
+  const value = process.env.SIM_DIAGNOSTICS?.trim().toLowerCase();
+  return value === "1" || value === "true" || value === "yes";
+}
+
+function emitDiagnosticsTiming(
+  config: { quiet?: boolean; controllerMode?: boolean },
+  stage: string,
+  startedAt: number,
+  payload: JsonObject = {}
+): void {
+  if (!diagnosticsEnabled() || !shouldEmitDiagnostic(config)) {
+    return;
+  }
+  console.error(
+    JSON.stringify({
+      ts: new Date().toISOString(),
+      event: "diagnostic_timing",
+      scope: "sim_runner",
+      stage,
+      duration_ms: Date.now() - startedAt,
+      ...payload
+    })
+  );
+}
+
 function telemetryTransportConfig(config: {
   telemetryTimeoutMs?: number;
   telemetryRetryAttempts?: number;
@@ -1058,9 +1084,18 @@ async function resolveLocalHeuristicDecision(config: {
   const actorScopedLegalActions: LegalActionMap = {
     [config.actor]: config.legalActions[config.actor] ?? []
   };
+  const localDecisionStartedAt = Date.now();
   const chosen = heuristicsV1Policy.chooseAction({
     state: config.stateRaw as never,
     legalActions: actorScopedLegalActions
+  });
+  emitDiagnosticsTiming(config, "local_decision_policy", localDecisionStartedAt, {
+    game_id: config.gameId,
+    hand_id: config.handId,
+    phase: config.phase,
+    actor_seat: String(config.actor),
+    decision_index: config.decisionIndex,
+    requested_provider: config.requestedProvider
   });
   const latencyMs = Date.now() - config.startedAt;
 
@@ -1090,6 +1125,7 @@ async function resolveLocalHeuristicDecision(config: {
       ...(config.workerId ? { workerId: config.workerId } : {}),
       ...(config.controllerMode ? { controllerMode: true } : {})
     });
+    const telemetryStartedAt = Date.now();
     const result = await emitTelemetryDecision({
       telemetry: {
         enabled: true,
@@ -1105,6 +1141,15 @@ async function resolveLocalHeuristicDecision(config: {
         controllerMode: config.controllerMode
       },
       payloads
+    });
+    emitDiagnosticsTiming(config, "telemetry_emit_decision", telemetryStartedAt, {
+      game_id: config.gameId,
+      hand_id: config.handId,
+      phase: config.phase,
+      actor_seat: String(config.actor),
+      decision_index: config.decisionIndex,
+      requested_provider: config.requestedProvider,
+      provider_used: providerUsed
     });
     recordTelemetryFailure(telemetryFailureStats, result);
     if (!result.ok) {
@@ -1148,6 +1193,7 @@ async function persistEvent(
     ...(config.workerId ? { workerId: config.workerId } : {}),
     ...(config.controllerMode ? { controllerMode: true } : {})
   });
+  const telemetryStartedAt = Date.now();
   const result = await emitTelemetryEvent({
     telemetry: {
       enabled: true,
@@ -1163,6 +1209,15 @@ async function persistEvent(
       controllerMode: config.controllerMode
     },
     payloads
+  });
+  emitDiagnosticsTiming(config, "telemetry_emit_event", telemetryStartedAt, {
+    game_id: config.gameId,
+    hand_id: config.handId,
+    phase: String(stateNorm.phase ?? ""),
+    actor_seat: String(config.actorSeat),
+    event_index: config.eventIndex,
+    requested_provider: config.requestedProvider,
+    provider_used: config.providerUsed
   });
   return result;
 }
@@ -1242,6 +1297,7 @@ export async function resolveDecision(config: {
     if (!fallbackAllowed) {
       throw failure;
     }
+    const fallbackStartedAt = Date.now();
     const fallback = await resolveLocalHeuristicDecision({
       ...config,
       requestedProvider,
@@ -1249,6 +1305,15 @@ export async function resolveDecision(config: {
       fallbackUsed: true,
       fallbackReason: failure.message,
       startedAt
+    });
+    emitDiagnosticsTiming(config, "fallback_local_resolution", fallbackStartedAt, {
+      game_id: config.gameId,
+      hand_id: config.handId,
+      phase: config.phase,
+      actor_seat: String(config.actor),
+      decision_index: config.decisionIndex,
+      requested_provider: requestedProvider,
+      failure_kind: failure.kind
     });
     emitDecisionDiagnostic(config, "decision_fallback", {
       kind: failure.kind,
@@ -1260,6 +1325,7 @@ export async function resolveDecision(config: {
     return fallback;
   };
 
+  const validationStartedAt = Date.now();
   const validation = validateBackendDecisionRequestInput({
     gameId: config.gameId,
     handId: config.handId,
@@ -1272,6 +1338,15 @@ export async function resolveDecision(config: {
     decisionIndex: config.decisionIndex,
     ...(config.workerId ? { workerId: config.workerId } : {}),
     ...(config.controllerMode ? { controllerMode: true } : {})
+  });
+  emitDiagnosticsTiming(config, "contract_validation", validationStartedAt, {
+    game_id: config.gameId,
+    hand_id: config.handId,
+    phase: config.phase,
+    actor_seat: String(config.actor),
+    decision_index: config.decisionIndex,
+    requested_provider: requestedProvider,
+    accepted: validation.ok
   });
   if (!validation.ok) {
     return fallbackLocally(
@@ -1300,6 +1375,7 @@ export async function resolveDecision(config: {
 
   let decisionRequestPayload: DecisionRequestPayload;
   try {
+    const payloadBuildStartedAt = Date.now();
     decisionRequestPayload = buildDecisionRequestPayload({
       gameId: config.gameId,
       handId: config.handId,
@@ -1311,6 +1387,14 @@ export async function resolveDecision(config: {
       decisionIndex: config.decisionIndex,
       ...(config.workerId ? { workerId: config.workerId } : {}),
       ...(config.controllerMode ? { controllerMode: true } : {})
+    });
+    emitDiagnosticsTiming(config, "decision_request_payload_build", payloadBuildStartedAt, {
+      game_id: config.gameId,
+      hand_id: config.handId,
+      phase: config.phase,
+      actor_seat: String(config.actor),
+      decision_index: config.decisionIndex,
+      requested_provider: requestedProvider
     });
   } catch (error) {
     return fallbackLocally(
@@ -1324,6 +1408,7 @@ export async function resolveDecision(config: {
 
   let decisionResponse: { status: number; payload: JsonObject };
   try {
+    const requestStartedAt = Date.now();
     decisionResponse = await requestJson(
       "POST",
       `${config.backendBaseUrl}${DECISION_REQUEST_PATH}`,
@@ -1342,6 +1427,14 @@ export async function resolveDecision(config: {
         ...(config.controllerMode ? { controller_mode: true } : {})
       }
     );
+    emitDiagnosticsTiming(config, "server_request_roundtrip", requestStartedAt, {
+      game_id: config.gameId,
+      hand_id: config.handId,
+      phase: config.phase,
+      actor_seat: String(config.actor),
+      decision_index: config.decisionIndex,
+      requested_provider: requestedProvider
+    });
   } catch (error) {
     if (error instanceof BackendRequestFailure) {
       return fallbackLocally(

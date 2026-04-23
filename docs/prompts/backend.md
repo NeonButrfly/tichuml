@@ -485,3 +485,31 @@ supported size limit.`, leaving the control UI stuck at `Batches=0`,
   [Linux Backend Deployment + ML Host](https://github.com/NeonButrfly/tichuml/milestone/25)
 - Status:
   Lives in GitHub, not here.
+
+## 2026-04-23 - Simulator diagnostics harness for provider and telemetry permutations
+
+- Prompt signal:
+  Add a simulator diagnostics harness that can run multiple provider and
+  telemetry permutations, capture live behavior, and write machine-readable
+  artifacts that show slowness, fallback loops, active-seat failures, telemetry
+  transport problems, and local-vs-server differences.
+- Interpreted requirement:
+  Issue [#45](https://github.com/NeonButrfly/tichuml/issues/45) tracks a
+  script-first diagnostics workflow around the real sim CLI: quick/full/single
+  modes, `server_heuristic` and `local` permutations, controller worker-count
+  coverage, live stderr/stdout/runtime parsing, structured counters for
+  contract/fallback/telemetry/runtime anomalies, diagnostics-only timing hooks,
+  and machine-readable artifact output under `diagnostics/sim-runs/<timestamp>/`.
+- Affected systems:
+  `apps/sim-runner/src/sim-diagnostics.ts`,
+  `scripts/sim-diagnostics.ts`,
+  `apps/sim-runner/src/cli.ts`,
+  `apps/sim-runner/src/self-play-batch.ts`,
+  `packages/telemetry/src/client.ts`,
+  diagnostics docs, integration tests.
+- Linked GitHub issue:
+  [#45](https://github.com/NeonButrfly/tichuml/issues/45)
+- Milestone:
+  [Linux Backend Deployment + ML Host](https://github.com/NeonButrfly/tichuml/milestone/25)
+- Status:
+  Lives in GitHub, not here.

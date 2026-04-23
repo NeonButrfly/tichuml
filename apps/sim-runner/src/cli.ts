@@ -44,6 +44,7 @@ type ParsedArgs = {
   telemetryEnabled: boolean;
   quiet: boolean;
   progress: boolean;
+  maxDecisionsPerGame: number | null;
   seatProviders: SeatProviderOverrides;
   forever: boolean;
   gamesPerBatch: number;
@@ -190,6 +191,7 @@ function parseArgs(argv: string[]): ParsedArgs {
     telemetryEnabled: true,
     quiet: false,
     progress: true,
+    maxDecisionsPerGame: null,
     seatProviders,
     forever: false,
     gamesPerBatch: 1,
@@ -335,6 +337,10 @@ function parseArgs(argv: string[]): ParsedArgs {
           throw new Error("Missing value for --seat-provider");
         }
         parseSeatProvider(next, seatProviders);
+        index += 1;
+        break;
+      case "--max-decisions-per-game":
+        parsed.maxDecisionsPerGame = Math.max(1, Number(next ?? 1));
         index += 1;
         break;
       default:
@@ -756,6 +762,9 @@ async function runWorker(args: ParsedArgs, worker: SimWorkerRuntimeState): Promi
         ...(args.backendBaseUrl ? { backendBaseUrl: args.backendBaseUrl } : {}),
         quiet: args.quiet,
         progress: args.progress,
+        ...(args.maxDecisionsPerGame !== null
+          ? { maxDecisionsPerGame: args.maxDecisionsPerGame }
+          : {}),
         workerId: worker.worker_id,
         controllerMode: true
       });
@@ -928,7 +937,10 @@ async function main(): Promise<void> {
       telemetryBackoffMs: args.telemetryBackoffMs,
       ...(args.backendBaseUrl ? { backendBaseUrl: args.backendBaseUrl } : {}),
       quiet: args.quiet,
-      progress: args.progress
+      progress: args.progress,
+      ...(args.maxDecisionsPerGame !== null
+        ? { maxDecisionsPerGame: args.maxDecisionsPerGame }
+        : {})
     });
   } finally {
     console.log = originalLog;

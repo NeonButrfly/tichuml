@@ -38,6 +38,14 @@ type EndpointBackoff = {
 
 const endpointBackoffs = new Map<string, EndpointBackoff>();
 
+function diagnosticsEnabled(): boolean {
+  const value =
+    typeof process !== "undefined"
+      ? process.env.SIM_DIAGNOSTICS?.trim().toLowerCase()
+      : undefined;
+  return value === "1" || value === "true" || value === "yes";
+}
+
 function buildEndpoint(
   config: NormalizedTelemetryConfig,
   requestKind: TelemetryRequestKind
@@ -97,6 +105,47 @@ function logChosenActionMismatchDiagnostic(config: {
       controller_mode: config.telemetryConfig.controllerMode === true
     })
   );
+}
+
+function emitDiagnosticsTiming(config: {
+  telemetryConfig: NormalizedTelemetryConfig;
+  stage: string;
+  startedAt: number;
+  requestKind: TelemetryRequestKind;
+  payload?: TelemetryDecisionPayload | TelemetryEventPayload;
+  extra?: Record<string, unknown>;
+}): void {
+  if (!diagnosticsEnabled()) {
+    return;
+  }
+  console.error(
+    JSON.stringify({
+      ts: new Date().toISOString(),
+      event: "diagnostic_timing",
+      scope: "telemetry",
+      stage: config.stage,
+      duration_ms: Date.now() - config.startedAt,
+      request_kind: config.requestKind,
+      source: config.telemetryConfig.source,
+      ...(config.payload
+        ? {
+            game_id: config.payload.game_id,
+            hand_id: config.payload.hand_id,
+            phase: config.payload.phase
+          }
+        : {}),
+      ...(config.extra ?? {})
+    })
+  );
+}
+
+function emitSuccessfulDiagnostics(result: TelemetryWriteResult): void {
+  if (!diagnosticsEnabled() || !result.ok) {
+    return;
+  }
+  for (const diagnostic of result.diagnostics) {
+    console.error(JSON.stringify(diagnostic));
+  }
 }
 
 async function readResponseJson(
@@ -376,7 +425,7 @@ async function postPayload(config: {
       ? (parsed.payload as TelemetryResponse)
       : { accepted: true };
   clearEndpointBackoff(endpoint);
-  return {
+  const result: TelemetryWriteResult = {
     ok: true,
     endpoint,
     method: "POST",
@@ -404,6 +453,18 @@ async function postPayload(config: {
       ? { telemetry_id: payload.telemetry_id }
       : {})
   };
+  emitDiagnosticsTiming({
+    telemetryConfig: config.telemetryConfig,
+    stage: "telemetry_post",
+    startedAt,
+    requestKind: config.requestKind,
+    payload: config.payload,
+    extra: {
+      status: response.status,
+      payload_bytes: config.payloadBytes
+    }
+  });
+  return result;
 }
 
 function validatePayload(config: {
@@ -496,6 +557,7 @@ async function emitTelemetry(config: {
     };
   }
 
+  const selectStartedAt = Date.now();
   const selected = selectTelemetryPayload({
     mode: telemetryConfig.mode,
     full: config.full,
@@ -505,6 +567,17 @@ async function emitTelemetry(config: {
     requestKind: config.requestKind,
     workerId: telemetryConfig.workerId,
     controllerMode: telemetryConfig.controllerMode
+  });
+  emitDiagnosticsTiming({
+    telemetryConfig,
+    stage: "telemetry_select_payload",
+    startedAt: selectStartedAt,
+    requestKind: config.requestKind,
+    payload: selected.payload ?? config.minimal,
+    extra: {
+      outcome: selected.outcome,
+      payload_bytes: selected.payloadBytes
+    }
   });
 
   if (!selected.payload) {
@@ -523,6 +596,7 @@ async function emitTelemetry(config: {
     });
   }
 
+  const validationStartedAt = Date.now();
   const validation = validatePayload({
     telemetryConfig,
     requestKind: config.requestKind,
@@ -531,11 +605,22 @@ async function emitTelemetry(config: {
     payloadBytes: selected.payloadBytes,
     diagnostics: selected.diagnostics
   });
+  emitDiagnosticsTiming({
+    telemetryConfig,
+    stage: "telemetry_validate_payload",
+    startedAt: validationStartedAt,
+    requestKind: config.requestKind,
+    payload: selected.payload,
+    extra: {
+      accepted: validation === null
+    }
+  });
   if (validation) {
     return validation;
   }
 
-  return postPayload({
+  const emitStartedAt = Date.now();
+  const result = await postPayload({
     telemetryConfig,
     requestKind: config.requestKind,
     payload: selected.payload,
@@ -544,6 +629,18 @@ async function emitTelemetry(config: {
     diagnostics: selected.diagnostics,
     fetchImpl: config.fetchImpl ?? globalThis.fetch.bind(globalThis)
   });
+  emitDiagnosticsTiming({
+    telemetryConfig,
+    stage: "telemetry_emit_total",
+    startedAt: emitStartedAt,
+    requestKind: config.requestKind,
+    payload: selected.payload,
+    extra: {
+      outcome: result.ok ? result.outcome : "failed"
+    }
+  });
+  emitSuccessfulDiagnostics(result);
+  return result;
 }
 
 export async function emitTelemetryDecision(config: {

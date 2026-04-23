@@ -53,6 +53,26 @@ export type {
   SeatProviderOverrides
 } from "./self-play-batch.js";
 export { runSelfPlayBatch } from "./self-play-batch.js";
+export {
+  buildDiagnosticsComparison,
+  createDiagnosticsAccumulator,
+  detectRuntimeAnomalies,
+  finalizeDiagnosticsSummary,
+  processDiagnosticsLine,
+  recordRuntimeSnapshot,
+  renderDiagnosticsReport,
+  tryParseSummaryFromOutput,
+  writeDiagnosticsSessionArtifacts
+} from "./sim-diagnostics.js";
+export type {
+  DiagnosticsComparison,
+  DiagnosticsAccumulator,
+  DiagnosticsFlag,
+  DiagnosticsRunDescriptor,
+  DiagnosticsRunTarget,
+  DiagnosticsStream,
+  DiagnosticsSummary
+} from "./sim-diagnostics.js";
 
 function appendEngineEvents(
   telemetry: TelemetrySession,
