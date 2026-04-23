@@ -135,6 +135,9 @@ Simulator/controller defaults persisted by the runtime config API include:
 - `TELEMETRY_MODE`
 - `TELEMETRY_MAX_POST_BYTES`
 - `TELEMETRY_POST_TIMEOUT_MS`
+- `TELEMETRY_RETRY_ATTEMPTS`
+- `TELEMETRY_RETRY_DELAY_MS`
+- `TELEMETRY_BACKOFF_MS`
 - `TELEMETRY_INGEST_QUEUE_MAX_DEPTH`
 - `TELEMETRY_PERSISTENCE_BATCH_SIZE`
 - `TELEMETRY_PERSISTENCE_CONCURRENCY`
@@ -150,6 +153,13 @@ prefers Ethernet names (`eth*`, `en*`, `eno*`, `ens*`), then wireless names
 (`wlan*`, `wlp*`), then falls back to `127.0.0.1`. Status and config payloads
 include `detectedEthernet`, `detectedWireless`, and `detectedDefault`, and all
 runtime URL defaults flow from the same effective values.
+
+Simulator/controller telemetry transport is local-first by default. Unless
+`SIM_BACKEND_URL` is explicitly saved, the controller posts to
+`BACKEND_LOCAL_URL` / `http://127.0.0.1:<PORT>` rather than the public operator
+URL. The config panel shows `SIM_BACKEND_URL` as the effective controller value
+so the runtime UI, controller launch args, and shared telemetry client use the
+same endpoint.
 
 Most server/runtime settings require restart because they are loaded at process
 startup. Restart pending is computed from actual disk-versus-loaded runtime

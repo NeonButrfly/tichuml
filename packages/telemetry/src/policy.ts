@@ -51,13 +51,19 @@ export function normalizeTelemetryConfig(
       input.retryAttempts !== undefined &&
       input.retryAttempts > 0
         ? Math.floor(input.retryAttempts)
-        : 1,
+        : 2,
     retryDelayMs:
       Number.isFinite(input.retryDelayMs) &&
       input.retryDelayMs !== undefined &&
       input.retryDelayMs >= 0
         ? Math.floor(input.retryDelayMs)
         : 100,
+    backoffMs:
+      Number.isFinite(input.backoffMs) &&
+      input.backoffMs !== undefined &&
+      input.backoffMs >= 0
+        ? Math.floor(input.backoffMs)
+        : 15_000,
     backendBaseUrl: normalizeBackendBaseUrl(backendBaseUrl),
     source: input.source ?? defaults.source,
     quiet: input.quiet ?? false,

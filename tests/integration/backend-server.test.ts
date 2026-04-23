@@ -222,6 +222,12 @@ function createSimState(
     total_games_completed: 0,
     total_errors: 0,
     last_error: null,
+    telemetry_decision_failures: 0,
+    telemetry_event_failures: 0,
+    telemetry_failures_total: 0,
+    telemetry_failure_by_endpoint: {},
+    telemetry_failure_by_kind: {},
+    telemetry_backoff_until: null,
     worker_count: 1,
     running_worker_count: status === "running" ? 1 : 0,
     paused_worker_count: status === "paused" ? 1 : 0,
@@ -231,6 +237,15 @@ function createSimState(
       provider: "local",
       games_per_batch: 1,
       telemetry_enabled: false,
+      server_fallback_enabled: true,
+      strict_telemetry: false,
+      trace_backend: false,
+      telemetry_mode: "minimal",
+      telemetry_max_bytes: 24 * 1024 * 1024,
+      telemetry_timeout_ms: 10000,
+      telemetry_retry_attempts: 2,
+      telemetry_retry_delay_ms: 250,
+      telemetry_backoff_ms: 15000,
       backend_url: "http://127.0.0.1",
       seed_prefix: "test",
       sleep_seconds: 1,
@@ -503,6 +518,9 @@ const TEST_SERVER_CONFIG: ServerConfig = {
   telemetryMode: "minimal",
   telemetryMaxPostBytes: 24 * 1024 * 1024,
   telemetryPostTimeoutMs: 10000,
+  telemetryRetryAttempts: 2,
+  telemetryRetryDelayMs: 250,
+  telemetryBackoffMs: 15000,
   telemetryIngestQueueMaxDepth: 5000,
   telemetryPersistenceBatchSize: 100,
   telemetryPersistenceConcurrency: 2,
@@ -1434,6 +1452,17 @@ describe("backend foundation server routes", () => {
           last_error: null
         }
       ];
+      runningState.telemetry_decision_failures = 3;
+      runningState.telemetry_event_failures = 1;
+      runningState.telemetry_failures_total = 4;
+      runningState.telemetry_failure_by_endpoint = {
+        "http://127.0.0.1:4310/api/telemetry/decision": 3
+      };
+      runningState.telemetry_failure_by_kind = {
+        network_failure: 3,
+        backoff_suppressed: 1
+      };
+      runningState.telemetry_backoff_until = "2030-01-01T00:00:00.000Z";
       fs.mkdirSync(runtimeDir, { recursive: true });
       fs.writeFileSync(
         runningState.runtime_path,
@@ -1448,6 +1477,11 @@ describe("backend foundation server routes", () => {
       });
       const status = await service.status();
       expect(status.runtime_state.workers).toHaveLength(1);
+      expect(status.runtime_state.telemetry_failures_total).toBe(4);
+      expect(status.runtime_state.telemetry_failure_by_kind.network_failure).toBe(3);
+      expect(status.runtime_state.telemetry_backoff_until).toBe(
+        "2030-01-01T00:00:00.000Z"
+      );
 
       const stopped = await service.stop();
       expect(stopped.current_status).toBe("stopped");

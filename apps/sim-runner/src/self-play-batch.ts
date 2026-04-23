@@ -62,6 +62,10 @@ export type SelfPlayBatchOptions = {
   traceBackend?: boolean;
   telemetryMode?: TelemetryMode;
   telemetryMaxBytes?: number;
+  telemetryTimeoutMs?: number;
+  telemetryRetryAttempts?: number;
+  telemetryRetryDelayMs?: number;
+  telemetryBackoffMs?: number;
   backendBaseUrl?: string;
   quiet?: boolean;
   progress?: boolean;
@@ -93,6 +97,8 @@ export type SelfPlayGameResult = {
   telemetryEventFailures: number;
   telemetryFailuresTotal: number;
   telemetryFailureByEndpoint: Record<string, number>;
+  telemetryFailureByKind: Record<string, number>;
+  telemetryBackoffUntil: string | null;
   latencyByProvider: Record<
     string,
     { count: number; totalMs: number; averageMs: number }
@@ -124,6 +130,8 @@ export type SelfPlayBatchSummary = {
   telemetryEventFailures: number;
   telemetryFailuresTotal: number;
   telemetryFailureByEndpoint: Record<string, number>;
+  telemetryFailureByKind: Record<string, number>;
+  telemetryBackoffUntil: string | null;
   averageLatencyByProvider: Record<string, number>;
 };
 
@@ -152,10 +160,41 @@ type PersistedEventConfig = {
   traceBackend?: boolean;
   telemetryMode?: TelemetryMode;
   telemetryMaxBytes?: number;
+  telemetryTimeoutMs?: number;
+  telemetryRetryAttempts?: number;
+  telemetryRetryDelayMs?: number;
+  telemetryBackoffMs?: number;
   quiet?: boolean;
   workerId?: string;
   controllerMode?: boolean;
 };
+
+function telemetryTransportConfig(config: {
+  telemetryTimeoutMs?: number;
+  telemetryRetryAttempts?: number;
+  telemetryRetryDelayMs?: number;
+  telemetryBackoffMs?: number;
+}): {
+  timeoutMs?: number;
+  retryAttempts?: number;
+  retryDelayMs?: number;
+  backoffMs?: number;
+} {
+  return {
+    ...(config.telemetryTimeoutMs !== undefined
+      ? { timeoutMs: config.telemetryTimeoutMs }
+      : {}),
+    ...(config.telemetryRetryAttempts !== undefined
+      ? { retryAttempts: config.telemetryRetryAttempts }
+      : {}),
+    ...(config.telemetryRetryDelayMs !== undefined
+      ? { retryDelayMs: config.telemetryRetryDelayMs }
+      : {}),
+    ...(config.telemetryBackoffMs !== undefined
+      ? { backoffMs: config.telemetryBackoffMs }
+      : {})
+  };
+}
 
 type BackendRequestKind =
   | "health_check"
@@ -993,6 +1032,10 @@ async function resolveLocalHeuristicDecision(config: {
   traceBackend?: boolean;
   telemetryMode?: TelemetryMode;
   telemetryMaxBytes?: number;
+  telemetryTimeoutMs?: number;
+  telemetryRetryAttempts?: number;
+  telemetryRetryDelayMs?: number;
+  telemetryBackoffMs?: number;
   quiet?: boolean;
   gameId: string;
   handId: string;
@@ -1056,6 +1099,7 @@ async function resolveLocalHeuristicDecision(config: {
         quiet: config.quiet,
         mode: config.telemetryMode ?? "minimal",
         maxBytes: config.telemetryMaxBytes,
+        ...telemetryTransportConfig(config),
         source: config.controllerMode ? "controller" : "selfplay",
         workerId: config.workerId,
         controllerMode: config.controllerMode
@@ -1113,6 +1157,7 @@ async function persistEvent(
       quiet: config.quiet,
       mode: config.telemetryMode ?? "minimal",
       maxBytes: config.telemetryMaxBytes,
+      ...telemetryTransportConfig(config),
       source: config.controllerMode ? "controller" : "selfplay",
       workerId: config.workerId,
       controllerMode: config.controllerMode
@@ -1140,6 +1185,10 @@ export async function resolveDecision(config: {
   traceBackend?: boolean;
   telemetryMode?: TelemetryMode;
   telemetryMaxBytes?: number;
+  telemetryTimeoutMs?: number;
+  telemetryRetryAttempts?: number;
+  telemetryRetryDelayMs?: number;
+  telemetryBackoffMs?: number;
   quiet?: boolean;
   workerId?: string;
   controllerMode?: boolean;
@@ -1386,6 +1435,7 @@ async function runSingleGame(
     {};
   const telemetryFailureStats = createTelemetryFailureStats();
   const telemetryFailureTracker = createTelemetryFailureTracker();
+  let telemetryBackoffUntil: string | null = null;
   let fallbackCount = 0;
   let passActions = 0;
   let playActions = 0;
@@ -1415,6 +1465,7 @@ async function runSingleGame(
         ...(options.telemetryMaxBytes !== undefined
           ? { telemetryMaxBytes: options.telemetryMaxBytes }
           : {}),
+        ...telemetryTransportConfig(options),
         ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
         gameId,
         handId,
@@ -1428,6 +1479,9 @@ async function runSingleGame(
     );
     if (telemetryResult) {
       recordTelemetryFailure(telemetryFailureStats, telemetryResult);
+      if (!telemetryResult.ok && telemetryResult.backoff_until) {
+        telemetryBackoffUntil = telemetryResult.backoff_until;
+      }
       emitTelemetryFailureDiagnostic(
         options,
         telemetryFailureTracker,
@@ -1478,6 +1532,7 @@ async function runSingleGame(
         ? { traceBackend: options.traceBackend }
         : {}),
       ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
+      ...telemetryTransportConfig(options),
       ...(options.workerId ? { workerId: options.workerId } : {}),
       ...(options.controllerMode ? { controllerMode: true } : {})
     });
@@ -1490,6 +1545,9 @@ async function runSingleGame(
       resolved.telemetryFailureStats
     );
     if (resolved.telemetryFailure) {
+      if (!resolved.telemetryFailure.ok && resolved.telemetryFailure.backoff_until) {
+        telemetryBackoffUntil = resolved.telemetryFailure.backoff_until;
+      }
       emitTelemetryFailureDiagnostic(
         options,
         telemetryFailureTracker,
@@ -1563,6 +1621,7 @@ async function runSingleGame(
           ...(options.telemetryMaxBytes !== undefined
             ? { telemetryMaxBytes: options.telemetryMaxBytes }
             : {}),
+          ...telemetryTransportConfig(options),
           ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
           gameId,
           handId,
@@ -1576,6 +1635,9 @@ async function runSingleGame(
       );
       if (telemetryResult) {
         recordTelemetryFailure(telemetryFailureStats, telemetryResult);
+        if (!telemetryResult.ok && telemetryResult.backoff_until) {
+          telemetryBackoffUntil = telemetryResult.backoff_until;
+        }
         emitTelemetryFailureDiagnostic(
           options,
           telemetryFailureTracker,
@@ -1624,6 +1686,7 @@ async function runSingleGame(
     wishActiveDecisions,
     invalidDecisions,
     ...telemetryFailureStats,
+    telemetryBackoffUntil,
     latencyByProvider: summarizeLatency(latencyByProvider)
   };
 }
@@ -1707,6 +1770,8 @@ export async function runSelfPlayBatch(
     telemetryEventFailures: 0,
     telemetryFailuresTotal: 0,
     telemetryFailureByEndpoint: {},
+    telemetryFailureByKind: {},
+    telemetryBackoffUntil: null,
     averageLatencyByProvider: {}
   };
 
@@ -1731,10 +1796,13 @@ export async function runSelfPlayBatch(
       summary.telemetryDecisionFailures += game.telemetryDecisionFailures;
       summary.telemetryEventFailures += game.telemetryEventFailures;
       summary.telemetryFailuresTotal += game.telemetryFailuresTotal;
+      summary.telemetryBackoffUntil =
+        game.telemetryBackoffUntil ?? summary.telemetryBackoffUntil;
       mergeCounts(
         summary.telemetryFailureByEndpoint,
         game.telemetryFailureByEndpoint
       );
+      mergeCounts(summary.telemetryFailureByKind, game.telemetryFailureByKind);
       totalDuration += game.durationMs;
       totalScoreMargin += game.scoreMargin;
       totalPassActions += game.passActions;

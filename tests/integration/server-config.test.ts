@@ -114,6 +114,23 @@ describe("server config env loading", () => {
     const config = loadServerConfig({}, { repoRoot });
 
     expect(config.backendBaseUrl).toBe("http://192.168.50.44:4310");
+    expect(config.simDefaultBackendUrl).toBe("http://127.0.0.1:4310");
+  });
+
+  it("uses explicit SIM_BACKEND_URL for simulator telemetry transport", async () => {
+    const repoRoot = await createTempRepo();
+    await fs.writeFile(
+      path.join(repoRoot, ".env"),
+      [
+        "PORT=4310",
+        "BACKEND_LOCAL_URL=http://127.0.0.1:4310",
+        "SIM_BACKEND_URL=http://192.168.50.44:4310"
+      ].join("\n")
+    );
+
+    const config = loadServerConfig({}, { repoRoot });
+
+    expect(config.simDefaultBackendUrl).toBe("http://192.168.50.44:4310");
   });
 
   it("loads request body and telemetry post limits from env", async () => {
@@ -126,6 +143,9 @@ describe("server config env loading", () => {
         "TELEMETRY_MODE=full",
         "TELEMETRY_MAX_POST_BYTES=1234567",
         "TELEMETRY_POST_TIMEOUT_MS=1234",
+        "TELEMETRY_RETRY_ATTEMPTS=4",
+        "TELEMETRY_RETRY_DELAY_MS=345",
+        "TELEMETRY_BACKOFF_MS=4567",
         "TELEMETRY_INGEST_QUEUE_MAX_DEPTH=234",
         "TELEMETRY_PERSISTENCE_BATCH_SIZE=12",
         "TELEMETRY_PERSISTENCE_CONCURRENCY=3",
@@ -143,6 +163,9 @@ describe("server config env loading", () => {
     expect(config.telemetryMode).toBe("full");
     expect(config.telemetryMaxPostBytes).toBe(1234567);
     expect(config.telemetryPostTimeoutMs).toBe(1234);
+    expect(config.telemetryRetryAttempts).toBe(4);
+    expect(config.telemetryRetryDelayMs).toBe(345);
+    expect(config.telemetryBackoffMs).toBe(4567);
     expect(config.telemetryIngestQueueMaxDepth).toBe(234);
     expect(config.telemetryPersistenceBatchSize).toBe(12);
     expect(config.telemetryPersistenceConcurrency).toBe(3);

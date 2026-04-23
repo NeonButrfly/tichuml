@@ -308,6 +308,14 @@ export class FileSimControllerService implements SimControllerService {
       resolved.telemetry_mode,
       "--telemetry-max-bytes",
       String(resolved.telemetry_max_bytes),
+      "--telemetry-timeout-ms",
+      String(resolved.telemetry_timeout_ms),
+      "--telemetry-retry-attempts",
+      String(resolved.telemetry_retry_attempts),
+      "--telemetry-retry-delay-ms",
+      String(resolved.telemetry_retry_delay_ms),
+      "--telemetry-backoff-ms",
+      String(resolved.telemetry_backoff_ms),
       "--backend-url",
       resolved.backend_url
     ];
@@ -364,6 +372,14 @@ export class FileSimControllerService implements SimControllerService {
       resolved.telemetry_mode,
       "--telemetry-max-bytes",
       String(resolved.telemetry_max_bytes),
+      "--telemetry-timeout-ms",
+      String(resolved.telemetry_timeout_ms),
+      "--telemetry-retry-attempts",
+      String(resolved.telemetry_retry_attempts),
+      "--telemetry-retry-delay-ms",
+      String(resolved.telemetry_retry_delay_ms),
+      "--telemetry-backoff-ms",
+      String(resolved.telemetry_backoff_ms),
       "--backend-url",
       resolved.backend_url,
       "--runtime-file",
@@ -394,7 +410,11 @@ export class FileSimControllerService implements SimControllerService {
       stdio: ["ignore", logFd, logFd],
       env: {
         ...process.env,
-        BACKEND_BASE_URL: resolved.backend_url
+        BACKEND_BASE_URL: resolved.backend_url,
+        TELEMETRY_POST_TIMEOUT_MS: String(resolved.telemetry_timeout_ms),
+        TELEMETRY_RETRY_ATTEMPTS: String(resolved.telemetry_retry_attempts),
+        TELEMETRY_RETRY_DELAY_MS: String(resolved.telemetry_retry_delay_ms),
+        TELEMETRY_BACKOFF_MS: String(resolved.telemetry_backoff_ms)
       }
     });
 
@@ -494,6 +514,12 @@ export class FileSimControllerService implements SimControllerService {
       total_games_completed: 0,
       total_errors: 0,
       last_error: null,
+      telemetry_decision_failures: 0,
+      telemetry_event_failures: 0,
+      telemetry_failures_total: 0,
+      telemetry_failure_by_endpoint: {},
+      telemetry_failure_by_kind: {},
+      telemetry_backoff_until: null,
       worker_count: config.worker_count,
       running_worker_count: 0,
       paused_worker_count: status === "paused" ? workers.length : 0,
@@ -557,6 +583,26 @@ export class FileSimControllerService implements SimControllerService {
         1,
         Number(payload.telemetry_max_bytes ?? this.config.telemetryMaxPostBytes)
       ),
+      telemetry_timeout_ms: Math.max(
+        1,
+        Number(payload.telemetry_timeout_ms ?? this.config.telemetryPostTimeoutMs)
+      ),
+      telemetry_retry_attempts: Math.max(
+        1,
+        Number(
+          payload.telemetry_retry_attempts ?? this.config.telemetryRetryAttempts
+        )
+      ),
+      telemetry_retry_delay_ms: Math.max(
+        1,
+        Number(
+          payload.telemetry_retry_delay_ms ?? this.config.telemetryRetryDelayMs
+        )
+      ),
+      telemetry_backoff_ms: Math.max(
+        1,
+        Number(payload.telemetry_backoff_ms ?? this.config.telemetryBackoffMs)
+      ),
       backend_url:
         typeof payload.backend_url === "string" && payload.backend_url.length > 0
           ? payload.backend_url
@@ -615,6 +661,12 @@ export class FileSimControllerService implements SimControllerService {
       ...state,
       pid: state.status === "stopped" ? null : state.pid,
       workers,
+      telemetry_decision_failures: state.telemetry_decision_failures ?? 0,
+      telemetry_event_failures: state.telemetry_event_failures ?? 0,
+      telemetry_failures_total: state.telemetry_failures_total ?? 0,
+      telemetry_failure_by_endpoint: state.telemetry_failure_by_endpoint ?? {},
+      telemetry_failure_by_kind: state.telemetry_failure_by_kind ?? {},
+      telemetry_backoff_until: state.telemetry_backoff_until ?? null,
       worker_count: workers.length,
       running_worker_count: workers.filter((worker) => worker.status === "running")
         .length,
@@ -644,7 +696,13 @@ export class FileSimControllerService implements SimControllerService {
       running_worker_count: 0,
       paused_worker_count: 0,
       stopped_worker_count: 0,
-      errored_worker_count: 0
+      errored_worker_count: 0,
+      telemetry_decision_failures: prior.telemetry_decision_failures ?? 0,
+      telemetry_event_failures: prior.telemetry_event_failures ?? 0,
+      telemetry_failures_total: prior.telemetry_failures_total ?? 0,
+      telemetry_failure_by_endpoint: prior.telemetry_failure_by_endpoint ?? {},
+      telemetry_failure_by_kind: prior.telemetry_failure_by_kind ?? {},
+      telemetry_backoff_until: prior.telemetry_backoff_until ?? null
     };
   }
 

@@ -10,6 +10,10 @@ import type {
 } from "@tichuml/shared";
 
 const DEFAULT_TELEMETRY_MAX_POST_BYTES = 24 * 1024 * 1024;
+const DEFAULT_TELEMETRY_POST_TIMEOUT_MS = 10_000;
+const DEFAULT_TELEMETRY_RETRY_ATTEMPTS = 2;
+const DEFAULT_TELEMETRY_RETRY_DELAY_MS = 250;
+const DEFAULT_TELEMETRY_BACKOFF_MS = 15_000;
 
 type ParsedArgs = {
   games: number;
@@ -20,6 +24,10 @@ type ParsedArgs = {
   traceBackend: boolean;
   telemetryMode: "minimal" | "full";
   telemetryMaxBytes: number;
+  telemetryTimeoutMs: number;
+  telemetryRetryAttempts: number;
+  telemetryRetryDelayMs: number;
+  telemetryBackoffMs: number;
   seed: string;
   seedPrefix: string;
   telemetryEnabled: boolean;
@@ -88,6 +96,22 @@ function parseArgs(argv: string[]): ParsedArgs {
       process.env.TELEMETRY_MAX_POST_BYTES,
       DEFAULT_TELEMETRY_MAX_POST_BYTES
     ),
+    telemetryTimeoutMs: parsePositiveInteger(
+      process.env.TELEMETRY_POST_TIMEOUT_MS,
+      DEFAULT_TELEMETRY_POST_TIMEOUT_MS
+    ),
+    telemetryRetryAttempts: parsePositiveInteger(
+      process.env.TELEMETRY_RETRY_ATTEMPTS,
+      DEFAULT_TELEMETRY_RETRY_ATTEMPTS
+    ),
+    telemetryRetryDelayMs: parsePositiveInteger(
+      process.env.TELEMETRY_RETRY_DELAY_MS,
+      DEFAULT_TELEMETRY_RETRY_DELAY_MS
+    ),
+    telemetryBackoffMs: parsePositiveInteger(
+      process.env.TELEMETRY_BACKOFF_MS,
+      DEFAULT_TELEMETRY_BACKOFF_MS
+    ),
     seed: "self-play",
     seedPrefix: "self-play",
     telemetryEnabled: true,
@@ -151,6 +175,22 @@ function parseArgs(argv: string[]): ParsedArgs {
         break;
       case "--telemetry-max-bytes":
         parsed.telemetryMaxBytes = parsePositiveInteger(next, parsed.telemetryMaxBytes);
+        index += 1;
+        break;
+      case "--telemetry-timeout-ms":
+        parsed.telemetryTimeoutMs = parsePositiveInteger(next, parsed.telemetryTimeoutMs);
+        index += 1;
+        break;
+      case "--telemetry-retry-attempts":
+        parsed.telemetryRetryAttempts = parsePositiveInteger(next, parsed.telemetryRetryAttempts);
+        index += 1;
+        break;
+      case "--telemetry-retry-delay-ms":
+        parsed.telemetryRetryDelayMs = parsePositiveInteger(next, parsed.telemetryRetryDelayMs);
+        index += 1;
+        break;
+      case "--telemetry-backoff-ms":
+        parsed.telemetryBackoffMs = parsePositiveInteger(next, parsed.telemetryBackoffMs);
         index += 1;
         break;
       case "--seed":
@@ -277,6 +317,10 @@ function buildControllerConfig(args: ParsedArgs): SimControllerConfig {
     trace_backend: args.traceBackend,
     telemetry_mode: args.telemetryMode,
     telemetry_max_bytes: args.telemetryMaxBytes,
+    telemetry_timeout_ms: args.telemetryTimeoutMs,
+    telemetry_retry_attempts: args.telemetryRetryAttempts,
+    telemetry_retry_delay_ms: args.telemetryRetryDelayMs,
+    telemetry_backoff_ms: args.telemetryBackoffMs,
     backend_url: args.backendBaseUrl ?? "http://localhost:4310",
     seed_prefix: args.seedPrefix,
     sleep_seconds: args.sleepSeconds,
@@ -354,6 +398,7 @@ function buildRuntimeState(
     (sum, worker) => sum + worker.total_games_completed,
     0
   );
+  const telemetryFailures = activeTelemetryFailures;
 
   return {
     status,
@@ -379,6 +424,12 @@ function buildRuntimeState(
     total_errors: workers.filter((worker) => worker.last_error !== null).length,
     last_error:
       workers.find((worker) => worker.last_error !== null)?.last_error ?? null,
+    telemetry_decision_failures: telemetryFailures.telemetryDecisionFailures,
+    telemetry_event_failures: telemetryFailures.telemetryEventFailures,
+    telemetry_failures_total: telemetryFailures.telemetryFailuresTotal,
+    telemetry_failure_by_endpoint: telemetryFailures.telemetryFailureByEndpoint,
+    telemetry_failure_by_kind: telemetryFailures.telemetryFailureByKind,
+    telemetry_backoff_until: activeTelemetryBackoffUntil,
     worker_count: displayWorkers.length,
     running_worker_count: status === "stopped" ? 0 : running,
     paused_worker_count: status === "stopped" ? 0 : paused,
@@ -408,6 +459,37 @@ async function waitWhilePaused(args: ParsedArgs, worker: SimWorkerRuntimeState):
 
 let activeWorkers: SimWorkerRuntimeState[] = [];
 let activeStartedAt = nowIso();
+let activeTelemetryFailures = {
+  telemetryDecisionFailures: 0,
+  telemetryEventFailures: 0,
+  telemetryFailuresTotal: 0,
+  telemetryFailureByEndpoint: {} as Record<string, number>,
+  telemetryFailureByKind: {} as Record<string, number>
+};
+let activeTelemetryBackoffUntil: string | null = null;
+
+function mergeCounts(target: Record<string, number>, source: Record<string, number>): void {
+  for (const [key, value] of Object.entries(source)) {
+    target[key] = (target[key] ?? 0) + value;
+  }
+}
+
+function recordBatchTelemetryFailures(summary: Awaited<ReturnType<typeof runSelfPlayBatch>>): void {
+  activeTelemetryFailures.telemetryDecisionFailures +=
+    summary.telemetryDecisionFailures;
+  activeTelemetryFailures.telemetryEventFailures += summary.telemetryEventFailures;
+  activeTelemetryFailures.telemetryFailuresTotal += summary.telemetryFailuresTotal;
+  mergeCounts(
+    activeTelemetryFailures.telemetryFailureByEndpoint,
+    summary.telemetryFailureByEndpoint
+  );
+  mergeCounts(
+    activeTelemetryFailures.telemetryFailureByKind,
+    summary.telemetryFailureByKind
+  );
+  activeTelemetryBackoffUntil =
+    summary.telemetryBackoffUntil ?? activeTelemetryBackoffUntil;
+}
 
 async function runWorker(args: ParsedArgs, worker: SimWorkerRuntimeState): Promise<void> {
   let batchIndex = 0;
@@ -440,6 +522,10 @@ async function runWorker(args: ParsedArgs, worker: SimWorkerRuntimeState): Promi
         traceBackend: args.traceBackend,
         telemetryMode: args.telemetryMode,
         telemetryMaxBytes: args.telemetryMaxBytes,
+        telemetryTimeoutMs: args.telemetryTimeoutMs,
+        telemetryRetryAttempts: args.telemetryRetryAttempts,
+        telemetryRetryDelayMs: args.telemetryRetryDelayMs,
+        telemetryBackoffMs: args.telemetryBackoffMs,
         ...(args.backendBaseUrl ? { backendBaseUrl: args.backendBaseUrl } : {}),
         quiet: args.quiet,
         progress: args.progress,
@@ -448,6 +534,7 @@ async function runWorker(args: ParsedArgs, worker: SimWorkerRuntimeState): Promi
       });
       worker.total_batches_completed += 1;
       worker.total_games_completed += summary.gamesPlayed;
+      recordBatchTelemetryFailures(summary);
       worker.last_error = summary.errors > 0 ? `${summary.errors} game errors in batch` : null;
       appendLog(args, "batch_end", {
         worker_id: worker.worker_id,
@@ -485,6 +572,14 @@ async function runWorker(args: ParsedArgs, worker: SimWorkerRuntimeState): Promi
 async function runForever(args: ParsedArgs): Promise<void> {
   const lockHandle = acquireLock(args);
   activeStartedAt = nowIso();
+  activeTelemetryFailures = {
+    telemetryDecisionFailures: 0,
+    telemetryEventFailures: 0,
+    telemetryFailuresTotal: 0,
+    telemetryFailureByEndpoint: {},
+    telemetryFailureByKind: {}
+  };
+  activeTelemetryBackoffUntil = null;
   activeWorkers = Array.from({ length: args.workerCount }, (_, index) =>
     createWorker(`worker-${String(index + 1).padStart(2, "0")}`)
   );
@@ -544,6 +639,10 @@ async function main(): Promise<void> {
       traceBackend: args.traceBackend,
       telemetryMode: args.telemetryMode,
       telemetryMaxBytes: args.telemetryMaxBytes,
+      telemetryTimeoutMs: args.telemetryTimeoutMs,
+      telemetryRetryAttempts: args.telemetryRetryAttempts,
+      telemetryRetryDelayMs: args.telemetryRetryDelayMs,
+      telemetryBackoffMs: args.telemetryBackoffMs,
       ...(args.backendBaseUrl ? { backendBaseUrl: args.backendBaseUrl } : {}),
       quiet: args.quiet,
       progress: args.progress

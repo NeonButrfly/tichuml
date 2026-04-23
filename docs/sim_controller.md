@@ -83,6 +83,29 @@ Default controller values come from the runtime config/env layer:
 - `SIM_GAMES_PER_BATCH`
 - `TELEMETRY_MODE`
 - `TELEMETRY_MAX_POST_BYTES`
+- `TELEMETRY_POST_TIMEOUT_MS`
+- `TELEMETRY_RETRY_ATTEMPTS`
+- `TELEMETRY_RETRY_DELAY_MS`
+- `TELEMETRY_BACKOFF_MS`
+
+`SIM_BACKEND_URL` is the effective backend URL passed to the sim-runner process
+and into the shared telemetry client. If it is not set, the backend config uses
+the local backend URL (`BACKEND_LOCAL_URL` or `http://127.0.0.1:<PORT>`) so a
+controller running on the backend host does not depend on reaching the host's
+public/operator address.
+
+Runtime state exposes telemetry transport health:
+
+- `telemetry_decision_failures`
+- `telemetry_event_failures`
+- `telemetry_failures_total`
+- `telemetry_failure_by_endpoint`
+- `telemetry_failure_by_kind`
+- `telemetry_backoff_until`
+
+These counters are diagnostic only. With `strict_telemetry=false`, telemetry
+transport failures and backoff suppression must not block batches, game counts,
+pause/stop behavior, or worker shutdown.
 
 Dashboard status refreshes adopt the effective runtime controller config unless
 the operator has unsaved edits in the form.

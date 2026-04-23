@@ -99,6 +99,10 @@ export type SimControllerConfig = {
   trace_backend: boolean;
   telemetry_mode: "minimal" | "full";
   telemetry_max_bytes: number;
+  telemetry_timeout_ms: number;
+  telemetry_retry_attempts: number;
+  telemetry_retry_delay_ms: number;
+  telemetry_backoff_ms: number;
   backend_url: string;
   seed_prefix: string;
   sleep_seconds: number;
@@ -138,6 +142,12 @@ export type SimControllerRuntimeState = {
   total_games_completed: number;
   total_errors: number;
   last_error: string | null;
+  telemetry_decision_failures: number;
+  telemetry_event_failures: number;
+  telemetry_failures_total: number;
+  telemetry_failure_by_endpoint: Record<string, number>;
+  telemetry_failure_by_kind: Record<string, number>;
+  telemetry_backoff_until: string | null;
   worker_count: number;
   running_worker_count: number;
   paused_worker_count: number;
@@ -176,6 +186,10 @@ export type SimControllerRequestPayload = Partial<{
   trace_backend: boolean;
   telemetry_mode: "minimal" | "full";
   telemetry_max_bytes: number;
+  telemetry_timeout_ms: number;
+  telemetry_retry_attempts: number;
+  telemetry_retry_delay_ms: number;
+  telemetry_backoff_ms: number;
   backend_url: string;
   seed: string;
   seed_prefix: string;

@@ -25,6 +25,7 @@ export type NormalizedTelemetryConfig = {
   timeoutMs: number;
   retryAttempts: number;
   retryDelayMs: number;
+  backoffMs: number;
   backendBaseUrl: string;
   source: TelemetrySource;
   quiet: boolean;
@@ -41,6 +42,7 @@ export type TelemetryConfigInput = {
   timeoutMs?: number | undefined;
   retryAttempts?: number | undefined;
   retryDelayMs?: number | undefined;
+  backoffMs?: number | undefined;
   backendBaseUrl?: string | undefined;
   source?: TelemetrySource | undefined;
   quiet?: boolean | undefined;
@@ -62,6 +64,7 @@ export type TelemetryFailureKind =
   | "network_failure"
   | "backend_rejection"
   | "unexpected_failure"
+  | "backoff_suppressed"
   | "oversize_skipped";
 
 export type TelemetryWriteOutcome =
@@ -99,6 +102,8 @@ export type TelemetryWriteResult =
       raw_body?: string;
       cause?: string;
       latency_ms?: number;
+      retry_after_ms?: number;
+      backoff_until?: string;
       payload_bytes?: number;
       max_bytes?: number;
       diagnostics: TelemetryDiagnostic[];
@@ -112,6 +117,7 @@ export type TelemetryDiagnostic = {
     | "telemetry_payload_trimmed"
     | "telemetry_payload_skipped"
     | "telemetry_transport_failed"
+    | "telemetry_backoff_suppressed"
     | "telemetry_backend_rejected"
     | "telemetry_client_validation_failed"
     | "telemetry_posted";
@@ -137,6 +143,7 @@ export type TelemetryFailureStats = {
   telemetryEventFailures: number;
   telemetryFailuresTotal: number;
   telemetryFailureByEndpoint: Record<string, number>;
+  telemetryFailureByKind: Record<string, number>;
 };
 
 export type TelemetryFailureTracker = {

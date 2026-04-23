@@ -32,6 +32,7 @@ records structured diagnostics for:
 - `telemetry_payload_downgraded`
 - `telemetry_payload_skipped`
 - `telemetry_transport_failed`
+- `telemetry_backoff_suppressed`
 - `telemetry_backend_rejected`
 
 `GET /api/telemetry/health` returns database telemetry stats plus current ingest
@@ -55,6 +56,15 @@ queue stats.
 - `TELEMETRY_POST_TIMEOUT_MS=10000`
   - Shared telemetry client timeout before best-effort transport failure
     handling.
+- `TELEMETRY_RETRY_ATTEMPTS=2`
+  - Network retry attempts after the first telemetry POST attempt.
+- `TELEMETRY_RETRY_DELAY_MS=250`
+  - Initial delay between telemetry transport retry attempts.
+- `TELEMETRY_BACKOFF_MS=15000`
+  - Initial endpoint backoff after telemetry transport failure. While a
+    telemetry endpoint is in backoff, the shared client suppresses new POSTs to
+    that endpoint, returns a structured `backoff_suppressed` result, and keeps
+    gameplay/controller progress non-fatal.
 - `TELEMETRY_INGEST_QUEUE_MAX_DEPTH=5000`
   - Backend queue depth before accepted telemetry is dropped for queue pressure.
 - `TELEMETRY_PERSISTENCE_BATCH_SIZE=100`
@@ -76,3 +86,21 @@ write increments counters and emits machine-readable diagnostics, but it must no
 block a UI move, simulator game, batch completion, controller accounting, pause,
 stop, or shutdown. Set `strict_telemetry=true` only when intentionally debugging
 telemetry itself.
+
+Simulator/controller status includes telemetry failure totals, failure counts by
+endpoint, failure counts by kind, and the current telemetry backoff deadline when
+one is active. This keeps repeated `network_failure` or `fetch failed` symptoms
+visible without spamming the same unreachable endpoint every decision.
+
+## Backend URL Selection
+
+Normal browser gameplay uses the browser/runtime backend setting. The simulator
+controller runs on the backend host, so its default `SIM_BACKEND_URL` is
+local-first: explicit `SIM_BACKEND_URL`, then `BACKEND_URL`, then
+`BACKEND_LOCAL_URL`, then `http://127.0.0.1:<PORT>`. This avoids silently posting
+controller telemetry to an operator/public host address when the local backend
+listener is reachable only through loopback from the controller process.
+
+The public/operator URL remains `BACKEND_BASE_URL` / `BACKEND_PUBLIC_URL`.
+Set `SIM_BACKEND_URL` explicitly only when the simulator process must post to a
+different reachable backend.

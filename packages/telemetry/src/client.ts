@@ -30,6 +30,14 @@ type TelemetryResponse = {
   telemetry_id?: number;
 };
 
+type EndpointBackoff = {
+  until: number;
+  failures: number;
+  message: string;
+};
+
+const endpointBackoffs = new Map<string, EndpointBackoff>();
+
 function buildEndpoint(
   config: NormalizedTelemetryConfig,
   requestKind: TelemetryRequestKind
@@ -65,6 +73,47 @@ function maybeThrow(
   return result;
 }
 
+function backoffUntilIso(until: number): string {
+  return new Date(until).toISOString();
+}
+
+function getEndpointBackoff(endpoint: string): EndpointBackoff | null {
+  const backoff = endpointBackoffs.get(endpoint);
+  if (!backoff) {
+    return null;
+  }
+  if (Date.now() >= backoff.until) {
+    endpointBackoffs.delete(endpoint);
+    return null;
+  }
+  return backoff;
+}
+
+function recordEndpointFailure(
+  endpoint: string,
+  config: NormalizedTelemetryConfig,
+  message: string
+): EndpointBackoff | null {
+  if (config.backoffMs <= 0) {
+    endpointBackoffs.delete(endpoint);
+    return null;
+  }
+  const prior = endpointBackoffs.get(endpoint);
+  const failures = (prior?.failures ?? 0) + 1;
+  const delayMs = Math.min(config.backoffMs * 2 ** (failures - 1), 60_000);
+  const backoff = {
+    until: Date.now() + delayMs,
+    failures,
+    message
+  };
+  endpointBackoffs.set(endpoint, backoff);
+  return backoff;
+}
+
+function clearEndpointBackoff(endpoint: string): void {
+  endpointBackoffs.delete(endpoint);
+}
+
 async function postPayload(config: {
   telemetryConfig: NormalizedTelemetryConfig;
   requestKind: TelemetryRequestKind;
@@ -75,6 +124,40 @@ async function postPayload(config: {
   fetchImpl: TelemetryClientFetch;
 }): Promise<TelemetryWriteResult> {
   const endpoint = buildEndpoint(config.telemetryConfig, config.requestKind);
+  const backoff = getEndpointBackoff(endpoint);
+  if (backoff) {
+    const retryAfterMs = Math.max(0, backoff.until - Date.now());
+    const message = `Telemetry POST suppressed while ${endpoint} is in transport backoff after ${backoff.failures} failure(s): ${backoff.message}`;
+    return maybeThrow(config.telemetryConfig, {
+      ok: false,
+      endpoint,
+      method: "POST",
+      request_kind: config.requestKind,
+      outcome: "failed",
+      failure_kind: "backoff_suppressed",
+      message,
+      cause: "transport_backoff",
+      retry_after_ms: retryAfterMs,
+      backoff_until: backoffUntilIso(backoff.until),
+      payload_bytes: config.payloadBytes,
+      max_bytes: config.telemetryConfig.maxBytes,
+      diagnostics: [
+        ...config.diagnostics,
+        createTelemetryDiagnostic({
+          event: "telemetry_backoff_suppressed",
+          source: config.telemetryConfig.source,
+          requestKind: config.requestKind,
+          payload: config.payload,
+          payloadBytes: config.payloadBytes,
+          maxBytes: config.telemetryConfig.maxBytes,
+          failureKind: "backoff_suppressed",
+          message,
+          workerId: config.telemetryConfig.workerId,
+          controllerMode: config.telemetryConfig.controllerMode
+        })
+      ]
+    });
+  }
   const startedAt = Date.now();
   let response: Response | undefined;
   let lastFailure: unknown;
@@ -113,6 +196,11 @@ async function postPayload(config: {
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    const nextBackoff = recordEndpointFailure(
+      endpoint,
+      config.telemetryConfig,
+      message
+    );
     const result: TelemetryWriteResult = {
       ok: false,
       endpoint,
@@ -123,6 +211,12 @@ async function postPayload(config: {
       message,
       cause: error instanceof Error ? error.name : "unknown",
       latency_ms: Date.now() - startedAt,
+      ...(nextBackoff
+        ? {
+            retry_after_ms: Math.max(0, nextBackoff.until - Date.now()),
+            backoff_until: backoffUntilIso(nextBackoff.until)
+          }
+        : {}),
       payload_bytes: config.payloadBytes,
       max_bytes: config.telemetryConfig.maxBytes,
       diagnostics: [
@@ -235,6 +329,7 @@ async function postPayload(config: {
     typeof parsed.payload === "object" && parsed.payload !== null
       ? (parsed.payload as TelemetryResponse)
       : { accepted: true };
+  clearEndpointBackoff(endpoint);
   return {
     ok: true,
     endpoint,
@@ -428,5 +523,6 @@ export const telemetryFailureKinds: Record<TelemetryFailureKind, true> = {
   network_failure: true,
   backend_rejection: true,
   unexpected_failure: true,
+  backoff_suppressed: true,
   oversize_skipped: true
 };

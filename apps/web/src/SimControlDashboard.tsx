@@ -26,6 +26,10 @@ type FormState = {
   telemetryEnabled: boolean;
   telemetryMode: "minimal" | "full";
   telemetryMaxBytes: number;
+  telemetryTimeoutMs: number;
+  telemetryRetryAttempts: number;
+  telemetryRetryDelayMs: number;
+  telemetryBackoffMs: number;
   backendUrl: string;
   seedPrefix: string;
   sleepSeconds: number;
@@ -76,6 +80,10 @@ function createInitialForm(): FormState {
     telemetryEnabled: settings.telemetryEnabled,
     telemetryMode: "minimal",
     telemetryMaxBytes: 24 * 1024 * 1024,
+    telemetryTimeoutMs: 10_000,
+    telemetryRetryAttempts: 2,
+    telemetryRetryDelayMs: 250,
+    telemetryBackoffMs: 15_000,
     backendUrl,
     seedPrefix: "controller",
     sleepSeconds: 5,
@@ -91,6 +99,10 @@ function toPayload(form: FormState): SimControllerRequestPayload {
     telemetry_enabled: form.telemetryEnabled,
     telemetry_mode: form.telemetryMode,
     telemetry_max_bytes: form.telemetryMaxBytes,
+    telemetry_timeout_ms: form.telemetryTimeoutMs,
+    telemetry_retry_attempts: form.telemetryRetryAttempts,
+    telemetry_retry_delay_ms: form.telemetryRetryDelayMs,
+    telemetry_backoff_ms: form.telemetryBackoffMs,
     backend_url: form.backendUrl,
     seed_prefix: form.seedPrefix,
     sleep_seconds: form.sleepSeconds,
@@ -122,6 +134,10 @@ function formFromRuntimeConfig(
     telemetryEnabled: config.telemetry_enabled,
     telemetryMode: config.telemetry_mode,
     telemetryMaxBytes: config.telemetry_max_bytes,
+    telemetryTimeoutMs: config.telemetry_timeout_ms,
+    telemetryRetryAttempts: config.telemetry_retry_attempts,
+    telemetryRetryDelayMs: config.telemetry_retry_delay_ms,
+    telemetryBackoffMs: config.telemetry_backoff_ms,
     backendUrl: config.backend_url,
     seedPrefix: config.seed_prefix,
     sleepSeconds: config.sleep_seconds,
@@ -381,6 +397,8 @@ export function SimControlDashboard() {
           <Metric label="Errored" value={status?.errored_worker_count ?? 0} />
           <Metric label="Current batch" value={status?.current_batch_started_at ? "active" : "idle"} />
           <Metric label="Backend" value={backendReachable === null ? "unknown" : backendReachable ? "ok" : "down"} />
+          <Metric label="Telemetry failures" value={status?.telemetry_failures_total ?? 0} />
+          <Metric label="Backoff" value={status?.telemetry_backoff_until ? "active" : "none"} />
         </div>
       </section>
 
@@ -525,6 +543,62 @@ export function SimControlDashboard() {
               }
             />
           </label>
+          <label>
+            Telemetry timeout ms
+            <input
+              type="number"
+              min={1}
+              value={form.telemetryTimeoutMs}
+              onChange={(event) =>
+                updateForm((current) => ({
+                  ...current,
+                  telemetryTimeoutMs: Math.max(1, Number(event.target.value))
+                }))
+              }
+            />
+          </label>
+          <label>
+            Telemetry retries
+            <input
+              type="number"
+              min={1}
+              value={form.telemetryRetryAttempts}
+              onChange={(event) =>
+                updateForm((current) => ({
+                  ...current,
+                  telemetryRetryAttempts: Math.max(1, Number(event.target.value))
+                }))
+              }
+            />
+          </label>
+          <label>
+            Telemetry retry delay ms
+            <input
+              type="number"
+              min={1}
+              value={form.telemetryRetryDelayMs}
+              onChange={(event) =>
+                updateForm((current) => ({
+                  ...current,
+                  telemetryRetryDelayMs: Math.max(1, Number(event.target.value))
+                }))
+              }
+            />
+          </label>
+          <label>
+            Telemetry backoff ms
+            <input
+              type="number"
+              min={1}
+              value={form.telemetryBackoffMs}
+              onChange={(event) =>
+                updateForm((current) => ({
+                  ...current,
+                  telemetryBackoffMs: Math.max(1, Number(event.target.value))
+                }))
+              }
+            />
+          </label>
         </form>
 
         <section className="sim-panel">
@@ -536,6 +610,9 @@ export function SimControlDashboard() {
             <Metric label="Last batch" value={status?.last_batch_status ?? "n/a"} />
           </div>
           <p className="sim-detail">Last error: {status?.last_error ?? "none"}</p>
+          <p className="sim-detail">Telemetry by kind: {JSON.stringify(status?.telemetry_failure_by_kind ?? {})}</p>
+          <p className="sim-detail">Telemetry by endpoint: {JSON.stringify(status?.telemetry_failure_by_endpoint ?? {})}</p>
+          <p className="sim-detail">Telemetry backoff until: {status?.telemetry_backoff_until ?? "none"}</p>
           <p className="sim-detail">Last updated: {lastUpdatedAt ?? "never"}</p>
           <p className="sim-detail">Log path: {status?.log_path ?? "n/a"}</p>
           <p className="sim-detail">Runtime path: {status?.runtime_path ?? "n/a"}</p>

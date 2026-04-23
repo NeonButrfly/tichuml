@@ -39,6 +39,9 @@ function createConfig(repoRoot: string): ServerConfig {
     telemetryMode: "minimal",
     telemetryMaxPostBytes: 24 * 1024 * 1024,
     telemetryPostTimeoutMs: 10000,
+    telemetryRetryAttempts: 2,
+    telemetryRetryDelayMs: 250,
+    telemetryBackoffMs: 15000,
     telemetryIngestQueueMaxDepth: 5000,
     telemetryPersistenceBatchSize: 100,
     telemetryPersistenceConcurrency: 2,
@@ -196,7 +199,11 @@ describe("runtime admin config manager", () => {
       SIM_GAMES_PER_BATCH: "5",
       SIM_BACKEND_URL: "http://192.168.50.44:4310",
       TELEMETRY_MODE: "full",
-      TELEMETRY_MAX_POST_BYTES: "123456"
+      TELEMETRY_MAX_POST_BYTES: "123456",
+      TELEMETRY_POST_TIMEOUT_MS: "2345",
+      TELEMETRY_RETRY_ATTEMPTS: "4",
+      TELEMETRY_RETRY_DELAY_MS: "345",
+      TELEMETRY_BACKOFF_MS: "4567"
     });
 
     expect(result.accepted).toBe(true);
@@ -209,5 +216,9 @@ describe("runtime admin config manager", () => {
     expect(envText).toContain("SIM_BACKEND_URL=http://192.168.50.44:4310");
     expect(envText).toContain("TELEMETRY_MODE=full");
     expect(envText).toContain("TELEMETRY_MAX_POST_BYTES=123456");
+    expect(envText).toContain("TELEMETRY_POST_TIMEOUT_MS=2345");
+    expect(envText).toContain("TELEMETRY_RETRY_ATTEMPTS=4");
+    expect(envText).toContain("TELEMETRY_RETRY_DELAY_MS=345");
+    expect(envText).toContain("TELEMETRY_BACKOFF_MS=4567");
   });
 });

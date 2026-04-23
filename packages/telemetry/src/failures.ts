@@ -21,7 +21,8 @@ export function createTelemetryFailureStats(): TelemetryFailureStats {
     telemetryDecisionFailures: 0,
     telemetryEventFailures: 0,
     telemetryFailuresTotal: 0,
-    telemetryFailureByEndpoint: {}
+    telemetryFailureByEndpoint: {},
+    telemetryFailureByKind: {}
   };
 }
 
@@ -49,6 +50,10 @@ export function mergeTelemetryFailureStats(
     target.telemetryFailureByEndpoint[key] =
       (target.telemetryFailureByEndpoint[key] ?? 0) + value;
   }
+  for (const [key, value] of Object.entries(source.telemetryFailureByKind)) {
+    target.telemetryFailureByKind[key] =
+      (target.telemetryFailureByKind[key] ?? 0) + value;
+  }
 }
 
 export function recordTelemetryFailure(
@@ -65,6 +70,7 @@ export function recordTelemetryFailure(
   }
   stats.telemetryFailuresTotal += 1;
   countByKey(stats.telemetryFailureByEndpoint, result.endpoint);
+  countByKey(stats.telemetryFailureByKind, result.failure_kind);
 }
 
 function shouldEmitDiagnostic(config: {
@@ -96,6 +102,8 @@ export function emitTelemetryFailureDiagnostic(
         message: result.message,
         status: result.status ?? null,
         latency_ms: result.latency_ms ?? null,
+        retry_after_ms: result.retry_after_ms ?? null,
+        backoff_until: result.backoff_until ?? null,
         payload_bytes: result.payload_bytes ?? null,
         max_bytes: result.max_bytes ?? null,
         diagnostics: result.diagnostics,

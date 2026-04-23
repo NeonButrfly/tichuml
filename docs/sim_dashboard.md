@@ -45,6 +45,7 @@ At-a-glance state includes:
 - current batch activity
 - worker counts
 - backend health
+- telemetry failure totals and active transport backoff
 - action feedback with prior and current status
 
 Operational sections include:
@@ -53,6 +54,9 @@ Operational sections include:
   prefix, sleep seconds, worker count, and confirmation token
 - totals for batches, games, errors, and last batch status
 - last error
+- telemetry failures by kind and by endpoint
+- telemetry backoff deadline, when the shared client is suppressing repeated
+  POST attempts to an unreachable endpoint
 - log path and runtime path
 - per-worker table
 - recent JSONL log preview

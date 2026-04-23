@@ -109,7 +109,7 @@ describe("central telemetry subsystem", () => {
         telemetry: {
           enabled: true,
           strictTelemetry: false,
-          backendBaseUrl: "http://127.0.0.1:1",
+          backendBaseUrl: "http://127.0.0.1:43198",
           source: "gameplay",
           mode: "minimal"
         },
@@ -120,13 +120,14 @@ describe("central telemetry subsystem", () => {
       ok: false,
       failure_kind: "network_failure"
     });
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
 
     await expect(
       emitTelemetryDecision({
         telemetry: {
           enabled: true,
           strictTelemetry: true,
-          backendBaseUrl: "http://127.0.0.1:1",
+          backendBaseUrl: "http://127.0.0.1:43198",
           source: "gameplay",
           mode: "minimal"
         },
@@ -134,6 +135,46 @@ describe("central telemetry subsystem", () => {
         fetchImpl
       })
     ).rejects.toBeInstanceOf(TelemetryError);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+  });
+
+  it("backs off repeated telemetry transport failures without another POST attempt", async () => {
+    const payloads = buildDecisionPayloads();
+    const fetchImpl = vi.fn(async () => {
+      throw new Error("connect timeout");
+    });
+    const telemetry = {
+      enabled: true,
+      strictTelemetry: false,
+      backendBaseUrl: "http://127.0.0.1:43199",
+      source: "selfplay" as const,
+      mode: "minimal" as const,
+      retryAttempts: 1,
+      retryDelayMs: 1,
+      backoffMs: 30_000
+    };
+
+    const first = await emitTelemetryDecision({
+      telemetry,
+      payloads,
+      fetchImpl
+    });
+    const second = await emitTelemetryDecision({
+      telemetry,
+      payloads,
+      fetchImpl
+    });
+
+    expect(first).toMatchObject({
+      ok: false,
+      failure_kind: "network_failure"
+    });
+    expect(second).toMatchObject({
+      ok: false,
+      failure_kind: "backoff_suppressed",
+      cause: "transport_backoff"
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
   it("downgrades oversized full payloads and skips centrally when minimal is also too large", async () => {

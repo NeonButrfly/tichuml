@@ -355,3 +355,34 @@ supported size limit.`, leaving the control UI stuck at `Batches=0`,
   for telemetry architecture.
 - Status:
   Lives in GitHub, not here.
+
+## 2026-04-22 - Simulator telemetry transport failures while controller progresses
+
+- Prompt signal:
+  Controller batches and games now increment, but telemetry decision writes still
+  repeatedly fail with `network_failure` / `fetch failed` against
+  `http://192.168.50.196:4310/api/telemetry/decision`; progress must remain
+  non-fatal while telemetry reliability is fixed.
+- Interpreted requirement:
+  Issue [#41](https://github.com/NeonButrfly/tichuml/issues/41) also tracks the
+  transport follow-up: audit the effective backend URL used by runtime/admin UI,
+  sim controller, sim-runner, and the shared telemetry client; avoid silently
+  posting controller telemetry to a stale or public-only host address; add
+  explicit retry/backoff policy; count failures by endpoint and kind; surface
+  telemetry transport state in simulator status; and preserve
+  `strict_telemetry=false` as non-fatal.
+- Affected systems:
+  `packages/telemetry`, `packages/shared/src/backend.ts`,
+  `apps/server/src/config/env.ts`,
+  `apps/server/src/services/runtime-admin-service.ts`,
+  `apps/server/src/services/sim-controller-service.ts`,
+  `apps/sim-runner/src/cli.ts`,
+  `apps/sim-runner/src/self-play-batch.ts`,
+  `apps/web/src/SimControlDashboard.tsx`, telemetry/runtime docs, integration
+  tests.
+- Linked GitHub issue:
+  [#41](https://github.com/NeonButrfly/tichuml/issues/41)
+- Milestone:
+  [Linux Backend Deployment + ML Host](https://github.com/NeonButrfly/tichuml/milestone/25)
+- Status:
+  Lives in GitHub, not here.

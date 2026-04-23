@@ -57,7 +57,7 @@ The canonical telemetry contract now lives in [../telemetry_contract.md](../tele
 - minimal/full/adaptive policy selection
 - byte measurement, downgrade, and skip behavior
 - shared POST behavior for `/api/telemetry/decision` and `/api/telemetry/event`
-- POST timeout/retry behavior
+- POST timeout, retry, and endpoint backoff behavior
 - non-fatal failure results, strict-mode errors, and structured diagnostics
 
 Existing producers are intentionally thin:
@@ -83,6 +83,12 @@ Backend ingest validates synchronously, then persists through a bounded queue.
 Queue pressure and persistence failures are logged as machine-readable backend
 diagnostics and exposed through `/api/telemetry/health` queue stats; they do not
 make non-strict gameplay or self-play fail.
+
+Transport failures are counted by endpoint and by failure kind. After a network
+failure, the shared client backs off that endpoint and returns
+`backoff_suppressed` results until the backoff window expires instead of posting
+every decision into the same unreachable route. Simulator/controller runtime
+state surfaces these counters and the active backoff deadline.
 
 ## Versioning
 

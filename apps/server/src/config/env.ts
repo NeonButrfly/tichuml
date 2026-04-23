@@ -28,6 +28,9 @@ export type ServerConfig = {
   telemetryMode: "minimal" | "full";
   telemetryMaxPostBytes: number;
   telemetryPostTimeoutMs: number;
+  telemetryRetryAttempts: number;
+  telemetryRetryDelayMs: number;
+  telemetryBackoffMs: number;
   telemetryIngestQueueMaxDepth: number;
   telemetryPersistenceBatchSize: number;
   telemetryPersistenceConcurrency: number;
@@ -46,6 +49,9 @@ export type ServerConfig = {
 const DEFAULT_REQUEST_BODY_LIMIT_MB = 25;
 const DEFAULT_TELEMETRY_MAX_POST_BYTES = 24 * 1024 * 1024;
 const DEFAULT_TELEMETRY_POST_TIMEOUT_MS = 10_000;
+const DEFAULT_TELEMETRY_RETRY_ATTEMPTS = 2;
+const DEFAULT_TELEMETRY_RETRY_DELAY_MS = 250;
+const DEFAULT_TELEMETRY_BACKOFF_MS = 15_000;
 
 function parsePositiveInteger(value: string | undefined, fallback: number): number {
   const parsed = Number(value ?? fallback);
@@ -178,6 +184,8 @@ export function loadServerConfig(
         mergedEnv.BACKEND_BASE_URL?.trim() ||
         detectedPublicUrl
       : mergedEnv.BACKEND_BASE_URL?.trim() || detectedPublicUrl;
+  const backendLocalUrl =
+    mergedEnv.BACKEND_LOCAL_URL?.trim() || `http://127.0.0.1:${port}`;
   const requestBodyLimit = resolveRequestBodyLimit(mergedEnv);
   const telemetryMaxPostBytes = parsePositiveInteger(
     mergedEnv.TELEMETRY_MAX_POST_BYTES,
@@ -186,7 +194,7 @@ export function loadServerConfig(
   const simBackendUrl =
     mergedEnv.SIM_BACKEND_URL?.trim() ||
     mergedEnv.BACKEND_URL?.trim() ||
-    backendBaseUrl;
+    backendLocalUrl;
 
   return {
     port,
@@ -225,6 +233,18 @@ export function loadServerConfig(
     telemetryPostTimeoutMs: parsePositiveInteger(
       mergedEnv.TELEMETRY_POST_TIMEOUT_MS,
       DEFAULT_TELEMETRY_POST_TIMEOUT_MS
+    ),
+    telemetryRetryAttempts: parsePositiveInteger(
+      mergedEnv.TELEMETRY_RETRY_ATTEMPTS,
+      DEFAULT_TELEMETRY_RETRY_ATTEMPTS
+    ),
+    telemetryRetryDelayMs: parsePositiveInteger(
+      mergedEnv.TELEMETRY_RETRY_DELAY_MS,
+      DEFAULT_TELEMETRY_RETRY_DELAY_MS
+    ),
+    telemetryBackoffMs: parsePositiveInteger(
+      mergedEnv.TELEMETRY_BACKOFF_MS,
+      DEFAULT_TELEMETRY_BACKOFF_MS
     ),
     telemetryIngestQueueMaxDepth: parsePositiveInteger(
       mergedEnv.TELEMETRY_INGEST_QUEUE_MAX_DEPTH,

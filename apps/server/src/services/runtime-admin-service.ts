@@ -196,6 +196,9 @@ const CONFIG_SCHEMA: Array<{
   { key: "TELEMETRY_MODE", label: "Telemetry mode", category: "Admin", type: "string", restart_required: true, description: "Default simulator telemetry mode: minimal or full.", options: ["minimal", "full"], validate: validateTelemetryMode },
   { key: "TELEMETRY_MAX_POST_BYTES", label: "Telemetry max post bytes", category: "Admin", type: "number", restart_required: false, description: "Simulator-side maximum telemetry POST size before local skip.", validate: validatePositiveNumber },
   { key: "TELEMETRY_POST_TIMEOUT_MS", label: "Telemetry POST timeout ms", category: "Admin", type: "number", restart_required: true, description: "Client-side telemetry POST timeout before best-effort failure handling.", validate: validatePositiveNumber },
+  { key: "TELEMETRY_RETRY_ATTEMPTS", label: "Telemetry retries", category: "Admin", type: "number", restart_required: true, description: "Network retry attempts for each telemetry POST before backoff.", validate: validatePositiveNumber },
+  { key: "TELEMETRY_RETRY_DELAY_MS", label: "Telemetry retry delay ms", category: "Admin", type: "number", restart_required: true, description: "Initial delay between telemetry POST retry attempts.", validate: validatePositiveNumber },
+  { key: "TELEMETRY_BACKOFF_MS", label: "Telemetry backoff ms", category: "Admin", type: "number", restart_required: true, description: "Initial endpoint backoff after telemetry transport failures.", validate: validatePositiveNumber },
   { key: "TELEMETRY_INGEST_QUEUE_MAX_DEPTH", label: "Telemetry queue depth", category: "Admin", type: "number", restart_required: true, description: "Maximum backend telemetry items accepted before queue-pressure drops.", validate: validatePositiveNumber },
   { key: "TELEMETRY_PERSISTENCE_BATCH_SIZE", label: "Telemetry batch size", category: "Admin", type: "number", restart_required: true, description: "Maximum telemetry items per backend persistence batch.", validate: validatePositiveNumber },
   { key: "TELEMETRY_PERSISTENCE_CONCURRENCY", label: "Telemetry concurrency", category: "Admin", type: "number", restart_required: true, description: "Concurrent backend telemetry persistence batches.", validate: validatePositiveNumber },
@@ -521,6 +524,9 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
       TELEMETRY_MODE: this.config.telemetryMode,
       TELEMETRY_MAX_POST_BYTES: String(this.config.telemetryMaxPostBytes),
       TELEMETRY_POST_TIMEOUT_MS: String(this.config.telemetryPostTimeoutMs),
+      TELEMETRY_RETRY_ATTEMPTS: String(this.config.telemetryRetryAttempts),
+      TELEMETRY_RETRY_DELAY_MS: String(this.config.telemetryRetryDelayMs),
+      TELEMETRY_BACKOFF_MS: String(this.config.telemetryBackoffMs),
       TELEMETRY_INGEST_QUEUE_MAX_DEPTH: String(
         this.config.telemetryIngestQueueMaxDepth
       ),
@@ -607,6 +613,12 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
         return this.config.telemetryMode;
       case "TELEMETRY_POST_TIMEOUT_MS":
         return String(this.config.telemetryPostTimeoutMs);
+      case "TELEMETRY_RETRY_ATTEMPTS":
+        return String(this.config.telemetryRetryAttempts);
+      case "TELEMETRY_RETRY_DELAY_MS":
+        return String(this.config.telemetryRetryDelayMs);
+      case "TELEMETRY_BACKOFF_MS":
+        return String(this.config.telemetryBackoffMs);
       case "TELEMETRY_INGEST_QUEUE_MAX_DEPTH":
         return String(this.config.telemetryIngestQueueMaxDepth);
       case "TELEMETRY_PERSISTENCE_BATCH_SIZE":
