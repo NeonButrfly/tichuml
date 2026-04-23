@@ -42,7 +42,7 @@ export function renderRuntimeControlPanel(): string {
     <title>TichuML Runtime Control</title>
     <style>
       :root { color-scheme: dark; font-family: Inter, system-ui, sans-serif; background: #071012; color: #edf7f3; }
-      body { margin: 0; padding: 24px; background: #071012; }
+      body { margin: 0 auto; padding: 24px; background: #071012; max-width: 1640px; overflow-x: hidden; }
       header { display: flex; justify-content: space-between; gap: 16px; align-items: start; margin-bottom: 20px; }
       h1 { margin: 0; font-size: 30px; }
       h2 { margin: 0 0 12px; font-size: 18px; }
@@ -54,8 +54,8 @@ export function renderRuntimeControlPanel(): string {
       button.danger:hover:not(:disabled) { background: #742020; }
       input, select { width: 100%; box-sizing: border-box; background: #0c1a1d; color: #edf7f3; border: 1px solid #29474d; border-radius: 5px; padding: 8px; min-height: 38px; }
       input:disabled { opacity: .62; }
-      .grid { display: grid; gap: 14px; grid-template-columns: repeat(12, 1fr); }
-      .panel { grid-column: span 6; border: 1px solid #243c42; background: #0b171a; border-radius: 8px; padding: 16px; }
+      .grid { display: grid; gap: 14px; grid-template-columns: repeat(12, minmax(0, 1fr)); min-width: 0; }
+      .panel { grid-column: span 6; border: 1px solid #243c42; background: #0b171a; border-radius: 8px; padding: 16px; min-width: 0; }
       .wide { grid-column: span 12; }
       .third { grid-column: span 4; }
       .row { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 8px; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,.06); min-width: 0; }
@@ -65,7 +65,9 @@ export function renderRuntimeControlPanel(): string {
       .bad { background: #6f1d1b; color: #ffd8d6; }
       .warn { background: #6b4e16; color: #ffe6ad; }
       .actions { display: flex; flex-wrap: wrap; gap: 8px; }
-      .config-row { display: grid; grid-template-columns: minmax(190px, 250px) 120px minmax(240px, 1fr) minmax(190px, 240px); gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.06); min-width: 0; }
+      #config { min-width: 0; overflow: hidden; }
+      .config-row { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(120px, 150px) minmax(260px, 1.35fr) minmax(220px, .9fr); gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.06); min-width: 0; }
+      .config-row > * { min-width: 0; }
       .config-meta { color: #9fb4b8; font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
       .category { margin: 18px 0 6px; color: #d5e0df; font-weight: 700; }
       small { color: #9fb4b8; }
@@ -172,6 +174,28 @@ export function renderRuntimeControlPanel(): string {
         return '<span class="badge ok">CLEAN / CURRENT</span>';
       }
 
+      function runtimeConfigValue(entry, state) {
+        const candidates = [
+          state.savedValue,
+          state.overrideValue,
+          entry.savedValue,
+          entry.value,
+          entry.effectiveValue,
+          entry.effective_value,
+          Array.isArray(entry.options) ? entry.options[0] : '',
+          ''
+        ];
+        const found = candidates.find((candidate) => candidate !== undefined && candidate !== null && String(candidate).length > 0);
+        return String(found ?? '');
+      }
+
+      function runtimeEffectiveValue(entry, state) {
+        if (state.overrideEnabled === false) {
+          return String(entry.detectedValue ?? entry.detected_value ?? entry.effectiveValue ?? entry.effective_value ?? '');
+        }
+        return runtimeConfigValue(entry, state);
+      }
+
       function renderStatus(status) {
         latestStatus = status;
         $('backend').innerHTML = row('Running', badge(status.backend.running)) + row('Health', badge(status.endpoints.health?.ok)) + row('PID', html(status.backend.pid)) + row('Uptime', status.backend.uptime_seconds ? html(status.backend.uptime_seconds + 's') : 'n/a') + row('Port listeners', html(status.backend.port_listeners.join(', ') || 'none'));
@@ -187,15 +211,18 @@ export function renderRuntimeControlPanel(): string {
       }
 
       function controlFor(entry, state) {
-        const value = state.overrideEnabled === false ? entry.detectedValue || '' : state.savedValue;
-        if (entry.type === 'boolean') {
-          const boolValue = String(state.savedValue).toLowerCase() === 'true' ? 'true' : 'false';
-          return '<select data-key="' + html(entry.key) + '" data-field="savedValue"><option value="true"' + (boolValue === 'true' ? ' selected' : '') + '>true</option><option value="false"' + (boolValue === 'false' ? ' selected' : '') + '>false</option></select>';
+        const value = state.overrideEnabled === false ? runtimeEffectiveValue(entry, state) : runtimeConfigValue(entry, state);
+        const disabled = state.overrideEnabled === false ? ' disabled' : '';
+        if (Array.isArray(entry.options) && entry.options.length > 0) {
+          const selectedValue = entry.options.includes(value) ? value : String(entry.options[0]);
+          return '<select data-key="' + html(entry.key) + '" data-field="savedValue"' + disabled + '>' + entry.options.map((option) => '<option value="' + html(option) + '"' + (selectedValue === String(option) ? ' selected' : '') + '>' + html(option) + '</option>').join('') + '</select>';
         }
-        if (entry.input === 'select' && Array.isArray(entry.options)) {
-          return '<select data-key="' + html(entry.key) + '" data-field="savedValue">' + entry.options.map((option) => '<option value="' + html(option) + '"' + (String(state.savedValue) === String(option) ? ' selected' : '') + '>' + html(option) + '</option>').join('') + '</select>';
+        if (entry.type === 'boolean' || entry.input === 'boolean') {
+          const boolValue = String(value).toLowerCase() === 'true' ? 'true' : 'false';
+          return '<select data-key="' + html(entry.key) + '" data-field="savedValue"' + disabled + '><option value="true"' + (boolValue === 'true' ? ' selected' : '') + '>true</option><option value="false"' + (boolValue === 'false' ? ' selected' : '') + '>false</option></select>';
         }
-        return '<input data-key="' + html(entry.key) + '" data-field="savedValue" type="' + (entry.type === 'number' ? 'number' : 'text') + '" value="' + html(value) + '"' + (state.overrideEnabled === false ? ' disabled' : '') + '>';
+        const inputType = entry.type === 'number' || entry.input === 'number' ? 'number' : 'text';
+        return '<input data-key="' + html(entry.key) + '" data-field="savedValue" type="' + inputType + '" value="' + html(value) + '"' + disabled + '>';
       }
 
       function renderConfig(config) {
@@ -211,7 +238,7 @@ export function renderRuntimeControlPanel(): string {
           const meta = [
             entry.requiresRestart ? 'restart required' : 'dynamic',
             entry.detectedValue ? 'detected: ' + entry.detectedValue : null,
-            'effective: ' + (state.overrideEnabled === false ? entry.detectedValue : state.savedValue || entry.effectiveValue),
+            'effective: ' + runtimeEffectiveValue(entry, state),
             dirtyKeys.has(entry.key) ? 'unsaved edit' : null
           ].filter(Boolean).map(html).join('<br>');
           const override = entry.detectedValue

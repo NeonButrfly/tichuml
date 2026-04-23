@@ -127,7 +127,9 @@ Boolean values render as `true` / `false` dropdowns. Enum values such as
 `TELEMETRY_MODE` and `SIM_PROVIDER` are typed as `select`, render as dropdowns,
 and are rejected if submitted outside their allowed values. Numeric settings
 render as numeric inputs; free-text controls are reserved for unconstrained
-strings such as URLs and paths.
+strings such as URLs and paths. The browser renderer also treats any config
+entry with an `options` array as a dropdown, even if an older or partially stale
+payload still labels the entry as a string.
 
 Simulator/controller defaults persisted by the runtime config API include:
 
