@@ -291,6 +291,112 @@ function withSourceMetadata(config: {
   };
 }
 
+function isJsonObjectValue(value: SeedJsonValue): value is JsonObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function sortedStringList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string").sort()
+    : [];
+}
+
+function stableJsonString(value: unknown): string {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+
+  if (Array.isArray(value)) {
+    return `[${value.map((entry) => stableJsonString(entry)).join(",")}]`;
+  }
+
+  const objectValue = value as Record<string, unknown>;
+  return `{${Object.keys(objectValue)
+    .sort()
+    .map(
+      (key) => `${JSON.stringify(key)}:${stableJsonString(objectValue[key])}`
+    )
+    .join(",")}}`;
+}
+
+function readStringField(value: JsonObject, key: string): string | null {
+  const field = value[key];
+  return typeof field === "string" ? field : null;
+}
+
+function actionsEquivalent(candidate: JsonObject, chosen: JsonObject): boolean {
+  if (stableJsonString(candidate) === stableJsonString(chosen)) {
+    return true;
+  }
+
+  const candidateType = readStringField(candidate, "type");
+  if (
+    candidateType === null ||
+    candidateType !== readStringField(chosen, "type")
+  ) {
+    return false;
+  }
+
+  const candidateSeat = readStringField(candidate, "seat");
+  const chosenSeat = readStringField(chosen, "seat");
+  if (
+    candidateSeat !== null &&
+    chosenSeat !== null &&
+    candidateSeat !== chosenSeat
+  ) {
+    return false;
+  }
+
+  if (candidateType === "play_cards") {
+    return (
+      sortedStringList(candidate.cardIds).join("|") ===
+        sortedStringList(chosen.cardIds).join("|") &&
+      candidate.phoenixAsRank === chosen.phoenixAsRank
+    );
+  }
+
+  if (candidateType === "select_pass") {
+    return (
+      candidate.seat === chosen.seat &&
+      candidate.left === chosen.left &&
+      candidate.partner === chosen.partner &&
+      candidate.right === chosen.right
+    );
+  }
+
+  if (candidateType === "assign_dragon_trick") {
+    return candidate.recipient === chosen.recipient;
+  }
+
+  if (candidateType === "advance_phase") {
+    return candidate.actor === chosen.actor;
+  }
+
+  return true;
+}
+
+export function selectTelemetryChosenAction(config: {
+  actorLegalActions: SeedJsonValue[];
+  chosenAction: JsonObject;
+}): JsonObject {
+  const exactMatch = config.actorLegalActions.find(
+    (candidate): candidate is JsonObject =>
+      isJsonObjectValue(candidate) &&
+      stableJsonString(candidate) === stableJsonString(config.chosenAction)
+  );
+  if (exactMatch) {
+    return exactMatch;
+  }
+
+  const structuralMatch = config.actorLegalActions.find(
+    (candidate): candidate is JsonObject =>
+      isJsonObjectValue(candidate) &&
+      actionsEquivalent(candidate, config.chosenAction)
+  );
+
+  return structuralMatch ?? config.chosenAction;
+}
+
 export function buildTelemetryDecisionPayloads(config: {
   source: TelemetrySource;
   mode: TelemetryMode;
@@ -321,6 +427,10 @@ export function buildTelemetryDecisionPayloads(config: {
     config.legalActions,
     config.actorSeat
   );
+  const chosenAction = selectTelemetryChosenAction({
+    actorLegalActions,
+    chosenAction: config.chosenAction
+  });
   const compactMetadata = buildCompactDecisionMetadata({
     stateRaw: config.stateRaw,
     actorLegalActions,
@@ -364,7 +474,7 @@ export function buildTelemetryDecisionPayloads(config: {
     fallback_used: config.fallbackUsed,
     policy_name: config.policyName,
     policy_source: config.policySource,
-    chosen_action: config.chosenAction,
+    chosen_action: chosenAction,
     metadata: baseMetadata,
     antipattern_tags: config.antipatternTags ?? []
   };
@@ -384,9 +494,7 @@ export function buildTelemetryDecisionPayloads(config: {
       state_raw: {},
       state_norm: null,
       legal_actions:
-        actorLegalActions.length > 0
-          ? actorLegalActions
-          : [config.chosenAction],
+        actorLegalActions.length > 0 ? actorLegalActions : [chosenAction],
       explanation: null,
       candidateScores: null,
       stateFeatures: compactMetadata,

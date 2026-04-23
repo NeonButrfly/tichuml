@@ -31,6 +31,32 @@ const PASS_ACTION = {
   seat: "seat-0"
 } as EngineAction;
 
+const COMPACT_PLAY_ACTION = {
+  type: "play_cards",
+  seat: "seat-0",
+  cardIds: ["red-5", "jade-5"],
+  combination: {
+    kind: "pair",
+    primaryRank: 5,
+    cardCount: 2,
+    isBomb: false
+  }
+} as JsonObject;
+
+const RAW_PLAY_ACTION = {
+  type: "play_cards",
+  seat: "seat-0",
+  cardIds: ["jade-5", "red-5"],
+  combination: {
+    kind: "pair",
+    primaryRank: 5,
+    cardCount: 2,
+    isBomb: false,
+    actualRanks: [5, 5],
+    cards: ["jade-5", "red-5"]
+  }
+} as unknown as EngineAction;
+
 const STATE_RAW = {
   phase: "play",
   activeSeat: "seat-0",
@@ -98,6 +124,74 @@ describe("central telemetry subsystem", () => {
     expect(payloads.minimal.metadata.source).toBe("gameplay");
   });
 
+  it("selects chosen_action from the same actor legal_actions snapshot", () => {
+    const payloads = buildTelemetryDecisionPayloads({
+      source: "gameplay",
+      mode: "full",
+      gameId: "game-canonical-action",
+      handId: "hand-canonical-action",
+      phase: "play",
+      actorSeat: "seat-0",
+      decisionIndex: 2,
+      stateRaw: STATE_RAW,
+      stateNorm: STATE_NORM,
+      legalActions: {
+        "seat-0": [COMPACT_PLAY_ACTION]
+      },
+      chosenAction: RAW_PLAY_ACTION as unknown as JsonObject,
+      policyName: "test-policy",
+      policySource: "local_heuristic",
+      requestedProvider: "local",
+      providerUsed: "local_heuristic",
+      fallbackUsed: false
+    });
+    const fullLegalActions = (payloads.full.legal_actions as JsonObject)[
+      "seat-0"
+    ] as JsonObject[];
+    const minimalLegalActions = payloads.minimal.legal_actions as JsonObject[];
+
+    expect(payloads.full.chosen_action).toEqual(COMPACT_PLAY_ACTION);
+    expect(payloads.full.chosen_action).toEqual(fullLegalActions[0]);
+    expect(payloads.minimal.chosen_action).toEqual(minimalLegalActions[0]);
+    expect(validateTelemetryDecisionPayload(payloads.full)).toMatchObject({
+      ok: true
+    });
+    expect(validateTelemetryDecisionPayload(payloads.minimal)).toMatchObject({
+      ok: true
+    });
+  });
+
+  it("keeps fallback chosen_action schema identical to legal_actions", () => {
+    const payloads = buildTelemetryDecisionPayloads({
+      source: "selfplay",
+      mode: "minimal",
+      gameId: "game-fallback-canonical-action",
+      handId: "hand-fallback-canonical-action",
+      phase: "play",
+      actorSeat: "seat-0",
+      decisionIndex: 3,
+      stateRaw: STATE_RAW,
+      stateNorm: STATE_NORM,
+      legalActions: {
+        "seat-0": [COMPACT_PLAY_ACTION]
+      },
+      chosenAction: RAW_PLAY_ACTION as unknown as JsonObject,
+      policyName: "test-policy",
+      policySource: "local_heuristic",
+      requestedProvider: "server_heuristic",
+      providerUsed: "local_heuristic",
+      fallbackUsed: true
+    });
+
+    expect(payloads.minimal.fallback_used).toBe(true);
+    expect(payloads.minimal.chosen_action).toEqual(
+      (payloads.minimal.legal_actions as JsonObject[])[0]
+    );
+    expect(validateTelemetryDecisionPayload(payloads.minimal)).toMatchObject({
+      ok: true
+    });
+  });
+
   it("suppresses transport failures by default and surfaces them in strict mode", async () => {
     const payloads = buildDecisionPayloads();
     const fetchImpl = vi.fn(async () => {
@@ -136,6 +230,78 @@ describe("central telemetry subsystem", () => {
       })
     ).rejects.toBeInstanceOf(TelemetryError);
     expect(fetchImpl).toHaveBeenCalledTimes(3);
+  });
+
+  it("logs full chosen_action mismatch diagnostics before posting", async () => {
+    const payloads = buildDecisionPayloads();
+    const invalidPayloads = {
+      full: {
+        ...payloads.full,
+        chosen_action: {
+          type: "pass_turn",
+          seat: "seat-1"
+        }
+      } as TelemetryDecisionPayload,
+      minimal: {
+        ...payloads.minimal,
+        chosen_action: {
+          type: "pass_turn",
+          seat: "seat-1"
+        }
+      } as TelemetryDecisionPayload
+    };
+    const fetchImpl = vi.fn(async () => ({
+      ok: true,
+      status: 201,
+      async text() {
+        return JSON.stringify({ accepted: true, telemetry_id: 9 });
+      }
+    })) as unknown as typeof fetch;
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    let diagnostic: JsonObject | null = null;
+
+    try {
+      await expect(
+        emitTelemetryDecision({
+          telemetry: {
+            enabled: true,
+            strictTelemetry: false,
+            backendBaseUrl: "http://localhost:4310",
+            source: "gameplay",
+            mode: "minimal"
+          },
+          payloads: invalidPayloads,
+          fetchImpl
+        })
+      ).resolves.toMatchObject({
+        ok: false,
+        failure_kind: "client_validation"
+      });
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      diagnostic = JSON.parse(
+        String(errorSpy.mock.calls[0]?.[0])
+      ) as JsonObject;
+    } finally {
+      errorSpy.mockRestore();
+    }
+
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(diagnostic).toMatchObject({
+      event: "telemetry_chosen_action_mismatch",
+      request_kind: "telemetry_decision",
+      failure_kind: "client_validation",
+      state_identifiers: {
+        game_id: "game-central",
+        hand_id: "hand-central",
+        actor_seat: "seat-0",
+        decision_index: 1
+      },
+      chosen_action: {
+        type: "pass_turn",
+        seat: "seat-1"
+      }
+    });
+    expect(diagnostic.legal_actions).toEqual(payloads.minimal.legal_actions);
   });
 
   it("backs off repeated telemetry transport failures without another POST attempt", async () => {
@@ -270,6 +436,59 @@ describe("central telemetry subsystem", () => {
 
     expect(gameplay.full.metadata.source).toBe("gameplay");
     expect(selfplay.minimal.metadata.source).toBe("selfplay");
+  });
+
+  it("normalizes gameplay and selfplay play-card actions through the shared path", () => {
+    const gameplay = buildGameplayDecisionTelemetry({
+      action: RAW_PLAY_ACTION,
+      phase: "play",
+      gameId: "game-play-shape",
+      handId: "hand-play-shape",
+      decisionIndex: 1,
+      stateRaw: STATE_RAW as unknown as EngineResult["nextState"],
+      stateNorm: STATE_NORM as unknown as EngineResult["derivedView"],
+      legalActions: {
+        "seat-0": [RAW_PLAY_ACTION]
+      } as unknown as EngineResult["legalActions"],
+      policyName: "test-policy",
+      policySource: "human_ui",
+      decisionMode: "server_heuristic"
+    });
+    const selfplay = buildSelfPlayDecisionTelemetry({
+      mode: "minimal",
+      gameId: "game-play-shape",
+      handId: "hand-play-shape",
+      phase: "play",
+      actorSeat: "seat-0",
+      decisionIndex: 1,
+      stateRaw: STATE_RAW,
+      stateNorm: STATE_NORM,
+      legalActions: {
+        "seat-0": [RAW_PLAY_ACTION]
+      } as unknown as LegalActionMap,
+      chosenAction: RAW_PLAY_ACTION,
+      policyName: "test-policy",
+      requestedProvider: "local",
+      providerUsed: "local_heuristic",
+      fallbackUsed: false,
+      latencyMs: 1
+    });
+
+    const gameplayActions = (gameplay.full.legal_actions as JsonObject)[
+      "seat-0"
+    ] as JsonObject[];
+
+    expect(gameplay.full.chosen_action).toEqual(gameplayActions[0]);
+    expect(selfplay.minimal.chosen_action).toEqual(
+      (selfplay.minimal.legal_actions as JsonObject[])[0]
+    );
+    expect(gameplay.full.chosen_action).toEqual(selfplay.minimal.chosen_action);
+    expect(validateTelemetryDecisionPayload(gameplay.full)).toMatchObject({
+      ok: true
+    });
+    expect(validateTelemetryDecisionPayload(selfplay.minimal)).toMatchObject({
+      ok: true
+    });
   });
 
   it("does not let gameplay telemetry failure reject the UI decision flow", async () => {

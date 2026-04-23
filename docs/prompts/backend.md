@@ -438,3 +438,26 @@ supported size limit.`, leaving the control UI stuck at `Batches=0`,
   [Linux Backend Deployment + ML Host](https://github.com/NeonButrfly/tichuml/milestone/25)
 - Status:
   Lives in GitHub, not here.
+
+## 2026-04-23 - Telemetry chosen action must match legal action exactly
+
+- Prompt signal:
+  Telemetry client validation is failing because `chosen_action` is not exactly
+  one of `legal_actions`.
+- Interpreted requirement:
+  Issue [#43](https://github.com/NeonButrfly/tichuml/issues/43) tracks the
+  producer-side invariant: normal gameplay, simulator/selfplay, controller, and
+  fallback decisions must choose telemetry `chosen_action` directly from the same
+  actor-scoped legal-action snapshot used for decision generation. Legal actions
+  and chosen actions must use the same schema, with no alias drift or extra raw
+  engine fields, and validation mismatches must produce a machine-readable
+  diagnostic without disabling validation.
+- Affected systems:
+  `packages/telemetry`, gameplay/selfplay telemetry adapters, simulator
+  decision telemetry, telemetry docs, integration tests.
+- Linked GitHub issue:
+  [#43](https://github.com/NeonButrfly/tichuml/issues/43)
+- Milestone:
+  [Linux Backend Deployment + ML Host](https://github.com/NeonButrfly/tichuml/milestone/25)
+- Status:
+  Lives in GitHub, not here.

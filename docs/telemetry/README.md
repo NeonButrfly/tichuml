@@ -53,6 +53,8 @@ The canonical telemetry contract now lives in [../telemetry_contract.md](../tele
 - payload builders for decision and event telemetry
 - source adapters for gameplay, selfplay, controller, and eval producers
 - source tags stored in metadata as `source` and `telemetry_source`
+- canonical `chosen_action` selection from the same actor-scoped `legal_actions`
+  snapshot used for validation
 - normalized telemetry config for enabled/strict/trace/mode/max-byte/backend settings
 - minimal/full/adaptive policy selection
 - byte measurement, downgrade, and skip behavior
@@ -67,6 +69,17 @@ Existing producers are intentionally thin:
 - controller selfplay uses the same selfplay adapter with `source: "controller"` and worker metadata
 
 Do not add new telemetry builders or raw telemetry POST paths in application code. Future producers should add a thin source adapter in `packages/telemetry/src/source-adapters.ts` or call the existing shared builders/client directly.
+
+Decision telemetry must keep `chosen_action` structurally identical to one entry
+in the actor's `legal_actions`. The shared builder enforces that by selecting
+the canonical legal action object from the actor-scoped list after source
+adapters serialize actions. Callers must pass the legal actions from the exact
+state used to choose the action; fallback decisions use the same rule. If a
+payload still fails local validation because `chosen_action` is not legal, the
+shared client logs a machine-readable `telemetry_chosen_action_mismatch`
+diagnostic with the state identifiers, full `chosen_action`, and full
+`legal_actions`, then follows the configured non-strict or strict failure
+policy.
 
 ## Failure Policy
 

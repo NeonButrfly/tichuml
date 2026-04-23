@@ -53,6 +53,52 @@ function validationMessage(issues: ValidationIssue[]): string {
   return issues.map((issue) => `${issue.path}: ${issue.message}`).join("; ");
 }
 
+function hasChosenActionValidationIssue(issues: ValidationIssue[]): boolean {
+  return issues.some((issue) => issue.path === "chosen_action");
+}
+
+function logChosenActionMismatchDiagnostic(config: {
+  telemetryConfig: NormalizedTelemetryConfig;
+  payload: TelemetryDecisionPayload | TelemetryEventPayload;
+  payloadBytes: number;
+  issues: ValidationIssue[];
+  message: string;
+}): void {
+  if (!("chosen_action" in config.payload)) {
+    return;
+  }
+
+  console.error(
+    JSON.stringify({
+      event: "telemetry_chosen_action_mismatch",
+      source: config.telemetryConfig.source,
+      endpoint: buildEndpoint(config.telemetryConfig, "telemetry_decision"),
+      request_kind: "telemetry_decision",
+      failure_kind: "client_validation",
+      message: config.message,
+      validation_issues: config.issues,
+      state_identifiers: {
+        game_id: config.payload.game_id,
+        hand_id: config.payload.hand_id,
+        phase: config.payload.phase,
+        actor_seat: config.payload.actor_seat,
+        decision_index: config.payload.decision_index,
+        schema_version: config.payload.schema_version,
+        telemetry_mode:
+          typeof config.payload.metadata.telemetry_mode === "string"
+            ? config.payload.metadata.telemetry_mode
+            : null
+      },
+      chosen_action: config.payload.chosen_action,
+      legal_actions: config.payload.legal_actions,
+      payload_bytes: config.payloadBytes,
+      max_bytes: config.telemetryConfig.maxBytes,
+      worker_id: config.telemetryConfig.workerId ?? null,
+      controller_mode: config.telemetryConfig.controllerMode === true
+    })
+  );
+}
+
 async function readResponseJson(
   response: Response
 ): Promise<{ payload: unknown; rawBody: string }> {
@@ -376,6 +422,18 @@ function validatePayload(config: {
     return null;
   }
   const message = `Local telemetry payload failed validation: ${validationMessage(parsed.issues)}`;
+  if (
+    config.requestKind === "telemetry_decision" &&
+    hasChosenActionValidationIssue(parsed.issues)
+  ) {
+    logChosenActionMismatchDiagnostic({
+      telemetryConfig: config.telemetryConfig,
+      payload: config.payload,
+      payloadBytes: config.payloadBytes,
+      issues: parsed.issues,
+      message
+    });
+  }
   return maybeThrow(config.telemetryConfig, {
     ok: false,
     endpoint: config.endpoint,
