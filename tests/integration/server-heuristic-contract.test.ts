@@ -77,7 +77,9 @@ class InMemoryTelemetryRepository implements TelemetryRepository {
     return id;
   }
 
-  async listDecisions(gameId: string): Promise<StoredTelemetryDecisionRecord[]> {
+  async listDecisions(
+    gameId: string
+  ): Promise<StoredTelemetryDecisionRecord[]> {
     return this.decisions.filter((decision) => decision.game_id === gameId);
   }
 
@@ -108,7 +110,9 @@ class InMemoryTelemetryRepository implements TelemetryRepository {
     return {
       decisions: this.decisions.length,
       events: this.events.length,
-      unique_state_hashes: new Set(this.decisions.map((decision) => decision.state_hash)).size,
+      unique_state_hashes: new Set(
+        this.decisions.map((decision) => decision.state_hash)
+      ).size,
       duplicate_state_hashes: 0,
       unique_legal_actions_hashes: new Set(
         this.decisions.map((decision) => decision.legal_actions_hash)
@@ -126,8 +130,9 @@ class InMemoryTelemetryRepository implements TelemetryRepository {
       decisions_with_legal_chosen_action: this.decisions.filter(
         (decision) => decision.chosen_action_is_legal
       ).length,
-      decisions_with_wish: this.decisions.filter((decision) => decision.has_wish)
-        .length,
+      decisions_with_wish: this.decisions.filter(
+        (decision) => decision.has_wish
+      ).length,
       decisions_can_pass: this.decisions.filter((decision) => decision.can_pass)
         .length,
       latest_decision_ts: this.decisions.at(-1)?.ts ?? null,
@@ -203,7 +208,10 @@ const TEST_SERVER_CONFIG: ServerConfig = {
 let nextSafeTestPort = 43210;
 
 async function withServer<T>(
-  callback: (config: { baseUrl: string; repository: InMemoryTelemetryRepository }) => Promise<T>
+  callback: (config: {
+    baseUrl: string;
+    repository: InMemoryTelemetryRepository;
+  }) => Promise<T>
 ): Promise<T> {
   const repository = new InMemoryTelemetryRepository();
   const server = createAppServer({
@@ -311,7 +319,9 @@ async function withTelemetryDecisionServer<T>(
         const body = Buffer.concat(chunks).toString("utf8");
         capturedPayloads.push(JSON.parse(body) as TelemetryDecisionPayload);
         response.writeHead(config.status ?? 201);
-        response.end(JSON.stringify(config.body ?? { accepted: true, telemetry_id: 1 }));
+        response.end(
+          JSON.stringify(config.body ?? { accepted: true, telemetry_id: 1 })
+        );
       });
       return;
     }
@@ -356,7 +366,9 @@ function advanceToPassSelect(): EngineResult {
   return result;
 }
 
-function createServerHeuristicPayload(result: EngineResult): DecisionRequestPayload {
+function createServerHeuristicPayload(
+  result: EngineResult
+): DecisionRequestPayload {
   const actor = getCanonicalActiveSeatFromState(result.nextState);
   return buildDecisionRequestPayload({
     gameId: "contract-game",
@@ -370,7 +382,9 @@ function createServerHeuristicPayload(result: EngineResult): DecisionRequestPayl
   });
 }
 
-function createTelemetryEventPayload(result: EngineResult): TelemetryEventPayload {
+function createTelemetryEventPayload(
+  result: EngineResult
+): TelemetryEventPayload {
   return {
     ts: new Date().toISOString(),
     game_id: "telemetry-event-game",
@@ -398,21 +412,27 @@ describe("server_heuristic actor contract", () => {
 
     const passSelect = advanceToPassSelect();
     expect(passSelect.nextState.activeSeat).toBeNull();
-    expect(getCanonicalActiveSeatFromState(passSelect.nextState)).toBe("seat-0");
+    expect(getCanonicalActiveSeatFromState(passSelect.nextState)).toBe(
+      "seat-0"
+    );
   });
 
   it("builds server requests with actor_seat matching the canonical actor", () => {
     const result = advanceToPassSelect();
     const request = createServerHeuristicPayload(result);
 
-    expect(request.actor_seat).toBe(getCanonicalActiveSeatFromState(request.state_raw));
+    expect(request.actor_seat).toBe(
+      getCanonicalActiveSeatFromState(request.state_raw)
+    );
     expect(
       validateLegalActionsForCanonicalActor({
         legalActions: request.legal_actions as never,
         actor: request.actor_seat as SeatId
       })
     ).toEqual([]);
-    expect(() => validateServerHeuristicDecisionRequestContract(request)).not.toThrow();
+    expect(() =>
+      validateServerHeuristicDecisionRequestContract(request)
+    ).not.toThrow();
   });
 
   it("rejects mismatched simulator requests before sending them", () => {
@@ -422,9 +442,9 @@ describe("server_heuristic actor contract", () => {
       actor_seat: "seat-2"
     };
 
-    expect(() => validateServerHeuristicDecisionRequestContract(request)).toThrow(
-      /\[server_heuristic\] refusing inconsistent request/
-    );
+    expect(() =>
+      validateServerHeuristicDecisionRequestContract(request)
+    ).toThrow(/\[server_heuristic\] refusing inconsistent request/);
   });
 
   it("reports incomplete backend payloads before sending them", () => {
@@ -433,7 +453,10 @@ describe("server_heuristic actor contract", () => {
     const validation = validateBackendDecisionRequestInput({
       gameId: "contract-game",
       handId: "contract-hand",
-      stateRaw: { phase: result.nextState.phase, activeSeat: result.nextState.activeSeat },
+      stateRaw: {
+        phase: result.nextState.phase,
+        activeSeat: result.nextState.activeSeat
+      },
       stateNorm: result.derivedView as unknown as JsonObject,
       legalActions: getActorScopedLegalActions(result.legalActions, actor),
       phase: result.nextState.phase,
@@ -465,7 +488,9 @@ describe("server_heuristic actor contract", () => {
         ...request,
         actor_seat: "seat-2"
       })
-    ).toThrow(/Actor mismatch:[\s\S]*request\.actor_seat=seat-2[\s\S]*canonical\.state\.activeSeat=seat-0/);
+    ).toThrow(
+      /Actor mismatch:[\s\S]*request\.actor_seat=seat-2[\s\S]*canonical\.state\.activeSeat=seat-0/
+    );
   });
 
   it("keeps numeric, string, and compass seat identities stable without rotation", () => {
@@ -490,9 +515,13 @@ describe("server_heuristic actor contract", () => {
       const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
       const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
       const capturedErrors: string[] = [];
-      const errorSpy = vi.spyOn(console, "error").mockImplementation((value) => {
-        capturedErrors.push(typeof value === "string" ? value : JSON.stringify(value));
-      });
+      const errorSpy = vi
+        .spyOn(console, "error")
+        .mockImplementation((value) => {
+          capturedErrors.push(
+            typeof value === "string" ? value : JSON.stringify(value)
+          );
+        });
       try {
         await runSelfPlayBatch({
           games: 1,
@@ -509,7 +538,9 @@ describe("server_heuristic actor contract", () => {
         errorSpy.mockRestore();
       }
 
-      expect(capturedErrors.join("\n")).not.toMatch(/actor[_ -]?seat|Actor mismatch/i);
+      expect(capturedErrors.join("\n")).not.toMatch(
+        /actor[_ -]?seat|Actor mismatch/i
+      );
       expect(repository.decisions.length).toBeGreaterThan(0);
     });
   }, 15_000);
@@ -519,9 +550,13 @@ describe("server_heuristic actor contract", () => {
       const result = advanceToPassSelect();
       const actor = getCanonicalActiveSeatFromState(result.nextState);
       const capturedErrors: string[] = [];
-      const errorSpy = vi.spyOn(console, "error").mockImplementation((value) => {
-        capturedErrors.push(typeof value === "string" ? value : JSON.stringify(value));
-      });
+      const errorSpy = vi
+        .spyOn(console, "error")
+        .mockImplementation((value) => {
+          capturedErrors.push(
+            typeof value === "string" ? value : JSON.stringify(value)
+          );
+        });
       try {
         const decision = await resolveDecision({
           backendBaseUrl: baseUrl,
@@ -580,44 +615,47 @@ describe("server_heuristic actor contract", () => {
   });
 
   it("sends compact local decision telemetry by default", async () => {
-    await withTelemetryDecisionServer({}, async ({ baseUrl, capturedPayloads }) => {
-      const result = advanceToPassSelect();
-      const actor = getCanonicalActiveSeatFromState(result.nextState);
-      const decision = await resolveDecision({
-        backendBaseUrl: baseUrl,
-        telemetryEnabled: true,
-        strictTelemetry: false,
-        gameId: "minimal-telemetry-game",
-        handId: "minimal-telemetry-hand",
-        actor,
-        decisionIndex: 0,
-        stateRaw: result.nextState as unknown as JsonObject,
-        stateNorm: result.derivedView as unknown as JsonObject,
-        legalActions: result.legalActions,
-        phase: result.nextState.phase,
-        defaultProvider: "local"
-      });
+    await withTelemetryDecisionServer(
+      {},
+      async ({ baseUrl, capturedPayloads }) => {
+        const result = advanceToPassSelect();
+        const actor = getCanonicalActiveSeatFromState(result.nextState);
+        const decision = await resolveDecision({
+          backendBaseUrl: baseUrl,
+          telemetryEnabled: true,
+          strictTelemetry: false,
+          gameId: "minimal-telemetry-game",
+          handId: "minimal-telemetry-hand",
+          actor,
+          decisionIndex: 0,
+          stateRaw: result.nextState as unknown as JsonObject,
+          stateNorm: result.derivedView as unknown as JsonObject,
+          legalActions: result.legalActions,
+          phase: result.nextState.phase,
+          defaultProvider: "local"
+        });
 
-      expect(decision.providerUsed).toBe("local_heuristic");
-      expect(capturedPayloads.length).toBe(1);
-      const payload = capturedPayloads[0];
-      expect(payload.game_id).toBe("minimal-telemetry-game");
-      expect(payload.hand_id).toBe("minimal-telemetry-hand");
-      expect(payload.phase).toBe(result.nextState.phase);
-      expect(payload.actor_seat).toBe(actor);
-      expect(payload.decision_index).toBe(0);
-      expect(payload.provider_used).toBe("local_heuristic");
-      expect(payload.state_raw).toEqual({});
-      expect(payload.state_norm).toBeNull();
-      expect(payload.legal_actions).toEqual([payload.chosen_action]);
-      expect(payload.explanation).toBeNull();
-      expect(payload.candidateScores).toBeNull();
-      expect(payload.metadata).toMatchObject({
-        telemetry_mode: "minimal",
-        legal_action_count: result.legalActions[actor]?.length ?? 0
-      });
-      expect(JSON.stringify(payload).length).toBeLessThan(10_000);
-    });
+        expect(decision.providerUsed).toBe("local_heuristic");
+        expect(capturedPayloads.length).toBe(1);
+        const payload = capturedPayloads[0];
+        expect(payload.game_id).toBe("minimal-telemetry-game");
+        expect(payload.hand_id).toBe("minimal-telemetry-hand");
+        expect(payload.phase).toBe(result.nextState.phase);
+        expect(payload.actor_seat).toBe(actor);
+        expect(payload.decision_index).toBe(0);
+        expect(payload.provider_used).toBe("local_heuristic");
+        expect(payload.state_raw).toEqual({});
+        expect(payload.state_norm).toBeNull();
+        expect(payload.legal_actions).toContainEqual(payload.chosen_action);
+        expect(payload.explanation).toBeNull();
+        expect(payload.candidateScores).toBeNull();
+        expect(payload.metadata).toMatchObject({
+          telemetry_mode: "minimal",
+          legal_action_count: result.legalActions[actor]?.length ?? 0
+        });
+        expect(JSON.stringify(payload).length).toBeLessThan(10_000);
+      }
+    );
   });
 
   it("keeps local provider decisions alive when telemetry decision POST returns 500", async () => {
@@ -647,7 +685,9 @@ describe("server_heuristic actor contract", () => {
         });
 
         expect(decision.providerUsed).toBe("local_heuristic");
-        expect(decision.telemetryFailureStats.telemetryDecisionFailures).toBe(1);
+        expect(decision.telemetryFailureStats.telemetryDecisionFailures).toBe(
+          1
+        );
         expect(decision.telemetryFailureStats.telemetryFailuresTotal).toBe(1);
         expect(decision.telemetryFailure).toMatchObject({
           ok: false,
@@ -683,35 +723,40 @@ describe("server_heuristic actor contract", () => {
   });
 
   it("skips oversized telemetry locally instead of posting it in non-strict mode", async () => {
-    await withTelemetryDecisionServer({}, async ({ baseUrl, capturedPayloads }) => {
-      const result = advanceToPassSelect();
-      const actor = getCanonicalActiveSeatFromState(result.nextState);
-      const decision = await resolveDecision({
-        backendBaseUrl: baseUrl,
-        telemetryEnabled: true,
-        strictTelemetry: false,
-        telemetryMode: "full",
-        telemetryMaxBytes: 1,
-        gameId: "oversize-guard-game",
-        handId: "oversize-guard-hand",
-        actor,
-        decisionIndex: 0,
-        stateRaw: result.nextState as unknown as JsonObject,
-        stateNorm: result.derivedView as unknown as JsonObject,
-        legalActions: result.legalActions,
-        phase: result.nextState.phase,
-        defaultProvider: "local"
-      });
+    await withTelemetryDecisionServer(
+      {},
+      async ({ baseUrl, capturedPayloads }) => {
+        const result = advanceToPassSelect();
+        const actor = getCanonicalActiveSeatFromState(result.nextState);
+        const decision = await resolveDecision({
+          backendBaseUrl: baseUrl,
+          telemetryEnabled: true,
+          strictTelemetry: false,
+          telemetryMode: "full",
+          telemetryMaxBytes: 1,
+          gameId: "oversize-guard-game",
+          handId: "oversize-guard-hand",
+          actor,
+          decisionIndex: 0,
+          stateRaw: result.nextState as unknown as JsonObject,
+          stateNorm: result.derivedView as unknown as JsonObject,
+          legalActions: result.legalActions,
+          phase: result.nextState.phase,
+          defaultProvider: "local"
+        });
 
-      expect(decision.providerUsed).toBe("local_heuristic");
-      expect(capturedPayloads).toHaveLength(0);
-      expect(decision.telemetryFailureStats.telemetryDecisionFailures).toBe(1);
-      expect(decision.telemetryFailure).toMatchObject({
-        ok: false,
-        cause: "local_oversize_guard",
-        max_bytes: 1
-      });
-    });
+        expect(decision.providerUsed).toBe("local_heuristic");
+        expect(capturedPayloads).toHaveLength(0);
+        expect(decision.telemetryFailureStats.telemetryDecisionFailures).toBe(
+          1
+        );
+        expect(decision.telemetryFailure).toMatchObject({
+          ok: false,
+          cause: "local_oversize_guard",
+          max_bytes: 1
+        });
+      }
+    );
   });
 
   it("reports telemetry event POST failures without throwing through the safe wrapper", async () => {
@@ -734,7 +779,9 @@ describe("server_heuristic actor contract", () => {
     const actor = getCanonicalActiveSeatFromState(result.nextState);
     const capturedErrors: string[] = [];
     const errorSpy = vi.spyOn(console, "error").mockImplementation((value) => {
-      capturedErrors.push(typeof value === "string" ? value : JSON.stringify(value));
+      capturedErrors.push(
+        typeof value === "string" ? value : JSON.stringify(value)
+      );
     });
     try {
       const decision = await resolveDecision({
@@ -783,7 +830,9 @@ describe("server_heuristic actor contract", () => {
         request_validated: true,
         provider_path: "server_heuristic"
       });
-      expect((payload.metadata as JsonObject).legal_action_count).toBeGreaterThan(0);
+      expect(
+        (payload.metadata as JsonObject).legal_action_count
+      ).toBeGreaterThan(0);
     });
   });
 
@@ -802,7 +851,9 @@ describe("server_heuristic actor contract", () => {
 
       expect(response.status).toBe(400);
       expect(String(payload.error)).toMatch(/Actor mismatch/);
-      expect(JSON.stringify(payload.validation_errors)).toMatch(/request\.actor_seat=seat-2/);
+      expect(JSON.stringify(payload.validation_errors)).toMatch(
+        /request\.actor_seat=seat-2/
+      );
     });
   });
 
@@ -845,5 +896,4 @@ describe("server_heuristic actor contract", () => {
     expect(decision.fallbackUsed).toBe(false);
     expect(decision.chosenAction).toBeTruthy();
   });
-
 });

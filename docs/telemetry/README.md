@@ -46,6 +46,38 @@ Telemetry upload is runtime-configurable in the `Backend Settings` dialog. Disab
 
 The canonical telemetry contract now lives in [../telemetry_contract.md](../telemetry_contract.md). Development-only clear/reset safeguards are documented in [../admin_reset_endpoints.md](../admin_reset_endpoints.md). Issue [#35](https://github.com/NeonButrfly/tichuml/issues/35) tracks the pipeline alignment across simulator emission, backend ingestion, database storage, ML export, and admin reset behavior.
 
+## Authoritative Telemetry Package
+
+`packages/telemetry` is the authoritative producer-side telemetry subsystem. It owns:
+
+- payload builders for decision and event telemetry
+- source adapters for gameplay, selfplay, controller, and eval producers
+- source tags stored in metadata as `source` and `telemetry_source`
+- normalized telemetry config for enabled/strict/trace/mode/max-byte/backend settings
+- minimal/full/adaptive policy selection
+- byte measurement, downgrade, and skip behavior
+- shared POST behavior for `/api/telemetry/decision` and `/api/telemetry/event`
+- non-fatal failure results, strict-mode errors, and structured diagnostics
+
+Existing producers are intentionally thin:
+
+- normal gameplay uses `apps/web/src/backend/telemetry.ts` as a UI adapter into `@tichuml/telemetry`
+- simulator/selfplay uses `apps/sim-runner/src/self-play-batch.ts` as a gameplay-context adapter into `@tichuml/telemetry`
+- controller selfplay uses the same selfplay adapter with `source: "controller"` and worker metadata
+
+Do not add new telemetry builders or raw telemetry POST paths in application code. Future producers should add a thin source adapter in `packages/telemetry/src/source-adapters.ts` or call the existing shared builders/client directly.
+
+## Failure Policy
+
+Telemetry is best-effort by default. With `strictTelemetry=false`, telemetry upload, validation, backend, network, and oversize failures return structured results and diagnostics without throwing into gameplay, UI turns, selfplay decisions, controller loops, or worker shutdown. `strictTelemetry=true` is reserved for targeted debugging and may surface a `TelemetryError`.
+
+Oversize handling is centralized:
+
+- minimal payloads are preferred for routine simulator/controller operation
+- full payloads preserve rich training data when explicitly requested
+- full payloads downgrade to minimal when the configured byte cap is exceeded
+- payloads that still exceed the cap are skipped locally and logged as machine-readable diagnostics
+
 ## Versioning
 
 Current telemetry metadata still exposes milestone-oriented engine and sim version fields where required by the existing schema. Those identifiers remain stable for compatibility even though broader project documentation has moved past the old milestone-only wording.

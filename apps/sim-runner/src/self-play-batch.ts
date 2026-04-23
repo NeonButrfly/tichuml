@@ -5,16 +5,12 @@ import {
 import {
   BACKEND_HEALTH_PATH,
   DECISION_REQUEST_PATH,
-  TELEMETRY_EVENT_PATH,
-  TELEMETRY_DECISION_PATH,
   normalizeBackendBaseUrl,
-  extractActorScopedLegalActions,
   type DecisionMode,
   type DecisionProviderUsed,
   type DecisionRequestPayload,
   type DecisionResponsePayload,
   type JsonObject,
-  type SeedJsonValue,
   type TelemetryDecisionPayload,
   type TelemetryEventPayload
 } from "@tichuml/shared";
@@ -36,15 +32,24 @@ import {
   type TeamId
 } from "@tichuml/engine";
 import {
-  TELEMETRY_ENGINE_VERSION,
+  buildSelfPlayDecisionTelemetry,
+  buildSelfPlayEventTelemetry,
+  createTelemetryFailureStats,
+  createTelemetryFailureTracker,
+  emitTelemetryDecision,
+  emitTelemetryEvent,
+  emitTelemetryFailureDiagnostic,
+  mergeTelemetryFailureStats,
+  recordTelemetryFailure,
   TELEMETRY_SCHEMA_VERSION,
-  TELEMETRY_SIM_VERSION
+  TELEMETRY_ENGINE_VERSION,
+  TELEMETRY_SIM_VERSION,
+  type TelemetryFailureStats,
+  type TelemetryWriteResult
 } from "@tichuml/telemetry";
 
 export type SeatProviderOverrides = Partial<Record<SeatId, DecisionMode>>;
 export type TelemetryMode = "minimal" | "full";
-
-const DEFAULT_TELEMETRY_MAX_BYTES = 24 * 1024 * 1024;
 
 export type SelfPlayBatchOptions = {
   games: number;
@@ -88,7 +93,10 @@ export type SelfPlayGameResult = {
   telemetryEventFailures: number;
   telemetryFailuresTotal: number;
   telemetryFailureByEndpoint: Record<string, number>;
-  latencyByProvider: Record<string, { count: number; totalMs: number; averageMs: number }>;
+  latencyByProvider: Record<
+    string,
+    { count: number; totalMs: number; averageMs: number }
+  >;
 };
 
 export type SelfPlayBatchSummary = {
@@ -185,43 +193,6 @@ type BackendRequestResult = {
   latency_ms: number;
 };
 
-type TelemetryWriteResult =
-  | {
-      ok: true;
-      endpoint: string;
-      method: string;
-      request_kind: "telemetry_decision" | "telemetry_event";
-      status: number;
-      latency_ms: number;
-    }
-  | {
-      ok: false;
-      endpoint: string;
-      method: string;
-      request_kind: "telemetry_decision" | "telemetry_event";
-      failure_kind: BackendFailureKind;
-      status?: number;
-      message: string;
-      body?: JsonObject;
-      raw_body?: string;
-      cause?: string;
-      latency_ms?: number;
-      payload_bytes?: number;
-      max_bytes?: number;
-    };
-
-type TelemetryFailureStats = {
-  telemetryDecisionFailures: number;
-  telemetryEventFailures: number;
-  telemetryFailuresTotal: number;
-  telemetryFailureByEndpoint: Record<string, number>;
-};
-
-type TelemetryFailureTracker = {
-  emittedDetailedFailures: number;
-  compactedFailures: number;
-};
-
 type DecisionFailureKind =
   | "payload_validation"
   | "network_failure"
@@ -282,41 +253,6 @@ function countByKey(bucket: Record<string, number>, key: string): void {
   bucket[key] = (bucket[key] ?? 0) + 1;
 }
 
-function createTelemetryFailureStats(): TelemetryFailureStats {
-  return {
-    telemetryDecisionFailures: 0,
-    telemetryEventFailures: 0,
-    telemetryFailuresTotal: 0,
-    telemetryFailureByEndpoint: {}
-  };
-}
-
-function mergeTelemetryFailureStats(
-  target: TelemetryFailureStats,
-  source: TelemetryFailureStats
-): void {
-  target.telemetryDecisionFailures += source.telemetryDecisionFailures;
-  target.telemetryEventFailures += source.telemetryEventFailures;
-  target.telemetryFailuresTotal += source.telemetryFailuresTotal;
-  mergeCounts(target.telemetryFailureByEndpoint, source.telemetryFailureByEndpoint);
-}
-
-function recordTelemetryFailure(
-  stats: TelemetryFailureStats,
-  result: TelemetryWriteResult
-): void {
-  if (result.ok) {
-    return;
-  }
-  if (result.request_kind === "telemetry_decision") {
-    stats.telemetryDecisionFailures += 1;
-  } else {
-    stats.telemetryEventFailures += 1;
-  }
-  stats.telemetryFailuresTotal += 1;
-  countByKey(stats.telemetryFailureByEndpoint, result.endpoint);
-}
-
 function createTeamScoreBucket(): Record<TeamId, number> {
   return {
     "team-0": 0,
@@ -324,7 +260,9 @@ function createTeamScoreBucket(): Record<TeamId, number> {
   };
 }
 
-function cloneTeamScores(source?: Record<TeamId, number> | null): Record<TeamId, number> {
+function cloneTeamScores(
+  source?: Record<TeamId, number> | null
+): Record<TeamId, number> {
   return {
     "team-0": source?.["team-0"] ?? 0,
     "team-1": source?.["team-1"] ?? 0
@@ -347,16 +285,6 @@ function summarizeLatency(
       }
     ])
   );
-}
-
-function jsonByteLength(value: unknown): number {
-  return Buffer.byteLength(JSON.stringify(value), "utf8");
-}
-
-function resolveTelemetryMaxBytes(value: number | undefined): number {
-  return Number.isFinite(value) && value !== undefined && value > 0
-    ? Math.floor(value)
-    : DEFAULT_TELEMETRY_MAX_BYTES;
 }
 
 function recordLatency(
@@ -390,18 +318,25 @@ function findMatchingLegalAction(
         case "play_cards":
           return (
             chosenAction.type === "play_cards" &&
-            sortCardIds(candidate.cardIds) === sortCardIds(chosenAction.cardIds) &&
+            sortCardIds(candidate.cardIds) ===
+              sortCardIds(chosenAction.cardIds) &&
             candidate.phoenixAsRank === chosenAction.phoenixAsRank
           );
         case "select_pass":
-          return chosenAction.type === "select_pass" && candidate.seat === chosenAction.seat;
+          return (
+            chosenAction.type === "select_pass" &&
+            candidate.seat === chosenAction.seat
+          );
         case "assign_dragon_trick":
           return (
             chosenAction.type === "assign_dragon_trick" &&
             candidate.recipient === chosenAction.recipient
           );
         case "advance_phase":
-          return chosenAction.type === "advance_phase" && candidate.actor === chosenAction.actor;
+          return (
+            chosenAction.type === "advance_phase" &&
+            candidate.actor === chosenAction.actor
+          );
         default:
           return true;
       }
@@ -409,11 +344,16 @@ function findMatchingLegalAction(
   );
 }
 
-function getChosenCombination(legalAction: LegalAction | null): Combination | null {
+function getChosenCombination(
+  legalAction: LegalAction | null
+): Combination | null {
   return legalAction?.type === "play_cards" ? legalAction.combination : null;
 }
 
-function actionSatisfiesWish(state: GameState, legalAction: LegalAction | null): boolean {
+function actionSatisfiesWish(
+  state: GameState,
+  legalAction: LegalAction | null
+): boolean {
   if (!state.currentWish || legalAction?.type !== "play_cards") {
     return false;
   }
@@ -424,85 +364,6 @@ function actionSatisfiesWish(state: GameState, legalAction: LegalAction | null):
   }
 
   return legalAction.combination.primaryRank === state.currentWish;
-}
-
-function summarizeCurrentCombination(state: GameState): JsonObject | null {
-  const combination = state.currentTrick?.currentCombination;
-  return combination
-    ? {
-        kind: combination.kind,
-        primaryRank: combination.primaryRank,
-        cardCount: combination.cardCount,
-        isBomb: combination.isBomb
-      }
-    : null;
-}
-
-function buildDecisionContextMetadata(
-  state: GameState,
-  actorLegalActions: SeedJsonValue[],
-  latencyMs: number
-): JsonObject {
-  const wishActive = state.currentWish !== null;
-  const wishSatisfiable =
-    wishActive &&
-    actorLegalActions.some(
-      (action) =>
-        typeof action === "object" &&
-        action !== null &&
-        "combination" in action &&
-        typeof action.combination === "object" &&
-        action.combination !== null &&
-        ((action.combination as JsonObject).primaryRank === state.currentWish ||
-          (Array.isArray((action.combination as JsonObject).actualRanks) &&
-            ((action.combination as JsonObject).actualRanks as SeedJsonValue[]).includes(
-              state.currentWish
-            )))
-    );
-
-  return {
-    seed: state.seed,
-    latency_ms: latencyMs,
-    current_lead_seat: state.currentTrick?.currentWinner ?? null,
-    current_combination: summarizeCurrentCombination(state),
-    wish_active: wishActive,
-    current_wish: state.currentWish,
-    wish_satisfiable: wishSatisfiable,
-    active_wish_no_legal_fulfilling_move: wishActive && !wishSatisfiable
-  };
-}
-
-function buildCompactDecisionMetadata(config: {
-  stateRaw: GameState;
-  actorLegalActions: SeedJsonValue[];
-  latencyMs: number;
-  telemetryMode: TelemetryMode;
-}): JsonObject {
-  const detail = buildDecisionContextMetadata(
-    config.stateRaw,
-    config.actorLegalActions,
-    config.latencyMs
-  );
-  return {
-    telemetry_mode: config.telemetryMode,
-    latency_ms: detail.latency_ms ?? null,
-    current_lead_seat: detail.current_lead_seat ?? null,
-    current_combination: detail.current_combination ?? null,
-    wish_active: detail.wish_active ?? false,
-    current_wish: detail.current_wish ?? null,
-    wish_satisfiable: detail.wish_satisfiable ?? false,
-    legal_action_count: config.actorLegalActions.length
-  };
-}
-
-function buildControllerMetadata(config: {
-  workerId?: string;
-  controllerMode?: boolean;
-}): JsonObject {
-  return {
-    ...(config.workerId ? { worker_id: config.workerId } : {}),
-    ...(config.controllerMode ? { controller_mode: true } : {})
-  };
 }
 
 function buildDecisionFailureContext(config: {
@@ -527,7 +388,10 @@ function buildDecisionFailureContext(config: {
   };
 }
 
-function shouldEmitDiagnostic(config: { quiet?: boolean; controllerMode?: boolean }): boolean {
+function shouldEmitDiagnostic(config: {
+  quiet?: boolean;
+  controllerMode?: boolean;
+}): boolean {
   return config.controllerMode === true || config.quiet !== true;
 }
 
@@ -539,12 +403,17 @@ function emitDecisionDiagnostic(
   if (!shouldEmitDiagnostic(config)) {
     return;
   }
-  console.error(JSON.stringify({ ts: new Date().toISOString(), event, ...payload }));
+  console.error(
+    JSON.stringify({ ts: new Date().toISOString(), event, ...payload })
+  );
 }
 
 function traceBackendRequest(
   context: BackendRequestContext,
-  event: "backend_request_start" | "backend_request_success" | "backend_request_failure",
+  event:
+    | "backend_request_start"
+    | "backend_request_success"
+    | "backend_request_failure",
   payload: JsonObject
 ): void {
   if (context.trace_backend !== true) {
@@ -563,10 +432,18 @@ function traceBackendRequest(
       ...(context.hand_id ? { hand_id: context.hand_id } : {}),
       ...(context.phase ? { phase: context.phase } : {}),
       ...(context.actor_seat ? { actor_seat: context.actor_seat } : {}),
-      ...(context.decision_index !== undefined ? { decision_index: context.decision_index } : {}),
-      ...(context.event_index !== undefined ? { event_index: context.event_index } : {}),
-      ...(context.requested_provider ? { requested_provider: context.requested_provider } : {}),
-      ...(context.payload_summary ? { payload_summary: context.payload_summary } : {}),
+      ...(context.decision_index !== undefined
+        ? { decision_index: context.decision_index }
+        : {}),
+      ...(context.event_index !== undefined
+        ? { event_index: context.event_index }
+        : {}),
+      ...(context.requested_provider
+        ? { requested_provider: context.requested_provider }
+        : {}),
+      ...(context.payload_summary
+        ? { payload_summary: context.payload_summary }
+        : {}),
       ...payload
     })
   );
@@ -587,8 +464,10 @@ function summarizeBackendPayload(
         phase: body.phase,
         actor_seat: body.actor_seat,
         requested_provider: body.requested_provider,
-        has_state_raw: typeof body.state_raw === "object" && body.state_raw !== null,
-        has_state_norm: typeof body.state_norm === "object" && body.state_norm !== null,
+        has_state_raw:
+          typeof body.state_raw === "object" && body.state_raw !== null,
+        has_state_norm:
+          typeof body.state_norm === "object" && body.state_norm !== null,
         legal_action_keys:
           typeof body.legal_actions === "object" && body.legal_actions !== null
             ? Object.keys(body.legal_actions as Record<string, unknown>)
@@ -618,100 +497,6 @@ function summarizeBackendPayload(
     case "health_check":
       return {};
   }
-}
-
-function normalizeTelemetryFailureResult(
-  endpoint: string,
-  requestKind: "telemetry_decision" | "telemetry_event",
-  error: unknown
-): TelemetryWriteResult {
-  if (error instanceof BackendRequestFailure) {
-    const status =
-      typeof error.details.status === "number" ? error.details.status : undefined;
-    const body =
-      typeof error.details.body === "object" &&
-      error.details.body !== null &&
-      !Array.isArray(error.details.body)
-        ? (error.details.body as JsonObject)
-        : undefined;
-    const rawBody =
-      typeof error.details.raw_body === "string" ? error.details.raw_body : undefined;
-    const cause =
-      typeof error.details.cause === "string" ? error.details.cause : undefined;
-    const latencyMs =
-      typeof error.details.latency_ms === "number" ? error.details.latency_ms : undefined;
-    return {
-      ok: false,
-      endpoint,
-      method: "POST",
-      request_kind: requestKind,
-      failure_kind: error.kind,
-      ...(status !== undefined ? { status } : {}),
-      message: error.message,
-      ...(body ? { body } : {}),
-      ...(rawBody ? { raw_body: rawBody } : {}),
-      ...(cause ? { cause } : {}),
-      ...(latencyMs !== undefined ? { latency_ms: latencyMs } : {})
-    };
-  }
-
-  return {
-    ok: false,
-    endpoint,
-    method: "POST",
-    request_kind: requestKind,
-    failure_kind: "unexpected_failure",
-    message: error instanceof Error ? error.message : String(error),
-    cause: error instanceof Error ? error.name : "unknown"
-  };
-}
-
-function emitTelemetryFailure(
-  config: { quiet?: boolean; controllerMode?: boolean },
-  tracker: TelemetryFailureTracker,
-  result: TelemetryWriteResult,
-  context: JsonObject
-): void {
-  if (result.ok || !shouldEmitDiagnostic(config)) {
-    return;
-  }
-  const detailed = tracker.emittedDetailedFailures < 3;
-  if (detailed) {
-    tracker.emittedDetailedFailures += 1;
-  } else {
-    tracker.compactedFailures += 1;
-  }
-  const payload: JsonObject = {
-    request_kind: result.request_kind,
-    failure_kind: result.failure_kind,
-    endpoint: result.endpoint,
-    method: result.method,
-    message: result.message,
-    compact: !detailed,
-    suppressed_after_threshold: tracker.compactedFailures,
-    ...context
-  };
-  if (detailed) {
-    if (result.status !== undefined) {
-      payload.status = result.status;
-    }
-    if (result.body) {
-      payload.body = result.body;
-    }
-    if (result.raw_body) {
-      payload.raw_body = result.raw_body;
-    }
-    if (result.cause) {
-      payload.cause = result.cause;
-    }
-    if (result.payload_bytes !== undefined) {
-      payload.payload_bytes = result.payload_bytes;
-    }
-    if (result.max_bytes !== undefined) {
-      payload.max_bytes = result.max_bytes;
-    }
-  }
-  emitDecisionDiagnostic(config, "telemetry_persistence_failure", payload);
 }
 
 function serializeError(error: unknown): JsonObject {
@@ -789,7 +574,9 @@ function resolveNextActor(
     }
   }
 
-  throw new Error("No legal actor was available for the next self-play decision.");
+  throw new Error(
+    "No legal actor was available for the next self-play decision."
+  );
 }
 
 export function validateServerHeuristicDecisionRequestContract(
@@ -883,7 +670,9 @@ export function validateBackendDecisionRequestInput(config: {
   }
   const actorScopedLegalActions =
     config.actor === SYSTEM_ACTOR
-      ? ({ [SYSTEM_ACTOR]: config.legalActions[SYSTEM_ACTOR] ?? [] } as LegalActionMap)
+      ? ({
+          [SYSTEM_ACTOR]: config.legalActions[SYSTEM_ACTOR] ?? []
+        } as LegalActionMap)
       : getActorScopedLegalActions(config.legalActions, config.actor);
   const actorActions = actorScopedLegalActions[config.actor] ?? [];
   if (!Array.isArray(actorActions) || actorActions.length === 0) {
@@ -905,7 +694,9 @@ export function validateBackendDecisionRequestInput(config: {
     );
   }
   if (config.stateRaw.phase !== config.phase) {
-    issues.push(`phase mismatch: request=${config.phase}, state_raw=${String(config.stateRaw.phase)}`);
+    issues.push(
+      `phase mismatch: request=${config.phase}, state_raw=${String(config.stateRaw.phase)}`
+    );
   }
   if (canonicalActorSeat) {
     issues.push(
@@ -961,10 +752,8 @@ export function buildDecisionRequestPayload(config: {
     metadata: {
       decision_index: config.decisionIndex,
       simulation_mode: true,
-      ...buildControllerMetadata({
-        ...(config.workerId ? { workerId: config.workerId } : {}),
-        ...(config.controllerMode ? { controllerMode: true } : {})
-      })
+      ...(config.workerId ? { worker_id: config.workerId } : {}),
+      ...(config.controllerMode ? { controller_mode: true } : {})
     } as JsonObject
   };
 
@@ -989,12 +778,21 @@ async function requestJson(
     ...(context?.hand_id ? { hand_id: context.hand_id } : {}),
     ...(context?.phase ? { phase: context.phase } : {}),
     ...(context?.actor_seat ? { actor_seat: context.actor_seat } : {}),
-    ...(context?.decision_index !== undefined ? { decision_index: context.decision_index } : {}),
-    ...(context?.event_index !== undefined ? { event_index: context.event_index } : {}),
-    ...(context?.requested_provider ? { requested_provider: context.requested_provider } : {}),
+    ...(context?.decision_index !== undefined
+      ? { decision_index: context.decision_index }
+      : {}),
+    ...(context?.event_index !== undefined
+      ? { event_index: context.event_index }
+      : {}),
+    ...(context?.requested_provider
+      ? { requested_provider: context.requested_provider }
+      : {}),
     ...(context?.trace_backend ? { trace_backend: true } : {}),
     ...(context?.quiet ? { quiet: true } : {}),
-    payload_summary: summarizeBackendPayload(context?.request_kind ?? "decision", body)
+    payload_summary: summarizeBackendPayload(
+      context?.request_kind ?? "decision",
+      body
+    )
   };
   const startedAt = Date.now();
   const requestBody = body ? JSON.stringify(body) : undefined;
@@ -1130,100 +928,6 @@ async function verifyBackend(
   });
 }
 
-function buildLocalDecisionTelemetry(config: {
-  gameId: string;
-  handId: string;
-  phase: string;
-  actorSeat: SeatId | typeof SYSTEM_ACTOR;
-  decisionIndex: number;
-  stateRaw: JsonObject;
-  stateNorm: JsonObject;
-  legalActions: LegalActionMap;
-  chosen: ChosenDecision;
-  requestedProvider: DecisionMode | "system_local";
-  fallbackUsed?: boolean;
-  fallbackReason?: string;
-  latencyMs: number;
-  telemetryMode?: TelemetryMode;
-  workerId?: string;
-  controllerMode?: boolean;
-}): TelemetryDecisionPayload {
-  const providerUsed =
-    config.actorSeat === SYSTEM_ACTOR ? "system_local" : "local_heuristic";
-  const fallbackUsed = config.fallbackUsed === true;
-  const telemetryMode = config.telemetryMode ?? "minimal";
-  const fullTelemetry = telemetryMode === "full";
-  const explanation = fullTelemetry
-    ? (config.chosen.explanation as unknown as JsonObject)
-    : null;
-  const actorLegalActions = extractActorScopedLegalActions(
-    config.legalActions as unknown as JsonObject,
-    String(config.actorSeat)
-  );
-  const compactMetadata = buildCompactDecisionMetadata({
-    stateRaw: config.stateRaw as unknown as GameState,
-    actorLegalActions,
-    latencyMs: config.latencyMs,
-    telemetryMode
-  });
-
-  return {
-    ts: new Date().toISOString(),
-    game_id: config.gameId,
-    hand_id: config.handId,
-    phase: config.phase,
-    actor_seat: String(config.actorSeat),
-    decision_index: config.decisionIndex,
-    schema_version: TELEMETRY_SCHEMA_VERSION,
-    engine_version: TELEMETRY_ENGINE_VERSION,
-    sim_version: TELEMETRY_SIM_VERSION,
-    requested_provider: config.requestedProvider,
-    provider_used: providerUsed,
-    fallback_used: fallbackUsed,
-    policy_name: heuristicsV1Policy.name,
-    policy_source: providerUsed,
-    state_raw: fullTelemetry ? config.stateRaw : {},
-    state_norm: fullTelemetry ? config.stateNorm : null,
-    legal_actions: fullTelemetry ? actorLegalActions : [config.chosen.action],
-    chosen_action: config.chosen.action as unknown as JsonObject,
-    explanation,
-    candidateScores: fullTelemetry
-      ? (config.chosen.explanation.candidateScores as unknown as JsonObject[])
-      : null,
-    stateFeatures: fullTelemetry
-      ? config.chosen.explanation.stateFeatures === undefined
-        ? null
-        : (config.chosen.explanation.stateFeatures as unknown as JsonObject)
-      : compactMetadata,
-    metadata: {
-      requested_provider: config.requestedProvider,
-      provider_used: providerUsed,
-      fallback_used: fallbackUsed,
-      ...(config.fallbackReason ? { fallback_reason: config.fallbackReason } : {}),
-      simulation_mode: true,
-      ...buildControllerMetadata(config),
-      ...compactMetadata,
-      ...(fullTelemetry ? { explanation: config.chosen.explanation } : {})
-    },
-    antipattern_tags: fullTelemetry ? config.chosen.explanation.selectedTags : []
-  };
-}
-
-function extractActorSeatFromEvent(
-  event: EngineEvent,
-  fallbackActor: SeatId | typeof SYSTEM_ACTOR
-): SeatId | null {
-  const candidate =
-    "seat" in event && typeof event.seat === "string"
-      ? event.seat
-      : "actor" in event && typeof event.actor === "string" && event.actor.startsWith("seat-")
-        ? event.actor
-        : fallbackActor !== SYSTEM_ACTOR
-          ? fallbackActor
-          : null;
-  return candidate && candidate.startsWith("seat-") ? (candidate as SeatId) : null;
-}
-
 export async function safePostTelemetryDecision(config: {
   backendBaseUrl: string;
   payload: TelemetryDecisionPayload;
@@ -1233,52 +937,24 @@ export async function safePostTelemetryDecision(config: {
   workerId?: string;
   controllerMode?: boolean;
 }): Promise<TelemetryWriteResult> {
-  const endpoint = `${config.backendBaseUrl}${TELEMETRY_DECISION_PATH}`;
-  const payloadBytes = jsonByteLength(config.payload);
-  const maxBytes = resolveTelemetryMaxBytes(config.maxBytes);
-  if (payloadBytes > maxBytes) {
-    return {
-      ok: false,
-      endpoint,
-      method: "POST",
-      request_kind: "telemetry_decision",
-      failure_kind: "backend_rejection",
-      message: `Telemetry decision payload skipped locally because it is ${payloadBytes} bytes and exceeds ${maxBytes} bytes.`,
-      cause: "local_oversize_guard",
-      payload_bytes: payloadBytes,
-      max_bytes: maxBytes
-    };
-  }
-  try {
-    const result = await requestJson(
-      "POST",
-      endpoint,
-      config.payload as unknown as JsonObject,
-      {
-        request_kind: "telemetry_decision",
-        game_id: config.payload.game_id,
-        hand_id: config.payload.hand_id,
-        phase: config.payload.phase,
-        actor_seat: config.payload.actor_seat,
-        decision_index: config.payload.decision_index,
-        requested_provider: config.payload.requested_provider,
-        ...(config.traceBackend ? { trace_backend: true } : {}),
-        ...(config.quiet ? { quiet: true } : {}),
-        ...(config.workerId ? { worker_id: config.workerId } : {}),
-        ...(config.controllerMode ? { controller_mode: true } : {})
-      }
-    );
-    return {
-      ok: true,
-      endpoint,
-      method: "POST",
-      request_kind: "telemetry_decision",
-      status: result.status,
-      latency_ms: result.latency_ms
-    };
-  } catch (error) {
-    return normalizeTelemetryFailureResult(endpoint, "telemetry_decision", error);
-  }
+  return emitTelemetryDecision({
+    telemetry: {
+      enabled: true,
+      strictTelemetry: false,
+      backendBaseUrl: config.backendBaseUrl,
+      traceBackend: config.traceBackend,
+      quiet: config.quiet,
+      maxBytes: config.maxBytes,
+      workerId: config.workerId,
+      controllerMode: config.controllerMode,
+      source: config.controllerMode ? "controller" : "selfplay",
+      mode: "full"
+    },
+    payloads: {
+      full: config.payload,
+      minimal: config.payload
+    }
+  });
 }
 
 export async function safePostTelemetryEvent(config: {
@@ -1290,54 +966,24 @@ export async function safePostTelemetryEvent(config: {
   workerId?: string;
   controllerMode?: boolean;
 }): Promise<TelemetryWriteResult> {
-  const endpoint = `${config.backendBaseUrl}${TELEMETRY_EVENT_PATH}`;
-  const payloadBytes = jsonByteLength(config.payload);
-  const maxBytes = resolveTelemetryMaxBytes(config.maxBytes);
-  if (payloadBytes > maxBytes) {
-    return {
-      ok: false,
-      endpoint,
-      method: "POST",
-      request_kind: "telemetry_event",
-      failure_kind: "backend_rejection",
-      message: `Telemetry event payload skipped locally because it is ${payloadBytes} bytes and exceeds ${maxBytes} bytes.`,
-      cause: "local_oversize_guard",
-      payload_bytes: payloadBytes,
-      max_bytes: maxBytes
-    };
-  }
-  try {
-    const result = await requestJson(
-      "POST",
-      endpoint,
-      config.payload as unknown as JsonObject,
-      {
-        request_kind: "telemetry_event",
-        game_id: config.payload.game_id,
-        hand_id: config.payload.hand_id,
-        phase: config.payload.phase,
-        event_index: config.payload.event_index,
-        ...(config.payload.requested_provider
-          ? { requested_provider: config.payload.requested_provider }
-          : {}),
-        ...(config.payload.actor_seat ? { actor_seat: config.payload.actor_seat } : {}),
-        ...(config.traceBackend ? { trace_backend: true } : {}),
-        ...(config.quiet ? { quiet: true } : {}),
-        ...(config.workerId ? { worker_id: config.workerId } : {}),
-        ...(config.controllerMode ? { controller_mode: true } : {})
-      }
-    );
-    return {
-      ok: true,
-      endpoint,
-      method: "POST",
-      request_kind: "telemetry_event",
-      status: result.status,
-      latency_ms: result.latency_ms
-    };
-  } catch (error) {
-    return normalizeTelemetryFailureResult(endpoint, "telemetry_event", error);
-  }
+  return emitTelemetryEvent({
+    telemetry: {
+      enabled: true,
+      strictTelemetry: false,
+      backendBaseUrl: config.backendBaseUrl,
+      traceBackend: config.traceBackend,
+      quiet: config.quiet,
+      maxBytes: config.maxBytes,
+      workerId: config.workerId,
+      controllerMode: config.controllerMode,
+      source: config.controllerMode ? "controller" : "selfplay",
+      mode: "full"
+    },
+    payloads: {
+      full: config.payload,
+      minimal: config.payload
+    }
+  });
 }
 
 async function resolveLocalHeuristicDecision(config: {
@@ -1376,7 +1022,9 @@ async function resolveLocalHeuristicDecision(config: {
   const latencyMs = Date.now() - config.startedAt;
 
   if (config.telemetryEnabled) {
-    const payload = buildLocalDecisionTelemetry({
+    const providerUsed =
+      config.actor === SYSTEM_ACTOR ? "system_local" : "local_heuristic";
+    const payloads = buildSelfPlayDecisionTelemetry({
       gameId: config.gameId,
       handId: config.handId,
       phase: config.phase,
@@ -1385,34 +1033,38 @@ async function resolveLocalHeuristicDecision(config: {
       stateRaw: config.stateRaw,
       stateNorm: config.stateNorm,
       legalActions: config.legalActions,
-      chosen,
+      chosenAction: chosen.action,
+      explanation: chosen.explanation as unknown as JsonObject,
+      policyName: heuristicsV1Policy.name,
       requestedProvider: config.requestedProvider,
+      providerUsed,
       fallbackUsed: config.fallbackUsed,
-      ...(config.fallbackReason ? { fallbackReason: config.fallbackReason } : {}),
+      ...(config.fallbackReason
+        ? { fallbackReason: config.fallbackReason }
+        : {}),
       latencyMs,
-      telemetryMode: config.telemetryMode ?? "minimal",
+      mode: config.telemetryMode ?? "minimal",
       ...(config.workerId ? { workerId: config.workerId } : {}),
       ...(config.controllerMode ? { controllerMode: true } : {})
     });
-    const result = await safePostTelemetryDecision({
-      backendBaseUrl: config.backendBaseUrl,
-      payload,
-      ...(config.traceBackend ? { traceBackend: true } : {}),
-      ...(config.quiet ? { quiet: true } : {}),
-      ...(config.telemetryMaxBytes !== undefined
-        ? { maxBytes: config.telemetryMaxBytes }
-        : {}),
-      ...(config.workerId ? { workerId: config.workerId } : {}),
-      ...(config.controllerMode ? { controllerMode: true } : {})
+    const result = await emitTelemetryDecision({
+      telemetry: {
+        enabled: true,
+        strictTelemetry: config.strictTelemetry === true,
+        backendBaseUrl: config.backendBaseUrl,
+        traceBackend: config.traceBackend,
+        quiet: config.quiet,
+        mode: config.telemetryMode ?? "minimal",
+        maxBytes: config.telemetryMaxBytes,
+        source: config.controllerMode ? "controller" : "selfplay",
+        workerId: config.workerId,
+        controllerMode: config.controllerMode
+      },
+      payloads
     });
     recordTelemetryFailure(telemetryFailureStats, result);
     if (!result.ok) {
       telemetryFailure = result;
-      if (config.strictTelemetry === true) {
-        throw new Error(
-          `Strict telemetry decision persistence failed (${result.failure_kind}) at ${result.endpoint}: ${result.message}`
-        );
-      }
     }
   }
 
@@ -1439,87 +1091,59 @@ async function persistEvent(
     return null;
   }
 
-  const telemetryMode = config.telemetryMode ?? "minimal";
-  const fullTelemetry = telemetryMode === "full";
-  const actorSeat = extractActorSeatFromEvent(event, config.actorSeat);
-  const payload: TelemetryEventPayload = {
-    ts: new Date().toISOString(),
-    game_id: config.gameId,
-    hand_id: config.handId,
-    phase: stateNorm.phase as string,
-    event_type: event.type,
-    actor_seat: actorSeat,
-    event_index: config.eventIndex,
-    schema_version: TELEMETRY_SCHEMA_VERSION,
-    engine_version: TELEMETRY_ENGINE_VERSION,
-    sim_version: TELEMETRY_SIM_VERSION,
-    requested_provider: config.requestedProvider,
-    provider_used: config.providerUsed,
-    fallback_used: config.providerUsed !== config.requestedProvider,
-    state_norm: fullTelemetry ? stateNorm : null,
-    payload: fullTelemetry
-      ? {
-          engine_event: event,
-          state_norm: stateNorm
-        }
-      : {
-          event_type: event.type,
-          actor_seat: actorSeat,
-          phase: stateNorm.phase as string
-        },
-    metadata: {
-      telemetry_mode: telemetryMode,
-      requested_provider: config.requestedProvider,
-      provider_used: config.providerUsed,
-      simulation_mode: true,
-      ...buildControllerMetadata(config),
-      event_index: config.eventIndex
-    }
-  };
-
-  const result = await safePostTelemetryEvent({
-    backendBaseUrl: config.backendBaseUrl,
-    payload,
-    ...(config.traceBackend ? { traceBackend: true } : {}),
-    ...(config.quiet ? { quiet: true } : {}),
-    ...(config.telemetryMaxBytes !== undefined
-      ? { maxBytes: config.telemetryMaxBytes }
-      : {}),
+  const payloads = buildSelfPlayEventTelemetry({
+    mode: config.telemetryMode ?? "minimal",
+    gameId: config.gameId,
+    handId: config.handId,
+    event,
+    stateNorm,
+    actorSeat: config.actorSeat,
+    eventIndex: config.eventIndex,
+    requestedProvider: config.requestedProvider,
+    providerUsed: config.providerUsed,
     ...(config.workerId ? { workerId: config.workerId } : {}),
     ...(config.controllerMode ? { controllerMode: true } : {})
   });
-  if (!result.ok && config.strictTelemetry === true) {
-    throw new Error(
-      `Strict telemetry event persistence failed (${result.failure_kind}) at ${result.endpoint}: ${result.message}`
-    );
-  }
+  const result = await emitTelemetryEvent({
+    telemetry: {
+      enabled: true,
+      strictTelemetry: config.strictTelemetry === true,
+      backendBaseUrl: config.backendBaseUrl,
+      traceBackend: config.traceBackend,
+      quiet: config.quiet,
+      mode: config.telemetryMode ?? "minimal",
+      maxBytes: config.telemetryMaxBytes,
+      source: config.controllerMode ? "controller" : "selfplay",
+      workerId: config.workerId,
+      controllerMode: config.controllerMode
+    },
+    payloads
+  });
   return result;
 }
 
-export async function resolveDecision(
-  config: {
-    backendBaseUrl: string;
-    telemetryEnabled: boolean;
-    gameId: string;
-    handId: string;
-    actor: SeatId | typeof SYSTEM_ACTOR;
-    decisionIndex: number;
-    stateRaw: JsonObject;
-    stateNorm: JsonObject;
-    legalActions: LegalActionMap;
-    phase: string;
-    defaultProvider: DecisionMode;
-    seatProviders?: SeatProviderOverrides;
-    serverFallbackEnabled?: boolean;
-    strictTelemetry?: boolean;
-    traceBackend?: boolean;
-    telemetryMode?: TelemetryMode;
-    telemetryMaxBytes?: number;
-    quiet?: boolean;
-    workerId?: string;
-    controllerMode?: boolean;
-  }
-): Promise<SimulatedDecision> {
+export async function resolveDecision(config: {
+  backendBaseUrl: string;
+  telemetryEnabled: boolean;
+  gameId: string;
+  handId: string;
+  actor: SeatId | typeof SYSTEM_ACTOR;
+  decisionIndex: number;
+  stateRaw: JsonObject;
+  stateNorm: JsonObject;
+  legalActions: LegalActionMap;
+  phase: string;
+  defaultProvider: DecisionMode;
+  seatProviders?: SeatProviderOverrides;
+  serverFallbackEnabled?: boolean;
+  strictTelemetry?: boolean;
+  traceBackend?: boolean;
+  telemetryMode?: TelemetryMode;
+  telemetryMaxBytes?: number;
+  quiet?: boolean;
+  workerId?: string;
+  controllerMode?: boolean;
+}): Promise<SimulatedDecision> {
   const startedAt = Date.now();
   if (config.actor === SYSTEM_ACTOR) {
     return resolveLocalHeuristicDecision({
@@ -1541,14 +1165,17 @@ export async function resolveDecision(
     return resolveLocalHeuristicDecision({
       ...config,
       requestedProvider,
-      providerReason: "Resolved locally through heuristics-v1 during self-play simulation.",
+      providerReason:
+        "Resolved locally through heuristics-v1 during self-play simulation.",
       fallbackUsed: false,
       startedAt
     });
   }
 
   const fallbackAllowed = config.serverFallbackEnabled !== false;
-  const fallbackLocally = async (failure: DecisionRequestFailure): Promise<SimulatedDecision> => {
+  const fallbackLocally = async (
+    failure: DecisionRequestFailure
+  ): Promise<SimulatedDecision> => {
     const event =
       failure.kind === "payload_validation"
         ? "decision_request_contract_failure"
@@ -1669,7 +1296,12 @@ export async function resolveDecision(
   } catch (error) {
     if (error instanceof BackendRequestFailure) {
       return fallbackLocally(
-        new DecisionRequestFailure(error.kind, error.message, context, error.details)
+        new DecisionRequestFailure(
+          error.kind,
+          error.message,
+          context,
+          error.details
+        )
       );
     }
     return fallbackLocally(
@@ -1681,7 +1313,8 @@ export async function resolveDecision(
     );
   }
 
-  const payload = decisionResponse.payload as unknown as DecisionResponsePayload;
+  const payload =
+    decisionResponse.payload as unknown as DecisionResponsePayload;
   if (!payload.accepted || !payload.chosen_action || !payload.provider_used) {
     return fallbackLocally(
       new DecisionRequestFailure(
@@ -1697,7 +1330,9 @@ export async function resolveDecision(
   }
 
   const chosenAction = payload.chosen_action as unknown as EngineAction;
-  if (!findMatchingLegalAction(config.legalActions, config.actor, chosenAction)) {
+  if (
+    !findMatchingLegalAction(config.legalActions, config.actor, chosenAction)
+  ) {
     return fallbackLocally(
       new DecisionRequestFailure(
         "invalid_backend_action",
@@ -1720,8 +1355,11 @@ export async function resolveDecision(
     chosenAction,
     providerUsed: payload.provider_used,
     requestedProvider,
-    providerReason: payload.provider_reason ?? "Resolved through the backend decision provider.",
-    ...(typeof metadata.explanation === "object" && metadata.explanation !== null
+    providerReason:
+      payload.provider_reason ??
+      "Resolved through the backend decision provider.",
+    ...(typeof metadata.explanation === "object" &&
+    metadata.explanation !== null
       ? { explanation: metadata.explanation as ChosenDecision["explanation"] }
       : {}),
     fallbackUsed,
@@ -1744,12 +1382,10 @@ async function runSingleGame(
   const providerUsage: Record<string, number> = {};
   const decisionsByPhase: Record<string, number> = {};
   const eventsByPhase: Record<string, number> = {};
-  const latencyByProvider: Record<string, { count: number; totalMs: number }> = {};
+  const latencyByProvider: Record<string, { count: number; totalMs: number }> =
+    {};
   const telemetryFailureStats = createTelemetryFailureStats();
-  const telemetryFailureTracker: TelemetryFailureTracker = {
-    emittedDetailedFailures: 0,
-    compactedFailures: 0
-  };
+  const telemetryFailureTracker = createTelemetryFailureTracker();
   let fallbackCount = 0;
   let passActions = 0;
   let playActions = 0;
@@ -1761,35 +1397,48 @@ async function runSingleGame(
   for (const event of result.events) {
     countByKey(eventsByPhase, result.nextState.phase);
     const currentEventIndex = eventIndex++;
-    const telemetryResult = await persistEvent(event, result.derivedView as unknown as JsonObject, {
-      backendBaseUrl,
-      telemetryEnabled: options.telemetryEnabled,
-      ...(options.strictTelemetry !== undefined
-        ? { strictTelemetry: options.strictTelemetry }
-        : {}),
-      ...(options.traceBackend !== undefined ? { traceBackend: options.traceBackend } : {}),
-      ...(options.telemetryMode !== undefined ? { telemetryMode: options.telemetryMode } : {}),
-      ...(options.telemetryMaxBytes !== undefined
-        ? { telemetryMaxBytes: options.telemetryMaxBytes }
-        : {}),
-      ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
-      gameId,
-      handId,
-      actorSeat: SYSTEM_ACTOR,
-      eventIndex: currentEventIndex,
-      providerUsed: "system_local",
-      requestedProvider: "system_local",
-      ...(options.workerId ? { workerId: options.workerId } : {}),
-      ...(options.controllerMode ? { controllerMode: true } : {})
-    });
+    const telemetryResult = await persistEvent(
+      event,
+      result.derivedView as unknown as JsonObject,
+      {
+        backendBaseUrl,
+        telemetryEnabled: options.telemetryEnabled,
+        ...(options.strictTelemetry !== undefined
+          ? { strictTelemetry: options.strictTelemetry }
+          : {}),
+        ...(options.traceBackend !== undefined
+          ? { traceBackend: options.traceBackend }
+          : {}),
+        ...(options.telemetryMode !== undefined
+          ? { telemetryMode: options.telemetryMode }
+          : {}),
+        ...(options.telemetryMaxBytes !== undefined
+          ? { telemetryMaxBytes: options.telemetryMaxBytes }
+          : {}),
+        ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
+        gameId,
+        handId,
+        actorSeat: SYSTEM_ACTOR,
+        eventIndex: currentEventIndex,
+        providerUsed: "system_local",
+        requestedProvider: "system_local",
+        ...(options.workerId ? { workerId: options.workerId } : {}),
+        ...(options.controllerMode ? { controllerMode: true } : {})
+      }
+    );
     if (telemetryResult) {
       recordTelemetryFailure(telemetryFailureStats, telemetryResult);
-      emitTelemetryFailure(options, telemetryFailureTracker, telemetryResult, {
-        game_id: gameId,
-        hand_id: handId,
-        phase: result.nextState.phase,
-        event_index: currentEventIndex
-      });
+      emitTelemetryFailureDiagnostic(
+        options,
+        telemetryFailureTracker,
+        telemetryResult,
+        {
+          game_id: gameId,
+          hand_id: handId,
+          phase: result.nextState.phase,
+          event_index: currentEventIndex
+        }
+      );
     }
   }
 
@@ -1816,14 +1465,18 @@ async function runSingleGame(
       legalActions: result.legalActions,
       phase: result.nextState.phase,
       defaultProvider: options.defaultProvider,
-      ...(options.seatProviders ? { seatProviders: options.seatProviders } : {}),
+      ...(options.seatProviders
+        ? { seatProviders: options.seatProviders }
+        : {}),
       ...(options.serverFallbackEnabled !== undefined
         ? { serverFallbackEnabled: options.serverFallbackEnabled }
         : {}),
       ...(options.strictTelemetry !== undefined
         ? { strictTelemetry: options.strictTelemetry }
         : {}),
-      ...(options.traceBackend !== undefined ? { traceBackend: options.traceBackend } : {}),
+      ...(options.traceBackend !== undefined
+        ? { traceBackend: options.traceBackend }
+        : {}),
       ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
       ...(options.workerId ? { workerId: options.workerId } : {}),
       ...(options.controllerMode ? { controllerMode: true } : {})
@@ -1832,15 +1485,23 @@ async function runSingleGame(
     countByKey(providerUsage, resolved.providerUsed);
     countByKey(decisionsByPhase, result.nextState.phase);
     recordLatency(latencyByProvider, resolved.providerUsed, resolved.latencyMs);
-    mergeTelemetryFailureStats(telemetryFailureStats, resolved.telemetryFailureStats);
+    mergeTelemetryFailureStats(
+      telemetryFailureStats,
+      resolved.telemetryFailureStats
+    );
     if (resolved.telemetryFailure) {
-      emitTelemetryFailure(options, telemetryFailureTracker, resolved.telemetryFailure, {
-        game_id: gameId,
-        hand_id: handId,
-        phase: result.nextState.phase,
-        actor_seat: String(actor),
-        decision_index: decisionIndex
-      });
+      emitTelemetryFailureDiagnostic(
+        options,
+        telemetryFailureTracker,
+        resolved.telemetryFailure,
+        {
+          game_id: gameId,
+          hand_id: handId,
+          phase: result.nextState.phase,
+          actor_seat: String(actor),
+          decision_index: decisionIndex
+        }
+      );
     }
     if (resolved.fallbackUsed) {
       fallbackCount += 1;
@@ -1877,40 +1538,56 @@ async function runSingleGame(
       }
     }
 
-    const nextResult = applyEngineAction(result.nextState, resolved.chosenAction);
+    const nextResult = applyEngineAction(
+      result.nextState,
+      resolved.chosenAction
+    );
     for (const event of nextResult.events) {
       countByKey(eventsByPhase, nextResult.nextState.phase);
       const currentEventIndex = eventIndex++;
-      const telemetryResult = await persistEvent(event, nextResult.derivedView as unknown as JsonObject, {
-        backendBaseUrl,
-        telemetryEnabled: options.telemetryEnabled,
-        ...(options.strictTelemetry !== undefined
-          ? { strictTelemetry: options.strictTelemetry }
-          : {}),
-        ...(options.traceBackend !== undefined ? { traceBackend: options.traceBackend } : {}),
-        ...(options.telemetryMode !== undefined ? { telemetryMode: options.telemetryMode } : {}),
-        ...(options.telemetryMaxBytes !== undefined
-          ? { telemetryMaxBytes: options.telemetryMaxBytes }
-          : {}),
-        ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
-        gameId,
-        handId,
-        actorSeat: actor,
-        eventIndex: currentEventIndex,
-        providerUsed: resolved.providerUsed,
-        requestedProvider: resolved.requestedProvider,
-        ...(options.workerId ? { workerId: options.workerId } : {}),
-        ...(options.controllerMode ? { controllerMode: true } : {})
-      });
+      const telemetryResult = await persistEvent(
+        event,
+        nextResult.derivedView as unknown as JsonObject,
+        {
+          backendBaseUrl,
+          telemetryEnabled: options.telemetryEnabled,
+          ...(options.strictTelemetry !== undefined
+            ? { strictTelemetry: options.strictTelemetry }
+            : {}),
+          ...(options.traceBackend !== undefined
+            ? { traceBackend: options.traceBackend }
+            : {}),
+          ...(options.telemetryMode !== undefined
+            ? { telemetryMode: options.telemetryMode }
+            : {}),
+          ...(options.telemetryMaxBytes !== undefined
+            ? { telemetryMaxBytes: options.telemetryMaxBytes }
+            : {}),
+          ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
+          gameId,
+          handId,
+          actorSeat: actor,
+          eventIndex: currentEventIndex,
+          providerUsed: resolved.providerUsed,
+          requestedProvider: resolved.requestedProvider,
+          ...(options.workerId ? { workerId: options.workerId } : {}),
+          ...(options.controllerMode ? { controllerMode: true } : {})
+        }
+      );
       if (telemetryResult) {
         recordTelemetryFailure(telemetryFailureStats, telemetryResult);
-        emitTelemetryFailure(options, telemetryFailureTracker, telemetryResult, {
-          game_id: gameId,
-          hand_id: handId,
-          phase: nextResult.nextState.phase,
-          actor_seat: String(actor),
-          event_index: currentEventIndex
-        });
+        emitTelemetryFailureDiagnostic(
+          options,
+          telemetryFailureTracker,
+          telemetryResult,
+          {
+            game_id: gameId,
+            hand_id: handId,
+            phase: nextResult.nextState.phase,
+            actor_seat: String(actor),
+            event_index: currentEventIndex
+          }
+        );
       }
     }
 
@@ -1951,7 +1628,10 @@ async function runSingleGame(
   };
 }
 
-function mergeCounts(target: Record<string, number>, source: Record<string, number>): void {
+function mergeCounts(
+  target: Record<string, number>,
+  source: Record<string, number>
+): void {
   for (const [key, value] of Object.entries(source)) {
     target[key] = (target[key] ?? 0) + value;
   }
@@ -1970,7 +1650,9 @@ export async function runSelfPlayBatch(
     )
   ]);
 
-  const usesBackendProvider = [...requestedProviders].some((provider) => provider !== "local");
+  const usesBackendProvider = [...requestedProviders].some(
+    (provider) => provider !== "local"
+  );
   if (options.telemetryEnabled || usesBackendProvider) {
     try {
       await verifyBackend(backendBaseUrl, {
@@ -1980,8 +1662,10 @@ export async function runSelfPlayBatch(
         ...(options.controllerMode ? { controllerMode: true } : {})
       });
     } catch (error) {
-      const telemetryRequiresBackend = options.telemetryEnabled && options.strictTelemetry === true;
-      const providerRequiresBackend = usesBackendProvider && options.serverFallbackEnabled === false;
+      const telemetryRequiresBackend =
+        options.telemetryEnabled && options.strictTelemetry === true;
+      const providerRequiresBackend =
+        usesBackendProvider && options.serverFallbackEnabled === false;
       if (telemetryRequiresBackend || providerRequiresBackend) {
         throw error;
       }
@@ -2069,8 +1753,11 @@ export async function runSelfPlayBatch(
         game.eventsByPhase.exchange_complete !== undefined ||
         game.eventsByPhase.pass_reveal !== undefined;
       summary.passSelectRecorded =
-        summary.passSelectRecorded || game.decisionsByPhase.pass_select !== undefined;
-      for (const [provider, metrics] of Object.entries(game.latencyByProvider)) {
+        summary.passSelectRecorded ||
+        game.decisionsByPhase.pass_select !== undefined;
+      for (const [provider, metrics] of Object.entries(
+        game.latencyByProvider
+      )) {
         const bucket = latencyTotals[provider] ?? { count: 0, totalMs: 0 };
         bucket.count += metrics.count;
         bucket.totalMs += metrics.totalMs;
@@ -2106,7 +1793,9 @@ export async function runSelfPlayBatch(
   }
 
   summary.averageGameDurationMs =
-    summary.gamesPlayed > 0 ? Math.round(totalDuration / summary.gamesPlayed) : 0;
+    summary.gamesPlayed > 0
+      ? Math.round(totalDuration / summary.gamesPlayed)
+      : 0;
   summary.averageDecisionsPerHand =
     summary.handsPlayed > 0
       ? Number((summary.decisionsRecorded / summary.handsPlayed).toFixed(2))
@@ -2117,7 +1806,9 @@ export async function runSelfPlayBatch(
       : 0;
   summary.passRate =
     totalPassActions + totalPlayActions > 0
-      ? Number((totalPassActions / (totalPassActions + totalPlayActions)).toFixed(4))
+      ? Number(
+          (totalPassActions / (totalPassActions + totalPlayActions)).toFixed(4)
+        )
       : 0;
   summary.bombUsageRate =
     totalPlayActions > 0
@@ -2130,7 +1821,9 @@ export async function runSelfPlayBatch(
   summary.averageLatencyByProvider = Object.fromEntries(
     Object.entries(latencyTotals).map(([provider, metrics]) => [
       provider,
-      metrics.count > 0 ? Number((metrics.totalMs / metrics.count).toFixed(2)) : 0
+      metrics.count > 0
+        ? Number((metrics.totalMs / metrics.count).toFixed(2))
+        : 0
     ])
   );
 

@@ -3,8 +3,17 @@
   "milestone": "6.5 - Local ML Integration & Reproducible Backend",
   "canonical_contract": "docs/telemetry_contract.md",
   "admin_docs": "docs/admin_reset_endpoints.md",
+  "authoritative_producer_package": "packages/telemetry",
   "decision_source_of_truth": "decisions",
   "event_source_of_truth": "events",
+  "producer_sources": ["gameplay", "selfplay", "controller", "eval"],
+  "producer_guarantees": {
+    "default_failure_mode": "best-effort structured result",
+    "strict_debug_mode": "TelemetryError may surface when strictTelemetry=true",
+    "oversize_policy": "full payloads downgrade to minimal, then skip locally if still above max bytes",
+    "normal_gameplay_path": "apps/web/src/backend/telemetry.ts -> @tichuml/telemetry -> /api/telemetry/*",
+    "selfplay_path": "apps/sim-runner/src/self-play-batch.ts -> @tichuml/telemetry -> /api/telemetry/*"
+  },
   "admin_endpoints": [
     "POST /api/admin/telemetry/clear",
     "POST /api/admin/database/clear",

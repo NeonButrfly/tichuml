@@ -2,6 +2,19 @@
 
 Tracking issue: [#35](https://github.com/NeonButrfly/tichuml/issues/35)
 
+## Authoritative Producer Subsystem
+
+Producer-side telemetry is centralized in `packages/telemetry`. The package owns payload builders, source adapters, minimal/full/adaptive richness policy, byte-limit downgrade/skip policy, shared POST behavior, failure classification, strict-mode behavior, and structured diagnostics. Application code should only map local context into these shared builders.
+
+Current source tags:
+
+- `gameplay` for normal web gameplay
+- `selfplay` for simulator/selfplay games
+- `controller` for long-running controller worker telemetry
+- `eval` for evaluation producers when used
+
+The tag is stored in payload `metadata.source` and `metadata.telemetry_source` so existing backend validation and storage remain compatible while ML/export consumers can split rows by producer.
+
 ## Ingestion
 
 Decision telemetry is ingested at `POST /api/telemetry/decision`. Event telemetry is ingested at `POST /api/telemetry/event`. Both routes validate payload shape before storage and reject malformed payloads with `accepted: false` plus `validation_errors`.
@@ -26,6 +39,8 @@ Rich optional fields are preserved when available:
 - `candidateScores`
 - `stateFeatures`
 - `antipattern_tags`
+
+Minimal mode keeps the validator-compatible core compact by using `state_raw: {}`, `state_norm: null`, actor-scoped legal actions, the selected action, provider context, source metadata, and compact state features. Full mode keeps raw state, normalized state, richer legal-action context, explanations, candidate scores, and state features for training and debugging. Adaptive currently follows the same central size policy and is reserved for future expansion.
 
 Consistency checks:
 
@@ -98,3 +113,5 @@ diagnostics, not as a UI contract.
 Rows from malformed legacy decisions are filtered when `chosen_action_is_legal`
 is explicitly false or actor-scoped legal actions are missing, and diagnostics
 report the filtered count.
+
+Normal gameplay and selfplay now feed the same backend decision/event tables through `@tichuml/telemetry`, so training exports can use one dataset path while retaining producer/source metadata.

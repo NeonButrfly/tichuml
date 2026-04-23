@@ -201,7 +201,7 @@ Prompt logs here capture backend/platform prompt intent only. GitHub issue state
 - Prompt signal:
   A healthy simulator controller/backend run was making decisions but repeatedly
   logging `/api/telemetry/decision` failures with `Request body exceeded the
-  supported size limit.`, leaving the control UI stuck at `Batches=0`,
+supported size limit.`, leaving the control UI stuck at `Batches=0`,
   `Games=0`, and `Last batch=running` while `strict_telemetry=false`.
 - Interpreted requirement:
   Issue [#41](https://github.com/NeonButrfly/tichuml/issues/41) also tracks the
@@ -223,6 +223,21 @@ Prompt logs here capture backend/platform prompt intent only. GitHub issue state
   [#41](https://github.com/NeonButrfly/tichuml/issues/41)
 - Milestone:
   [Linux Backend Deployment + ML Host](https://github.com/NeonButrfly/tichuml/milestone/25)
+- Status:
+  Lives in GitHub, not here.
+
+## 2026-04-22 - Central producer-side telemetry subsystem
+
+- Prompt signal:
+  Centralize all telemetry into one authoritative shared pipeline so simulator/selfplay and normal gameplay both feed the same telemetry system, while ensuring telemetry can never blow up gameplay, UI turns, simulator progress, worker shutdown, or controller accounting.
+- Interpreted requirement:
+  Issue [#35](https://github.com/NeonButrfly/tichuml/issues/35) now covers the producer-side refactor: `packages/telemetry` must own decision/event builders, source tags, normalized config, minimal/full/adaptive policy, byte downgrade/skip behavior, shared POST behavior, non-fatal defaults, strict debug failures, and machine-readable diagnostics. Sim and web code must remain thin adapters only.
+- Affected systems:
+  `packages/telemetry`, `apps/sim-runner/src/self-play-batch.ts`, `apps/web/src/backend/telemetry.ts`, telemetry tests, telemetry docs.
+- Linked GitHub issue:
+  [#35](https://github.com/NeonButrfly/tichuml/issues/35)
+- Milestone:
+  [6.5 - Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
 - Status:
   Lives in GitHub, not here.
 

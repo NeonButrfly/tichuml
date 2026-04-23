@@ -12,8 +12,6 @@ import {
   TELEMETRY_EVENT_PATH,
   normalizeBackendBaseUrl,
   validateDecisionRequestPayload,
-  validateTelemetryDecisionPayload,
-  validateTelemetryEventPayload,
   type DecisionRequestPayload,
   type DecisionResponsePayload,
   type SimControllerRequestPayload,
@@ -21,6 +19,12 @@ import {
   type TelemetryDecisionPayload,
   type TelemetryEventPayload
 } from "@tichuml/shared";
+import {
+  emitTelemetryDecision,
+  emitTelemetryEvent,
+  TelemetryError,
+  type TelemetryWriteResult
+} from "@tichuml/telemetry";
 
 type FetchLike = typeof fetch;
 
@@ -95,7 +99,10 @@ async function fetchJson<T>(
       payload !== null &&
       "validation_errors" in payload &&
       Array.isArray(payload.validation_errors)
-        ? (payload.validation_errors as Array<{ path: string; message: string }>)
+        ? (payload.validation_errors as Array<{
+            path: string;
+            message: string;
+          }>)
         : null;
     throw new BackendRequestError({
       message:
@@ -169,29 +176,34 @@ export async function postTelemetryDecision(
   payload: TelemetryDecisionPayload,
   fetchImpl: FetchLike = globalThis.fetch
 ): Promise<TelemetryWriteResponse> {
-  const parsed = validateTelemetryDecisionPayload(payload);
-  if (!parsed.ok) {
-    throw new BackendRequestError({
-      message: "Local telemetry decision payload failed validation before upload.",
-      endpoint: TELEMETRY_DECISION_PATH,
-      kind: "client_validation",
-      reachable: null,
-      validationErrors: parsed.issues
-    });
-  }
-
-  return fetchJson<TelemetryWriteResponse>(
-    buildUrl(baseUrl, TELEMETRY_DECISION_PATH),
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(parsed.value)
+  const result = await emitTelemetryDecision({
+    telemetry: {
+      enabled: true,
+      strictTelemetry: true,
+      backendBaseUrl: baseUrl,
+      source:
+        payload.metadata.source === "selfplay" ||
+        payload.metadata.source === "controller" ||
+        payload.metadata.source === "eval"
+          ? payload.metadata.source
+          : "gameplay",
+      mode: "full"
     },
-    fetchImpl,
-    TELEMETRY_DECISION_PATH
-  );
+    payloads: {
+      full: payload,
+      minimal: payload
+    },
+    fetchImpl
+  }).catch((error) => {
+    throw toBackendRequestError(error, TELEMETRY_DECISION_PATH);
+  });
+
+  return {
+    accepted: result.ok,
+    ...(result.ok && result.telemetry_id !== undefined
+      ? { telemetry_id: result.telemetry_id }
+      : {})
+  };
 }
 
 export async function postTelemetryEvent(
@@ -199,29 +211,79 @@ export async function postTelemetryEvent(
   payload: TelemetryEventPayload,
   fetchImpl: FetchLike = globalThis.fetch
 ): Promise<TelemetryWriteResponse> {
-  const parsed = validateTelemetryEventPayload(payload);
-  if (!parsed.ok) {
-    throw new BackendRequestError({
-      message: "Local event telemetry payload failed validation before upload.",
-      endpoint: TELEMETRY_EVENT_PATH,
-      kind: "client_validation",
-      reachable: null,
-      validationErrors: parsed.issues
+  const result = await emitTelemetryEvent({
+    telemetry: {
+      enabled: true,
+      strictTelemetry: true,
+      backendBaseUrl: baseUrl,
+      source:
+        payload.metadata.source === "selfplay" ||
+        payload.metadata.source === "controller" ||
+        payload.metadata.source === "eval"
+          ? payload.metadata.source
+          : "gameplay",
+      mode: "full"
+    },
+    payloads: {
+      full: payload,
+      minimal: payload
+    },
+    fetchImpl
+  }).catch((error) => {
+    throw toBackendRequestError(error, TELEMETRY_EVENT_PATH);
+  });
+
+  return {
+    accepted: result.ok,
+    ...(result.ok && result.telemetry_id !== undefined
+      ? { telemetry_id: result.telemetry_id }
+      : {})
+  };
+}
+
+function toBackendRequestError(
+  error: unknown,
+  endpoint: string
+): BackendRequestError {
+  if (error instanceof BackendRequestError) {
+    return error;
+  }
+  if (error instanceof TelemetryError) {
+    const result = error.result as TelemetryWriteResult;
+    const validationErrors =
+      !result.ok && result.body && Array.isArray(result.body.validation_errors)
+        ? (result.body.validation_errors as Array<{
+            path: string;
+            message: string;
+          }>)
+        : null;
+    return new BackendRequestError({
+      message: error.message,
+      endpoint,
+      kind:
+        !result.ok && result.failure_kind === "client_validation"
+          ? "client_validation"
+          : !result.ok && result.status === 400
+            ? "validation"
+            : !result.ok && result.failure_kind === "network_failure"
+              ? "network"
+              : "server",
+      reachable:
+        !result.ok && result.failure_kind === "client_validation"
+          ? null
+          : result.ok
+            ? true
+            : result.failure_kind !== "network_failure",
+      statusCode: !result.ok ? (result.status ?? null) : null,
+      validationErrors
     });
   }
-
-  return fetchJson<TelemetryWriteResponse>(
-    buildUrl(baseUrl, TELEMETRY_EVENT_PATH),
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(parsed.value)
-    },
-    fetchImpl,
-    TELEMETRY_EVENT_PATH
-  );
+  return new BackendRequestError({
+    message: error instanceof Error ? error.message : String(error),
+    endpoint,
+    kind: "server",
+    reachable: null
+  });
 }
 
 export async function getSimControllerStatus(
