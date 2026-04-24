@@ -43,14 +43,18 @@ import {
 } from "../../apps/server/src/services/sim-controller-service";
 import type { TelemetryRepository } from "../../apps/server/src/services/telemetry-repository";
 import { deriveControllerBatchBaseSeed } from "../../apps/sim-runner/src/cli";
+import { buildDecisionRequestPayload } from "../../apps/sim-runner/src/self-play-batch";
 
 class InMemoryTelemetryRepository implements TelemetryRepository {
   decisions: StoredTelemetryDecisionRecord[] = [];
   events: StoredTelemetryEventRecord[] = [];
+  pingCalls = 0;
   private decisionId = 1;
   private eventId = 1;
 
-  async ping(): Promise<void> {}
+  async ping(): Promise<void> {
+    this.pingCalls += 1;
+  }
 
   async insertDecision(payload: TelemetryDecisionPayload): Promise<number> {
     const id = this.decisionId++;
@@ -550,8 +554,6 @@ const TEST_SERVER_CONFIG: ServerConfig = {
   lightgbmModelMetaPath: "ml/model_registry/lightgbm_action_model.meta.json"
 };
 
-let nextSafeTestPort = 43110;
-
 async function withServer<T>(
   callback: (config: { baseUrl: string; repository: InMemoryTelemetryRepository }) => Promise<T>,
   options: {
@@ -566,13 +568,12 @@ async function withServer<T>(
     serverConfig: { ...TEST_SERVER_CONFIG, ...(options.serverConfig ?? {}) },
     repository,
     lightgbmScorer: options.lightgbmScorer,
-    simController: options.simController,
+    simController: options.simController ?? new InMemorySimController(),
     runtimeAdmin: options.runtimeAdmin ?? new InMemoryRuntimeAdmin()
   });
 
-  const port = nextSafeTestPort++;
   await new Promise<void>((resolve) => {
-    server.listen(port, "127.0.0.1", () => resolve());
+    server.listen(0, "127.0.0.1", () => resolve());
   });
 
   const address = server.address();
@@ -698,7 +699,9 @@ function createEventPayload(ts: string, eventType: string): TelemetryEventPayloa
   };
 }
 
-function createDecisionRequestBody() {
+function createDecisionRequestBody(options: {
+  fullStateDecisionRequests?: boolean;
+} = {}) {
   let result = createInitialGameState({ seed: "backend-route-test" });
   while (result.nextState.phase !== "grand_tichu_window") {
     result = applyEngineAction(result.nextState, {
@@ -712,25 +715,19 @@ function createDecisionRequestBody() {
     throw new Error("Expected an active seat in the grand Tichu window.");
   }
 
-  return {
-    game_id: "game-1",
-    hand_id: "hand-1",
+  return buildDecisionRequestPayload({
+    gameId: "game-1",
+    handId: "hand-1",
+    stateRaw: result.nextState as unknown as Record<string, unknown>,
+    stateNorm: result.derivedView as unknown as Record<string, unknown>,
+    legalActions: getLegalActions(result.nextState),
     phase: result.nextState.phase,
-    actor_seat: actorSeat,
-    schema_version: 2,
-    engine_version: "milestone-1",
-    sim_version: "milestone-2",
-    state_raw: result.nextState as unknown as Record<string, unknown>,
-    state_norm: result.derivedView as unknown as Record<string, unknown>,
-    legal_actions: getLegalActions(result.nextState) as unknown as Record<
-      string,
-      unknown
-    >,
-    requested_provider: "server_heuristic" as const,
-    metadata: {
-      decision_index: 1
-    }
-  };
+    requestedProvider: "server_heuristic",
+    decisionIndex: 1,
+    ...(options.fullStateDecisionRequests === true
+      ? { fullStateDecisionRequests: true }
+      : {})
+  });
 }
 
 afterEach(() => {
@@ -1032,12 +1029,55 @@ describe("backend foundation server routes", () => {
         accepted: boolean;
         chosen_action: EngineAction;
         provider_used: string;
+        metadata?: {
+          scoring_path?: string;
+          timing?: {
+            payload_bytes?: number;
+            parse_ms?: number;
+            validate_ms?: number;
+            normalize_ms?: number;
+            evaluate_ms?: number;
+            response_ms?: number;
+            total_latency_ms?: number;
+            candidate_count?: number;
+            scoring_path?: string;
+          };
+        };
         telemetry_id?: number;
       };
       expect(payload.accepted).toBe(true);
       expect(payload.provider_used).toBe("server_heuristic");
       expect(payload.chosen_action.type).toBeDefined();
+      expect(payload.telemetry_id).toBeUndefined();
+      expect(payload.metadata?.scoring_path).toBe("fast_path");
+      expect(payload.metadata?.timing).toMatchObject({
+        scoring_path: "fast_path"
+      });
+      expect(repository.decisions).toHaveLength(0);
+    });
+  });
+
+  it("preserves rich-path telemetry persistence when explicitly requested", async () => {
+    await withServer(async ({ baseUrl, repository }) => {
+      const response = await fetch(`${baseUrl}/api/decision/request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          createDecisionRequestBody({ fullStateDecisionRequests: true })
+        )
+      });
+
+      expect(response.status).toBe(200);
+      const payload = (await response.json()) as {
+        accepted: boolean;
+        provider_used: string;
+        telemetry_id?: number;
+        metadata?: { scoring_path?: string };
+      };
+      expect(payload.accepted).toBe(true);
+      expect(payload.provider_used).toBe("server_heuristic");
       expect(payload.telemetry_id).toBeGreaterThan(0);
+      expect(payload.metadata?.scoring_path).toBe("rich_path");
       expect(repository.decisions).toHaveLength(1);
       expect(repository.decisions[0]?.policy_source).toBe("server_heuristic");
     });
@@ -1063,7 +1103,7 @@ describe("backend foundation server routes", () => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            ...createDecisionRequestBody(),
+            ...createDecisionRequestBody({ fullStateDecisionRequests: true }),
             requested_provider: "lightgbm_model"
           })
         });

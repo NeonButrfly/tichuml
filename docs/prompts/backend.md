@@ -549,3 +549,36 @@ supported size limit.`, leaving the control UI stuck at `Batches=0`,
   [Linux Backend Deployment + ML Host](https://github.com/NeonButrfly/tichuml/milestone/25)
 - Status:
   Lives in GitHub, not here.
+
+## 2026-04-23 - Split fast/rich server heuristic decision path for hot-loop recovery
+
+- Prompt signal:
+  Fix the `server_heuristic` performance regression without regressing gameplay
+  quality, stale-runtime recovery, seed handling, diagnostics, or fallback
+  behavior. Restore the old low-latency live backend path by separating a
+  bounded fast decision path from the existing rich validation/explainability
+  path.
+- Interpreted requirement:
+  Issue [#46](https://github.com/NeonButrfly/tichuml/issues/46) tracks the
+  backend/simulator split-path architecture: live `server_heuristic` decisions
+  must default to a compact fast path with actor-scoped legal actions, bounded
+  candidate generation, centralized scoring weights, payload and latency
+  budgets, request timeout/fallback protection, and no inline rich telemetry or
+  explainability work. The rich/full-state path remains available only when
+  explicitly enabled for diagnostics or analysis.
+- Affected systems:
+  `apps/sim-runner/src/self-play-batch.ts`,
+  `apps/sim-runner/src/cli.ts`,
+  `apps/server/src/providers/*`,
+  `apps/server/src/routes/router.ts`,
+  `apps/server/src/services/decision-service.ts`,
+  `apps/server/src/services/sim-controller-service.ts`,
+  `packages/ai-heuristics/src/*`,
+  `packages/shared/src/backend.ts`,
+  diagnostics artifacts, backend/server heuristic integration tests.
+- Linked GitHub issue:
+  [#46](https://github.com/NeonButrfly/tichuml/issues/46)
+- Milestone:
+  [6.5 - Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status:
+  Lives in GitHub, not here.

@@ -36,6 +36,7 @@ export type ValidationResult<T> =
 export type DecisionMode = "local" | "server_heuristic" | "lightgbm_model";
 export type RequestedDecisionProvider = "server_heuristic" | "lightgbm_model";
 export type DecisionProviderUsed = RequestedDecisionProvider | "local_heuristic";
+export type DecisionScoringPath = "fast_path" | "rich_path";
 export type BackendReachabilityState =
   | "unknown"
   | "checking"
@@ -117,6 +118,7 @@ export type SimControllerConfig = {
   server_fallback_enabled: boolean;
   strict_telemetry: boolean;
   trace_backend: boolean;
+  full_state_decision_requests: boolean;
   telemetry_mode: "minimal" | "full";
   telemetry_max_bytes: number;
   telemetry_timeout_ms: number;
@@ -215,6 +217,8 @@ export type SimControllerRequestPayload = Partial<{
   server_fallback: boolean;
   strict_telemetry: boolean;
   trace_backend: boolean;
+  full_state_decision_requests: boolean;
+  full_state: boolean;
   telemetry_mode: "minimal" | "full";
   telemetry_max_bytes: number;
   telemetry_timeout_ms: number;
@@ -798,6 +802,10 @@ function chosenActionMatchesLegalAction(
   return concreteActionsEquivalent(candidate, chosen);
 }
 
+export function actionsEquivalent(candidate: unknown, chosen: unknown): boolean {
+  return chosenActionMatchesLegalAction(candidate, chosen);
+}
+
 export function extractActorScopedLegalActions(
   legalActions: SeedJsonValue,
   actorSeat: string
@@ -814,6 +822,11 @@ export function extractActorScopedLegalActions(
   }
 
   return [];
+}
+
+export function getDecisionScoringPath(payload: Pick<DecisionRequestPayload, "metadata">): DecisionScoringPath {
+  const value = payload.metadata.scoring_path;
+  return value === "rich_path" ? "rich_path" : "fast_path";
 }
 
 function extractExplanationFromMetadata(metadata: JsonObject | null): SeedJsonValue | null {
@@ -848,7 +861,7 @@ export function deriveTelemetryDecisionFields(
   );
   const chosenActionType = getActionType(payload.chosen_action);
   const chosenActionIsLegal = actorActions.some((candidate) =>
-    chosenActionMatchesLegalAction(candidate, payload.chosen_action)
+    actionsEquivalent(candidate, payload.chosen_action)
   );
   const wishRank =
     readFiniteNumber(payload.state_raw.currentWish) ??
@@ -908,7 +921,7 @@ function validateDecisionConsistency(
     );
   } else if (
     !actorActions.some((candidate) =>
-      chosenActionMatchesLegalAction(candidate, payload.chosen_action)
+      actionsEquivalent(candidate, payload.chosen_action)
     )
   ) {
     pushIssue(

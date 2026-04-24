@@ -431,14 +431,13 @@ export function createRouter({
       }
 
       if (request.method === "GET" && url.pathname === BACKEND_HEALTH_PATH) {
-        await repository.ping();
         writeJson(
           response,
           200,
           {
             ok: true,
             service: "tichuml-server",
-            database: "ok"
+            database: "deferred"
           },
           config.allowedOrigin
         );
@@ -615,12 +614,21 @@ export function createRouter({
 
       if (request.method === "POST" && url.pathname === DECISION_REQUEST_PATH) {
         const startedAt = Date.now();
-        const parsed = validateDecisionRequestPayload(await readConfiguredJsonBody());
+        const parseStartedAt = Date.now();
+        const body = await readConfiguredJsonBody();
+        const parseMs = Date.now() - parseStartedAt;
+        const validateStartedAt = Date.now();
+        const parsed = validateDecisionRequestPayload(body);
+        const validateMs = Date.now() - validateStartedAt;
+        const payloadBytes = Number(request.headers["content-length"] ?? 0) || 0;
         if (!parsed.ok) {
           logDecisionTrace(config, "decision_request_rejected", {
             reason: "payload_validation",
             validation_issues: parsed.issues,
-            latency_ms: Date.now() - startedAt
+            latency_ms: Date.now() - startedAt,
+            parse_ms: parseMs,
+            validate_ms: validateMs,
+            payload_bytes: payloadBytes
           });
           badRequest(
             response,
@@ -632,7 +640,10 @@ export function createRouter({
         }
 
         logDecisionTrace(config, "decision_request_received", {
-          ...summarizeDecisionRequest(parsed.value)
+          ...summarizeDecisionRequest(parsed.value),
+          parse_ms: parseMs,
+          validate_ms: validateMs,
+          payload_bytes: payloadBytes
         });
         let decisionResponse;
         try {
@@ -641,7 +652,10 @@ export function createRouter({
             parsed.value,
             {
               ...(lightgbmScorer ? { lightgbmScorer } : {}),
-              traceDecisionRequests: config.traceDecisionRequests
+              traceDecisionRequests: config.traceDecisionRequests,
+              parseMs,
+              validateMs,
+              payloadBytes
             }
           );
         } catch (error) {
@@ -657,7 +671,10 @@ export function createRouter({
             actor_seat: parsed.value.actor_seat,
             requested_provider: parsed.value.requested_provider,
             error: message,
-            latency_ms: Date.now() - startedAt
+            latency_ms: Date.now() - startedAt,
+            parse_ms: parseMs,
+            validate_ms: validateMs,
+            payload_bytes: payloadBytes
           });
           if (message.startsWith("Actor mismatch:")) {
             badRequest(response, message, config.allowedOrigin, [
@@ -671,7 +688,14 @@ export function createRouter({
           ...summarizeDecisionRequest(parsed.value),
           provider_used: decisionResponse.provider_used,
           telemetry_id: decisionResponse.telemetry_id,
-          latency_ms: Date.now() - startedAt
+          latency_ms: Date.now() - startedAt,
+          parse_ms: parseMs,
+          validate_ms: validateMs,
+          payload_bytes: payloadBytes,
+          scoring_path:
+            typeof decisionResponse.metadata?.scoring_path === "string"
+              ? decisionResponse.metadata.scoring_path
+              : "fast_path"
         });
         writeJson(response, 200, decisionResponse, config.allowedOrigin);
         return;

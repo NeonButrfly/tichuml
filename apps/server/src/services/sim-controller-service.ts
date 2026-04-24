@@ -409,6 +409,8 @@ export class FileSimControllerService implements SimControllerService {
       String(resolved.config.strict_telemetry),
       "--trace-backend",
       String(resolved.config.trace_backend),
+      "--full-state",
+      String(resolved.config.full_state_decision_requests),
       "--telemetry-mode",
       resolved.config.telemetry_mode,
       "--telemetry-max-bytes",
@@ -475,6 +477,8 @@ export class FileSimControllerService implements SimControllerService {
       String(resolved.config.strict_telemetry),
       "--trace-backend",
       String(resolved.config.trace_backend),
+      "--full-state",
+      String(resolved.config.full_state_decision_requests),
       "--telemetry-mode",
       resolved.config.telemetry_mode,
       "--telemetry-max-bytes",
@@ -815,6 +819,12 @@ export class FileSimControllerService implements SimControllerService {
             : true,
       strict_telemetry: payload.strict_telemetry === true,
       trace_backend: payload.trace_backend === true,
+      full_state_decision_requests:
+        typeof payload.full_state_decision_requests === "boolean"
+          ? payload.full_state_decision_requests
+          : typeof payload.full_state === "boolean"
+            ? payload.full_state
+            : false,
       telemetry_mode:
         payload.telemetry_mode === "full" || payload.telemetry_mode === "minimal"
           ? payload.telemetry_mode
@@ -913,6 +923,8 @@ export class FileSimControllerService implements SimControllerService {
   ): SimControllerRuntimeState {
     const normalizedConfig: SimControllerConfig = {
       ...state.config,
+      full_state_decision_requests:
+        state.config.full_state_decision_requests ?? false,
       seed_namespace: state.config.seed_namespace ?? state.config.seed_prefix ?? "controller",
       manual_seed_override_enabled:
         state.config.manual_seed_override_enabled ?? false,

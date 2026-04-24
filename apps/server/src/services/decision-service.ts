@@ -25,6 +25,9 @@ export async function handleDecisionRequest(
   dependencies: {
     lightgbmScorer?: LightgbmScorer;
     traceDecisionRequests?: boolean;
+    parseMs?: number;
+    validateMs?: number;
+    payloadBytes?: number;
   } = {}
 ): Promise<DecisionResponsePayload> {
   const startedAt = Date.now();
@@ -58,11 +61,36 @@ export async function handleDecisionRequest(
             : {})
         });
   const latencyMs = Date.now() - startedAt;
-  routed.telemetryPayload.metadata = {
-    ...routed.telemetryPayload.metadata,
-    latency_ms: latencyMs
-  };
-  const telemetryId = await repository.insertDecision(routed.telemetryPayload);
+  let telemetryId: number | undefined;
+  if (routed.telemetryPayload) {
+    routed.telemetryPayload.metadata = {
+      ...routed.telemetryPayload.metadata,
+      latency_ms: latencyMs
+    };
+    telemetryId = await repository.insertDecision(routed.telemetryPayload);
+  }
+  const existingTiming =
+    typeof routed.responseMetadata?.timing === "object" &&
+    routed.responseMetadata.timing !== null
+      ? (routed.responseMetadata.timing as JsonObject)
+      : undefined;
+  const providerWorkMs =
+    (typeof existingTiming?.normalize_ms === "number"
+      ? existingTiming.normalize_ms
+      : 0) +
+    (typeof existingTiming?.evaluate_ms === "number"
+      ? existingTiming.evaluate_ms
+      : 0);
+  const timingMetadata = {
+    parse_ms: dependencies.parseMs ?? 0,
+    validate_ms: dependencies.validateMs ?? 0,
+    response_ms: Math.max(
+      0,
+      latencyMs - (dependencies.parseMs ?? 0) - (dependencies.validateMs ?? 0) - providerWorkMs
+    ),
+    total_latency_ms: latencyMs,
+    payload_bytes: dependencies.payloadBytes ?? 0
+  } as JsonObject;
   logDecisionTrace(dependencies.traceDecisionRequests === true, "decision_request_resolved", {
     game_id: payload.game_id,
     hand_id: payload.hand_id,
@@ -73,7 +101,8 @@ export async function handleDecisionRequest(
     telemetry_id: telemetryId,
     latency_ms: latencyMs,
     canonical_actor_seat: routed.responseMetadata?.canonical_actor_seat,
-    legal_action_count: routed.responseMetadata?.legal_action_count
+    legal_action_count: routed.responseMetadata?.legal_action_count,
+    scoring_path: routed.responseMetadata?.scoring_path
   });
 
   return {
@@ -84,8 +113,12 @@ export async function handleDecisionRequest(
     metadata: {
       ...(routed.responseMetadata ?? {}),
       latency_ms: latencyMs,
-      telemetry_id: telemetryId
+      timing: {
+        ...((existingTiming ?? {}) as JsonObject),
+        ...timingMetadata
+      },
+      ...(telemetryId !== undefined ? { telemetry_id: telemetryId } : {})
     },
-    telemetry_id: telemetryId
+    ...(telemetryId !== undefined ? { telemetry_id: telemetryId } : {})
   };
 }

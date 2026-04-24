@@ -1,11 +1,17 @@
 import {
+  buildServerFastPathState,
   heuristicsV1Policy,
+  chooseServerFastPathDecision,
+  generateFastTrickPlayCandidates,
+  SERVER_HEURISTIC_FAST_PATH_LIMITS,
   type ChosenDecision
 } from "@tichuml/ai-heuristics";
 import {
   BACKEND_HEALTH_PATH,
   DECISION_REQUEST_PATH,
+  getDecisionScoringPath,
   normalizeBackendBaseUrl,
+  type DecisionScoringPath,
   type DecisionMode,
   type DecisionProviderUsed,
   type DecisionRequestPayload,
@@ -72,6 +78,7 @@ export type SelfPlayBatchOptions = {
   maxDecisionsPerGame?: number;
   workerId?: string;
   controllerMode?: boolean;
+  fullStateDecisionRequests?: boolean;
 };
 
 export type SelfPlayGameResult = {
@@ -148,6 +155,8 @@ type SimulatedDecision = {
   telemetryFailureStats: TelemetryFailureStats;
   telemetryFailure?: TelemetryWriteResult;
 };
+
+type LocalDecisionStrategy = "heuristics_v1" | "server_fast_path";
 
 type PersistedEventConfig = {
   backendBaseUrl: string;
@@ -439,6 +448,7 @@ type BackendRequestContext = {
   requested_provider?: string;
   trace_backend?: boolean;
   quiet?: boolean;
+  timeout_ms?: number;
   payload_summary?: JsonObject;
 };
 
@@ -447,6 +457,8 @@ type BackendRequestResult = {
   payload: JsonObject;
   raw_body?: string;
   latency_ms: number;
+  response_ms: number;
+  parse_ms: number;
 };
 
 type DecisionFailureKind =
@@ -579,10 +591,37 @@ function findMatchingLegalAction(
             candidate.phoenixAsRank === chosenAction.phoenixAsRank
           );
         case "select_pass":
-          return (
-            chosenAction.type === "select_pass" &&
-            candidate.seat === chosenAction.seat
-          );
+          if (chosenAction.type !== "select_pass" || candidate.seat !== chosenAction.seat) {
+            return false;
+          }
+          if (
+            !Array.isArray(candidate.availableCardIds) ||
+            !Array.isArray(candidate.requiredTargets)
+          ) {
+            return false;
+          }
+          const chosenCardIds = [
+            chosenAction.left,
+            chosenAction.partner,
+            chosenAction.right
+          ];
+          if (new Set(chosenCardIds).size !== chosenCardIds.length) {
+            return false;
+          }
+          const requiredTargets: Array<"left" | "partner" | "right"> = [
+            "left",
+            "partner",
+            "right"
+          ];
+          if (
+            requiredTargets.some(
+              (target) => !candidate.requiredTargets.includes(target)
+            )
+          ) {
+            return false;
+          }
+          const allowedCardIds = new Set(candidate.availableCardIds);
+          return chosenCardIds.every((cardId) => allowedCardIds.has(cardId));
         case "assign_dragon_trick":
           return (
             chosenAction.type === "assign_dragon_trick" &&
@@ -720,14 +759,25 @@ function summarizeBackendPayload(
         phase: body.phase,
         actor_seat: body.actor_seat,
         requested_provider: body.requested_provider,
+        scoring_path:
+          typeof body.metadata === "object" &&
+          body.metadata !== null &&
+          "scoring_path" in body.metadata
+            ? (body.metadata as Record<string, unknown>).scoring_path
+            : "fast_path",
         has_state_raw:
           typeof body.state_raw === "object" && body.state_raw !== null,
         has_state_norm:
           typeof body.state_norm === "object" && body.state_norm !== null,
-        legal_action_keys:
-          typeof body.legal_actions === "object" && body.legal_actions !== null
-            ? Object.keys(body.legal_actions as Record<string, unknown>)
-            : []
+        legal_action_count: Array.isArray(body.legal_actions)
+          ? body.legal_actions.length
+          : typeof body.legal_actions === "object" && body.legal_actions !== null
+            ? Object.values(body.legal_actions as Record<string, unknown>).reduce(
+                (count: number, entry) =>
+                  count + (Array.isArray(entry) ? entry.length : 0),
+                0
+              )
+            : 0
       } as JsonObject;
     case "telemetry_decision":
       return {
@@ -835,19 +885,88 @@ function resolveNextActor(
   );
 }
 
+function resolveDecisionScoringPath(config?: {
+  fullStateDecisionRequests?: boolean;
+}): DecisionScoringPath {
+  return config?.fullStateDecisionRequests === true ? "rich_path" : "fast_path";
+}
+
+function extractActorLegalActionList(
+  legalActions: LegalActionMap,
+  actor: SeatId | typeof SYSTEM_ACTOR
+): LegalAction[] {
+  const actorActions = legalActions[actor] ?? [];
+  return Array.isArray(actorActions) ? actorActions : [];
+}
+
+function buildFastPathLegalActionPayload(
+  state: GameState,
+  actor: SeatId,
+  phase: string,
+  actorActions: LegalAction[]
+): LegalAction[] {
+  if (phase !== "trick_play") {
+    return actorActions;
+  }
+
+  const fastState = buildServerFastPathState(state, actor);
+  const candidates = generateFastTrickPlayCandidates({
+    state: fastState,
+    actor,
+    legalActions: actorActions
+  });
+  if (candidates.length === 0) {
+    return actorActions;
+  }
+
+  const scopedLegalActions = { [actor]: actorActions } as LegalActionMap;
+  const boundedActions = candidates
+    .map((candidate) =>
+      findMatchingLegalAction(scopedLegalActions, actor, candidate.action)
+    )
+    .filter((candidate): candidate is LegalAction => candidate !== null);
+
+  return boundedActions.length > 0 ? boundedActions : actorActions;
+}
+
+function buildFastDecisionStatePayload(
+  stateRaw: JsonObject,
+  actorSeat: SeatId
+): JsonObject {
+  return buildServerFastPathState(
+    stateRaw as unknown as GameState,
+    actorSeat
+  ) as unknown as JsonObject;
+}
+
 export function validateServerHeuristicDecisionRequestContract(
   request: DecisionRequestPayload
 ): void {
+  const scoringPath = getDecisionScoringPath(request);
+  const contractState =
+    scoringPath === "rich_path" ? request.state_raw : request.state_norm;
   if (
-    typeof request.state_raw !== "object" ||
-    request.state_raw === null ||
-    !("phase" in request.state_raw) ||
-    !("hands" in request.state_raw) ||
-    !("activeSeat" in request.state_raw)
+    typeof contractState !== "object" ||
+    contractState === null ||
+    !("phase" in contractState)
   ) {
     throw new Error(
       [
-        "[server_heuristic] refusing incomplete request: full state_raw is required",
+        `[server_heuristic] refusing incomplete request: ${scoringPath} requires canonical state context`,
+        `game_id=${request.game_id}`,
+        `hand_id=${request.hand_id}`,
+        `phase=${request.phase}`,
+        `scoring_path=${scoringPath}`
+      ].join("; ")
+    );
+  }
+  if (
+    scoringPath === "rich_path" &&
+    (!("hands" in contractState) || !("activeSeat" in contractState))
+  ) {
+    throw new Error(
+      [
+        "[server_heuristic] refusing incomplete rich request: full state_raw is required",
         `game_id=${request.game_id}`,
         `hand_id=${request.hand_id}`,
         `phase=${request.phase}`,
@@ -856,9 +975,15 @@ export function validateServerHeuristicDecisionRequestContract(
     );
   }
 
-  const canonicalActorSeat = getCanonicalActiveSeatFromState(request.state_raw);
-  const phase = request.state_raw?.phase;
-  const legalActions = request.legal_actions as unknown as LegalActionMap;
+  const canonicalActorSeat = getCanonicalActiveSeatFromState(contractState);
+  const phase = String(contractState.phase);
+  const actorActions = Array.isArray(request.legal_actions)
+    ? (request.legal_actions as unknown as LegalAction[])
+    : ((request.legal_actions as Record<string, LegalAction[]>)[request.actor_seat] ??
+      []);
+  const legalActions = {
+    [request.actor_seat]: actorActions
+  } as LegalActionMap;
   const legalActionIssues = validateLegalActionsForCanonicalActor({
     legalActions,
     actor: canonicalActorSeat
@@ -898,6 +1023,7 @@ export function validateBackendDecisionRequestInput(config: {
   decisionIndex: number;
   workerId?: string;
   controllerMode?: boolean;
+  fullStateDecisionRequests?: boolean;
 }): BackendDecisionValidationResult {
   const context = buildDecisionFailureContext({
     gameId: config.gameId,
@@ -911,10 +1037,11 @@ export function validateBackendDecisionRequestInput(config: {
   });
   const missingFields: string[] = [];
   const issues: string[] = [];
+  const scoringPath = resolveDecisionScoringPath(config);
 
   if (typeof config.stateRaw !== "object" || config.stateRaw === null) {
     missingFields.push("state_raw");
-  } else {
+  } else if (scoringPath === "rich_path") {
     for (const field of ["phase", "hands", "activeSeat"]) {
       if (!(field in config.stateRaw)) {
         missingFields.push(`state_raw.${field}`);
@@ -948,6 +1075,9 @@ export function validateBackendDecisionRequestInput(config: {
     issues.push(
       `actor mismatch: actor=${String(config.actor)}, canonical=${canonicalActorSeat}`
     );
+  }
+  if (config.phase === "trick_play" && config.stateRaw.activeSeat === null) {
+    issues.push("trick_play requests must not be built with activeSeat=null.");
   }
   if (config.stateRaw.phase !== config.phase) {
     issues.push(
@@ -991,8 +1121,17 @@ export function buildDecisionRequestPayload(config: {
   decisionIndex: number;
   workerId?: string;
   controllerMode?: boolean;
+  fullStateDecisionRequests?: boolean;
 }): DecisionRequestPayload {
   const actorSeat = getCanonicalActiveSeatFromState(config.stateRaw);
+  const scoringPath = resolveDecisionScoringPath(config);
+  const actorActions = extractActorLegalActionList(config.legalActions, actorSeat);
+  const fastPathActions = buildFastPathLegalActionPayload(
+    config.stateRaw as unknown as GameState,
+    actorSeat,
+    config.phase,
+    actorActions
+  );
   const payload: DecisionRequestPayload = {
     game_id: config.gameId,
     hand_id: config.handId,
@@ -1001,13 +1140,20 @@ export function buildDecisionRequestPayload(config: {
     schema_version: TELEMETRY_SCHEMA_VERSION,
     engine_version: TELEMETRY_ENGINE_VERSION,
     sim_version: TELEMETRY_SIM_VERSION,
-    state_raw: config.stateRaw,
-    state_norm: config.stateNorm,
-    legal_actions: config.legalActions as unknown as JsonObject,
+    state_raw: scoringPath === "rich_path" ? config.stateRaw : null,
+    state_norm:
+      scoringPath === "rich_path"
+        ? config.stateNorm
+        : buildFastDecisionStatePayload(config.stateRaw, actorSeat),
+    legal_actions:
+      scoringPath === "rich_path"
+        ? (config.legalActions as unknown as JsonObject)
+        : (fastPathActions as unknown as JsonObject),
     requested_provider: config.requestedProvider,
     metadata: {
       decision_index: config.decisionIndex,
       simulation_mode: true,
+      scoring_path: scoringPath,
       ...(config.workerId ? { worker_id: config.workerId } : {}),
       ...(config.controllerMode ? { controller_mode: true } : {})
     } as JsonObject
@@ -1045,6 +1191,7 @@ async function requestJson(
       : {}),
     ...(context?.trace_backend ? { trace_backend: true } : {}),
     ...(context?.quiet ? { quiet: true } : {}),
+    ...(context?.timeout_ms !== undefined ? { timeout_ms: context.timeout_ms } : {}),
     payload_summary: summarizeBackendPayload(
       context?.request_kind ?? "decision",
       body
@@ -1057,7 +1204,13 @@ async function requestJson(
   traceBackendRequest(requestContext, "backend_request_start", {
     payload_bytes: payloadBytes
   });
-  const init: RequestInit = { method };
+  const abortController = new AbortController();
+  const timeoutMs = context?.timeout_ms;
+  const timeoutHandle =
+    timeoutMs !== undefined
+      ? setTimeout(() => abortController.abort(), timeoutMs)
+      : undefined;
+  const init: RequestInit = { method, signal: abortController.signal };
   if (requestBody) {
     init.headers = {
       "content-type": "application/json"
@@ -1069,28 +1222,40 @@ async function requestJson(
     response = await fetch(url, init);
   } catch (error) {
     const latencyMs = Date.now() - startedAt;
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
     const message = error instanceof Error ? error.message : String(error);
+    const aborted = error instanceof Error && error.name === "AbortError";
     traceBackendRequest(requestContext, "backend_request_failure", {
-      failure_kind: "network_failure",
+      failure_kind: aborted ? "unexpected_failure" : "network_failure",
       latency_ms: latencyMs,
       payload_bytes: payloadBytes,
       message,
-      cause: error instanceof Error ? error.name : "unknown"
+      cause: error instanceof Error ? error.name : "unknown",
+      ...(timeoutMs !== undefined ? { timeout_ms: timeoutMs } : {})
     });
     throw new BackendRequestFailure(
-      "network_failure",
-      `Request to ${url} failed before receiving a response: ${message}`,
+      aborted ? "unexpected_failure" : "network_failure",
+      aborted
+        ? `Request to ${url} timed out after ${timeoutMs ?? 0}ms.`
+        : `Request to ${url} failed before receiving a response: ${message}`,
       {
         method,
         url,
         request_kind: requestContext.request_kind,
         latency_ms: latencyMs,
-        cause: message
+        cause: message,
+        ...(timeoutMs !== undefined ? { timeout_ms: timeoutMs } : {})
       }
     );
   }
+  if (timeoutHandle) {
+    clearTimeout(timeoutHandle);
+  }
 
   let responseText: string;
+  const responseReadStartedAt = Date.now();
   try {
     responseText = await response.text();
   } catch (error) {
@@ -1116,9 +1281,11 @@ async function requestJson(
       }
     );
   }
+  const responseMs = Date.now() - responseReadStartedAt;
 
   let payload: JsonObject = {};
   let rawBody: string | undefined;
+  const parseStartedAt = Date.now();
   if (responseText.length > 0) {
     try {
       payload = JSON.parse(responseText) as JsonObject;
@@ -1127,11 +1294,14 @@ async function requestJson(
       payload = {};
     }
   }
+  const parseMs = Date.now() - parseStartedAt;
   const latencyMs = Date.now() - startedAt;
   if (!response.ok) {
     traceBackendRequest(requestContext, "backend_request_failure", {
       failure_kind: "backend_rejection",
       latency_ms: latencyMs,
+      response_ms: responseMs,
+      parse_ms: parseMs,
       status: response.status,
       payload_bytes: payloadBytes,
       ...(Object.keys(payload).length > 0 ? { body: payload } : {}),
@@ -1148,6 +1318,8 @@ async function requestJson(
         request_kind: requestContext.request_kind,
         status: response.status,
         latency_ms: latencyMs,
+        response_ms: responseMs,
+        parse_ms: parseMs,
         ...(Object.keys(payload).length > 0 ? { body: payload } : {}),
         ...(rawBody ? { raw_body: rawBody } : {})
       }
@@ -1155,6 +1327,8 @@ async function requestJson(
   }
   traceBackendRequest(requestContext, "backend_request_success", {
     latency_ms: latencyMs,
+    response_ms: responseMs,
+    parse_ms: parseMs,
     status: response.status,
     payload_bytes: payloadBytes
   });
@@ -1162,7 +1336,9 @@ async function requestJson(
     status: response.status,
     payload,
     ...(rawBody ? { raw_body: rawBody } : {}),
-    latency_ms: latencyMs
+    latency_ms: latencyMs,
+    response_ms: responseMs,
+    parse_ms: parseMs
   };
 }
 
@@ -1177,6 +1353,7 @@ async function verifyBackend(
 ): Promise<void> {
   await requestJson("GET", `${baseUrl}${BACKEND_HEALTH_PATH}`, undefined, {
     request_kind: "health_check",
+    timeout_ms: 250,
     ...(options.traceBackend ? { trace_backend: true } : {}),
     ...(options.quiet ? { quiet: true } : {}),
     ...(options.workerId ? { worker_id: options.workerId } : {}),
@@ -1267,6 +1444,7 @@ async function resolveLocalHeuristicDecision(config: {
   fallbackUsed: boolean;
   fallbackReason?: string;
   startedAt: number;
+  strategy?: LocalDecisionStrategy;
   telemetryDispatch?: TelemetryDispatchMode;
   telemetryDispatcher?: BackgroundTelemetryDispatcher;
   workerId?: string;
@@ -1278,17 +1456,50 @@ async function resolveLocalHeuristicDecision(config: {
     [config.actor]: config.legalActions[config.actor] ?? []
   };
   const localDecisionStartedAt = Date.now();
-  const chosen = heuristicsV1Policy.chooseAction({
-    state: config.stateRaw as never,
-    legalActions: actorScopedLegalActions
-  });
+  const strategy = config.strategy ?? "heuristics_v1";
+  const chosen =
+    strategy === "server_fast_path" && config.actor !== SYSTEM_ACTOR
+      ? (() => {
+          const fastDecision = chooseServerFastPathDecision({
+            state: buildServerFastPathState(
+              config.stateRaw as unknown as GameState,
+              config.actor
+            ),
+            actor: config.actor,
+            legalActions: extractActorLegalActionList(
+              config.legalActions,
+              config.actor
+            )
+          });
+          return {
+            actor: fastDecision.actor,
+            action: fastDecision.action,
+            explanation: {
+              policy: "server-fast-path",
+              actor: fastDecision.actor,
+              candidateScores: fastDecision.candidates.map((candidate) => ({
+                action: candidate.action,
+                score: candidate.score,
+                reasons: candidate.reasons,
+                tags: []
+              })),
+              selectedReasonSummary: fastDecision.candidates[0]?.reasons ?? [],
+              selectedTags: []
+            }
+          } satisfies ChosenDecision;
+        })()
+      : heuristicsV1Policy.chooseAction({
+          state: config.stateRaw as never,
+          legalActions: actorScopedLegalActions
+        });
   emitDiagnosticsTiming(config, "local_decision_policy", localDecisionStartedAt, {
     game_id: config.gameId,
     hand_id: config.handId,
     phase: config.phase,
     actor_seat: String(config.actor),
     decision_index: config.decisionIndex,
-    requested_provider: config.requestedProvider
+    requested_provider: config.requestedProvider,
+    scoring_path: strategy === "server_fast_path" ? "fast_path" : "rich_path"
   });
   const latencyMs = Date.now() - config.startedAt;
 
@@ -1308,7 +1519,10 @@ async function resolveLocalHeuristicDecision(config: {
       legalActions: config.legalActions,
       chosenAction: chosen.action,
       explanation: chosen.explanation as unknown as JsonObject,
-      policyName: heuristicsV1Policy.name,
+      policyName:
+        strategy === "server_fast_path"
+          ? "server-fast-path"
+          : heuristicsV1Policy.name,
       requestedProvider: config.requestedProvider,
       providerUsed,
       fallbackUsed: config.fallbackUsed,
@@ -1533,6 +1747,7 @@ export async function resolveDecision(config: {
   quiet?: boolean;
   workerId?: string;
   controllerMode?: boolean;
+  fullStateDecisionRequests?: boolean;
 }): Promise<SimulatedDecision> {
   const startedAt = Date.now();
   if (config.actor === SYSTEM_ACTOR) {
@@ -1557,6 +1772,23 @@ export async function resolveDecision(config: {
       requestedProvider,
       providerReason:
         "Resolved locally through heuristics-v1 during self-play simulation.",
+      fallbackUsed: false,
+      startedAt
+    });
+  }
+
+  if (
+    requestedProvider === "server_heuristic" &&
+    config.phase === "trick_play" &&
+    typeof config.stateRaw === "object" &&
+    config.stateRaw !== null &&
+    config.stateRaw.activeSeat === null
+  ) {
+    return resolveLocalHeuristicDecision({
+      ...config,
+      requestedProvider,
+      providerReason:
+        "Resolved locally because this trick_play boundary has no canonical active seat yet.",
       fallbackUsed: false,
       startedAt
     });
@@ -1587,10 +1819,17 @@ export async function resolveDecision(config: {
     const fallback = await resolveLocalHeuristicDecision({
       ...config,
       requestedProvider,
-      providerReason: `Backend ${requestedProvider} decision failed; resolved through local heuristics-v1 fallback.`,
+      providerReason:
+        requestedProvider === "server_heuristic"
+          ? `Backend ${requestedProvider} decision failed; resolved through the bounded local fast-path fallback.`
+          : `Backend ${requestedProvider} decision failed; resolved through local heuristics-v1 fallback.`,
       fallbackUsed: true,
       fallbackReason: failure.message,
-      startedAt
+      startedAt,
+      strategy:
+        requestedProvider === "server_heuristic"
+          ? "server_fast_path"
+          : "heuristics_v1"
     });
     emitDiagnosticsTiming(config, "fallback_local_resolution", fallbackStartedAt, {
       game_id: config.gameId,
@@ -1612,6 +1851,7 @@ export async function resolveDecision(config: {
   };
 
   const validationStartedAt = Date.now();
+  const scoringPath = resolveDecisionScoringPath(config);
   const validation = validateBackendDecisionRequestInput({
     gameId: config.gameId,
     handId: config.handId,
@@ -1623,7 +1863,10 @@ export async function resolveDecision(config: {
     requestedProvider,
     decisionIndex: config.decisionIndex,
     ...(config.workerId ? { workerId: config.workerId } : {}),
-    ...(config.controllerMode ? { controllerMode: true } : {})
+    ...(config.controllerMode ? { controllerMode: true } : {}),
+    ...(config.fullStateDecisionRequests !== undefined
+      ? { fullStateDecisionRequests: config.fullStateDecisionRequests }
+      : {})
   });
   emitDiagnosticsTiming(config, "contract_validation", validationStartedAt, {
     game_id: config.gameId,
@@ -1632,7 +1875,8 @@ export async function resolveDecision(config: {
     actor_seat: String(config.actor),
     decision_index: config.decisionIndex,
     requested_provider: requestedProvider,
-    accepted: validation.ok
+    accepted: validation.ok,
+    scoring_path: scoringPath
   });
   if (!validation.ok) {
     return fallbackLocally(
@@ -1672,7 +1916,10 @@ export async function resolveDecision(config: {
       requestedProvider,
       decisionIndex: config.decisionIndex,
       ...(config.workerId ? { workerId: config.workerId } : {}),
-      ...(config.controllerMode ? { controllerMode: true } : {})
+      ...(config.controllerMode ? { controllerMode: true } : {}),
+      ...(config.fullStateDecisionRequests !== undefined
+        ? { fullStateDecisionRequests: config.fullStateDecisionRequests }
+        : {})
     });
     emitDiagnosticsTiming(config, "decision_request_payload_build", payloadBuildStartedAt, {
       game_id: config.gameId,
@@ -1680,7 +1927,8 @@ export async function resolveDecision(config: {
       phase: config.phase,
       actor_seat: String(config.actor),
       decision_index: config.decisionIndex,
-      requested_provider: requestedProvider
+      requested_provider: requestedProvider,
+      scoring_path: scoringPath
     });
   } catch (error) {
     return fallbackLocally(
@@ -1692,7 +1940,7 @@ export async function resolveDecision(config: {
     );
   }
 
-  let decisionResponse: { status: number; payload: JsonObject };
+  let decisionResponse: BackendRequestResult;
   try {
     const requestStartedAt = Date.now();
     decisionResponse = await requestJson(
@@ -1707,6 +1955,7 @@ export async function resolveDecision(config: {
         actor_seat: String(config.actor),
         decision_index: config.decisionIndex,
         requested_provider: requestedProvider,
+        timeout_ms: 500,
         ...(config.traceBackend ? { trace_backend: true } : {}),
         ...(config.quiet ? { quiet: true } : {}),
         ...(config.workerId ? { worker_id: config.workerId } : {}),
@@ -1719,7 +1968,10 @@ export async function resolveDecision(config: {
       phase: config.phase,
       actor_seat: String(config.actor),
       decision_index: config.decisionIndex,
-      requested_provider: requestedProvider
+      requested_provider: requestedProvider,
+      scoring_path: scoringPath,
+      parse_ms: decisionResponse.parse_ms,
+      response_ms: decisionResponse.response_ms
     });
   } catch (error) {
     if (error instanceof BackendRequestFailure) {
@@ -1925,7 +2177,10 @@ async function runSingleGame(
         ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
         ...telemetryTransportConfig(options),
         ...(options.workerId ? { workerId: options.workerId } : {}),
-        ...(options.controllerMode ? { controllerMode: true } : {})
+        ...(options.controllerMode ? { controllerMode: true } : {}),
+        ...(options.fullStateDecisionRequests !== undefined
+          ? { fullStateDecisionRequests: options.fullStateDecisionRequests }
+          : {})
       });
 
       countByKey(providerUsage, resolved.providerUsed);

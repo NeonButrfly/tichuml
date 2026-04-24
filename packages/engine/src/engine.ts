@@ -407,6 +407,8 @@ function summarizeLegalPlayActions(actions: LegalAction[]): string[] {
   return actions.filter(isPlayLegalAction).map((action) => action.combination.key);
 }
 
+const STRAIGHT_RESPONSE_LOG_PREVIEW_LIMIT = 6;
+
 function logActiveStraightResponseActions(
   state: GameState,
   activeActions: LegalAction[]
@@ -420,14 +422,24 @@ function logActiveStraightResponseActions(
     return;
   }
 
+  const normalizedResponses = summarizeLegalPlayActions(activeActions);
   logEngineDiagnostic({
     level: "info",
     message: "[engine] Straight response availability",
+    throttleKey: `straight-response:${state.activeSeat}`,
+    windowMs: 60_000,
     payload: {
       activeSeat: state.activeSeat,
       leadCombo: state.currentTrick.currentCombination.key,
-      legalResponseCount: activeActions.filter(isPlayLegalAction).length,
-      normalizedResponseList: summarizeLegalPlayActions(activeActions),
+      legalResponseCount: normalizedResponses.length,
+      normalizedResponsePreview: normalizedResponses.slice(
+        0,
+        STRAIGHT_RESPONSE_LOG_PREVIEW_LIMIT
+      ),
+      omittedResponseCount: Math.max(
+        normalizedResponses.length - STRAIGHT_RESPONSE_LOG_PREVIEW_LIMIT,
+        0
+      ),
       canPass: activeActions.some((action) => action.type === "pass_turn"),
       wishState: state.currentWish
     }
@@ -467,6 +479,8 @@ function applyWishConstraintToPlayActions(
     level: "warn",
     message:
       "[engine] Active wish had no legal fulfilling moves; using unfiltered legal moves.",
+    throttleKey: `wish-fallback:${seat}:${wishedRank}`,
+    windowMs: 60_000,
     payload: {
       seat,
       wishedRank,
@@ -647,6 +661,8 @@ export function getLegalActions(state: GameState): LegalActionMap {
         level: "error",
         message:
           "[engine] Active seat had no legal trick actions; forcing pass fallback.",
+        throttleKey: `forced-pass-fallback:${state.activeSeat}`,
+        windowMs: 60_000,
         payload: {
           seat: state.activeSeat,
           wishedRank: state.currentWish,

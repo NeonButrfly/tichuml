@@ -2,16 +2,21 @@ import { describe, expect, it, vi } from "vitest";
 import { createServer, type Server } from "node:http";
 import {
   applyEngineAction,
+  cardsFromIds,
   compassToSeatId,
+  createScenarioState,
   createInitialGameState,
   getActorScopedLegalActions,
   getCanonicalActiveSeatFromState,
+  getLegalActions,
   seatIdFromIndex,
   seatIdToCompass,
   seatIndexFromId,
   validateLegalActionsForCanonicalActor,
+  type GameState,
   type CompassSeat,
   type EngineResult,
+  type LegalActionMap,
   type SeatId
 } from "@tichuml/engine";
 import type {
@@ -303,6 +308,53 @@ async function withRejectingDecisionServer<T>(
   }
 }
 
+async function withSlowDecisionServer<T>(
+  callback: (config: { baseUrl: string }) => Promise<T>
+): Promise<T> {
+  const server = createServer((request, response) => {
+    response.setHeader("content-type", "application/json");
+    if (request.url === BACKEND_HEALTH_PATH && request.method === "GET") {
+      response.writeHead(200);
+      response.end(JSON.stringify({ ok: true, database: "deferred" }));
+      return;
+    }
+    if (request.url === DECISION_REQUEST_PATH && request.method === "POST") {
+      setTimeout(() => {
+        response.writeHead(200);
+        response.end(
+          JSON.stringify({
+            accepted: true,
+            chosen_action: { type: "pass_turn", seat: "seat-0" },
+            provider_used: "server_heuristic"
+          })
+        );
+      }, 2_000);
+      return;
+    }
+    response.writeHead(404);
+    response.end(JSON.stringify({ error: "not found" }));
+  });
+
+  const port = nextSafeTestPort++;
+  await new Promise<void>((resolve) => {
+    server.listen(port, "127.0.0.1", () => resolve());
+  });
+
+  try {
+    return await callback({ baseUrl: `http://127.0.0.1:${port}` });
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      (server as Server).close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    });
+  }
+}
+
 async function withTelemetryDecisionServer<T>(
   config: {
     status?: number;
@@ -377,19 +429,51 @@ function advanceToPassSelect(): EngineResult {
   return result;
 }
 
+function advanceToGrandTichuWindow(): EngineResult {
+  let result = createInitialGameState({ seed: "server-contract-grand-tichu" });
+  while (result.nextState.phase !== "grand_tichu_window") {
+    result = applyEngineAction(result.nextState, {
+      type: "advance_phase",
+      actor: "system"
+    });
+  }
+
+  expect(result.nextState.phase).toBe("grand_tichu_window");
+  expect(result.nextState.activeSeat).not.toBeNull();
+  return result;
+}
+
 function createServerHeuristicPayload(
-  result: EngineResult
+  result: EngineResult,
+  options: {
+    fullStateDecisionRequests?: boolean;
+  } = {}
 ): DecisionRequestPayload {
-  const actor = getCanonicalActiveSeatFromState(result.nextState);
   return buildDecisionRequestPayload({
     gameId: "contract-game",
     handId: "contract-hand",
     stateRaw: result.nextState as unknown as JsonObject,
     stateNorm: result.derivedView as unknown as JsonObject,
-    legalActions: getActorScopedLegalActions(result.legalActions, actor),
+    legalActions: result.legalActions,
     phase: result.nextState.phase,
     requestedProvider: "server_heuristic",
-    decisionIndex: 1
+    decisionIndex: 1,
+    ...(options.fullStateDecisionRequests === true
+      ? { fullStateDecisionRequests: true }
+      : {})
+  });
+}
+
+function scenario(config: Partial<GameState> = {}): GameState {
+  return createScenarioState({
+    ...config,
+    hands: {
+      "seat-0": [],
+      "seat-1": [],
+      "seat-2": [],
+      "seat-3": [],
+      ...(config.hands ?? {})
+    }
   });
 }
 
@@ -433,14 +517,20 @@ describe("server_heuristic actor contract", () => {
     const request = createServerHeuristicPayload(result);
 
     expect(request.actor_seat).toBe(
-      getCanonicalActiveSeatFromState(request.state_raw)
+      getCanonicalActiveSeatFromState(
+        (request.state_norm ?? request.state_raw) as JsonObject
+      )
     );
     expect(
       validateLegalActionsForCanonicalActor({
-        legalActions: request.legal_actions as never,
+        legalActions: {
+          [request.actor_seat]: request.legal_actions
+        } as unknown as LegalActionMap,
         actor: request.actor_seat as SeatId
       })
     ).toEqual([]);
+    expect(request.state_raw).toBeNull();
+    expect(Array.isArray(request.legal_actions)).toBe(true);
     expect(() =>
       validateServerHeuristicDecisionRequestContract(request)
     ).not.toThrow();
@@ -473,7 +563,8 @@ describe("server_heuristic actor contract", () => {
       phase: result.nextState.phase,
       actor,
       requestedProvider: "server_heuristic",
-      decisionIndex: 1
+      decisionIndex: 1,
+      fullStateDecisionRequests: true
     });
 
     expect(validation.ok).toBe(false);
@@ -534,15 +625,16 @@ describe("server_heuristic actor contract", () => {
           );
         });
       try {
-        await runSelfPlayBatch({
-          games: 1,
-          baseSeed: "server-heuristic-contract",
-          defaultProvider: "server_heuristic",
-          telemetryEnabled: false,
-          backendBaseUrl: baseUrl,
-          quiet: true,
-          maxDecisionsPerGame: 1
-        });
+      await runSelfPlayBatch({
+        games: 1,
+        baseSeed: "server-heuristic-contract",
+        defaultProvider: "server_heuristic",
+        telemetryEnabled: false,
+        backendBaseUrl: baseUrl,
+        quiet: true,
+        maxDecisionsPerGame: 1
+      });
+      expect(repository.decisions).toHaveLength(0);
       } finally {
         debugSpy.mockRestore();
         logSpy.mockRestore();
@@ -552,7 +644,6 @@ describe("server_heuristic actor contract", () => {
       expect(capturedErrors.join("\n")).not.toMatch(
         /actor[_ -]?seat|Actor mismatch/i
       );
-      expect(repository.decisions.length).toBeGreaterThan(0);
     });
   }, 15_000);
 
@@ -834,18 +925,162 @@ describe("server_heuristic actor contract", () => {
 
       expect(response.status).toBe(200);
       expect(payload.provider_used).toBe("server_heuristic");
-      expect(payload.telemetry_id).toBe(1);
-      expect(repository.decisions.length).toBe(1);
+      expect(payload.telemetry_id).toBeUndefined();
+      expect(repository.decisions.length).toBe(0);
       expect(payload.metadata).toMatchObject({
         canonical_actor_seat: request.actor_seat,
         request_validated: true,
-        provider_path: "server_heuristic"
+        provider_path: "server_heuristic",
+        scoring_path: "fast_path"
+      });
+      expect((payload.metadata as JsonObject).timing).toMatchObject({
+        scoring_path: "fast_path"
       });
       expect(
         (payload.metadata as JsonObject).legal_action_count
       ).toBeGreaterThan(0);
     });
   });
+
+  it("keeps rich-path server_heuristic telemetry and metadata when explicitly requested", async () => {
+    await withServer(async ({ baseUrl, repository }) => {
+      const request = createServerHeuristicPayload(advanceToGrandTichuWindow(), {
+        fullStateDecisionRequests: true
+      });
+      const response = await fetch(`${baseUrl}${DECISION_REQUEST_PATH}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(request)
+      });
+      const payload = (await response.json()) as JsonObject;
+
+      expect(response.status).toBe(200);
+      expect(payload.provider_used).toBe("server_heuristic");
+      expect(payload.telemetry_id).toBe(1);
+      expect(repository.decisions.length).toBe(1);
+      expect(repository.decisions[0]?.policy_source).toBe("server_heuristic");
+      expect(payload.metadata).toMatchObject({
+        canonical_actor_seat: request.actor_seat,
+        request_validated: true,
+        provider_path: "server_heuristic",
+        scoring_path: "rich_path"
+      });
+      expect((payload.metadata as JsonObject).timing).toMatchObject({
+        scoring_path: "rich_path"
+      });
+    });
+  });
+
+  it("rejects trick_play requests with activeSeat=null before the backend boundary", () => {
+    const validation = validateBackendDecisionRequestInput({
+      gameId: "trick-play-null-active-seat",
+      handId: "trick-play-null-active-seat-hand",
+      stateRaw: {
+        ...scenario({
+          phase: "trick_play",
+          activeSeat: null,
+          hands: {
+            "seat-0": cardsFromIds(["jade-8"]),
+            "seat-1": cardsFromIds(["jade-7"]),
+            "seat-2": cardsFromIds(["jade-6"]),
+            "seat-3": cardsFromIds(["jade-5"])
+          }
+        }),
+        phase: "trick_play",
+        activeSeat: null
+      } as unknown as JsonObject,
+      stateNorm: {
+        phase: "trick_play",
+        activeSeat: null
+      },
+      legalActions: {
+        system: [],
+        "seat-0": [{ type: "pass_turn", seat: "seat-0" }],
+        "seat-1": [],
+        "seat-2": [],
+        "seat-3": []
+      },
+      phase: "trick_play",
+      actor: "seat-0",
+      requestedProvider: "server_heuristic",
+      decisionIndex: 0
+    });
+
+    expect(validation.ok).toBe(false);
+    if (!validation.ok) {
+      expect(validation.issues).toContain(
+        "trick_play requests must not be built with activeSeat=null."
+      );
+    }
+  });
+
+  it("resolves activeSeat=null trick boundaries locally instead of attempting server_heuristic", async () => {
+    const state = {
+      ...scenario({
+      phase: "trick_play",
+      hands: {
+        "seat-0": cardsFromIds(["dragon"]),
+        "seat-1": cardsFromIds(["jade-7"]),
+        "seat-2": cardsFromIds(["jade-6"]),
+        "seat-3": cardsFromIds(["jade-5"])
+      },
+      pendingDragonGift: {
+        winner: "seat-0",
+        trickCards: cardsFromIds(["dragon"]),
+        nextLeader: "seat-1",
+        roundEndsAfterGift: false
+      }
+    }),
+      activeSeat: null
+    } as GameState;
+    const legalActions = getLegalActions(state);
+    const decision = await resolveDecision({
+      backendBaseUrl: "http://127.0.0.1:1",
+      telemetryEnabled: false,
+      gameId: "trick-play-null-active-seat",
+      handId: "trick-play-null-active-seat-hand",
+      actor: "seat-0",
+      decisionIndex: 0,
+      stateRaw: state as unknown as JsonObject,
+      stateNorm: state as unknown as JsonObject,
+      legalActions,
+      phase: "trick_play",
+      defaultProvider: "server_heuristic",
+      seatProviders: {},
+      serverFallbackEnabled: true
+    });
+
+    expect(decision.providerUsed).toBe("local_heuristic");
+    expect(decision.fallbackUsed).toBe(false);
+    expect(decision.chosenAction.type).toBe("assign_dragon_trick");
+  });
+
+  it("falls back quickly when the backend decision route exceeds the fast-path timeout", async () => {
+    await withSlowDecisionServer(async ({ baseUrl }) => {
+      const result = advanceToPassSelect();
+      const actor = getCanonicalActiveSeatFromState(result.nextState);
+      const startedAt = Date.now();
+      const decision = await resolveDecision({
+        backendBaseUrl: baseUrl,
+        telemetryEnabled: false,
+        gameId: "decision-timeout-game",
+        handId: "decision-timeout-hand",
+        actor,
+        decisionIndex: 0,
+        stateRaw: result.nextState as unknown as JsonObject,
+        stateNorm: result.derivedView as unknown as JsonObject,
+        legalActions: result.legalActions,
+        phase: result.nextState.phase,
+        defaultProvider: "server_heuristic",
+        serverFallbackEnabled: true
+      });
+      const elapsedMs = Date.now() - startedAt;
+
+      expect(decision.providerUsed).toBe("local_heuristic");
+      expect(decision.fallbackUsed).toBe(true);
+      expect(elapsedMs).toBeLessThan(1_500);
+    });
+  }, 10_000);
 
   it("preserves informative backend actor mismatch rejection bodies", async () => {
     await withServer(async ({ baseUrl }) => {

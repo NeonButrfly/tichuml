@@ -33,6 +33,7 @@ type ParsedArgs = {
   serverFallbackEnabled: boolean;
   strictTelemetry: boolean;
   traceBackend: boolean;
+  fullStateDecisionRequests: boolean;
   telemetryMode: "minimal" | "full";
   telemetryMaxBytes: number;
   telemetryTimeoutMs: number;
@@ -165,6 +166,7 @@ function parseArgs(argv: string[]): ParsedArgs {
     serverFallbackEnabled: true,
     strictTelemetry: false,
     traceBackend: false,
+    fullStateDecisionRequests: false,
     telemetryMode: parseTelemetryMode(process.env.TELEMETRY_MODE),
     telemetryMaxBytes: parsePositiveInteger(
       process.env.TELEMETRY_MAX_POST_BYTES,
@@ -246,6 +248,10 @@ function parseArgs(argv: string[]): ParsedArgs {
         break;
       case "--trace-backend":
         parsed.traceBackend = parseBoolean(next, false);
+        index += 1;
+        break;
+      case "--full-state":
+        parsed.fullStateDecisionRequests = parseBoolean(next, true);
         index += 1;
         break;
       case "--telemetry-mode":
@@ -429,6 +435,7 @@ function buildControllerConfig(args: ParsedArgs): SimControllerConfig {
     server_fallback_enabled: args.serverFallbackEnabled,
     strict_telemetry: args.strictTelemetry,
     trace_backend: args.traceBackend,
+    full_state_decision_requests: args.fullStateDecisionRequests,
     telemetry_mode: args.telemetryMode,
     telemetry_max_bytes: args.telemetryMaxBytes,
     telemetry_timeout_ms: args.telemetryTimeoutMs,
@@ -753,6 +760,7 @@ async function runWorker(args: ParsedArgs, worker: SimWorkerRuntimeState): Promi
         serverFallbackEnabled: args.serverFallbackEnabled,
         strictTelemetry: args.strictTelemetry,
         traceBackend: args.traceBackend,
+        fullStateDecisionRequests: args.fullStateDecisionRequests,
         telemetryMode: args.telemetryMode,
         telemetryMaxBytes: args.telemetryMaxBytes,
         telemetryTimeoutMs: args.telemetryTimeoutMs,
@@ -929,6 +937,7 @@ async function main(): Promise<void> {
       serverFallbackEnabled: args.serverFallbackEnabled,
       strictTelemetry: args.strictTelemetry,
       traceBackend: args.traceBackend,
+      fullStateDecisionRequests: args.fullStateDecisionRequests,
       telemetryMode: args.telemetryMode,
       telemetryMaxBytes: args.telemetryMaxBytes,
       telemetryTimeoutMs: args.telemetryTimeoutMs,
@@ -952,16 +961,18 @@ async function main(): Promise<void> {
   console.log(JSON.stringify(summary, null, args.quiet ? 0 : 2));
 }
 
-main().catch((error) => {
-  console.error(
-    JSON.stringify(
-      {
-        accepted: false,
-        error: error instanceof Error ? error.message : String(error)
-      },
-      null,
-      2
-    )
-  );
-  process.exitCode = 1;
-});
+if (import.meta.main) {
+  main().catch((error) => {
+    console.error(
+      JSON.stringify(
+        {
+          accepted: false,
+          error: error instanceof Error ? error.message : String(error)
+        },
+        null,
+        2
+      )
+    );
+    process.exitCode = 1;
+  });
+}

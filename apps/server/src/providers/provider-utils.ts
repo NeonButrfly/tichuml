@@ -26,7 +26,7 @@ export type RoutedDecision = {
   providerUsed: RequestedDecisionProvider;
   providerReason: string;
   chosen: ChosenDecision;
-  telemetryPayload: TelemetryDecisionPayload;
+  telemetryPayload: TelemetryDecisionPayload | null;
   responseMetadata?: JsonObject;
 };
 
@@ -38,6 +38,12 @@ export function isUsableState(value: unknown): value is GameState {
     "hands" in value &&
     "activeSeat" in value
   );
+}
+
+function isCanonicalActorState(
+  value: unknown
+): value is Pick<GameState, "phase" | "activeSeat" | "passSelections"> {
+  return typeof value === "object" && value !== null && "phase" in value;
 }
 
 export function isUsableLegalActionMap(value: unknown): value is LegalActionMap {
@@ -63,15 +69,30 @@ export function summarizeDecisionRequest(payload: DecisionRequestPayload): JsonO
   } catch {
     actorActionCount = 0;
   }
+  let canonicalActorSeat: SeatId | null = null;
+  try {
+    const contractState = isCanonicalActorState(payload.state_raw)
+      ? payload.state_raw
+      : isCanonicalActorState(payload.state_norm)
+        ? payload.state_norm
+        : null;
+    canonicalActorSeat = contractState
+      ? getCanonicalActiveSeatFromState(contractState)
+      : null;
+  } catch {
+    canonicalActorSeat = null;
+  }
   return {
     game_id: payload.game_id,
     hand_id: payload.hand_id,
     phase: payload.phase,
     actor_seat: payload.actor_seat,
     requested_provider: payload.requested_provider,
-    canonical_actor_seat: isUsableState(payload.state_raw)
-      ? getCanonicalActiveSeatFromState(payload.state_raw)
-      : null,
+    canonical_actor_seat: canonicalActorSeat,
+    scoring_path:
+      typeof payload.metadata.scoring_path === "string"
+        ? payload.metadata.scoring_path
+        : "fast_path",
     legal_action_keys: legalActionKeys,
     legal_action_count: actorActionCount,
     legal_action_types: legalActionTypesForDiagnostics(legalActions)
@@ -114,14 +135,21 @@ export function formatActorMismatchDiagnostics(config: {
 export function validateDecisionRequestActorContract(
   payload: DecisionRequestPayload
 ): SeatId {
-  if (!isUsableState(payload.state_raw)) {
+  const contractState = isCanonicalActorState(payload.state_raw)
+    ? payload.state_raw
+    : isCanonicalActorState(payload.state_norm)
+      ? payload.state_norm
+      : null;
+  if (!contractState) {
     throw new Error(
-      "Decision requests require a full state_raw payload before actor validation."
+      "Decision requests require canonical state context before actor validation."
     );
   }
 
-  const canonicalActorSeat = getCanonicalActiveSeatFromState(payload.state_raw);
-  const legalActions = payload.legal_actions as unknown as LegalActionMap;
+  const canonicalActorSeat = getCanonicalActiveSeatFromState(contractState);
+  const legalActions = {
+    [payload.actor_seat]: extractActorLegalActions(payload)
+  } as LegalActionMap;
   const legalActionIssues = validateLegalActionsForCanonicalActor({
     legalActions,
     actor: canonicalActorSeat

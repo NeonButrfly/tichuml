@@ -43,6 +43,17 @@ export {
 } from "./HandAnalysis.js";
 export { buildUrgencyProfile } from "./HeuristicContext.js";
 export { createHeuristicFeatureAnalyzer } from "./HeuristicFeatureAnalyzer.js";
+export {
+  SERVER_HEURISTIC_FAST_PATH_LIMITS,
+  SERVER_HEURISTIC_FAST_PATH_WEIGHTS,
+  buildServerFastPathState,
+  chooseServerFastPathDecision,
+  generateFastPassSelectCandidates,
+  generateFastTrickPlayCandidates,
+  type ServerFastPathCandidate,
+  type ServerFastPathDecision,
+  type ServerFastPathState
+} from "./serverFastPath.js";
 
 function filterWishLockedActions(
   actions: LegalAction[],

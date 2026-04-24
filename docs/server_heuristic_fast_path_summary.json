@@ -1,0 +1,180 @@
+{
+  "issue": {
+    "number": 46,
+    "title": "Fix server_heuristic hot-path performance regression with split fast/rich decision paths",
+    "url": "https://github.com/NeonButrfly/tichuml/issues/46"
+  },
+  "milestone": "6.5 - Local ML Integration & Reproducible Backend",
+  "status": "implemented_with_targeted_validation",
+  "root_cause": [
+    "The live server_heuristic path had drifted into a rich-analysis path that always built large full-state payloads, performed heavier validation and explainability work inline, and allowed hot-loop transport waits to dominate trick-play latency.",
+    "Payload growth and repeated full-state work correlated directly with multi-second trick_play decisions, while telemetry itself was already proven non-blocking."
+  ],
+  "architecture": {
+    "default_scoring_path": "fast_path",
+    "rich_path_opt_in_only": true,
+    "fast_path_critical_path_excludes": [
+      "state_raw construction",
+      "full legal-action map transport",
+      "rich explainability shaping",
+      "inline backend decision telemetry persistence",
+      "long transport waits and retries"
+    ]
+  },
+  "files_changed": [
+    "apps/server/src/providers/heuristic-provider.ts",
+    "apps/server/src/providers/provider-utils.ts",
+    "apps/server/src/routes/router.ts",
+    "apps/server/src/services/decision-service.ts",
+    "apps/server/src/services/sim-controller-service.ts",
+    "apps/sim-runner/src/cli.ts",
+    "apps/sim-runner/src/self-play-batch.ts",
+    "docs/prompts/ai.md",
+    "docs/prompts/backend.md",
+    "packages/ai-heuristics/src/index.ts",
+    "packages/ai-heuristics/src/serverFastPath.ts",
+    "packages/engine/src/engine.ts",
+    "packages/shared/src/backend.ts",
+    "tests/integration/backend-server.test.ts",
+    "tests/integration/server-fast-path.test.ts",
+    "tests/integration/server-heuristic-contract.test.ts"
+  ],
+  "scoring_weights": {
+    "preserve_bomb_weight": 180,
+    "preserve_phoenix_weight": 95,
+    "preserve_dragon_weight": 120,
+    "preserve_dog_weight": 55,
+    "preserve_mahjong_weight": 42,
+    "straight_break_penalty": 18,
+    "pair_break_penalty": 16,
+    "triple_break_penalty": 26,
+    "combo_preservation_weight": 10,
+    "control_preservation_weight": 8,
+    "clutter_reduction_weight": 12,
+    "isolated_low_card_bonus": 18,
+    "opponent_help_penalty": 15,
+    "hand_shape_balance_bonus": 14,
+    "lowest_winning_bonus": 52,
+    "overkill_penalty": 10,
+    "pass_conservation_bonus": 34,
+    "opponent_escape_prevention_bonus": 78,
+    "endgame_closeout_bonus": 120,
+    "cheap_wish_satisfaction_bonus": 58,
+    "bomb_conservation_bonus": 135,
+    "phoenix_conservation_bonus": 72
+  },
+  "candidate_caps": {
+    "pass_select_max": 20,
+    "trick_play_max": 10,
+    "target_latency_ms": 100,
+    "hard_cap_ms": 200
+  },
+  "before_metrics": {
+    "source": "user_validation_baseline_2026-04-23",
+    "game_duration_ms": 275297,
+    "total_decisions": 73,
+    "trick_play_decisions": 61,
+    "average_server_heuristic_latency_ms": 3527.91,
+    "average_local_fallback_latency_ms": 11349.67,
+    "largest_live_payload_bytes_observed": 140288,
+    "longest_request_ms_observed": 32800
+  },
+  "after_metrics": {
+    "source": "in_memory_backend_validation_2026-04-23",
+    "health_latency_ms_samples": [50.26, 5.5, 1.54, 1.1, 1.02],
+    "server_heuristic_game_duration_ms": 1522,
+    "server_heuristic_average_latency_ms": 3.04,
+    "server_heuristic_decisions": 106,
+    "server_heuristic_fallback_count": 0,
+    "decision_request_payload_bytes": {
+      "average": 2545.1,
+      "maximum": 4025
+    },
+    "decision_request_latency_by_phase": {
+      "grand_tichu_window": {
+        "count": 4,
+        "average_latency_ms": 4,
+        "max_latency_ms": 7,
+        "average_payload_bytes": 1498.5,
+        "max_payload_bytes": 1509
+      },
+      "pass_select": {
+        "count": 6,
+        "average_latency_ms": 3.67,
+        "max_latency_ms": 5,
+        "average_payload_bytes": 2072.67,
+        "max_payload_bytes": 2202
+      },
+      "trick_play": {
+        "count": 92,
+        "average_latency_ms": 2.66,
+        "max_latency_ms": 7,
+        "average_payload_bytes": 2621.41,
+        "max_payload_bytes": 4025
+      }
+    },
+    "diagnostics_quick_comparison_path": "diagnostics/sim-runs/2026-04-23T23-40-25-997Z/comparison.json"
+  },
+  "validations": [
+    {
+      "command": "npm run build:shared",
+      "status": "passed"
+    },
+    {
+      "command": "npm run build:ai",
+      "status": "passed"
+    },
+    {
+      "command": "npm run build:server",
+      "status": "passed"
+    },
+    {
+      "command": "npm run build:sim-runner",
+      "status": "passed"
+    },
+    {
+      "command": "npx vitest run tests/integration/server-fast-path.test.ts",
+      "status": "passed"
+    },
+    {
+      "command": "npx vitest run tests/integration/server-heuristic-contract.test.ts",
+      "status": "passed"
+    },
+    {
+      "command": "npx vitest run tests/integration/backend-server.test.ts",
+      "status": "passed"
+    },
+    {
+      "command": "npx vitest run tests/integration/engine-logging.test.ts",
+      "status": "passed"
+    },
+    {
+      "command": "npm run sim -- --games 1 --provider local --telemetry false",
+      "status": "passed_but_slow",
+      "duration_ms": 140807
+    },
+    {
+      "command": "npm run sim -- --games 1 --provider server_heuristic --telemetry false --server-fallback true --trace-backend true --backend-url http://127.0.0.1:4310 --max-decisions-per-game 120",
+      "status": "passed",
+      "duration_ms": 1522
+    },
+    {
+      "command": "npm run sim:diag -- --mode quick --provider local --provider server_heuristic --backend-url http://127.0.0.1:4310 --verbose",
+      "status": "passed",
+      "artifact_root": "diagnostics/sim-runs/2026-04-23T23-40-25-997Z"
+    },
+    {
+      "command": "npm run test",
+      "status": "failed_unrelated_blockers",
+      "duration_ms": 700240,
+      "notes": "Server fast-path work passed targeted validation. Repo-wide run still fails on sim-dashboard routing assertion drift tracked in #47 and long-running headless AI timeouts tracked in #36; Vitest also reported a secondary snapshotSaved timeout after the sim-dashboard diff."
+    }
+  ],
+  "behavioral_guarantees": {
+    "active_seat_null_at_decision_boundary_fixed": true,
+    "fast_path_default_confirmed": true,
+    "rich_path_off_critical_path_confirmed": true,
+    "template_select_pass_validation_preserved": true,
+    "transport_timeout_ms": 500
+  }
+}

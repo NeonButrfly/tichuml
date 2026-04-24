@@ -67,3 +67,25 @@ Use this file to preserve AI and bot-behavior prompt intent and link it to GitHu
 - Linked GitHub Issue: [#31](https://github.com/NeonButrfly/tichuml/issues/31)
 - Milestone: [6.5 – Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
 - Status Source: GitHub issue state only.
+
+### 2026-04-23 - Server heuristic fast-path live policy with rich-path opt-in analysis
+
+- Prompt Signal: The latest server heuristic prompt required restoring
+  low-latency live backend play without removing intelligence, by splitting
+  `server_heuristic` into a bounded fast path for live decisions and a richer
+  optional analysis path for diagnostics.
+- Interpreted Requirement: Issue [#46](https://github.com/NeonButrfly/tichuml/issues/46)
+  tracks a new `server-fast-path` policy surface that keeps centralized tunable
+  weights, bounded pass/trick candidate generation, lowest-winning and
+  structure-preserving play preferences, bomb/Phoenix conservation, and legal
+  fallback guarantees on the live path while moving rich explainability,
+  full-state validation, and telemetry shaping off the gameplay critical path.
+- Affected Systems: `packages/ai-heuristics/src/serverFastPath.ts`,
+  `packages/ai-heuristics/src/index.ts`,
+  `apps/server/src/providers/heuristic-provider.ts`,
+  `apps/sim-runner/src/self-play-batch.ts`,
+  `tests/integration/server-fast-path.test.ts`,
+  `tests/integration/server-heuristic-contract.test.ts`.
+- Linked GitHub Issue: [#46](https://github.com/NeonButrfly/tichuml/issues/46)
+- Milestone: [6.5 – Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status Source: GitHub issue state only.
