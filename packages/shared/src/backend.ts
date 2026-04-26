@@ -149,6 +149,43 @@ export type SimWorkerRuntimeState = {
   last_error: string | null;
 };
 
+export type TelemetryTransportStatus =
+  | "connected"
+  | "degraded"
+  | "backoff"
+  | "offline";
+
+export type TelemetryEndpointRuntimeState = {
+  endpoint: string;
+  request_kind: "telemetry_decision" | "telemetry_event";
+  status: TelemetryTransportStatus;
+  queue_depth: number;
+  accepted_count: number;
+  failed_count: number;
+  dropped_count: number;
+  pending_count: number;
+  last_success_at: string | null;
+  last_failure_at: string | null;
+  last_failure_reason: string | null;
+  next_retry_at: string | null;
+};
+
+export type TelemetryRuntimeState = {
+  enabled: boolean;
+  status: TelemetryTransportStatus;
+  queue_depth: number;
+  accepted_count: number;
+  failed_count: number;
+  dropped_count: number;
+  pending_count: number;
+  last_success_at: string | null;
+  last_failure_at: string | null;
+  last_failure_reason: string | null;
+  storage_dir: string | null;
+  replayed_dir: string | null;
+  endpoints: Record<string, TelemetryEndpointRuntimeState>;
+};
+
 export type SimControllerRuntimeState = {
   runtime_schema_version: number;
   status: SimControllerStatus;
@@ -181,6 +218,7 @@ export type SimControllerRuntimeState = {
   telemetry_failure_by_endpoint: Record<string, number>;
   telemetry_failure_by_kind: Record<string, number>;
   telemetry_backoff_until: string | null;
+  telemetry_runtime?: TelemetryRuntimeState | null;
   worker_count: number;
   running_worker_count: number;
   paused_worker_count: number;

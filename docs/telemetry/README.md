@@ -111,11 +111,25 @@ every decision into the same unreachable route. Simulator/controller runtime
 state surfaces these counters and the active backoff deadline.
 
 The simulator path keeps telemetry off the decision hot loop. Self-play batches
-schedule decision and event telemetry onto a background dispatcher, continue
-gameplay immediately, then flush only briefly at batch/game boundaries. In
-non-strict mode the dispatcher may abort or drop straggling telemetry instead
-of stalling game completion, batch completion, controller accounting, or worker
-shutdown.
+schedule decision and event telemetry onto an async queue manager, continue
+gameplay immediately, then flush only briefly at batch/game boundaries. Remote
+telemetry POST failures spool NDJSON records under `.runtime/telemetry/pending/`
+for later replay instead of stalling game completion, batch completion,
+controller accounting, or worker shutdown.
+
+Issue [#49](https://github.com/NeonButrfly/tichuml/issues/49) extends the
+simulator-side transport path with:
+
+- background-only remote POSTs for live sim/controller runs
+- per-endpoint runtime status: `connected`, `degraded`, `backoff`, `offline`
+- queue-depth, accepted, failed, dropped, and pending counters
+- last success/failure timestamps and the most recent failure reason
+- durable local fallback files in `.runtime/telemetry/pending/`
+- replay support through `npm run telemetry:replay`
+
+Replay moves successfully resent files into `.runtime/telemetry/replayed/` so
+operators can distinguish still-pending telemetry from already recovered local
+spillover.
 
 ## Versioning
 

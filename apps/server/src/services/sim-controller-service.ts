@@ -704,6 +704,7 @@ export class FileSimControllerService implements SimControllerService {
       telemetry_failure_by_endpoint: {},
       telemetry_failure_by_kind: {},
       telemetry_backoff_until: null,
+      telemetry_runtime: null,
       worker_count: config.worker_count,
       running_worker_count: 0,
       paused_worker_count: status === "paused" ? workers.length : 0,
@@ -965,6 +966,7 @@ export class FileSimControllerService implements SimControllerService {
       telemetry_failure_by_endpoint: state.telemetry_failure_by_endpoint ?? {},
       telemetry_failure_by_kind: state.telemetry_failure_by_kind ?? {},
       telemetry_backoff_until: state.telemetry_backoff_until ?? null,
+      telemetry_runtime: state.telemetry_runtime ?? null,
       worker_count: workers.length,
       running_worker_count: workers.filter((worker) => worker.status === "running")
         .length,

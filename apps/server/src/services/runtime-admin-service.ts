@@ -718,11 +718,7 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
           headers: { "Content-Type": "application/json" },
           body: "{}"
         }),
-        telemetry: await fetchReachable(`${localBase}/api/telemetry/event`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: "{}"
-        }),
+        telemetry: await fetchReachable(`${localBase}/api/telemetry/health`),
         control_panel: await fetchReachable(`${localBase}/admin/control`)
       },
       postgres: {

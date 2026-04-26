@@ -9,7 +9,8 @@ import type {
   SimControllerRuntimeState,
   SimControllerStatus,
   SimRunSeedInfo,
-  SimWorkerRuntimeState
+  SimWorkerRuntimeState,
+  TelemetryRuntimeState
 } from "@tichuml/shared";
 
 const DEFAULT_TELEMETRY_MAX_POST_BYTES = 24 * 1024 * 1024;
@@ -615,6 +616,7 @@ function buildRuntimeState(
     telemetry_failure_by_endpoint: telemetryFailures.telemetryFailureByEndpoint,
     telemetry_failure_by_kind: telemetryFailures.telemetryFailureByKind,
     telemetry_backoff_until: activeTelemetryBackoffUntil,
+    telemetry_runtime: activeTelemetryRuntime,
     worker_count: liveWorkers.length,
     running_worker_count: ACTIVE_CONTROLLER_STATUSES.has(status) ? running : 0,
     paused_worker_count: ACTIVE_CONTROLLER_STATUSES.has(status) ? paused : 0,
@@ -700,6 +702,7 @@ let activeTelemetryFailures = {
   telemetryFailureByKind: {} as Record<string, number>
 };
 let activeTelemetryBackoffUntil: string | null = null;
+let activeTelemetryRuntime: TelemetryRuntimeState | null = null;
 
 function mergeCounts(target: Record<string, number>, source: Record<string, number>): void {
   for (const [key, value] of Object.entries(source)) {
@@ -722,6 +725,7 @@ function recordBatchTelemetryFailures(summary: Awaited<ReturnType<typeof runSelf
   );
   activeTelemetryBackoffUntil =
     summary.telemetryBackoffUntil ?? activeTelemetryBackoffUntil;
+  activeTelemetryRuntime = summary.telemetryRuntime ?? activeTelemetryRuntime;
 }
 
 async function runWorker(args: ParsedArgs, worker: SimWorkerRuntimeState): Promise<void> {
@@ -774,7 +778,10 @@ async function runWorker(args: ParsedArgs, worker: SimWorkerRuntimeState): Promi
           ? { maxDecisionsPerGame: args.maxDecisionsPerGame }
           : {}),
         workerId: worker.worker_id,
-        controllerMode: true
+        controllerMode: true,
+        onTelemetryRuntimeState: (state) => {
+          activeTelemetryRuntime = state;
+        }
       });
       worker.total_batches_completed += 1;
       worker.total_games_completed += summary.gamesPlayed;
@@ -863,6 +870,7 @@ async function runForever(args: ParsedArgs): Promise<void> {
     telemetryFailureByKind: {}
   };
   activeTelemetryBackoffUntil = null;
+  activeTelemetryRuntime = null;
   activeWorkers = Array.from({ length: args.workerCount }, (_, index) =>
     createWorker(args, `worker-${String(index + 1).padStart(2, "0")}`)
   );
@@ -949,7 +957,10 @@ async function main(): Promise<void> {
       progress: args.progress,
       ...(args.maxDecisionsPerGame !== null
         ? { maxDecisionsPerGame: args.maxDecisionsPerGame }
-        : {})
+        : {}),
+      onTelemetryRuntimeState: (state) => {
+        activeTelemetryRuntime = state;
+      }
     });
   } finally {
     console.log = originalLog;

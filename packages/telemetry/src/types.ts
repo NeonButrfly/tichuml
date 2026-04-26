@@ -61,7 +61,9 @@ export type TelemetryRequestKind = "telemetry_decision" | "telemetry_event";
 
 export type TelemetryFailureKind =
   | "client_validation"
+  | "timeout"
   | "network_failure"
+  | "backend_error"
   | "backend_rejection"
   | "unexpected_failure"
   | "backoff_suppressed"

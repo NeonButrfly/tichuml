@@ -87,10 +87,51 @@ block a UI move, simulator game, batch completion, controller accounting, pause,
 stop, or shutdown. Set `strict_telemetry=true` only when intentionally debugging
 telemetry itself.
 
+Issue [#49](https://github.com/NeonButrfly/tichuml/issues/49) tightens the
+simulator-side transport behavior further:
+
+- live sim/controller telemetry uses an async queue-backed sender only
+- remote POST timeout is enforced by `TELEMETRY_POST_TIMEOUT_MS`
+- timed-out requests classify as `timeout`
+- fetch/connect failures classify as `network_failure`
+- HTTP `5xx` responses classify as `backend_error`
+- HTTP `4xx` responses remain `backend_rejection`
+- strict telemetry fails a run only if both remote POST and durable local NDJSON
+  fallback fail
+- non-strict telemetry never fails the sim because the backend is slow or down
+
 Simulator/controller status includes telemetry failure totals, failure counts by
 endpoint, failure counts by kind, and the current telemetry backoff deadline when
 one is active. This keeps repeated `network_failure` or `fetch failed` symptoms
 visible without spamming the same unreachable endpoint every decision.
+
+The simulator/controller runtime state now also includes:
+
+- overall telemetry status: `connected`, `degraded`, `backoff`, `offline`
+- queue depth
+- accepted / failed / dropped / pending counts
+- last success and last failure timestamps
+- last failure reason
+- per-endpoint `next_retry_at`
+- local spool directories for pending and replayed NDJSON
+
+## Local Spool And Replay
+
+Pending simulator-side telemetry is written under:
+
+- `.runtime/telemetry/pending/`
+
+Successfully replayed files are moved to:
+
+- `.runtime/telemetry/replayed/`
+
+Replay commands:
+
+- `npm run telemetry:replay`
+- `npx tsx apps/sim-runner/src/telemetry/replay.ts`
+
+Use replay after backend outages, long operator-network interruptions, or after
+controller stop drained only part of the queue.
 
 ## Backend URL Selection
 

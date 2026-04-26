@@ -36,6 +36,13 @@ type EndpointBackoff = {
   message: string;
 };
 
+class TelemetryRequestTimeoutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TelemetryRequestTimeoutError";
+  }
+}
+
 const endpointBackoffs = new Map<string, EndpointBackoff>();
 const mismatchDiagnosticState = new Map<
   string,
@@ -153,9 +160,13 @@ function logChosenActionMismatchDiagnostic(config: {
 function createRequestSignal(config: {
   timeoutMs: number;
   requestSignal?: AbortSignal;
-}): { signal: AbortSignal; cleanup: () => void } {
+}): { signal: AbortSignal; cleanup: () => void; didTimeout: () => boolean } {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
+  let timedOut = false;
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, config.timeoutMs);
   const forwardAbort = () => controller.abort();
   config.requestSignal?.addEventListener("abort", forwardAbort, { once: true });
   return {
@@ -163,6 +174,9 @@ function createRequestSignal(config: {
     cleanup() {
       clearTimeout(timeout);
       config.requestSignal?.removeEventListener("abort", forwardAbort);
+    },
+    didTimeout() {
+      return timedOut;
     }
   };
 }
@@ -317,14 +331,16 @@ async function postPayload(config: {
   const startedAt = Date.now();
   let response: Response | undefined;
   let lastFailure: unknown;
+  const deadlineAt = startedAt + config.telemetryConfig.timeoutMs;
   try {
     for (
       let attempt = 0;
       attempt <= config.telemetryConfig.retryAttempts;
       attempt += 1
     ) {
+      const remainingMs = Math.max(1, deadlineAt - Date.now());
       const requestSignal = createRequestSignal({
-        timeoutMs: config.telemetryConfig.timeoutMs,
+        timeoutMs: remainingMs,
         ...(config.requestSignal ? { requestSignal: config.requestSignal } : {})
       });
       try {
@@ -338,9 +354,19 @@ async function postPayload(config: {
         });
         break;
       } catch (error) {
-        lastFailure = error;
+        lastFailure = requestSignal.didTimeout()
+          ? new TelemetryRequestTimeoutError(
+              `Telemetry request to ${endpoint} timed out after ${config.telemetryConfig.timeoutMs}ms.`
+            )
+          : error;
+        if (requestSignal.didTimeout()) {
+          throw lastFailure;
+        }
         if (attempt >= config.telemetryConfig.retryAttempts) {
-          throw error;
+          throw lastFailure;
+        }
+        if (Date.now() >= deadlineAt) {
+          throw lastFailure;
         }
         await new Promise((resolve) =>
           setTimeout(resolve, config.telemetryConfig.retryDelayMs)
@@ -351,6 +377,8 @@ async function postPayload(config: {
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    const failureKind: TelemetryFailureKind =
+      error instanceof TelemetryRequestTimeoutError ? "timeout" : "network_failure";
     const nextBackoff = recordEndpointFailure(
       endpoint,
       config.telemetryConfig,
@@ -362,7 +390,7 @@ async function postPayload(config: {
       method: "POST",
       request_kind: config.requestKind,
       outcome: "failed",
-      failure_kind: "network_failure",
+      failure_kind: failureKind,
       message,
       cause: error instanceof Error ? error.name : "unknown",
       latency_ms: Date.now() - startedAt,
@@ -383,7 +411,7 @@ async function postPayload(config: {
           payload: config.payload,
           payloadBytes: config.payloadBytes,
           maxBytes: config.telemetryConfig.maxBytes,
-          failureKind: "network_failure",
+          failureKind,
           message,
           workerId: config.telemetryConfig.workerId,
           controllerMode: config.telemetryConfig.controllerMode
@@ -395,13 +423,15 @@ async function postPayload(config: {
   if (response === undefined) {
     const error = lastFailure ?? new Error("Telemetry request failed.");
     const message = error instanceof Error ? error.message : String(error);
+    const failureKind: TelemetryFailureKind =
+      error instanceof TelemetryRequestTimeoutError ? "timeout" : "network_failure";
     const result: TelemetryWriteResult = {
       ok: false,
       endpoint,
       method: "POST",
       request_kind: config.requestKind,
       outcome: "failed",
-      failure_kind: "network_failure",
+      failure_kind: failureKind,
       message,
       cause: error instanceof Error ? error.name : "unknown",
       latency_ms: Date.now() - startedAt,
@@ -446,13 +476,15 @@ async function postPayload(config: {
       body && typeof body.error === "string"
         ? body.error
         : `Telemetry request failed with HTTP ${response.status}.`;
+    const failureKind: TelemetryFailureKind =
+      response.status >= 500 ? "backend_error" : "backend_rejection";
     const result: TelemetryWriteResult = {
       ok: false,
       endpoint,
       method: "POST",
       request_kind: config.requestKind,
       outcome: "failed",
-      failure_kind: "backend_rejection",
+      failure_kind: failureKind,
       status: response.status,
       message,
       ...(body ? { body } : {}),
@@ -470,7 +502,7 @@ async function postPayload(config: {
           payloadBytes: config.payloadBytes,
           maxBytes: config.telemetryConfig.maxBytes,
           status: response.status,
-          failureKind: "backend_rejection",
+          failureKind,
           message,
           workerId: config.telemetryConfig.workerId,
           controllerMode: config.telemetryConfig.controllerMode
@@ -741,7 +773,9 @@ export async function emitTelemetryEvent(config: {
 
 export const telemetryFailureKinds: Record<TelemetryFailureKind, true> = {
   client_validation: true,
+  timeout: true,
   network_failure: true,
+  backend_error: true,
   backend_rejection: true,
   unexpected_failure: true,
   backoff_suppressed: true,

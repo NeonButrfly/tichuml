@@ -437,7 +437,11 @@ export function createRouter({
           {
             ok: true,
             service: "tichuml-server",
-            database: "deferred"
+            database: "deferred",
+            telemetry_ingest: {
+              ready: true,
+              health_endpoint: "/api/telemetry/health"
+            }
           },
           config.allowedOrigin
         );
@@ -450,6 +454,7 @@ export function createRouter({
           200,
           {
             accepted: true,
+            ready: true,
             stats: await repository.getHealthStats(),
             queue: telemetryQueue.stats()
           },
@@ -502,6 +507,7 @@ export function createRouter({
           202,
           {
             accepted: true,
+            telemetry_id: null,
             queued: queued.queued,
             dropped: queued.dropped,
             queue_depth: queued.queue_depth,
@@ -530,6 +536,7 @@ export function createRouter({
           202,
           {
             accepted: true,
+            event_id: null,
             queued: queued.queued,
             dropped: queued.dropped,
             queue_depth: queued.queue_depth,

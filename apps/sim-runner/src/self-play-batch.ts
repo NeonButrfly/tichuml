@@ -17,6 +17,7 @@ import {
   type DecisionRequestPayload,
   type DecisionResponsePayload,
   type JsonObject,
+  type TelemetryRuntimeState,
   type TelemetryDecisionPayload,
   type TelemetryEventPayload
 } from "@tichuml/shared";
@@ -38,6 +39,7 @@ import {
   type TeamId
 } from "@tichuml/engine";
 import {
+  type TelemetryConfigInput,
   buildSelfPlayDecisionTelemetry,
   buildSelfPlayEventTelemetry,
   createTelemetryFailureStats,
@@ -53,6 +55,10 @@ import {
   type TelemetryFailureStats,
   type TelemetryWriteResult
 } from "@tichuml/telemetry";
+import {
+  AsyncTelemetryManager,
+  createDefaultTelemetryStorageRoot
+} from "./telemetry/async-telemetry.js";
 
 export type SeatProviderOverrides = Partial<Record<SeatId, DecisionMode>>;
 export type TelemetryMode = "minimal" | "full";
@@ -79,6 +85,8 @@ export type SelfPlayBatchOptions = {
   workerId?: string;
   controllerMode?: boolean;
   fullStateDecisionRequests?: boolean;
+  telemetryStorageRoot?: string;
+  onTelemetryRuntimeState?: ((state: TelemetryRuntimeState) => void) | undefined;
 };
 
 export type SelfPlayGameResult = {
@@ -111,6 +119,7 @@ export type SelfPlayGameResult = {
   telemetryFailureByEndpoint: Record<string, number>;
   telemetryFailureByKind: Record<string, number>;
   telemetryBackoffUntil: string | null;
+  telemetryRuntime: TelemetryRuntimeState | null;
   latencyByProvider: Record<
     string,
     { count: number; totalMs: number; averageMs: number }
@@ -148,10 +157,9 @@ export type SelfPlayBatchSummary = {
   telemetryFailureByEndpoint: Record<string, number>;
   telemetryFailureByKind: Record<string, number>;
   telemetryBackoffUntil: string | null;
+  telemetryRuntime: TelemetryRuntimeState | null;
   averageLatencyByProvider: Record<string, number>;
 };
-
-type TelemetryDispatchMode = "await" | "background";
 
 type SimulatedDecision = {
   chosenAction: EngineAction;
@@ -184,8 +192,7 @@ type PersistedEventConfig = {
   telemetryRetryAttempts?: number;
   telemetryRetryDelayMs?: number;
   telemetryBackoffMs?: number;
-  telemetryDispatch?: TelemetryDispatchMode;
-  telemetryDispatcher?: BackgroundTelemetryDispatcher;
+  telemetryManager?: AsyncTelemetryManager;
   quiet?: boolean;
   workerId?: string;
   controllerMode?: boolean;
@@ -242,193 +249,6 @@ function telemetryTransportConfig(config: {
       ? { backoffMs: config.telemetryBackoffMs }
       : {})
   };
-}
-
-class BackgroundTelemetryDispatcher {
-  private readonly maxConcurrency = 2;
-  private readonly maxQueueDepth = 128;
-  private readonly pending = new Set<Promise<void>>();
-  private readonly controllers = new Set<AbortController>();
-  private readonly queue: Array<{
-    send: (signal: AbortSignal) => Promise<TelemetryWriteResult>;
-    context: JsonObject;
-    requestKind: TelemetryWriteResult["request_kind"];
-  }> = [];
-  private readonly stats = createTelemetryFailureStats();
-  private readonly tracker = createTelemetryFailureTracker();
-  private readonly idleResolvers = new Set<() => void>();
-  private telemetryBackoffUntil: string | null = null;
-  private lastFailure?: TelemetryWriteResult;
-  private inFlight = 0;
-
-  constructor(
-    private readonly diagnosticsConfig: {
-      quiet?: boolean;
-      controllerMode?: boolean;
-    }
-  ) {}
-
-  private recordFailure(
-    result: TelemetryWriteResult,
-    context: JsonObject
-  ): void {
-    recordTelemetryFailure(this.stats, result);
-    this.lastFailure = result;
-    if (!result.ok && result.backoff_until) {
-      this.telemetryBackoffUntil = result.backoff_until;
-    }
-    emitTelemetryFailureDiagnostic(
-      this.diagnosticsConfig,
-      this.tracker,
-      result,
-      context
-    );
-  }
-
-  private resolveIdle(): void {
-    if (this.queue.length > 0 || this.inFlight > 0) {
-      return;
-    }
-    for (const resolver of this.idleResolvers) {
-      resolver();
-    }
-    this.idleResolvers.clear();
-  }
-
-  private pump(): void {
-    while (
-      this.queue.length > 0 &&
-      this.inFlight < this.maxConcurrency
-    ) {
-      const next = this.queue.shift();
-      if (!next) {
-        break;
-      }
-      this.inFlight += 1;
-      const controller = new AbortController();
-      this.controllers.add(controller);
-      let task: Promise<void> | null = null;
-      task = (async () => {
-        try {
-          const result = await next.send(controller.signal);
-          if (!result.ok) {
-            this.recordFailure(result, next.context);
-          }
-        } catch (error) {
-          this.recordFailure(
-            {
-              ok: false,
-              endpoint: "background://telemetry",
-              method: "POST",
-              request_kind: next.requestKind,
-              outcome: "failed",
-              failure_kind: "unexpected_failure",
-              message:
-                error instanceof Error ? error.message : String(error),
-              diagnostics: []
-            },
-            next.context
-          );
-        } finally {
-          this.controllers.delete(controller);
-          this.inFlight -= 1;
-          if (task) {
-            this.pending.delete(task);
-          }
-          this.pump();
-          this.resolveIdle();
-        }
-      })();
-      this.pending.add(task);
-    }
-  }
-
-  schedule(config: {
-    send: (signal: AbortSignal) => Promise<TelemetryWriteResult>;
-    context: JsonObject;
-    requestKind: TelemetryWriteResult["request_kind"];
-  }): void {
-    if (this.queue.length + this.inFlight >= this.maxQueueDepth) {
-      this.recordFailure(
-        {
-          ok: false,
-          endpoint: "background://telemetry",
-          method: "POST",
-          request_kind: config.requestKind,
-          outcome: "failed",
-          failure_kind: "unexpected_failure",
-          message:
-            "Telemetry background queue is full; dropped queued telemetry.",
-          diagnostics: []
-        },
-        {
-          ...config.context,
-          cause: "background_queue_full"
-        }
-      );
-      return;
-    }
-
-    this.queue.push(config);
-    this.pump();
-  }
-
-  async flush(timeoutMs: number): Promise<void> {
-    if (this.queue.length === 0 && this.inFlight === 0) {
-      return;
-    }
-
-    let timedOut = false;
-    await Promise.race([
-      new Promise<void>((resolve) => {
-        this.idleResolvers.add(resolve);
-        this.resolveIdle();
-      }),
-      new Promise<void>((resolve) =>
-        setTimeout(() => {
-          timedOut = true;
-          resolve();
-        }, timeoutMs)
-      )
-    ]);
-
-    if (!timedOut) {
-      return;
-    }
-
-    for (const controller of this.controllers) {
-      controller.abort();
-    }
-    this.queue.length = 0;
-    await Promise.allSettled(this.pending);
-  }
-
-  snapshot(): {
-    stats: TelemetryFailureStats;
-    telemetryBackoffUntil: string | null;
-    lastFailure?: TelemetryWriteResult;
-  } {
-    return {
-      stats: this.stats,
-      telemetryBackoffUntil: this.telemetryBackoffUntil,
-      ...(this.lastFailure ? { lastFailure: this.lastFailure } : {})
-    };
-  }
-}
-
-function resolveTelemetryDispatchMode(config: {
-  strictTelemetry?: boolean;
-  telemetryDispatch?: TelemetryDispatchMode;
-  telemetryDispatcher?: BackgroundTelemetryDispatcher;
-}): TelemetryDispatchMode {
-  if (
-    config.strictTelemetry === true ||
-    config.telemetryDispatch !== "background" ||
-    !config.telemetryDispatcher
-  ) {
-    return "await";
-  }
-  return "background";
 }
 
 type BackendRequestKind =
@@ -1499,8 +1319,7 @@ async function resolveLocalHeuristicDecision(config: {
   fallbackReason?: string;
   startedAt: number;
   strategy?: LocalDecisionStrategy;
-  telemetryDispatch?: TelemetryDispatchMode;
-  telemetryDispatcher?: BackgroundTelemetryDispatcher;
+  telemetryManager?: AsyncTelemetryManager;
   workerId?: string;
   controllerMode?: boolean;
 }): Promise<SimulatedDecision> {
@@ -1588,9 +1407,9 @@ async function resolveLocalHeuristicDecision(config: {
       ...(config.workerId ? { workerId: config.workerId } : {}),
       ...(config.controllerMode ? { controllerMode: true } : {})
     });
-    const telemetryConfig = {
+    const telemetryConfig: TelemetryConfigInput = {
       enabled: true,
-      strictTelemetry: config.strictTelemetry === true,
+      strictTelemetry: false,
       backendBaseUrl: config.backendBaseUrl,
       traceBackend: config.traceBackend,
       quiet: config.quiet,
@@ -1601,65 +1420,43 @@ async function resolveLocalHeuristicDecision(config: {
       workerId: config.workerId,
       controllerMode: config.controllerMode
     };
-    const dispatchMode = resolveTelemetryDispatchMode(config);
-    if (
-      dispatchMode === "background" &&
-      config.telemetryDispatcher
-    ) {
-      config.telemetryDispatcher.schedule({
-        requestKind: "telemetry_decision",
-        context: {
-          game_id: config.gameId,
-          hand_id: config.handId,
-          phase: config.phase,
-          actor_seat: String(config.actor),
-          decision_index: config.decisionIndex,
-          requested_provider: config.requestedProvider,
-          provider_used: providerUsed
-        },
-        send: async (signal) => {
-          const telemetryStartedAt = Date.now();
-          const result = await emitTelemetryDecision({
-            telemetry: telemetryConfig,
-            payloads,
-            signal
-          });
-          emitDiagnosticsTiming(
-            config,
-            "telemetry_emit_decision",
-            telemetryStartedAt,
-            {
-              game_id: config.gameId,
-              hand_id: config.handId,
-              phase: config.phase,
-              actor_seat: String(config.actor),
-              decision_index: config.decisionIndex,
-              requested_provider: config.requestedProvider,
-              provider_used: providerUsed
-            }
-          );
-          return result;
-        }
+    const telemetryContext = {
+      game_id: config.gameId,
+      hand_id: config.handId,
+      phase: config.phase,
+      actor_seat: String(config.actor),
+      decision_index: config.decisionIndex,
+      requested_provider: config.requestedProvider,
+      provider_used: providerUsed
+    } as JsonObject;
+    if (config.telemetryManager) {
+      const telemetryStartedAt = Date.now();
+      await config.telemetryManager.enqueueDecision({
+        telemetry: telemetryConfig,
+        payloads,
+        context: telemetryContext,
+        strictTelemetry: config.strictTelemetry === true
       });
+      emitDiagnosticsTiming(
+        config,
+        "telemetry_queue_decision",
+        telemetryStartedAt,
+        telemetryContext
+      );
     } else {
       const telemetryStartedAt = Date.now();
       const result = await emitTelemetryDecision({
-        telemetry: telemetryConfig,
+        telemetry: {
+          ...telemetryConfig,
+          strictTelemetry: config.strictTelemetry === true
+        },
         payloads
       });
       emitDiagnosticsTiming(
         config,
         "telemetry_emit_decision",
         telemetryStartedAt,
-        {
-          game_id: config.gameId,
-          hand_id: config.handId,
-          phase: config.phase,
-          actor_seat: String(config.actor),
-          decision_index: config.decisionIndex,
-          requested_provider: config.requestedProvider,
-          provider_used: providerUsed
-        }
+        telemetryContext
       );
       recordTelemetryFailure(telemetryFailureStats, result);
       if (!result.ok) {
@@ -1706,9 +1503,9 @@ async function persistEvent(
   });
   const telemetrySource: "controller" | "selfplay" =
     config.controllerMode ? "controller" : "selfplay";
-  const telemetryConfig = {
+  const telemetryConfig: TelemetryConfigInput = {
     enabled: true,
-    strictTelemetry: config.strictTelemetry === true,
+    strictTelemetry: false,
     backendBaseUrl: config.backendBaseUrl,
     traceBackend: config.traceBackend,
     quiet: config.quiet,
@@ -1719,50 +1516,7 @@ async function persistEvent(
     workerId: config.workerId,
     controllerMode: config.controllerMode
   };
-  const dispatchMode = resolveTelemetryDispatchMode(config);
-  if (
-    dispatchMode === "background" &&
-    config.telemetryDispatcher
-  ) {
-    config.telemetryDispatcher.schedule({
-      requestKind: "telemetry_event",
-      context: {
-        game_id: config.gameId,
-        hand_id: config.handId,
-        phase: String(stateNorm.phase ?? ""),
-        actor_seat: String(config.actorSeat),
-        event_index: config.eventIndex,
-        requested_provider: config.requestedProvider,
-        provider_used: config.providerUsed
-      },
-      send: async (signal) => {
-        const telemetryStartedAt = Date.now();
-        const result = await emitTelemetryEvent({
-          telemetry: telemetryConfig,
-          payloads,
-          signal
-        });
-        emitDiagnosticsTiming(config, "telemetry_emit_event", telemetryStartedAt, {
-          game_id: config.gameId,
-          hand_id: config.handId,
-          phase: String(stateNorm.phase ?? ""),
-          actor_seat: String(config.actorSeat),
-          event_index: config.eventIndex,
-          requested_provider: config.requestedProvider,
-          provider_used: config.providerUsed
-        });
-        return result;
-      }
-    });
-    return null;
-  }
-
-  const telemetryStartedAt = Date.now();
-  const result = await emitTelemetryEvent({
-    telemetry: telemetryConfig,
-    payloads
-  });
-  emitDiagnosticsTiming(config, "telemetry_emit_event", telemetryStartedAt, {
+  const telemetryContext = {
     game_id: config.gameId,
     hand_id: config.handId,
     phase: String(stateNorm.phase ?? ""),
@@ -1770,7 +1524,28 @@ async function persistEvent(
     event_index: config.eventIndex,
     requested_provider: config.requestedProvider,
     provider_used: config.providerUsed
+  } as JsonObject;
+  if (config.telemetryManager) {
+    const telemetryStartedAt = Date.now();
+    await config.telemetryManager.enqueueEvent({
+      telemetry: telemetryConfig,
+      payloads,
+      context: telemetryContext,
+      strictTelemetry: config.strictTelemetry === true
+    });
+    emitDiagnosticsTiming(config, "telemetry_queue_event", telemetryStartedAt, telemetryContext);
+    return null;
+  }
+
+  const telemetryStartedAt = Date.now();
+  const result = await emitTelemetryEvent({
+    telemetry: {
+      ...telemetryConfig,
+      strictTelemetry: config.strictTelemetry === true
+    },
+    payloads
   });
+  emitDiagnosticsTiming(config, "telemetry_emit_event", telemetryStartedAt, telemetryContext);
   return result;
 }
 
@@ -1796,8 +1571,7 @@ export async function resolveDecision(config: {
   telemetryRetryAttempts?: number;
   telemetryRetryDelayMs?: number;
   telemetryBackoffMs?: number;
-  telemetryDispatch?: TelemetryDispatchMode;
-  telemetryDispatcher?: BackgroundTelemetryDispatcher;
+  telemetryManager?: AsyncTelemetryManager;
   quiet?: boolean;
   workerId?: string;
   controllerMode?: boolean;
@@ -2123,13 +1897,20 @@ async function runSingleGame(
     {};
   const telemetryFailureStats = createTelemetryFailureStats();
   const telemetryFailureTracker = createTelemetryFailureTracker();
-  const telemetryDispatcher =
-    options.telemetryEnabled && options.strictTelemetry !== true
-      ? new BackgroundTelemetryDispatcher({
-          ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
-          ...(options.controllerMode ? { controllerMode: true } : {})
-        })
-      : undefined;
+  let telemetryRuntimeState: TelemetryRuntimeState | null = null;
+  const telemetryManager = options.telemetryEnabled
+    ? new AsyncTelemetryManager({
+        enabled: true,
+        storageRoot:
+          options.telemetryStorageRoot ?? createDefaultTelemetryStorageRoot(),
+        ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
+        ...(options.controllerMode ? { controllerMode: true } : {}),
+        onSnapshot: (snapshot) => {
+          telemetryRuntimeState = snapshot;
+          options.onTelemetryRuntimeState?.(snapshot);
+        }
+      })
+    : undefined;
   let telemetryBackoffUntil: string | null = null;
   let fallbackCount = 0;
   let passActions = 0;
@@ -2165,8 +1946,7 @@ async function runSingleGame(
               ? { telemetryMaxBytes: options.telemetryMaxBytes }
               : {}),
             ...telemetryTransportConfig(options),
-            telemetryDispatch: telemetryDispatcher ? "background" : "await",
-            ...(telemetryDispatcher ? { telemetryDispatcher } : {}),
+            ...(telemetryManager ? { telemetryManager } : {}),
             ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
             gameId,
             handId,
@@ -2232,8 +2012,7 @@ async function runSingleGame(
           ...(options.traceBackend !== undefined
             ? { traceBackend: options.traceBackend }
             : {}),
-          telemetryDispatch: telemetryDispatcher ? "background" : "await",
-          ...(telemetryDispatcher ? { telemetryDispatcher } : {}),
+          ...(telemetryManager ? { telemetryManager } : {}),
           ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
           ...telemetryTransportConfig(options),
           ...(options.workerId ? { workerId: options.workerId } : {}),
@@ -2335,8 +2114,7 @@ async function runSingleGame(
                 ? { telemetryMaxBytes: options.telemetryMaxBytes }
                 : {}),
               ...telemetryTransportConfig(options),
-              telemetryDispatch: telemetryDispatcher ? "background" : "await",
-              ...(telemetryDispatcher ? { telemetryDispatcher } : {}),
+              ...(telemetryManager ? { telemetryManager } : {}),
               ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
               gameId,
               handId,
@@ -2383,15 +2161,17 @@ async function runSingleGame(
       });
     }
   } finally {
-    if (telemetryDispatcher) {
-      await telemetryDispatcher.flush(
+    if (telemetryManager) {
+      await telemetryManager.flush(
         Math.max(100, Math.min(options.telemetryTimeoutMs ?? 1_000, 500))
       );
-      const telemetrySnapshot = telemetryDispatcher.snapshot();
+      const telemetrySnapshot = telemetryManager.snapshot();
       mergeTelemetryFailureStats(telemetryFailureStats, telemetrySnapshot.stats);
       if (telemetrySnapshot.telemetryBackoffUntil) {
         telemetryBackoffUntil = telemetrySnapshot.telemetryBackoffUntil;
       }
+      telemetryRuntimeState = telemetrySnapshot.runtimeState;
+      options.onTelemetryRuntimeState?.(telemetrySnapshot.runtimeState);
     }
   }
 
@@ -2432,6 +2212,7 @@ async function runSingleGame(
     invalidDecisions,
     ...telemetryFailureStats,
     telemetryBackoffUntil,
+    telemetryRuntime: telemetryRuntimeState,
     latencyByProvider: summarizeLatency(latencyByProvider)
   };
 }
@@ -2470,8 +2251,7 @@ export async function runSelfPlayBatch(
         ...(options.controllerMode ? { controllerMode: true } : {})
       });
     } catch (error) {
-      const telemetryRequiresBackend =
-        options.telemetryEnabled && options.strictTelemetry === true;
+      const telemetryRequiresBackend = false;
       const providerRequiresBackend =
         usesBackendProvider && options.serverFallbackEnabled === false;
       if (telemetryRequiresBackend || providerRequiresBackend) {
@@ -2521,6 +2301,7 @@ export async function runSelfPlayBatch(
     telemetryFailureByEndpoint: {},
     telemetryFailureByKind: {},
     telemetryBackoffUntil: null,
+    telemetryRuntime: null,
     averageLatencyByProvider: {}
   };
 
@@ -2551,6 +2332,9 @@ export async function runSelfPlayBatch(
       summary.telemetryFailuresTotal += game.telemetryFailuresTotal;
       summary.telemetryBackoffUntil =
         game.telemetryBackoffUntil ?? summary.telemetryBackoffUntil;
+      if (game.telemetryRuntime !== null) {
+        summary.telemetryRuntime = game.telemetryRuntime;
+      }
       mergeCounts(
         summary.telemetryFailureByEndpoint,
         game.telemetryFailureByEndpoint

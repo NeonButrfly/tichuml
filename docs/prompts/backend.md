@@ -582,3 +582,38 @@ supported size limit.`, leaving the control UI stuck at `Batches=0`,
   [6.5 - Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
 - Status:
   Lives in GitHub, not here.
+
+## 2026-04-26 - Telemetry pipeline resilience with async queue, durable fallback, and replay
+
+- Prompt signal:
+  Fix simulator/controller telemetry transport so backend outages, aborted
+  requests, and endpoint backoff never make the controller appear dead or stall
+  self-play. Add background flushing, durable local fallback, replay, runtime
+  telemetry health, and clear timeout/failure classification without regressing
+  gameplay, provider selection, server heuristic decisions, controller
+  start/stop behavior, or existing admin settings.
+- Interpreted requirement:
+  Issue [#49](https://github.com/NeonButrfly/tichuml/issues/49) tracks the
+  simulator-side resilience path: all live telemetry POSTs must go through one
+  shared async client/queue, remote failures must degrade into local NDJSON
+  persistence under `.runtime/telemetry/`, telemetry timeout settings must be
+  enforced as real deadlines, runtime status and admin UI must show queue and
+  endpoint health clearly, and replay must be available through
+  `npm run telemetry:replay`.
+- Affected systems:
+  `packages/telemetry/src/*`,
+  `packages/shared/src/backend.ts`,
+  `apps/sim-runner/src/self-play-batch.ts`,
+  `apps/sim-runner/src/telemetry/*`,
+  `apps/sim-runner/src/cli.ts`,
+  `apps/server/src/routes/router.ts`,
+  `apps/server/src/services/runtime-admin-service.ts`,
+  `apps/server/src/services/sim-controller-service.ts`,
+  `apps/web/src/SimControlDashboard.tsx`,
+  telemetry runtime docs, and integration tests.
+- Linked GitHub issue:
+  [#49](https://github.com/NeonButrfly/tichuml/issues/49)
+- Milestone:
+  [6.5 – Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status:
+  Lives in GitHub, not here.

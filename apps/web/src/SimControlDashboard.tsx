@@ -6,7 +6,8 @@ import {
   type DecisionMode,
   type SimControllerRequestPayload,
   type SimControllerResponse,
-  type SimControllerRuntimeState
+  type SimControllerRuntimeState,
+  type TelemetryEndpointRuntimeState
 } from "@tichuml/shared";
 import {
   getBackendSettingsDefaults,
@@ -130,6 +131,10 @@ function formatRelative(ts: string | null): string {
   return `${ageSeconds}s ago`;
 }
 
+function formatTimestamp(ts: string | null): string {
+  return ts ?? "never";
+}
+
 function formFromRuntimeConfig(
   current: FormState,
   config: SimControllerRuntimeState["config"]
@@ -200,6 +205,11 @@ export function SimControlDashboard() {
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [formDirty, setFormDirty] = useState(false);
+  const telemetryRuntime = status?.telemetry_runtime ?? null;
+  const telemetryEndpoints = useMemo<TelemetryEndpointRuntimeState[]>(
+    () => Object.values(telemetryRuntime?.endpoints ?? {}),
+    [telemetryRuntime]
+  );
 
   const controlsDisabledReason = useMemo(() => {
     if (pendingAction) {
@@ -389,8 +399,8 @@ export function SimControlDashboard() {
           <Metric label="Errored" value={status?.errored_worker_count ?? 0} />
           <Metric label="Current batch" value={currentBatchActive ? "active" : "none"} />
           <Metric label="Backend" value={backendReachable === null ? "unknown" : backendReachable ? "ok" : "down"} />
-          <Metric label="Telemetry failures" value={status?.telemetry_failures_total ?? 0} />
-          <Metric label="Backoff" value={status?.telemetry_backoff_until ? "active" : "none"} />
+          <Metric label="Telemetry" value={telemetryRuntime?.status ?? "unknown"} />
+          <Metric label="Queue depth" value={telemetryRuntime?.queue_depth ?? 0} />
         </div>
       </section>
 
@@ -668,13 +678,72 @@ export function SimControlDashboard() {
           <p className="sim-detail">
             Last shutdown reason: {status?.last_shutdown_reason ?? "none"}
           </p>
+          <p className="sim-detail">
+            Telemetry runtime: {telemetryRuntime?.status ?? "unknown"}
+          </p>
+          <p className="sim-detail">
+            Telemetry counts: accepted={telemetryRuntime?.accepted_count ?? 0} failed=
+            {telemetryRuntime?.failed_count ?? 0} dropped={telemetryRuntime?.dropped_count ?? 0} pending=
+            {telemetryRuntime?.pending_count ?? 0}
+          </p>
+          <p className="sim-detail">
+            Telemetry last success: {formatTimestamp(telemetryRuntime?.last_success_at ?? null)}
+          </p>
+          <p className="sim-detail">
+            Telemetry last failure: {formatTimestamp(telemetryRuntime?.last_failure_at ?? null)}
+          </p>
+          <p className="sim-detail">
+            Telemetry failure reason: {telemetryRuntime?.last_failure_reason ?? "none"}
+          </p>
           <p className="sim-detail">Telemetry by kind: {JSON.stringify(status?.telemetry_failure_by_kind ?? {})}</p>
           <p className="sim-detail">Telemetry by endpoint: {JSON.stringify(status?.telemetry_failure_by_endpoint ?? {})}</p>
           <p className="sim-detail">Telemetry backoff until: {status?.telemetry_backoff_until ?? "none"}</p>
+          <p className="sim-detail">Telemetry spool: {telemetryRuntime?.storage_dir ?? "n/a"}</p>
+          <p className="sim-detail">Telemetry replayed: {telemetryRuntime?.replayed_dir ?? "n/a"}</p>
           <p className="sim-detail">Last updated: {lastUpdatedAt ?? "never"}</p>
           <p className="sim-detail">Control API: {controlApiBaseUrl}</p>
           <p className="sim-detail">Log path: {status?.log_path ?? "n/a"}</p>
           <p className="sim-detail">Runtime path: {status?.runtime_path ?? "n/a"}</p>
+        </section>
+
+        <section className="sim-panel">
+          <h2>Endpoint Status</h2>
+          <p className="sim-detail">
+            Backend health: {backendReachable === null ? "unknown" : backendReachable ? "reachable" : "offline"}
+          </p>
+          <p className="sim-detail">
+            Telemetry transport: {telemetryRuntime?.status ?? "unknown"}
+          </p>
+          {telemetryEndpoints.length > 0 ? (
+            <table>
+              <thead>
+                <tr>
+                  <th>Endpoint</th>
+                  <th>Status</th>
+                  <th>Queue</th>
+                  <th>Accepted</th>
+                  <th>Failed</th>
+                  <th>Pending</th>
+                  <th>Next retry</th>
+                </tr>
+              </thead>
+              <tbody>
+                {telemetryEndpoints.map((endpoint) => (
+                  <tr key={`${endpoint.request_kind}:${endpoint.endpoint}`}>
+                    <td>{endpoint.request_kind}</td>
+                    <td>{endpoint.status}</td>
+                    <td>{endpoint.queue_depth}</td>
+                    <td>{endpoint.accepted_count}</td>
+                    <td>{endpoint.failed_count}</td>
+                    <td>{endpoint.pending_count}</td>
+                    <td>{endpoint.next_retry_at ?? "none"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p className="sim-detail">No telemetry endpoint activity yet.</p>
+          )}
         </section>
 
         <section className="sim-panel sim-workers">

@@ -373,6 +373,7 @@ function createEmptyBatchSummary(): SelfPlayBatchSummary {
     telemetryFailureByEndpoint: {},
     telemetryFailureByKind: {},
     telemetryBackoffUntil: null,
+    telemetryRuntime: null,
     averageLatencyByProvider: {}
   };
 }
