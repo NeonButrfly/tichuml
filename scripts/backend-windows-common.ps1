@@ -235,3 +235,6 @@ function Show-BackendStatus {
   if ($pid) { Write-Ok "Backend process is running with pid $pid" } else { Write-Fail "Backend process is not running" }
   [void](Test-BackendHealth)
 }
+
+
+
