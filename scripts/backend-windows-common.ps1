@@ -21,13 +21,13 @@ function Write-Fail { param([string]$Message) Write-Host "[FAIL] $Message" -Fore
 function Test-CommandExists { param([string]$Name) return [bool](Get-Command $Name -ErrorAction SilentlyContinue) }
 
 function Invoke-Logged {
-  param([string]$FilePath, [string[]]$ArgumentList, [string]$WorkingDirectory)
-  $args = @($ArgumentList)
+  param([string]$FilePath, [string[]]$ArgsList = @(), [string]$WorkingDirectory)
+  $cmdArgs = @($ArgsList)
   $wd = if ($WorkingDirectory) { $WorkingDirectory } else { (Get-Location).Path }
-  Write-Info ("Running: {0} {1}" -f $FilePath, ($args -join " "))
+  Write-Info ("Running: {0} {1}" -f $FilePath, ($cmdArgs -join " "))
   Push-Location $wd
   try {
-    & $FilePath @args
+    & $FilePath @cmdArgs
     if ($LASTEXITCODE -ne 0) { throw "$FilePath failed with exit code $LASTEXITCODE" }
   } finally {
     Pop-Location
@@ -114,7 +114,7 @@ function Ensure-Docker {
 function Install-NodeDependenciesIfNeeded {
   $stamp = Join-Path $script:RuntimeDir "npm-install.stamp"
   $nodeModules = Join-Path $script:RepoRoot "node_modules"
-  if (-not (Test-Path $nodeModules) -or -not (Test-Path $stamp)) { Invoke-Logged "npm" @("install") $script:RepoRoot; New-Item -ItemType File -Force -Path $stamp | Out-Null } else { Write-Info "Node dependencies already up to date" }
+  if (-not (Test-Path $nodeModules) -or -not (Test-Path $stamp)) { Invoke-Logged "npm.cmd" @("install") $script:RepoRoot; New-Item -ItemType File -Force -Path $stamp | Out-Null } else { Write-Info "Node dependencies already up to date" }
 }
 
 function Get-PythonCommand {
@@ -144,7 +144,7 @@ function Install-MLRequirementsIfNeeded {
 
 function Prepare-RuntimeStack {
   Write-Step "Preparing Windows backend runtime stack"
-  foreach ($cmd in @("git", "node", "npm", "docker")) { if (-not (Test-CommandExists $cmd)) { throw "Required command missing: $cmd" } }
+  foreach ($cmd in @("git", "node", "npm.cmd", "docker")) { if (-not (Test-CommandExists $cmd)) { throw "Required command missing: $cmd" } }
   Ensure-RuntimeDirs
   Import-DotEnv
   Ensure-Docker
@@ -172,13 +172,13 @@ function Wait-Postgres {
 
 function Run-Migrations {
   Write-Step "Running database migrations"
-  Invoke-Logged "npm" @("run", "db:migrate") $script:RepoRoot
+  Invoke-Logged "npm.cmd" @("run", "db:migrate") $script:RepoRoot
 }
 
 function Build-BackendArtifacts {
   Write-Step "Building backend and simulator runtime artifacts"
   $scripts = @("build:shared", "build:engine", "build:telemetry", "build:ai", "build:server", "build:sim-runner")
-  foreach ($s in $scripts) { Invoke-Logged "npm" @("run", $s) $script:RepoRoot }
+  foreach ($s in $scripts) { Invoke-Logged "npm.cmd" @("run", $s) $script:RepoRoot }
 }
 
 function Get-BackendPid {
@@ -203,10 +203,10 @@ function Start-BackendProcess {
 }
 
 function Stop-BackendProcess {
-  $pid = Get-BackendPid
-  if (-not $pid) { Write-Warn "Backend pid file missing or process is not running"; Remove-Item $script:PidFile -Force -ErrorAction SilentlyContinue; return }
+  $backendPid = Get-BackendPid
+  if (-not $backendPid) { Write-Warn "Backend pid file missing or process is not running"; Remove-Item $script:PidFile -Force -ErrorAction SilentlyContinue; return }
   Write-Step "Stopping backend process"
-  Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+  Stop-Process -Id $backendPid -Force -ErrorAction SilentlyContinue
   Remove-Item $script:PidFile -Force -ErrorAction SilentlyContinue
   Write-Ok "Backend stopped"
 }
@@ -224,17 +224,20 @@ function Show-BackendStatus {
   Write-Step "Inspecting Windows backend host status"
   Ensure-RuntimeDirs
   Import-DotEnv
-  foreach ($cmd in @("git", "node", "npm", "docker")) { if (Test-CommandExists $cmd) { Write-Ok "$cmd is installed" } else { Write-Fail "$cmd is missing" } }
+  foreach ($cmd in @("git", "node", "npm.cmd", "docker")) { if (Test-CommandExists $cmd) { Write-Ok "$cmd is installed" } else { Write-Fail "$cmd is missing" } }
   if (Test-DockerReachable) { Write-Ok "Docker daemon is running" } else { Write-Fail "Docker daemon is not running" }
   $container = if ($env:POSTGRES_CONTAINER_NAME) { $env:POSTGRES_CONTAINER_NAME } else { "tichu-postgres" }
   try {
     $running = docker inspect -f "{{.State.Running}}" $container 2>$null
     if ($running -eq "true") { Write-Ok "Postgres container is running" } else { Write-Fail "Postgres container is not running" }
   } catch { Write-Fail "Postgres container not found" }
-  $pid = Get-BackendPid
-  if ($pid) { Write-Ok "Backend process is running with pid $pid" } else { Write-Fail "Backend process is not running" }
+  $backendPid = Get-BackendPid
+  if ($backendPid) { Write-Ok "Backend process is running with pid $backendPid" } else { Write-Fail "Backend process is not running" }
   [void](Test-BackendHealth)
 }
+
+
+
 
 
 
