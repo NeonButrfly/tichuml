@@ -359,6 +359,13 @@ function createEmptyBatchSummary(): SelfPlayBatchSummary {
     passRate: 0,
     bombUsageRate: 0,
     wishSatisfactionRate: null,
+    lastCompletedGameId: null,
+    lastCompletedHandId: null,
+    lastCompletedMatchWinner: null,
+    lastCompletedMatchScore: {
+      "team-0": 0,
+      "team-1": 0
+    },
     invalidDecisionCount: 0,
     telemetryDecisionFailures: 0,
     telemetryEventFailures: 0,

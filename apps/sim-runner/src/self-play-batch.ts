@@ -84,6 +84,9 @@ export type SelfPlayBatchOptions = {
 export type SelfPlayGameResult = {
   gameId: string;
   handId: string;
+  firstHandId: string;
+  lastHandId: string;
+  handsPlayed: number;
   decisions: number;
   events: number;
   durationMs: number;
@@ -93,6 +96,8 @@ export type SelfPlayGameResult = {
   eventsByPhase: Record<string, number>;
   teamScores: Record<TeamId, number>;
   winningTeam: TeamId | "tie";
+  matchComplete: boolean;
+  matchWinner: TeamId | null;
   scoreMargin: number;
   passActions: number;
   playActions: number;
@@ -132,6 +137,10 @@ export type SelfPlayBatchSummary = {
   passRate: number;
   bombUsageRate: number;
   wishSatisfactionRate: number | null;
+  lastCompletedGameId: string | null;
+  lastCompletedHandId: string | null;
+  lastCompletedMatchWinner: TeamId | "tie" | null;
+  lastCompletedMatchScore: Record<TeamId, number>;
   invalidDecisionCount: number;
   telemetryDecisionFailures: number;
   telemetryEventFailures: number;
@@ -537,6 +546,36 @@ function cloneTeamScores(
   };
 }
 
+function cloneMatchHistory(
+  source: GameState["matchHistory"]
+): GameState["matchHistory"] {
+  return source.map((entry) => ({
+    handNumber: entry.handNumber,
+    roundSeed: entry.roundSeed,
+    teamScores: { ...entry.teamScores },
+    cumulativeScores: { ...entry.cumulativeScores },
+    finishOrder: [...entry.finishOrder],
+    doubleVictory: entry.doubleVictory,
+    tichuBonuses: entry.tichuBonuses.map((bonus) => ({ ...bonus }))
+  }));
+}
+
+function createNextDealCarryState(
+  state: Pick<GameState, "matchComplete" | "matchHistory" | "matchScore">
+): {
+  matchScore: Record<TeamId, number>;
+  matchHistory: GameState["matchHistory"];
+} {
+  if (state.matchComplete) {
+    throw new Error("Cannot create another deal after the match is complete.");
+  }
+
+  return {
+    matchScore: { ...state.matchScore },
+    matchHistory: cloneMatchHistory(state.matchHistory)
+  };
+}
+
 function summarizeLatency(
   source: Record<string, { count: number; totalMs: number }>
 ): Record<string, { count: number; totalMs: number; averageMs: number }> {
@@ -836,8 +875,23 @@ function buildGameId(baseSeed: string, index: number): string {
   return `selfplay-${baseSeed}-game-${String(index + 1).padStart(6, "0")}`;
 }
 
-function buildHandId(gameId: string): string {
-  return `${gameId}-hand-1`;
+function buildHandId(gameId: string, handNumber: number): string {
+  return `${gameId}-hand-${handNumber}`;
+}
+
+function buildHandSeed(
+  baseSeed: string,
+  index: number,
+  handNumber: number
+): string {
+  if (handNumber === 1) {
+    return `${baseSeed}-${index}`;
+  }
+  return `${baseSeed}-${index}-hand-${handNumber}`;
+}
+
+function getCurrentHandNumber(state: Pick<GameState, "matchHistory">): number {
+  return state.matchHistory.length + 1;
 }
 
 function resolveRequestedProvider(
@@ -2054,9 +2108,12 @@ async function runSingleGame(
   backendBaseUrl: string
 ): Promise<SelfPlayGameResult> {
   const gameId = buildGameId(options.baseSeed, index);
-  const handId = buildHandId(gameId);
+  const firstHandId = buildHandId(gameId, 1);
   const startedAt = Date.now();
-  let result = createInitialGameState(`${options.baseSeed}-${index}`);
+  let currentHandNumber = 1;
+  let result = createInitialGameState(
+    buildHandSeed(options.baseSeed, index, currentHandNumber)
+  );
   let decisionIndex = 0;
   let eventIndex = 0;
   const providerUsage: Record<string, number> = {};
@@ -2083,175 +2140,15 @@ async function runSingleGame(
   let invalidDecisions = 0;
 
   try {
-    for (const event of result.events) {
-      countByKey(eventsByPhase, result.nextState.phase);
-      const currentEventIndex = eventIndex++;
-      const telemetryResult = await persistEvent(
-        event,
-        result.derivedView as unknown as JsonObject,
-        {
-          backendBaseUrl,
-          telemetryEnabled: options.telemetryEnabled,
-          ...(options.strictTelemetry !== undefined
-            ? { strictTelemetry: options.strictTelemetry }
-            : {}),
-          ...(options.traceBackend !== undefined
-            ? { traceBackend: options.traceBackend }
-            : {}),
-          ...(options.telemetryMode !== undefined
-            ? { telemetryMode: options.telemetryMode }
-            : {}),
-          ...(options.telemetryMaxBytes !== undefined
-            ? { telemetryMaxBytes: options.telemetryMaxBytes }
-            : {}),
-          ...telemetryTransportConfig(options),
-          telemetryDispatch: telemetryDispatcher ? "background" : "await",
-          ...(telemetryDispatcher ? { telemetryDispatcher } : {}),
-          ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
-          gameId,
-          handId,
-          actorSeat: SYSTEM_ACTOR,
-          eventIndex: currentEventIndex,
-          providerUsed: "system_local",
-          requestedProvider: "system_local",
-          ...(options.workerId ? { workerId: options.workerId } : {}),
-          ...(options.controllerMode ? { controllerMode: true } : {})
-        }
-      );
-      if (telemetryResult) {
-        recordTelemetryFailure(telemetryFailureStats, telemetryResult);
-        if (!telemetryResult.ok && telemetryResult.backoff_until) {
-          telemetryBackoffUntil = telemetryResult.backoff_until;
-        }
-        emitTelemetryFailureDiagnostic(
-          options,
-          telemetryFailureTracker,
-          telemetryResult,
-          {
-            game_id: gameId,
-            hand_id: handId,
-            phase: result.nextState.phase,
-            event_index: currentEventIndex
-          }
-        );
-      }
-    }
+    while (true) {
+      const handId = buildHandId(gameId, currentHandNumber);
 
-    while (result.nextState.phase !== "finished") {
-      if (
-        options.maxDecisionsPerGame !== undefined &&
-        decisionIndex >= options.maxDecisionsPerGame
-      ) {
-        throw new Error(
-          `Soft lock protection tripped after ${options.maxDecisionsPerGame} decisions for ${gameId}.`
-        );
-      }
-
-      const actor = resolveNextActor(result.legalActions, result.nextState);
-      const resolved = await resolveDecision({
-        backendBaseUrl,
-        telemetryEnabled: options.telemetryEnabled,
-        gameId,
-        handId,
-        actor,
-        decisionIndex,
-        stateRaw: result.nextState as unknown as JsonObject,
-        stateNorm: result.derivedView as unknown as JsonObject,
-        legalActions: result.legalActions,
-        phase: result.nextState.phase,
-        defaultProvider: options.defaultProvider,
-        ...(options.seatProviders
-          ? { seatProviders: options.seatProviders }
-          : {}),
-        ...(options.serverFallbackEnabled !== undefined
-          ? { serverFallbackEnabled: options.serverFallbackEnabled }
-          : {}),
-        ...(options.strictTelemetry !== undefined
-          ? { strictTelemetry: options.strictTelemetry }
-          : {}),
-        ...(options.traceBackend !== undefined
-          ? { traceBackend: options.traceBackend }
-          : {}),
-        telemetryDispatch: telemetryDispatcher ? "background" : "await",
-        ...(telemetryDispatcher ? { telemetryDispatcher } : {}),
-        ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
-        ...telemetryTransportConfig(options),
-        ...(options.workerId ? { workerId: options.workerId } : {}),
-        ...(options.controllerMode ? { controllerMode: true } : {}),
-        ...(options.fullStateDecisionRequests !== undefined
-          ? { fullStateDecisionRequests: options.fullStateDecisionRequests }
-          : {})
-      });
-
-      countByKey(providerUsage, resolved.providerUsed);
-      countByKey(decisionsByPhase, result.nextState.phase);
-      recordLatency(latencyByProvider, resolved.providerUsed, resolved.latencyMs);
-      mergeTelemetryFailureStats(
-        telemetryFailureStats,
-        resolved.telemetryFailureStats
-      );
-      if (resolved.telemetryFailure) {
-        if (!resolved.telemetryFailure.ok && resolved.telemetryFailure.backoff_until) {
-          telemetryBackoffUntil = resolved.telemetryFailure.backoff_until;
-        }
-        emitTelemetryFailureDiagnostic(
-          options,
-          telemetryFailureTracker,
-          resolved.telemetryFailure,
-          {
-            game_id: gameId,
-            hand_id: handId,
-            phase: result.nextState.phase,
-            actor_seat: String(actor),
-            decision_index: decisionIndex
-          }
-        );
-      }
-      if (resolved.fallbackUsed) {
-        fallbackCount += 1;
-      }
-
-      const matchedLegalAction = findMatchingLegalAction(
-        result.legalActions,
-        actor,
-        resolved.chosenAction
-      );
-
-      if (!matchedLegalAction) {
-        invalidDecisions += 1;
-        throw new Error(
-          `Resolved action for actor ${actor} did not match a legal action: ${JSON.stringify(resolved.chosenAction)}`
-        );
-      }
-
-      if (matchedLegalAction.type === "pass_turn") {
-        passActions += 1;
-      }
-
-      if (matchedLegalAction.type === "play_cards") {
-        playActions += 1;
-        const combination = getChosenCombination(matchedLegalAction);
-        if (combination?.isBomb) {
-          bombPlays += 1;
-        }
-        if (result.nextState.currentWish !== null) {
-          wishActiveDecisions += 1;
-          if (actionSatisfiesWish(result.nextState, matchedLegalAction)) {
-            wishSatisfiedPlays += 1;
-          }
-        }
-      }
-
-      const nextResult = applyEngineAction(
-        result.nextState,
-        resolved.chosenAction
-      );
-      for (const event of nextResult.events) {
-        countByKey(eventsByPhase, nextResult.nextState.phase);
+      for (const event of result.events) {
+        countByKey(eventsByPhase, result.nextState.phase);
         const currentEventIndex = eventIndex++;
         const telemetryResult = await persistEvent(
           event,
-          nextResult.derivedView as unknown as JsonObject,
+          result.derivedView as unknown as JsonObject,
           {
             backendBaseUrl,
             telemetryEnabled: options.telemetryEnabled,
@@ -2273,10 +2170,10 @@ async function runSingleGame(
             ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
             gameId,
             handId,
-            actorSeat: actor,
+            actorSeat: SYSTEM_ACTOR,
             eventIndex: currentEventIndex,
-            providerUsed: resolved.providerUsed,
-            requestedProvider: resolved.requestedProvider,
+            providerUsed: "system_local",
+            requestedProvider: "system_local",
             ...(options.workerId ? { workerId: options.workerId } : {}),
             ...(options.controllerMode ? { controllerMode: true } : {})
           }
@@ -2293,16 +2190,197 @@ async function runSingleGame(
             {
               game_id: gameId,
               hand_id: handId,
-              phase: nextResult.nextState.phase,
-              actor_seat: String(actor),
+              phase: result.nextState.phase,
               event_index: currentEventIndex
             }
           );
         }
       }
 
-      result = nextResult;
-      decisionIndex += 1;
+      while (result.nextState.phase !== "finished") {
+        if (
+          options.maxDecisionsPerGame !== undefined &&
+          decisionIndex >= options.maxDecisionsPerGame
+        ) {
+          throw new Error(
+            `Soft lock protection tripped after ${options.maxDecisionsPerGame} decisions for ${gameId}.`
+          );
+        }
+
+        const actor = resolveNextActor(result.legalActions, result.nextState);
+        const resolved = await resolveDecision({
+          backendBaseUrl,
+          telemetryEnabled: options.telemetryEnabled,
+          gameId,
+          handId,
+          actor,
+          decisionIndex,
+          stateRaw: result.nextState as unknown as JsonObject,
+          stateNorm: result.derivedView as unknown as JsonObject,
+          legalActions: result.legalActions,
+          phase: result.nextState.phase,
+          defaultProvider: options.defaultProvider,
+          ...(options.seatProviders
+            ? { seatProviders: options.seatProviders }
+            : {}),
+          ...(options.serverFallbackEnabled !== undefined
+            ? { serverFallbackEnabled: options.serverFallbackEnabled }
+            : {}),
+          ...(options.strictTelemetry !== undefined
+            ? { strictTelemetry: options.strictTelemetry }
+            : {}),
+          ...(options.traceBackend !== undefined
+            ? { traceBackend: options.traceBackend }
+            : {}),
+          telemetryDispatch: telemetryDispatcher ? "background" : "await",
+          ...(telemetryDispatcher ? { telemetryDispatcher } : {}),
+          ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
+          ...telemetryTransportConfig(options),
+          ...(options.workerId ? { workerId: options.workerId } : {}),
+          ...(options.controllerMode ? { controllerMode: true } : {}),
+          ...(options.fullStateDecisionRequests !== undefined
+            ? { fullStateDecisionRequests: options.fullStateDecisionRequests }
+            : {})
+        });
+
+        countByKey(providerUsage, resolved.providerUsed);
+        countByKey(decisionsByPhase, result.nextState.phase);
+        recordLatency(
+          latencyByProvider,
+          resolved.providerUsed,
+          resolved.latencyMs
+        );
+        mergeTelemetryFailureStats(
+          telemetryFailureStats,
+          resolved.telemetryFailureStats
+        );
+        if (resolved.telemetryFailure) {
+          if (
+            !resolved.telemetryFailure.ok &&
+            resolved.telemetryFailure.backoff_until
+          ) {
+            telemetryBackoffUntil = resolved.telemetryFailure.backoff_until;
+          }
+          emitTelemetryFailureDiagnostic(
+            options,
+            telemetryFailureTracker,
+            resolved.telemetryFailure,
+            {
+              game_id: gameId,
+              hand_id: handId,
+              phase: result.nextState.phase,
+              actor_seat: String(actor),
+              decision_index: decisionIndex
+            }
+          );
+        }
+        if (resolved.fallbackUsed) {
+          fallbackCount += 1;
+        }
+
+        const matchedLegalAction = findMatchingLegalAction(
+          result.legalActions,
+          actor,
+          resolved.chosenAction
+        );
+
+        if (!matchedLegalAction) {
+          invalidDecisions += 1;
+          throw new Error(
+            `Resolved action for actor ${actor} did not match a legal action: ${JSON.stringify(resolved.chosenAction)}`
+          );
+        }
+
+        if (matchedLegalAction.type === "pass_turn") {
+          passActions += 1;
+        }
+
+        if (matchedLegalAction.type === "play_cards") {
+          playActions += 1;
+          const combination = getChosenCombination(matchedLegalAction);
+          if (combination?.isBomb) {
+            bombPlays += 1;
+          }
+          if (result.nextState.currentWish !== null) {
+            wishActiveDecisions += 1;
+            if (actionSatisfiesWish(result.nextState, matchedLegalAction)) {
+              wishSatisfiedPlays += 1;
+            }
+          }
+        }
+
+        const nextResult = applyEngineAction(
+          result.nextState,
+          resolved.chosenAction
+        );
+        for (const event of nextResult.events) {
+          countByKey(eventsByPhase, nextResult.nextState.phase);
+          const currentEventIndex = eventIndex++;
+          const telemetryResult = await persistEvent(
+            event,
+            nextResult.derivedView as unknown as JsonObject,
+            {
+              backendBaseUrl,
+              telemetryEnabled: options.telemetryEnabled,
+              ...(options.strictTelemetry !== undefined
+                ? { strictTelemetry: options.strictTelemetry }
+                : {}),
+              ...(options.traceBackend !== undefined
+                ? { traceBackend: options.traceBackend }
+                : {}),
+              ...(options.telemetryMode !== undefined
+                ? { telemetryMode: options.telemetryMode }
+                : {}),
+              ...(options.telemetryMaxBytes !== undefined
+                ? { telemetryMaxBytes: options.telemetryMaxBytes }
+                : {}),
+              ...telemetryTransportConfig(options),
+              telemetryDispatch: telemetryDispatcher ? "background" : "await",
+              ...(telemetryDispatcher ? { telemetryDispatcher } : {}),
+              ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
+              gameId,
+              handId,
+              actorSeat: actor,
+              eventIndex: currentEventIndex,
+              providerUsed: resolved.providerUsed,
+              requestedProvider: resolved.requestedProvider,
+              ...(options.workerId ? { workerId: options.workerId } : {}),
+              ...(options.controllerMode ? { controllerMode: true } : {})
+            }
+          );
+          if (telemetryResult) {
+            recordTelemetryFailure(telemetryFailureStats, telemetryResult);
+            if (!telemetryResult.ok && telemetryResult.backoff_until) {
+              telemetryBackoffUntil = telemetryResult.backoff_until;
+            }
+            emitTelemetryFailureDiagnostic(
+              options,
+              telemetryFailureTracker,
+              telemetryResult,
+              {
+                game_id: gameId,
+                hand_id: handId,
+                phase: nextResult.nextState.phase,
+                actor_seat: String(actor),
+                event_index: currentEventIndex
+              }
+            );
+          }
+        }
+
+        result = nextResult;
+        decisionIndex += 1;
+      }
+
+      if (result.nextState.matchComplete) {
+        break;
+      }
+
+      currentHandNumber = getCurrentHandNumber(result.nextState);
+      result = createInitialGameState({
+        seed: buildHandSeed(options.baseSeed, index, currentHandNumber),
+        ...createNextDealCarryState(result.nextState)
+      });
     }
   } finally {
     if (telemetryDispatcher) {
@@ -2317,7 +2395,9 @@ async function runSingleGame(
     }
   }
 
-  const teamScores = cloneTeamScores(result.nextState.roundSummary?.teamScores);
+  const handsPlayed = result.nextState.matchHistory.length;
+  const handId = buildHandId(gameId, handsPlayed);
+  const teamScores = cloneTeamScores(result.nextState.matchScore);
   const scoreMargin = Math.abs(teamScores["team-0"] - teamScores["team-1"]);
   const winningTeam =
     teamScores["team-0"] === teamScores["team-1"]
@@ -2329,6 +2409,9 @@ async function runSingleGame(
   return {
     gameId,
     handId,
+    firstHandId,
+    lastHandId: handId,
+    handsPlayed,
     decisions: decisionIndex,
     events: eventIndex,
     durationMs: Date.now() - startedAt,
@@ -2338,6 +2421,8 @@ async function runSingleGame(
     eventsByPhase,
     teamScores,
     winningTeam,
+    matchComplete: result.nextState.matchComplete,
+    matchWinner: result.nextState.matchWinner,
     scoreMargin,
     passActions,
     playActions,
@@ -2425,6 +2510,10 @@ export async function runSelfPlayBatch(
     passRate: 0,
     bombUsageRate: 0,
     wishSatisfactionRate: null,
+    lastCompletedGameId: null,
+    lastCompletedHandId: null,
+    lastCompletedMatchWinner: null,
+    lastCompletedMatchScore: createTeamScoreBucket(),
     invalidDecisionCount: 0,
     telemetryDecisionFailures: 0,
     telemetryEventFailures: 0,
@@ -2448,10 +2537,14 @@ export async function runSelfPlayBatch(
     try {
       const game = await runSingleGame(index, options, backendBaseUrl);
       summary.gamesPlayed += 1;
-      summary.handsPlayed += 1;
+      summary.handsPlayed += game.handsPlayed;
       summary.decisionsRecorded += game.decisions;
       summary.eventsRecorded += game.events;
       summary.fallbackCount += game.fallbackCount;
+      summary.lastCompletedGameId = game.gameId;
+      summary.lastCompletedHandId = game.lastHandId;
+      summary.lastCompletedMatchWinner = game.winningTeam;
+      summary.lastCompletedMatchScore = cloneTeamScores(game.teamScores);
       summary.invalidDecisionCount += game.invalidDecisions;
       summary.telemetryDecisionFailures += game.telemetryDecisionFailures;
       summary.telemetryEventFailures += game.telemetryEventFailures;

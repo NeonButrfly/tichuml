@@ -14,6 +14,27 @@ Use this file to preserve AI and bot-behavior prompt intent and link it to GitHu
 
 ## Entries
 
+### 2026-04-26 - Self-play game-vs-hand semantics must stay match-scoped
+
+- Prompt Signal: The latest self-play semantics request required simulator
+  "games" to continue across multiple dealt hands until the cumulative match
+  score reaches the engine's `>=1000` completion target, instead of treating a
+  single hand as a full completed game.
+- Interpreted Requirement: Issue
+  [#48](https://github.com/NeonButrfly/tichuml/issues/48) tracks match-scoped
+  self-play semantics where one simulated game can contain multiple sequential
+  hands, `gamesPlayed` increments only when the full match ends, `handsPlayed`
+  increments once per dealt hand, hand ids advance as `hand-1`, `hand-2`, and
+  later summaries/telemetry expose the cumulative final score plus
+  `matchWinner` without starting any extra hand after `matchComplete=true`.
+- Affected Systems: `apps/sim-runner/src/self-play-batch.ts`,
+  `apps/sim-runner/src/sim-diagnostics.ts`,
+  `tests/integration/self-play-match-semantics.test.ts`,
+  `tests/integration/sim-diagnostics.test.ts`.
+- Linked GitHub Issue: [#48](https://github.com/NeonButrfly/tichuml/issues/48)
+- Milestone: [6.5 – Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status Source: GitHub issue state only.
+
 ### 2026-04-10 - Bot partner-awareness regression guard
 
 - Prompt Signal: The forward stabilization request explicitly called out bot and AI improvements and required a regression guard for partner-awareness rules.
