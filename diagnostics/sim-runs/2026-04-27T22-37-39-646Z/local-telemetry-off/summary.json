@@ -1,0 +1,170 @@
+{
+  "run_id": "local-telemetry-off",
+  "label": "local telemetry off",
+  "target": "oneshot",
+  "provider": "local",
+  "started_at": "2026-04-27T22:38:18.957Z",
+  "ended_at": "2026-04-27T22:38:39.282Z",
+  "duration_ms": 20325,
+  "duration_seconds": 20.325,
+  "command": {
+    "executable": "npm.cmd",
+    "args": [
+      "run",
+      "sim",
+      "--",
+      "--games",
+      "1",
+      "--provider",
+      "local",
+      "--seed",
+      "b93b9255354179a350934c10668f181e0e58216f0401258eb6cea098ffee6fa6",
+      "--seed-prefix",
+      "diagnostics",
+      "--telemetry",
+      "false",
+      "--server-fallback",
+      "true",
+      "--strict-telemetry",
+      "false",
+      "--trace-backend",
+      "false",
+      "--telemetry-mode",
+      "minimal",
+      "--backend-url",
+      "http://127.0.0.1:4310",
+      "--quiet",
+      "--max-decisions-per-game",
+      "120"
+    ],
+    "display": "npm.cmd run sim -- --games 1 --provider local --seed b93b9255354179a350934c10668f181e0e58216f0401258eb6cea098ffee6fa6 --seed-prefix diagnostics --telemetry false --server-fallback true --strict-telemetry false --trace-backend false --telemetry-mode minimal --backend-url http://127.0.0.1:4310 --quiet --max-decisions-per-game 120"
+  },
+  "resolved_config": {
+    "provider": "local",
+    "telemetry_enabled": false,
+    "telemetry_mode": "minimal",
+    "server_fallback_enabled": true,
+    "worker_count": 1,
+    "games_requested": 1,
+    "games_per_batch": null,
+    "target": "oneshot",
+    "controller_seconds": null,
+    "backend_url": "http://127.0.0.1:4310",
+    "diagnostics_enabled": true,
+    "trace_backend": false,
+    "max_decisions_per_game": 120,
+    "wall_clock_seconds": 20
+  },
+  "provider_config": {
+    "telemetry_enabled": false,
+    "telemetry_mode": "minimal",
+    "server_fallback_enabled": true,
+    "worker_count": 1,
+    "games_requested": 1,
+    "games_per_batch": null,
+    "backend_url": "http://127.0.0.1:4310"
+  },
+  "seed": {
+    "mode": "automatic_entropy",
+    "resolved_run_seed": "b93b9255354179a350934c10668f181e0e58216f0401258eb6cea098ffee6fa6",
+    "derivation_namespace": "diagnostics",
+    "manual_override_enabled": false,
+    "manual_override_seed": null,
+    "generated_at": "2026-04-27T22:38:18.956Z",
+    "entropy_game_id": "5136f2f1-24a5-439f-9e01-bd8a6af707ef",
+    "audit_hash_hex": "1c83050b9da5fb8241fd3ae2c1cda7b48a846480a70b58d5036b7e8072134ed0",
+    "primary_provider": "qrandom_io",
+    "local_fallback_used": false,
+    "source_summary": {
+      "attempted": 9,
+      "succeeded": 7,
+      "failed": 2,
+      "minimumRequired": 1,
+      "metMinimum": true
+    }
+  },
+  "process": {
+    "exit_code": 1,
+    "exit_signal": null
+  },
+  "totals": {
+    "games_requested": 1,
+    "games_completed": 0,
+    "decisions_requested": 0,
+    "events_recorded": 0,
+    "errors": 0,
+    "batches_started": 0,
+    "batches_completed": 0
+  },
+  "throughput": {
+    "games_per_sec": 0,
+    "decisions_per_sec": 0
+  },
+  "counters": {
+    "decision_request_contract_failure": 0,
+    "payload_validation": 0,
+    "telemetry_chosen_action_mismatch": 0,
+    "telemetry_client_validation_failed": 0,
+    "telemetry_transport_failed": 0,
+    "fallback_count": 0,
+    "fallback_rate": 0,
+    "decision_provider_failures": 0,
+    "telemetry_send_attempts": 0,
+    "telemetry_success_count": 0,
+    "telemetry_failure_count": 0,
+    "telemetry_failure_rate": 0,
+    "telemetry_backoff_suppressed": 0,
+    "telemetry_oversize_downgraded": 0,
+    "telemetry_oversize_skipped": 0,
+    "active_seat_null_occurrences": 0,
+    "canonical_active_seat_failures": 0,
+    "stale_runtime_anomalies": 0,
+    "repeated_log_count": 0
+  },
+  "telemetry": {
+    "failure_by_kind": {},
+    "failure_by_endpoint": {}
+  },
+  "runtime": {
+    "final_status": null,
+    "final_worker_count": 0,
+    "final_running_worker_count": 0,
+    "final_current_batch_active": true,
+    "stale_recovery_detected": false,
+    "max_live_workers_seen": 0,
+    "last_runtime_path": null,
+    "anomalies": []
+  },
+  "perf": {
+    "by_stage": {}
+  },
+  "repeated_log_signatures": [
+    {
+      "signature": "{\"raw\":\"> tichuml@<n>.<n>.<n> sim\",\"classifications\":[]}",
+      "count": 1,
+      "sample": "> tichuml@0.1.0 sim",
+      "classifications": []
+    },
+    {
+      "signature": "{\"raw\":\"> tsx apps/sim-runner/src/cli.ts --games <n> --provider local --seed b93b9255354179a350934c10668f181e0e58216f0401258eb6cea098ffee6fa6 --seed-prefix diagnostics --telemetry false --server-fallback true --strict-telemetry false --trace-backend false --telemetry-mode minimal --backend-url http://<n>.<n>.<n>.<n>:<n> --quiet --max-decisions-per-game <n>\",\"classifications\":[]}",
+      "count": 1,
+      "sample": "> tsx apps/sim-runner/src/cli.ts --games 1 --provider local --seed b93b9255354179a350934c10668f181e0e58216f0401258eb6cea098ffee6fa6 --seed-prefix diagnostics --telemetry false --server-fallback true --strict-telemetry false --trace-backend false --telemetry-mode minimal --backend-url http://127.0.0.1:4310 --quiet --max-decisions-per-game 120",
+      "classifications": []
+    }
+  ],
+  "flags": [
+    {
+      "code": "non_zero_exit",
+      "severity": "error",
+      "message": "Process exited with code 1."
+    }
+  ],
+  "clean": false,
+  "degraded": true,
+  "stdout_path": "C:\\tichu\\tichuml\\diagnostics\\sim-runs\\2026-04-27T22-37-39-646Z\\local-telemetry-off\\stdout.log",
+  "stderr_path": "C:\\tichu\\tichuml\\diagnostics\\sim-runs\\2026-04-27T22-37-39-646Z\\local-telemetry-off\\stderr.log",
+  "events_path": "C:\\tichu\\tichuml\\diagnostics\\sim-runs\\2026-04-27T22-37-39-646Z\\local-telemetry-off\\events.ndjson",
+  "runtime_path": null,
+  "log_path": null,
+  "aggregate_summary": null
+}

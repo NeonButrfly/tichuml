@@ -1,0 +1,7 @@
+ table_name | count 
+------------+-------
+ decisions  |     0
+ events     |     0
+ matches    |     0
+(3 rows)
+

@@ -1,0 +1,9 @@
+{
+  "ok": true,
+  "service": "tichuml-server",
+  "database": "deferred",
+  "telemetry_ingest": {
+    "ready": true,
+    "health_endpoint": "/api/telemetry/health"
+  }
+}

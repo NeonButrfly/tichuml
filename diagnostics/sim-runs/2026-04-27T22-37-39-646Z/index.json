@@ -1,0 +1,53 @@
+{
+  "generated_at": "2026-04-27T22:39:04.671Z",
+  "runs": [
+    {
+      "run_id": "local-telemetry-off",
+      "label": "local telemetry off",
+      "summary_path": "C:\\tichu\\tichuml\\diagnostics\\sim-runs\\2026-04-27T22-37-39-646Z\\local-telemetry-off\\summary.json",
+      "stdout_path": "C:\\tichu\\tichuml\\diagnostics\\sim-runs\\2026-04-27T22-37-39-646Z\\local-telemetry-off\\stdout.log",
+      "stderr_path": "C:\\tichu\\tichuml\\diagnostics\\sim-runs\\2026-04-27T22-37-39-646Z\\local-telemetry-off\\stderr.log",
+      "events_path": "C:\\tichu\\tichuml\\diagnostics\\sim-runs\\2026-04-27T22-37-39-646Z\\local-telemetry-off\\events.ndjson"
+    },
+    {
+      "run_id": "local-telemetry-on",
+      "label": "local telemetry on",
+      "summary_path": "C:\\tichu\\tichuml\\diagnostics\\sim-runs\\2026-04-27T22-37-39-646Z\\local-telemetry-on\\summary.json",
+      "stdout_path": "C:\\tichu\\tichuml\\diagnostics\\sim-runs\\2026-04-27T22-37-39-646Z\\local-telemetry-on\\stdout.log",
+      "stderr_path": "C:\\tichu\\tichuml\\diagnostics\\sim-runs\\2026-04-27T22-37-39-646Z\\local-telemetry-on\\stderr.log",
+      "events_path": "C:\\tichu\\tichuml\\diagnostics\\sim-runs\\2026-04-27T22-37-39-646Z\\local-telemetry-on\\events.ndjson"
+    },
+    {
+      "run_id": "server-heuristic-fallback-off",
+      "label": "server_heuristic fallback off",
+      "summary_path": "C:\\tichu\\tichuml\\diagnostics\\sim-runs\\2026-04-27T22-37-39-646Z\\server-heuristic-fallback-off\\summary.json",
+      "stdout_path": "C:\\tichu\\tichuml\\diagnostics\\sim-runs\\2026-04-27T22-37-39-646Z\\server-heuristic-fallback-off\\stdout.log",
+      "stderr_path": "C:\\tichu\\tichuml\\diagnostics\\sim-runs\\2026-04-27T22-37-39-646Z\\server-heuristic-fallback-off\\stderr.log",
+      "events_path": "C:\\tichu\\tichuml\\diagnostics\\sim-runs\\2026-04-27T22-37-39-646Z\\server-heuristic-fallback-off\\events.ndjson"
+    },
+    {
+      "run_id": "server-heuristic-telemetry-full",
+      "label": "server_heuristic telemetry full",
+      "summary_path": "C:\\tichu\\tichuml\\diagnostics\\sim-runs\\2026-04-27T22-37-39-646Z\\server-heuristic-telemetry-full\\summary.json",
+      "stdout_path": "C:\\tichu\\tichuml\\diagnostics\\sim-runs\\2026-04-27T22-37-39-646Z\\server-heuristic-telemetry-full\\stdout.log",
+      "stderr_path": "C:\\tichu\\tichuml\\diagnostics\\sim-runs\\2026-04-27T22-37-39-646Z\\server-heuristic-telemetry-full\\stderr.log",
+      "events_path": "C:\\tichu\\tichuml\\diagnostics\\sim-runs\\2026-04-27T22-37-39-646Z\\server-heuristic-telemetry-full\\events.ndjson"
+    },
+    {
+      "run_id": "server-heuristic-telemetry-off",
+      "label": "server_heuristic telemetry off",
+      "summary_path": "C:\\tichu\\tichuml\\diagnostics\\sim-runs\\2026-04-27T22-37-39-646Z\\server-heuristic-telemetry-off\\summary.json",
+      "stdout_path": "C:\\tichu\\tichuml\\diagnostics\\sim-runs\\2026-04-27T22-37-39-646Z\\server-heuristic-telemetry-off\\stdout.log",
+      "stderr_path": "C:\\tichu\\tichuml\\diagnostics\\sim-runs\\2026-04-27T22-37-39-646Z\\server-heuristic-telemetry-off\\stderr.log",
+      "events_path": "C:\\tichu\\tichuml\\diagnostics\\sim-runs\\2026-04-27T22-37-39-646Z\\server-heuristic-telemetry-off\\events.ndjson"
+    },
+    {
+      "run_id": "server-heuristic-telemetry-on",
+      "label": "server_heuristic telemetry on",
+      "summary_path": "C:\\tichu\\tichuml\\diagnostics\\sim-runs\\2026-04-27T22-37-39-646Z\\server-heuristic-telemetry-on\\summary.json",
+      "stdout_path": "C:\\tichu\\tichuml\\diagnostics\\sim-runs\\2026-04-27T22-37-39-646Z\\server-heuristic-telemetry-on\\stdout.log",
+      "stderr_path": "C:\\tichu\\tichuml\\diagnostics\\sim-runs\\2026-04-27T22-37-39-646Z\\server-heuristic-telemetry-on\\stderr.log",
+      "events_path": "C:\\tichu\\tichuml\\diagnostics\\sim-runs\\2026-04-27T22-37-39-646Z\\server-heuristic-telemetry-on\\events.ndjson"
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "accepted": true,
+  "ready": true,
+  "stats": {
+    "decisions": 0,
+    "events": 0,
+    "unique_state_hashes": 0,
+    "duplicate_state_hashes": 0,
+    "unique_legal_actions_hashes": 0,
+    "duplicate_legal_actions_hashes": 0,
+    "decisions_with_explanation": 0,
+    "decisions_with_candidate_scores": 0,
+    "decisions_with_state_features": 0,
+    "decisions_with_legal_chosen_action": 0,
+    "decisions_with_wish": 0,
+    "decisions_can_pass": 0,
+    "latest_decision_ts": null,
+    "latest_event_ts": null,
+    "decisions_by_provider": {},
+    "decisions_by_phase": {},
+    "decisions_by_seat": {},
+    "events_by_type": {},
+    "events_by_phase": {}
+  },
+  "queue": {
+    "pending": 0,
+    "in_flight_batches": 0,
+    "accepted": 4608,
+    "persisted": 3152,
+    "dropped_queue_pressure": 0,
+    "persistence_failures": 1456,
+    "last_persisted_at": "2026-04-27T22:46:50.573Z",
+    "last_failure_at": "2026-04-27T22:36:19.158Z",
+    "last_failure_message": ""
+  }
+}

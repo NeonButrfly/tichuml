@@ -1,0 +1,293 @@
+{
+  "generated_at": "2026-04-27T22:39:04.670Z",
+  "session_root": "C:\\tichu\\tichuml\\diagnostics\\sim-runs\\2026-04-27T22-37-39-646Z",
+  "total_runs": 6,
+  "thresholds": {
+    "fallback_rate_warn": 0.05,
+    "telemetry_failure_rate_warn": 0.1,
+    "slowdown_ratio_warn": 0.5
+  },
+  "runs": [
+    {
+      "run_id": "local-telemetry-off",
+      "label": "local telemetry off",
+      "provider": "local",
+      "target": "oneshot",
+      "telemetry_enabled": false,
+      "telemetry_mode": "minimal",
+      "duration_ms": 20325,
+      "games_completed": 0,
+      "decisions_requested": 0,
+      "games_per_sec": 0,
+      "decisions_per_sec": 0,
+      "contract_failure_count": 0,
+      "fallback_rate": 0,
+      "telemetry_failure_rate": 0,
+      "active_seat_null_occurrences": 0,
+      "repeated_log_count": 0,
+      "clean": false,
+      "degraded": true,
+      "flags": [
+        {
+          "code": "non_zero_exit",
+          "severity": "error",
+          "message": "Process exited with code 1."
+        }
+      ]
+    },
+    {
+      "run_id": "local-telemetry-on",
+      "label": "local telemetry on",
+      "provider": "local",
+      "target": "oneshot",
+      "telemetry_enabled": true,
+      "telemetry_mode": "minimal",
+      "duration_ms": 20368,
+      "games_completed": 0,
+      "decisions_requested": 0,
+      "games_per_sec": 0,
+      "decisions_per_sec": 0,
+      "contract_failure_count": 0,
+      "fallback_rate": 0,
+      "telemetry_failure_rate": 0,
+      "active_seat_null_occurrences": 0,
+      "repeated_log_count": 0,
+      "clean": false,
+      "degraded": true,
+      "flags": [
+        {
+          "code": "non_zero_exit",
+          "severity": "error",
+          "message": "Process exited with code 1."
+        }
+      ]
+    },
+    {
+      "run_id": "server-heuristic-fallback-off",
+      "label": "server_heuristic fallback off",
+      "provider": "server_heuristic",
+      "target": "oneshot",
+      "telemetry_enabled": false,
+      "telemetry_mode": "minimal",
+      "duration_ms": 3594,
+      "games_completed": 0,
+      "decisions_requested": 0,
+      "games_per_sec": 0,
+      "decisions_per_sec": 0,
+      "contract_failure_count": 0,
+      "fallback_rate": 0,
+      "telemetry_failure_rate": 0,
+      "active_seat_null_occurrences": 0,
+      "repeated_log_count": 0,
+      "clean": false,
+      "degraded": true,
+      "flags": [
+        {
+          "code": "game_errors",
+          "severity": "warn",
+          "message": "Run recorded 1 game error(s)."
+        }
+      ]
+    },
+    {
+      "run_id": "server-heuristic-telemetry-full",
+      "label": "server_heuristic telemetry full",
+      "provider": "server_heuristic",
+      "target": "oneshot",
+      "telemetry_enabled": true,
+      "telemetry_mode": "full",
+      "duration_ms": 3526,
+      "games_completed": 0,
+      "decisions_requested": 0,
+      "games_per_sec": 0,
+      "decisions_per_sec": 0,
+      "contract_failure_count": 0,
+      "fallback_rate": 0,
+      "telemetry_failure_rate": 0,
+      "active_seat_null_occurrences": 0,
+      "repeated_log_count": 0,
+      "clean": false,
+      "degraded": true,
+      "flags": [
+        {
+          "code": "game_errors",
+          "severity": "warn",
+          "message": "Run recorded 1 game error(s)."
+        }
+      ]
+    },
+    {
+      "run_id": "server-heuristic-telemetry-off",
+      "label": "server_heuristic telemetry off",
+      "provider": "server_heuristic",
+      "target": "oneshot",
+      "telemetry_enabled": false,
+      "telemetry_mode": "minimal",
+      "duration_ms": 2670,
+      "games_completed": 0,
+      "decisions_requested": 0,
+      "games_per_sec": 0,
+      "decisions_per_sec": 0,
+      "contract_failure_count": 0,
+      "fallback_rate": 0,
+      "telemetry_failure_rate": 0,
+      "active_seat_null_occurrences": 0,
+      "repeated_log_count": 0,
+      "clean": false,
+      "degraded": true,
+      "flags": [
+        {
+          "code": "game_errors",
+          "severity": "warn",
+          "message": "Run recorded 1 game error(s)."
+        }
+      ]
+    },
+    {
+      "run_id": "server-heuristic-telemetry-on",
+      "label": "server_heuristic telemetry on",
+      "provider": "server_heuristic",
+      "target": "oneshot",
+      "telemetry_enabled": true,
+      "telemetry_mode": "minimal",
+      "duration_ms": 4382,
+      "games_completed": 0,
+      "decisions_requested": 0,
+      "games_per_sec": 0,
+      "decisions_per_sec": 0,
+      "contract_failure_count": 0,
+      "fallback_rate": 0,
+      "telemetry_failure_rate": 0,
+      "active_seat_null_occurrences": 0,
+      "repeated_log_count": 0,
+      "clean": false,
+      "degraded": true,
+      "flags": [
+        {
+          "code": "game_errors",
+          "severity": "warn",
+          "message": "Run recorded 1 game error(s)."
+        }
+      ]
+    }
+  ],
+  "provider_rollups": {
+    "local": {
+      "runs": 2,
+      "average_games_per_sec": 0,
+      "average_decisions_per_sec": 0,
+      "average_fallback_rate": 0,
+      "average_telemetry_failure_rate": 0,
+      "active_seat_null_runs": 0,
+      "degraded_runs": 2
+    },
+    "server_heuristic": {
+      "runs": 4,
+      "average_games_per_sec": 0,
+      "average_decisions_per_sec": 0,
+      "average_fallback_rate": 0,
+      "average_telemetry_failure_rate": 0,
+      "active_seat_null_runs": 0,
+      "degraded_runs": 4
+    }
+  },
+  "comparisons": [
+    {
+      "profile": "oneshot|telemetry-off|minimal|fallback-on|workers-1",
+      "left_run_id": "server-heuristic-telemetry-off",
+      "right_run_id": "local-telemetry-off",
+      "left_provider": "server_heuristic",
+      "right_provider": "local",
+      "metric": "games_per_sec",
+      "left_value": 0,
+      "right_value": 0,
+      "delta": 0,
+      "delta_ratio": null
+    },
+    {
+      "profile": "oneshot|telemetry-off|minimal|fallback-on|workers-1",
+      "left_run_id": "server-heuristic-telemetry-off",
+      "right_run_id": "local-telemetry-off",
+      "left_provider": "server_heuristic",
+      "right_provider": "local",
+      "metric": "decisions_per_sec",
+      "left_value": 0,
+      "right_value": 0,
+      "delta": 0,
+      "delta_ratio": null
+    },
+    {
+      "profile": "oneshot|telemetry-off|minimal|fallback-on|workers-1",
+      "left_run_id": "server-heuristic-telemetry-off",
+      "right_run_id": "local-telemetry-off",
+      "left_provider": "server_heuristic",
+      "right_provider": "local",
+      "metric": "fallback_rate",
+      "left_value": 0,
+      "right_value": 0,
+      "delta": 0,
+      "delta_ratio": null
+    },
+    {
+      "profile": "oneshot|telemetry-off|minimal|fallback-on|workers-1",
+      "left_run_id": "server-heuristic-telemetry-off",
+      "right_run_id": "local-telemetry-off",
+      "left_provider": "server_heuristic",
+      "right_provider": "local",
+      "metric": "telemetry_failure_rate",
+      "left_value": 0,
+      "right_value": 0,
+      "delta": 0,
+      "delta_ratio": null
+    },
+    {
+      "profile": "oneshot|telemetry-on|minimal|fallback-on|workers-1",
+      "left_run_id": "server-heuristic-telemetry-on",
+      "right_run_id": "local-telemetry-on",
+      "left_provider": "server_heuristic",
+      "right_provider": "local",
+      "metric": "games_per_sec",
+      "left_value": 0,
+      "right_value": 0,
+      "delta": 0,
+      "delta_ratio": null
+    },
+    {
+      "profile": "oneshot|telemetry-on|minimal|fallback-on|workers-1",
+      "left_run_id": "server-heuristic-telemetry-on",
+      "right_run_id": "local-telemetry-on",
+      "left_provider": "server_heuristic",
+      "right_provider": "local",
+      "metric": "decisions_per_sec",
+      "left_value": 0,
+      "right_value": 0,
+      "delta": 0,
+      "delta_ratio": null
+    },
+    {
+      "profile": "oneshot|telemetry-on|minimal|fallback-on|workers-1",
+      "left_run_id": "server-heuristic-telemetry-on",
+      "right_run_id": "local-telemetry-on",
+      "left_provider": "server_heuristic",
+      "right_provider": "local",
+      "metric": "fallback_rate",
+      "left_value": 0,
+      "right_value": 0,
+      "delta": 0,
+      "delta_ratio": null
+    },
+    {
+      "profile": "oneshot|telemetry-on|minimal|fallback-on|workers-1",
+      "left_run_id": "server-heuristic-telemetry-on",
+      "right_run_id": "local-telemetry-on",
+      "left_provider": "server_heuristic",
+      "right_provider": "local",
+      "metric": "telemetry_failure_rate",
+      "left_value": 0,
+      "right_value": 0,
+      "delta": 0,
+      "delta_ratio": null
+    }
+  ],
+  "highlights": []
+}

@@ -1,0 +1,2 @@
+?? diagnostics/
+?? scripts/verify-sim-one-game-v2.ps1

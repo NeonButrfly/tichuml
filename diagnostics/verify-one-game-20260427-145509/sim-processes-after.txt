@@ -1,0 +1,9 @@
+
+ProcessId   : 16148
+Name        : node.exe
+CommandLine : "node"   "C:\tichu\tichuml\node_modules\.bin\\..\tsx\dist\cli.mjs" apps/sim-runner/src/cli.ts --games 1 --provider local --telemetry true --strict-telemetry true --trace-backend true --backend-url http://127.0.0.1:4310
+
+ProcessId   : 9472
+Name        : node.exe
+CommandLine : "C:\Program Files\nodejs\node.exe" --require C:\tichu\tichuml\node_modules\tsx\dist\preflight.cjs --import file:///C:/tichu/tichuml/node_modules/tsx/dist/loader.mjs apps/sim-runner/src/cli.ts --games 1 --provider local --telemetry true --strict-telemetry true --trace-backend true --backend-url http://127.0.0.1:4310
+

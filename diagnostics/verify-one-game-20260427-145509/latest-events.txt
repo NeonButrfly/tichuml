@@ -1,0 +1,4 @@
+ id | game_id | hand_id | phase | event_type | actor_seat | created_at 
+----+---------+---------+-------+------------+------------+------------
+(0 rows)
+
