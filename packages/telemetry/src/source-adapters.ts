@@ -207,6 +207,7 @@ export function buildSelfPlayDecisionTelemetry(config: {
   fallbackReason?: string;
   latencyMs: number;
   explanation?: SeedJsonValue;
+  strictTelemetry?: boolean | undefined;
   workerId?: string | undefined;
   controllerMode?: boolean | undefined;
 }): TelemetryDecisionBuildResult {
@@ -237,6 +238,7 @@ export function buildSelfPlayDecisionTelemetry(config: {
     explanation: config.explanation ?? null,
     metadata: {
       simulation_mode: true,
+      strict_telemetry: config.strictTelemetry === true,
       ...(config.fallbackReason
         ? { fallback_reason: config.fallbackReason }
         : {})
@@ -257,6 +259,7 @@ export function buildSelfPlayEventTelemetry(config: {
   eventIndex: number;
   requestedProvider: string;
   providerUsed: string;
+  strictTelemetry?: boolean | undefined;
   workerId?: string | undefined;
   controllerMode?: boolean | undefined;
 }): TelemetryEventBuildResult {
@@ -285,7 +288,8 @@ export function buildSelfPlayEventTelemetry(config: {
       state_norm: config.stateNorm
     },
     metadata: {
-      simulation_mode: true
+      simulation_mode: true,
+      strict_telemetry: config.strictTelemetry === true
     },
     workerId: config.workerId,
     controllerMode: config.controllerMode

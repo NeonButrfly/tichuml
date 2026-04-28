@@ -51,6 +51,7 @@ class InMemoryTelemetryRepository implements TelemetryRepository {
   pingCalls = 0;
   private decisionId = 1;
   private eventId = 1;
+  private readonly matches = new Set<string>();
 
   async ping(): Promise<void> {
     this.pingCalls += 1;
@@ -58,10 +59,12 @@ class InMemoryTelemetryRepository implements TelemetryRepository {
 
   async insertDecision(payload: TelemetryDecisionPayload): Promise<number> {
     const id = this.decisionId++;
+    const matchId = this.ensureMatch(payload.game_id);
     this.decisions.push({
       ...payload,
       ...deriveTelemetryDecisionFields(payload),
       id,
+      match_id: matchId,
       created_at: new Date().toISOString()
     });
     return id;
@@ -69,10 +72,12 @@ class InMemoryTelemetryRepository implements TelemetryRepository {
 
   async insertEvent(payload: TelemetryEventPayload): Promise<number> {
     const id = this.eventId++;
+    const matchId = this.ensureMatch(payload.game_id);
     this.events.push({
       ...payload,
       ...deriveTelemetryEventFields(payload),
       id,
+      match_id: matchId,
       created_at: new Date().toISOString()
     });
     return id;
@@ -138,7 +143,7 @@ class InMemoryTelemetryRepository implements TelemetryRepository {
     return {
       decisions: this.decisions.length,
       events: this.events.length,
-      matches: 0,
+      matches: this.matches.size,
       unique_state_hashes: new Set(this.decisions.map((decision) => decision.state_hash)).size,
       duplicate_state_hashes: 0,
       unique_legal_actions_hashes: new Set(
@@ -163,7 +168,8 @@ class InMemoryTelemetryRepository implements TelemetryRepository {
         .length,
       latest_decision_ts: this.decisions.at(-1)?.ts ?? null,
       latest_event_ts: this.events.at(-1)?.ts ?? null,
-      latest_match_ts: null,
+      latest_match_ts:
+        this.decisions.at(-1)?.ts ?? this.events.at(-1)?.ts ?? null,
       decisions_by_provider: countBy(this.decisions, "provider_used"),
       decisions_by_phase: countBy(this.decisions, "phase"),
       decisions_by_seat: countBy(this.decisions, "actor_seat"),
@@ -189,12 +195,14 @@ class InMemoryTelemetryRepository implements TelemetryRepository {
   }
 
   async clearDatabase(): Promise<AdminClearResult> {
+    const matchCount = this.matches.size;
     const result = await this.clearTelemetry();
+    this.matches.clear();
     return {
       ...result,
       action: "database.clear",
       tables_cleared: ["decisions", "events", "matches"],
-      row_counts: { ...result.row_counts, matches: 0 }
+      row_counts: { ...result.row_counts, matches: matchCount }
     };
   }
 
@@ -204,6 +212,12 @@ class InMemoryTelemetryRepository implements TelemetryRepository {
       ...result,
       action: "database.reset"
     };
+  }
+
+  private ensureMatch(gameId: string): string {
+    const matchId = `match-${gameId}`;
+    this.matches.add(matchId);
+    return matchId;
   }
 }
 
@@ -954,7 +968,7 @@ describe("backend foundation server routes", () => {
       expect(payload.last_failure_message).toBeNull();
       expect(payload.db_decisions_count).toBe(1);
       expect(payload.db_events_count).toBe(1);
-      expect(payload.db_matches_count).toBe(0);
+      expect(payload.db_matches_count).toBe(1);
       expect(payload.runtime.database_url).not.toContain("tichu_dev_password");
       expect(payload.runtime.git_commit).toBeTruthy();
     });

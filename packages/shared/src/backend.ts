@@ -344,6 +344,7 @@ export type DecisionResponsePayload = {
 
 export type StoredTelemetryDecisionRecord = TelemetryDecisionPayload & {
   id: number;
+  match_id: string | null;
   worker_id: string | null;
   chosen_action_type: string;
   legal_action_count: number;
@@ -363,6 +364,7 @@ export type StoredTelemetryDecisionRecord = TelemetryDecisionPayload & {
 
 export type StoredTelemetryEventRecord = TelemetryEventPayload & {
   id: number;
+  match_id: string | null;
   worker_id: string | null;
   state_hash: string | null;
   event_hash: string;

@@ -29,6 +29,7 @@ class QueueTestRepository implements TelemetryRepository {
       ...payload,
       ...deriveTelemetryDecisionFields(payload),
       id,
+      match_id: `match-${payload.game_id}`,
       worker_id: null,
       created_at: new Date().toISOString()
     });
@@ -58,7 +59,7 @@ class QueueTestRepository implements TelemetryRepository {
     return {
       decisions: this.decisions.length,
       events: 0,
-      matches: 0,
+      matches: new Set(this.decisions.map((decision) => decision.match_id)).size,
       unique_state_hashes: 0,
       duplicate_state_hashes: 0,
       unique_legal_actions_hashes: 0,
@@ -71,7 +72,7 @@ class QueueTestRepository implements TelemetryRepository {
       decisions_can_pass: 0,
       latest_decision_ts: null,
       latest_event_ts: null,
-      latest_match_ts: null,
+      latest_match_ts: this.decisions.at(-1)?.ts ?? null,
       decisions_by_provider: {},
       decisions_by_phase: {},
       decisions_by_seat: {},

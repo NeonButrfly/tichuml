@@ -15,3 +15,5 @@ ml/model_registry/*
 ml/feature_schema.json
 eval/results/*
 !eval/results/.gitkeep
+diagnostics/verify-one-game-*/
+verify-one-game-*.zip

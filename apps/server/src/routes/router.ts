@@ -483,6 +483,7 @@ export function createRouter({
             db_matches_count: stats.matches,
             db_latest_decision_ts: stats.latest_decision_ts,
             db_latest_event_ts: stats.latest_event_ts,
+            db_latest_match_ts: stats.latest_match_ts,
             stats,
             queue
           },

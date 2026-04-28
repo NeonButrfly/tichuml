@@ -2,7 +2,9 @@
 
 GitHub issues [#41](https://github.com/NeonButrfly/tichuml/issues/41) and
 [#50](https://github.com/NeonButrfly/tichuml/issues/50) track the simulator,
-gameplay, backend persistence, and health-truth telemetry work.
+gameplay, backend persistence, and health-truth telemetry work. Issue
+[#51](https://github.com/NeonButrfly/tichuml/issues/51) tracks durable match
+lifecycle rows and Linux/Windows diagnostic parity.
 
 ## Current Architecture
 
@@ -40,6 +42,32 @@ records structured diagnostics for:
 queue stats. Queue acceptance is not database truth. The source of truth for ML
 rows is the actual `decisions`, `events`, and `matches` table counts reported as
 `db_decisions_count`, `db_events_count`, and `db_matches_count`.
+
+## DB Truth Model
+
+Queue counters describe the backend ingest worker, not training data:
+
+- `queue_accepted`: payloads accepted by HTTP validation and put on the server
+  ingest queue.
+- `queue_pending` / `queue_in_flight`: work not yet committed to Postgres.
+- `queue_persisted`: payload inserts that returned after the repository write
+  completed.
+- `persistence_failures`: repository/Postgres write failures.
+
+Database row counts are the ML source of truth:
+
+- `matches`: one durable lifecycle row per simulator game, keyed by `game_id`
+  and joined by `match_id`.
+- `decisions`: decision telemetry rows; each row has `game_id`, `hand_id`, and
+  `match_id`.
+- `events`: event telemetry rows, including simulator lifecycle events such as
+  `game_started`, `hand_started`, `exchange_completed`, `trick_resolved`,
+  `match_completed`, and `game_completed` when the simulator emits them.
+
+`npm run telemetry:truth -- --backend-url http://127.0.0.1:4310 --require-rows`
+queries Postgres directly and fails if decisions, events, or matches are empty,
+or if any decision/event row cannot join back to its match row by `match_id` and
+`game_id`.
 
 `GET /health` and `GET /api/telemetry/health` include runtime identity so stale
 backend processes are visible:
@@ -137,24 +165,42 @@ npm run sim:doctor -- --backend-url http://127.0.0.1:4310
 ```
 
 It verifies backend health, telemetry health, direct decision/event POSTs, DB
-persistence, one bounded simulator game, queue flush, and simulator process
-exit. The output is machine-readable JSON and failures are named by layer:
+persistence, match lifecycle persistence, one bounded simulator game, queue
+flush, and simulator process exit. The output is machine-readable JSON and
+failures are named by layer:
 `backend_health`, `db_connection`, `telemetry_decision_post`,
-`telemetry_event_post`, `persistence_decision`, `persistence_event`, `flush`,
-or `orphan_process`.
+`telemetry_event_post`, `persistence_decision`, `persistence_event`,
+`persistence_match`, `flush`, or `orphan_process`.
 
 On Windows, use the diagnostic ZIP script for operator evidence:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\verify-sim-one-game-fixed.ps1 -ClearDatabase
+powershell -ExecutionPolicy Bypass -File scripts\windows\verify-sim-one-game-fixed.ps1 -ClearDatabase
 ```
 
 The script kills stale simulator/controller processes, clears
 `.runtime\sim-controller`, captures `/health`, captures telemetry health before
 and after, runs exactly one strict telemetry simulator game, records table
-counts and latest rows, captures backend process command lines and sanitized DB
-identity from health, zips all outputs, and fails if `decisions = 0`,
-`events = 0`, the simulator exits unsuccessfully, or a simulator process remains.
+counts, latest rows, and join truth, captures backend process command lines and
+sanitized DB identity from health, zips all outputs, and fails if
+`decisions = 0`, `events = 0`, `matches = 0`, join validation fails, queue
+pending remains non-zero, persistence failures are present, or a simulator
+process remains.
+
+The legacy path remains as a compatibility alias:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\verify-sim-one-game-fixed.ps1 -ClearDatabase
+```
+
+On Linux, use the equivalent bounded diagnostic from any working directory:
+
+```bash
+/opt/tichuml/scripts/linux/verify-sim-one-game-fixed.sh --clear-database --timeout-seconds 90 --backend-url http://127.0.0.1:4310
+```
+
+The Linux script writes artifacts under `diagnostics/verify-one-game-linux-*`
+and creates a `.tar.gz` archive at the repo root.
 
 Manual DB monitor commands:
 
@@ -213,3 +259,42 @@ as the initial remote default when served from the backend host, but it does not
 silently rewrite an already configured Backend URL after a transport failure.
 Runtime/admin status, controller launch args, sim-runner CLI config, and the
 shared telemetry client should therefore show the same effective endpoint.
+
+## Script Parity
+
+Canonical local environment shared by Windows and Linux:
+
+| Setting | Value |
+| --- | --- |
+| Postgres container | `tichu-postgres` |
+| Postgres user/db | `tichu` / `tichu` |
+| Postgres host port | `54329` |
+| `DATABASE_URL` | `postgres://tichu:tichu_dev_password@localhost:54329/tichu` |
+| `PG_BOOTSTRAP_URL` | `postgres://tichu:tichu_dev_password@localhost:54329/postgres` |
+| Backend URL | `http://127.0.0.1:4310` |
+| Linux repo path | `/opt/tichuml` |
+
+| Task | Windows | Linux |
+| --- | --- | --- |
+| Start backend | `powershell -ExecutionPolicy Bypass -File scripts\windows\start-backend.ps1` | `./scripts/linux/start-backend.sh` |
+| Stop backend | `powershell -ExecutionPolicy Bypass -File scripts\windows\stop-backend.ps1` | `./scripts/linux/stop-backend.sh` |
+| Restart backend | `powershell -ExecutionPolicy Bypass -File scripts\windows\restart-backend.ps1` | `./scripts/linux/restart-backend.sh` |
+| Check status | `powershell -ExecutionPolicy Bypass -File scripts\windows\status-backend.ps1` | `./scripts/linux/status-backend.sh` |
+| Reset DB | `powershell -ExecutionPolicy Bypass -File scripts\windows\reset-db.ps1` | `./scripts/linux/reset-db.sh --yes` |
+| One-game verification | `powershell -ExecutionPolicy Bypass -File scripts\windows\verify-sim-one-game-fixed.ps1 -ClearDatabase -TimeoutSeconds 90` | `./scripts/linux/verify-sim-one-game-fixed.sh --clear-database --timeout-seconds 90` |
+| Sim doctor | `powershell -ExecutionPolicy Bypass -File scripts\windows\sim-doctor.ps1 --backend-url http://127.0.0.1:4310 --timeout-ms 30000` | `./scripts/linux/sim-doctor.sh --backend-url http://127.0.0.1:4310 --timeout-ms 30000` |
+| Training simulator | `powershell -ExecutionPolicy Bypass -File scripts\windows\run-training-sim.ps1 -Provider local -Telemetry true -StrictTelemetry false -BackendUrl http://127.0.0.1:4310 -GamesPerLoop 100` | `./scripts/linux/run-training-sim.sh --provider local --telemetry true --strict-telemetry false --backend-url http://127.0.0.1:4310 --games-per-loop 100 --log-dir /opt/tichuml/logs/sim-training` |
+
+Logs:
+
+- Windows backend: `.runtime\backend.log`
+- Windows training simulator: `logs\sim-training\*.log`
+- Linux backend: `.runtime/backend.log`
+- Linux training simulator: `/opt/tichuml/logs/sim-training/*.log` by default
+
+To prove Windows and Linux are using the same backend URL, DB, and telemetry
+mode, compare `/health`, `/api/telemetry/health`, and
+`npm run telemetry:truth -- --backend-url http://127.0.0.1:4310 --require-rows`.
+The backend health payload includes the sanitized `DATABASE_URL`, process PID,
+command line, cwd, git commit, backend mode, port, and telemetry health shape
+version.

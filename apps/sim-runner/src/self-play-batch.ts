@@ -1404,6 +1404,7 @@ async function resolveLocalHeuristicDecision(config: {
         : {}),
       latencyMs,
       mode: config.telemetryMode ?? "minimal",
+      strictTelemetry: config.strictTelemetry === true,
       ...(config.workerId ? { workerId: config.workerId } : {}),
       ...(config.controllerMode ? { controllerMode: true } : {})
     });
@@ -1498,6 +1499,7 @@ async function persistEvent(
     eventIndex: config.eventIndex,
     requestedProvider: config.requestedProvider,
     providerUsed: config.providerUsed,
+    strictTelemetry: config.strictTelemetry === true,
     ...(config.workerId ? { workerId: config.workerId } : {}),
     ...(config.controllerMode ? { controllerMode: true } : {})
   });
@@ -1919,10 +1921,83 @@ async function runSingleGame(
   let wishSatisfiedPlays = 0;
   let wishActiveDecisions = 0;
   let invalidDecisions = 0;
+  const startedHands = new Set<number>();
 
   try {
+    const gameStarted = await persistEvent(
+      { type: "game_started" },
+      result.derivedView as unknown as JsonObject,
+      {
+        backendBaseUrl,
+        telemetryEnabled: options.telemetryEnabled,
+        ...(options.strictTelemetry !== undefined
+          ? { strictTelemetry: options.strictTelemetry }
+          : {}),
+        ...(options.traceBackend !== undefined
+          ? { traceBackend: options.traceBackend }
+          : {}),
+        ...(options.telemetryMode !== undefined
+          ? { telemetryMode: options.telemetryMode }
+          : {}),
+        ...(options.telemetryMaxBytes !== undefined
+          ? { telemetryMaxBytes: options.telemetryMaxBytes }
+          : {}),
+        ...telemetryTransportConfig(options),
+        ...(telemetryManager ? { telemetryManager } : {}),
+        ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
+        gameId,
+        handId: firstHandId,
+        actorSeat: SYSTEM_ACTOR,
+        eventIndex: eventIndex++,
+        providerUsed: "system_local",
+        requestedProvider: "system_local",
+        ...(options.workerId ? { workerId: options.workerId } : {}),
+        ...(options.controllerMode ? { controllerMode: true } : {})
+      }
+    );
+    if (gameStarted) {
+      recordTelemetryFailure(telemetryFailureStats, gameStarted);
+    }
+
     while (true) {
       const handId = buildHandId(gameId, currentHandNumber);
+      if (!startedHands.has(currentHandNumber)) {
+        startedHands.add(currentHandNumber);
+        const handStarted = await persistEvent(
+          { type: "hand_started", detail: handId },
+          result.derivedView as unknown as JsonObject,
+          {
+            backendBaseUrl,
+            telemetryEnabled: options.telemetryEnabled,
+            ...(options.strictTelemetry !== undefined
+              ? { strictTelemetry: options.strictTelemetry }
+              : {}),
+            ...(options.traceBackend !== undefined
+              ? { traceBackend: options.traceBackend }
+              : {}),
+            ...(options.telemetryMode !== undefined
+              ? { telemetryMode: options.telemetryMode }
+              : {}),
+            ...(options.telemetryMaxBytes !== undefined
+              ? { telemetryMaxBytes: options.telemetryMaxBytes }
+              : {}),
+            ...telemetryTransportConfig(options),
+            ...(telemetryManager ? { telemetryManager } : {}),
+            ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
+            gameId,
+            handId,
+            actorSeat: SYSTEM_ACTOR,
+            eventIndex: eventIndex++,
+            providerUsed: "system_local",
+            requestedProvider: "system_local",
+            ...(options.workerId ? { workerId: options.workerId } : {}),
+            ...(options.controllerMode ? { controllerMode: true } : {})
+          }
+        );
+        if (handStarted) {
+          recordTelemetryFailure(telemetryFailureStats, handStarted);
+        }
+      }
 
       for (const event of result.events) {
         countByKey(eventsByPhase, result.nextState.phase);
@@ -2151,6 +2226,40 @@ async function runSingleGame(
       }
 
       if (result.nextState.matchComplete) {
+        const gameCompleted = await persistEvent(
+          { type: "game_completed", detail: result.nextState.matchWinner ?? "tie" },
+          result.derivedView as unknown as JsonObject,
+          {
+            backendBaseUrl,
+            telemetryEnabled: options.telemetryEnabled,
+            ...(options.strictTelemetry !== undefined
+              ? { strictTelemetry: options.strictTelemetry }
+              : {}),
+            ...(options.traceBackend !== undefined
+              ? { traceBackend: options.traceBackend }
+              : {}),
+            ...(options.telemetryMode !== undefined
+              ? { telemetryMode: options.telemetryMode }
+              : {}),
+            ...(options.telemetryMaxBytes !== undefined
+              ? { telemetryMaxBytes: options.telemetryMaxBytes }
+              : {}),
+            ...telemetryTransportConfig(options),
+            ...(telemetryManager ? { telemetryManager } : {}),
+            ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
+            gameId,
+            handId,
+            actorSeat: SYSTEM_ACTOR,
+            eventIndex: eventIndex++,
+            providerUsed: "system_local",
+            requestedProvider: "system_local",
+            ...(options.workerId ? { workerId: options.workerId } : {}),
+            ...(options.controllerMode ? { controllerMode: true } : {})
+          }
+        );
+        if (gameCompleted) {
+          recordTelemetryFailure(telemetryFailureStats, gameCompleted);
+        }
         break;
       }
 

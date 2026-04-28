@@ -2,6 +2,7 @@ import {
   deriveTelemetryDecisionFields,
   deriveTelemetryEventFields,
   type AdminClearResult,
+  type JsonObject,
   type ReplayPayload,
   type ReplayRecord,
   type StoredTelemetryDecisionRecord,
@@ -27,6 +28,65 @@ export interface TelemetryRepository {
 
 type DecisionRow = StoredTelemetryDecisionRecord;
 type EventRow = StoredTelemetryEventRecord;
+type TelemetryPayload = TelemetryDecisionPayload | TelemetryEventPayload;
+
+type MatchLifecycleFields = {
+  gameId: string;
+  handId: string;
+  provider: string | null;
+  requestedProvider: string | null;
+  telemetryMode: string | null;
+  strictTelemetry: boolean | null;
+  simVersion: string;
+  engineVersion: string;
+  observedAt: string;
+  completedAt: string | null;
+  status: "running" | "completed" | "failed";
+};
+
+function readMetadataString(metadata: JsonObject, key: string): string | null {
+  const value = metadata[key];
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function readMetadataBoolean(metadata: JsonObject, key: string): boolean | null {
+  const value = metadata[key];
+  return typeof value === "boolean" ? value : null;
+}
+
+function isCompletionEvent(payload: TelemetryPayload): boolean {
+  if (!("event_type" in payload)) {
+    return payload.phase === "finished";
+  }
+
+  return (
+    payload.event_type === "game_completed" ||
+    payload.event_type === "match_completed" ||
+    payload.event_type === "hand_completed" ||
+    payload.phase === "finished"
+  );
+}
+
+function matchLifecycleFields(payload: TelemetryPayload): MatchLifecycleFields {
+  const requestedProvider =
+    payload.requested_provider ?? readMetadataString(payload.metadata, "requested_provider");
+  const provider =
+    payload.provider_used ?? readMetadataString(payload.metadata, "provider_used");
+  const completedAt = isCompletionEvent(payload) ? payload.ts : null;
+  return {
+    gameId: payload.game_id,
+    handId: payload.hand_id,
+    provider,
+    requestedProvider,
+    telemetryMode: readMetadataString(payload.metadata, "telemetry_mode"),
+    strictTelemetry: readMetadataBoolean(payload.metadata, "strict_telemetry"),
+    simVersion: payload.sim_version,
+    engineVersion: payload.engine_version,
+    observedAt: payload.ts,
+    completedAt,
+    status: completedAt ? "completed" : "running"
+  };
+}
 
 export class PostgresTelemetryRepository implements TelemetryRepository {
   constructor(private readonly sql: DatabaseClient) {}
@@ -37,8 +97,10 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
 
   async insertDecision(payload: TelemetryDecisionPayload): Promise<number> {
     const derived = deriveTelemetryDecisionFields(payload);
+    const matchId = await this.ensureMatchForTelemetry(payload);
     const [row] = await this.sql<{ id: number }[]>`
       INSERT INTO decisions (
+        match_id,
         ts,
         game_id,
         hand_id,
@@ -78,6 +140,7 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
         chosen_action_hash
       )
       VALUES (
+        ${matchId},
         ${payload.ts},
         ${payload.game_id},
         ${payload.hand_id},
@@ -124,8 +187,10 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
 
   async insertEvent(payload: TelemetryEventPayload): Promise<number> {
     const derived = deriveTelemetryEventFields(payload);
+    const matchId = await this.ensureMatchForTelemetry(payload);
     const [row] = await this.sql<{ id: number }[]>`
       INSERT INTO events (
+        match_id,
         ts,
         game_id,
         hand_id,
@@ -147,6 +212,7 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
         event_hash
       )
       VALUES (
+        ${matchId},
         ${payload.ts},
         ${payload.game_id},
         ${payload.hand_id},
@@ -177,6 +243,7 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
     return this.sql<DecisionRow[]>`
       SELECT
         id,
+        match_id,
         ts,
         game_id,
         hand_id,
@@ -225,6 +292,7 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
     return this.sql<EventRow[]>`
       SELECT
         id,
+        match_id,
         ts,
         game_id,
         hand_id,
@@ -328,7 +396,7 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
     }>>`
       SELECT
         COUNT(*)::INTEGER AS matches,
-        MAX(created_at)::TEXT AS latest_match_ts
+        MAX(COALESCE(completed_at, updated_at, started_at, created_at))::TEXT AS latest_match_ts
       FROM matches
     `;
     const [duplicateStats] = await this.sql<Array<{ duplicate_state_hashes: number }>>`
@@ -441,6 +509,65 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
       counts[table] = row?.count ?? 0;
     }
     return counts;
+  }
+
+  private async ensureMatchForTelemetry(payload: TelemetryPayload): Promise<string> {
+    const fields = matchLifecycleFields(payload);
+    const [row] = await this.sql<Array<{ id: string }>>`
+      INSERT INTO matches (
+        game_id,
+        last_hand_id,
+        provider,
+        requested_provider,
+        telemetry_mode,
+        strict_telemetry,
+        sim_version,
+        engine_version,
+        started_at,
+        completed_at,
+        status,
+        updated_at
+      )
+      VALUES (
+        ${fields.gameId},
+        ${fields.handId},
+        ${fields.provider},
+        ${fields.requestedProvider},
+        ${fields.telemetryMode},
+        ${fields.strictTelemetry},
+        ${fields.simVersion},
+        ${fields.engineVersion},
+        ${fields.observedAt},
+        ${fields.completedAt},
+        ${fields.status},
+        NOW()
+      )
+      ON CONFLICT (game_id) WHERE game_id IS NOT NULL DO UPDATE SET
+        last_hand_id = EXCLUDED.last_hand_id,
+        provider = COALESCE(matches.provider, EXCLUDED.provider),
+        requested_provider = COALESCE(matches.requested_provider, EXCLUDED.requested_provider),
+        telemetry_mode = COALESCE(matches.telemetry_mode, EXCLUDED.telemetry_mode),
+        strict_telemetry = COALESCE(matches.strict_telemetry, EXCLUDED.strict_telemetry),
+        sim_version = COALESCE(matches.sim_version, EXCLUDED.sim_version),
+        engine_version = COALESCE(matches.engine_version, EXCLUDED.engine_version),
+        started_at = LEAST(
+          COALESCE(matches.started_at, EXCLUDED.started_at),
+          EXCLUDED.started_at
+        ),
+        completed_at = COALESCE(matches.completed_at, EXCLUDED.completed_at),
+        status = CASE
+          WHEN EXCLUDED.completed_at IS NOT NULL THEN EXCLUDED.status
+          WHEN matches.status = 'created' THEN 'running'
+          ELSE matches.status
+        END,
+        updated_at = NOW()
+      RETURNING id
+    `;
+
+    if (!row?.id) {
+      throw new Error(`Unable to upsert match lifecycle row for game_id=${fields.gameId}`);
+    }
+    return row.id;
   }
 
   private async countGrouped(

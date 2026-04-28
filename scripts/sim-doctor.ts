@@ -9,6 +9,7 @@ type Layer =
   | "telemetry_event_post"
   | "persistence_decision"
   | "persistence_event"
+  | "persistence_match"
   | "flush"
   | "orphan_process";
 
@@ -103,7 +104,12 @@ function decisionPayload(gameId: string) {
     explanation: null,
     candidateScores: null,
     stateFeatures: null,
-    metadata: { source: "selfplay", diagnostic: "sim-doctor" },
+    metadata: {
+      source: "selfplay",
+      diagnostic: "sim-doctor",
+      telemetry_mode: "minimal",
+      strict_telemetry: true
+    },
     antipattern_tags: []
   };
 }
@@ -125,7 +131,12 @@ function eventPayload(gameId: string) {
     fallback_used: false,
     state_norm: null,
     payload: { ok: true },
-    metadata: { source: "selfplay", diagnostic: "sim-doctor" }
+    metadata: {
+      source: "selfplay",
+      diagnostic: "sim-doctor",
+      telemetry_mode: "minimal",
+      strict_telemetry: true
+    }
   };
 }
 
@@ -161,6 +172,7 @@ async function waitForCountIncrease(
 function runBoundedSim(config: {
   backendUrl: string;
   timeoutMs: number;
+  seed: string;
 }): Promise<{ exitCode: number | null; timedOut: boolean; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
     const tsxCli = path.join(process.cwd(), "node_modules", "tsx", "dist", "cli.mjs");
@@ -173,6 +185,8 @@ function runBoundedSim(config: {
         "1",
         "--provider",
         "local",
+        "--seed",
+        config.seed,
         "--telemetry",
         "true",
         "--strict-telemetry",
@@ -297,13 +311,22 @@ async function main(): Promise<void> {
     ok: afterProbeCounts.events > beforeCounts.events,
     detail: { before: beforeCounts.events, after: afterProbeCounts.events }
   });
+  checks.push({
+    layer: "persistence_match",
+    ok: afterProbeCounts.matches > beforeCounts.matches,
+    detail: { before: beforeCounts.matches, after: afterProbeCounts.matches }
+  });
 
   let simResult:
     | { exitCode: number | null; timedOut: boolean; stdout: string; stderr: string }
     | null = null;
   let afterSim = afterProbe;
   if (runSim) {
-    simResult = await runBoundedSim({ backendUrl, timeoutMs });
+    simResult = await runBoundedSim({
+      backendUrl,
+      timeoutMs,
+      seed: `sim-doctor-${Date.now()}`
+    });
     afterSim = await waitForFlush(backendUrl).catch(() => afterProbe);
   }
   const afterSimCounts = counts(afterSim);
@@ -343,6 +366,15 @@ async function main(): Promise<void> {
         scope: "one_game_sim",
         before: afterProbeCounts.events,
         after: afterSimCounts.events
+      }
+    });
+    checks.push({
+      layer: "persistence_match",
+      ok: afterSimCounts.matches > afterProbeCounts.matches,
+      detail: {
+        scope: "one_game_sim",
+        before: afterProbeCounts.matches,
+        after: afterSimCounts.matches
       }
     });
   }

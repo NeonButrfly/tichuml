@@ -93,9 +93,12 @@ Write-Log "Simulator ExitCode: $($sim.ExitCode)"
 Save-JsonEndpoint "$BackendUrl/health" "backend-health-after.json"
 Save-JsonEndpoint "$BackendUrl/api/telemetry/health" "telemetry-after.json"
 Run-Sql "SELECT 'decisions' AS table_name, COUNT(*) FROM decisions UNION ALL SELECT 'events', COUNT(*) FROM events UNION ALL SELECT 'matches', COUNT(*) FROM matches;" | Tee-Object -FilePath (Join-Path $OutputDir "db-counts-after.txt")
-Run-Sql "SELECT id, game_id, hand_id, phase, actor_seat, provider_used, created_at FROM decisions ORDER BY id DESC LIMIT 20;" | Tee-Object -FilePath (Join-Path $OutputDir "latest-decisions.txt")
-Run-Sql "SELECT id, game_id, hand_id, phase, event_type, actor_seat, created_at FROM events ORDER BY id DESC LIMIT 20;" | Tee-Object -FilePath (Join-Path $OutputDir "latest-events.txt")
-Run-Sql "SELECT * FROM matches ORDER BY created_at DESC LIMIT 20;" | Tee-Object -FilePath (Join-Path $OutputDir "latest-matches.txt")
+Run-Sql "SELECT id, match_id, game_id, hand_id, phase, actor_seat, provider_used, created_at FROM decisions ORDER BY id DESC LIMIT 20;" | Tee-Object -FilePath (Join-Path $OutputDir "latest-decisions.txt")
+Run-Sql "SELECT id, match_id, game_id, hand_id, phase, event_type, actor_seat, created_at FROM events ORDER BY id DESC LIMIT 20;" | Tee-Object -FilePath (Join-Path $OutputDir "latest-events.txt")
+Run-Sql "SELECT id AS match_id, game_id, last_hand_id, provider, requested_provider, telemetry_mode, strict_telemetry, sim_version, engine_version, status, started_at, completed_at, created_at, updated_at FROM matches ORDER BY created_at DESC LIMIT 20;" | Tee-Object -FilePath (Join-Path $OutputDir "latest-matches.txt")
+$truthFile = Join-Path $OutputDir "telemetry-truth.json"
+npm.cmd run telemetry:truth -- --backend-url $BackendUrl --require-rows *> $truthFile
+$truthExitCode = $LASTEXITCODE
 
 if (Test-Path $RuntimeDir) {
   Get-ChildItem $RuntimeDir -Force | Out-File (Join-Path $OutputDir "runtime-files.txt")
@@ -111,12 +114,15 @@ foreach ($proc in $remaining) {
 
 $decisions = Read-Count "decisions"
 $events = Read-Count "events"
+$matches = Read-Count "matches"
 $failures = @()
 if ($decisions -le 0) { $failures += "decisions_zero" }
 if ($events -le 0) { $failures += "events_zero" }
+if ($matches -le 0) { $failures += "matches_zero" }
+if ($truthExitCode -ne 0) { $failures += "join_validation_failed" }
 if (@(Get-SimProcesses).Count -gt 0) { $failures += "orphan_sim_process" }
 
-@{ ok = ($failures.Count -eq 0); failures = $failures; decisions = $decisions; events = $events; zip = $ZipOutput } | ConvertTo-Json -Depth 10 | Set-Content -Path (Join-Path $OutputDir "summary.json") -Encoding UTF8
+@{ ok = ($failures.Count -eq 0); failures = $failures; decisions = $decisions; events = $events; matches = $matches; zip = $ZipOutput } | ConvertTo-Json -Depth 10 | Set-Content -Path (Join-Path $OutputDir "summary.json") -Encoding UTF8
 Compress-Archive -Path "$OutputDir\*" -DestinationPath $ZipOutput -Force
 
 if ($failures.Count -eq 0) {

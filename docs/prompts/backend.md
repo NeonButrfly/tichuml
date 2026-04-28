@@ -653,3 +653,27 @@ supported size limit.`, leaving the control UI stuck at `Batches=0`,
   [6.5 – Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
 - Status:
   Lives in GitHub, not here.
+
+## 2026-04-27 - Match lifecycle persistence and Linux diagnostic parity
+
+- Prompt signal:
+  Decision and event telemetry now persists, but `matches = 0`; implement durable
+  simulator match lifecycle persistence and align Linux backend/Postgres/sim
+  diagnostics with the Windows script architecture.
+- Interpreted requirement:
+  Issue [#51](https://github.com/NeonButrfly/tichuml/issues/51) tracks one
+  match row per simulator game, stable `match_id`/`game_id`/`hand_id` joins for
+  decisions and events, lifecycle event persistence, DB truth validation, Linux
+  script parity for backend lifecycle/reset/doctor/one-game diagnostics/training
+  runs, and docs that distinguish queue counters from database truth.
+- Affected systems:
+  `infra/db/migrations`, `apps/server/src/services/telemetry-repository.ts`,
+  `apps/sim-runner/src/self-play-batch.ts`, `packages/telemetry`,
+  `packages/shared`, `scripts/linux`, `scripts/windows`, telemetry docs, and
+  integration tests.
+- Linked GitHub issue:
+  [#51](https://github.com/NeonButrfly/tichuml/issues/51)
+- Milestone:
+  [6.5 – Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status:
+  Lives in GitHub, not here.
