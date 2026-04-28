@@ -153,12 +153,12 @@ the operator has unsaved edits in the form.
 ## CLI Script
 
 ```bash
-scripts/sim-controller.sh status
-scripts/sim-controller.sh start --provider local --games-per-batch 10 --worker-count 2
-scripts/sim-controller.sh pause
-scripts/sim-controller.sh continue
-scripts/sim-controller.sh stop
-scripts/sim-controller.sh run-once --games 1
+scripts/linux/sim-controller.sh status
+scripts/linux/sim-controller.sh start --provider local --games-per-batch 10 --worker-count 2
+scripts/linux/sim-controller.sh pause
+scripts/linux/sim-controller.sh continue
+scripts/linux/sim-controller.sh stop
+scripts/linux/sim-controller.sh run-once --games 1
 ```
 
 Environment:

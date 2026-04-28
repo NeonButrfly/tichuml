@@ -178,6 +178,12 @@ On Windows, use the diagnostic ZIP script for operator evidence:
 powershell -ExecutionPolicy Bypass -File scripts\windows\verify-sim-one-game-fixed.ps1 -ClearDatabase
 ```
 
+If PowerShell blocks downloaded repo scripts, unblock them first:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\windows\unblock-scripts.ps1
+```
+
 The script kills stale simulator/controller processes, clears
 `.runtime\sim-controller`, captures `/health`, captures telemetry health before
 and after, runs exactly one strict telemetry simulator game, records table

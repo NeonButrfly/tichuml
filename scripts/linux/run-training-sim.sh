@@ -2,7 +2,7 @@
 set -euo pipefail
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
-. "$SCRIPT_DIR/common.sh"
+. "$SCRIPT_DIR/backend-common.sh"
 
 PROVIDER="local"
 TELEMETRY="true"

@@ -1,7 +1,2 @@
-. "$PSScriptRoot\backend-windows-common.ps1"
-Write-Step "Updating Windows backend repository"
-Ensure-RuntimeDirs
-Ensure-EnvFile
-Import-DotEnv
-Force-RefreshRepo
-Write-Ok "Repository force-refreshed from origin."
+$ErrorActionPreference = "Stop"
+& (Join-Path $PSScriptRoot "windows\\update-backend.ps1") @args

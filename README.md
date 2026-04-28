@@ -55,6 +55,12 @@ Windows PowerShell:
 npm run bootstrap:windows
 ```
 
+If Windows blocks repo scripts after download or extract, unblock them first:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\windows\unblock-scripts.ps1
+```
+
 Windows watch mode:
 
 ```powershell
@@ -124,7 +130,7 @@ Target backend URL:
 Linux install/bootstrap:
 
 ```sh
-bash scripts/install_backend_linux.sh
+bash scripts/linux/install-backend.sh
 ```
 
 The installer is idempotent and only installs missing system dependencies. It supports Ubuntu/Debian-family hosts with `apt-get` and Oracle Linux 9 / RHEL-family hosts with `dnf` or `yum`.
@@ -186,10 +192,10 @@ When `apt` is busy, the installer no longer appears to hang after `Installing sy
 Linux start/update flow:
 
 ```sh
-bash scripts/start_backend_linux.sh
+bash scripts/linux/start-backend.sh
 ```
 
-On Linux, backend startup force-syncs the checked-out repo before starting the runtime stack. This is intentionally destructive for local source changes on the backend host and runs only from `scripts/start_backend_linux.sh`, not from simulator commands or unrelated CLI workflows. The installer and update scripts use the same force-overwrite policy. The sync uses:
+On Linux, backend startup force-syncs the checked-out repo before starting the runtime stack. This is intentionally destructive for local source changes on the backend host and runs only from `scripts/linux/start-backend.sh`, not from simulator commands or unrelated CLI workflows. The installer and update scripts use the same force-overwrite policy. The sync uses:
 
 - `git remote set-url origin ...`
 - `git fetch --prune origin main`
@@ -200,7 +206,7 @@ On Linux, backend startup force-syncs the checked-out repo before starting the r
 For systemd deployments, wire the same sync as:
 
 ```ini
-ExecStartPre=/path/to/tichuml/scripts/force-sync.sh
+ExecStartPre=/path/to/tichuml/scripts/linux/force-sync.sh
 ```
 
 If the sync fails, the backend must not start.
@@ -208,20 +214,20 @@ If the sync fails, the backend must not start.
 Manual Linux update-only flow:
 
 ```sh
-bash scripts/update_backend_linux.sh
+bash scripts/linux/update-backend.sh
 ```
 
 Status/health check:
 
 ```sh
-bash scripts/status_backend_linux.sh
+bash scripts/linux/status-backend.sh
 ```
 
 Stop backend services:
 
 ```sh
-bash scripts/stop_backend_linux.sh --backend-only
-bash scripts/stop_backend_linux.sh --full
+bash scripts/linux/stop-backend.sh --backend-only
+bash scripts/linux/stop-backend.sh --full
 ```
 
 The backend host also serves a trusted-operator runtime control panel at:
@@ -233,7 +239,7 @@ http://<backend-host>:4310/admin/control
 Mutating control-panel actions require `ENABLE_RUNTIME_ADMIN_CONTROL=true` and
 the confirmation token `CLEAR_TICHU_DB`.
 
-No systemd unit is added in-repo yet. The intended service entrypoint is `bash /path/to/tichuml/scripts/start_backend_linux.sh`, with `bash /path/to/tichuml/scripts/status_backend_linux.sh` as the companion health/status check.
+No systemd unit is added in-repo yet. The intended service entrypoint is `bash /path/to/tichuml/scripts/linux/start-backend.sh`, with `bash /path/to/tichuml/scripts/linux/status-backend.sh` as the companion health/status check.
 
 Those scripts:
 
@@ -251,17 +257,17 @@ Those scripts:
 Linux-host recovery:
 
 - `apt` lock held by unattended-upgrades:
-  Wait for the lock to clear or inspect the holder with `ps -ef | grep -E 'apt|dpkg|unattended'`. If you intentionally need to stop unattended upgrades first, run `sudo systemctl stop unattended-upgrades`, then rerun `bash scripts/install_backend_linux.sh`.
+  Wait for the lock to clear or inspect the holder with `ps -ef | grep -E 'apt|dpkg|unattended'`. If you intentionally need to stop unattended upgrades first, run `sudo systemctl stop unattended-upgrades`, then rerun `bash scripts/linux/install-backend.sh`.
 - Missing Docker repo / partial Docker CE family:
   If the host has `containerd.io`, `docker-ce`, or `docker-ce-cli` but no working `docker` command, either finish configuring Docker's apt repository and install `docker-ce docker-ce-cli docker-compose-plugin`, or remove the partial Docker CE packages before rerunning the installer. The script will not force Ubuntu `docker.io` over that partial state.
 - Dirty repo:
-  `install_backend_linux.sh`, `update_backend_linux.sh`, and Linux startup intentionally force remote state over local changes with `fetch`, `checkout`, `reset --hard`, and `clean -fd`. Save anything you need somewhere else before running backend install/start/update on a host.
+  `scripts/linux/install-backend.sh`, `scripts/linux/update-backend.sh`, and Linux startup intentionally force remote state over local changes with `fetch`, `checkout`, `reset --hard`, and `clean -fd`. Save anything you need somewhere else before running backend install/start/update on a host.
 - Missing `npm` with `node` already present:
   On Ubuntu/Debian, install `npm` from the same Node distribution already on the host, or reinstall Node with npm included. On Oracle/RHEL, rerun the installer so it can enable/install Node.js 20 with npm.
 - Docker daemon not active:
-  Run `sudo systemctl enable --now docker`, then rerun `bash scripts/status_backend_linux.sh` or `bash scripts/start_backend_linux.sh`. If the daemon is running but access is denied, add the service user to the `docker` group and sign in again before retrying.
+  Run `sudo systemctl enable --now docker`, then rerun `bash scripts/linux/status-backend.sh` or `bash scripts/linux/start-backend.sh`. If the daemon is running but access is denied, add the service user to the `docker` group and sign in again before retrying.
 - Missing Docker Compose package:
-  Rerun `bash scripts/install_backend_linux.sh`. It tries distro Compose packages first and then installs a pinned Compose CLI plugin in `/usr/local/lib/docker/cli-plugins`.
+  Rerun `bash scripts/linux/install-backend.sh`. It tries distro Compose packages first and then installs a pinned Compose CLI plugin in `/usr/local/lib/docker/cli-plugins`.
 
 Remote clients should set the runtime backend URL in the app to:
 

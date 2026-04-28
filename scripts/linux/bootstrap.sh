@@ -3,4 +3,4 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-exec "$SCRIPT_DIR/linux/start-backend.sh" "$@"
+exec "$SCRIPT_DIR/install-backend.sh" "$@"

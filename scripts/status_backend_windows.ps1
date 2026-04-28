@@ -1,7 +1,2 @@
-param(
-  [string]$RepoRoot = "C:\tichu\tichuml"
-)
-
-$env:BACKEND_REPO_ROOT = $RepoRoot
-. "$PSScriptRoot\backend-windows-common.ps1"
-Show-BackendStatus
+$ErrorActionPreference = "Stop"
+& (Join-Path $PSScriptRoot "windows\\status-backend.ps1") @args

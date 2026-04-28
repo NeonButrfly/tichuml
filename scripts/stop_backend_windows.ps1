@@ -1,9 +1,2 @@
-param(
-  [string]$RepoRoot = "C:\tichu\tichuml"
-)
-
-$env:BACKEND_REPO_ROOT = $RepoRoot
-. "$PSScriptRoot\backend-windows-common.ps1"
-Write-Step "Stopping Windows backend host flow"
-Stop-BackendProcess
-Write-Ok "Stop requested."
+$ErrorActionPreference = "Stop"
+& (Join-Path $PSScriptRoot "windows\\stop-backend.ps1") @args
