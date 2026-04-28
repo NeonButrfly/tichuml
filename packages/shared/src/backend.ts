@@ -405,6 +405,7 @@ export type AdminClearResult = {
 export type TelemetryHealthStats = {
   decisions: number;
   events: number;
+  matches: number;
   unique_state_hashes: number;
   duplicate_state_hashes: number;
   unique_legal_actions_hashes: number;
@@ -417,6 +418,7 @@ export type TelemetryHealthStats = {
   decisions_can_pass: number;
   latest_decision_ts: string | null;
   latest_event_ts: string | null;
+  latest_match_ts: string | null;
   decisions_by_provider: Record<string, number>;
   decisions_by_phase: Record<string, number>;
   decisions_by_seat: Record<string, number>;

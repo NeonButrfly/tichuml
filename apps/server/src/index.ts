@@ -5,6 +5,7 @@ import { ensureDatabaseReady } from "./db/bootstrap.js";
 import { createDatabaseClient } from "./db/postgres.js";
 import { createLightgbmScorer } from "./ml/lightgbm-scorer.js";
 import { PostgresTelemetryRepository } from "./services/telemetry-repository.js";
+import { getBackendRuntimeInfo } from "./utils/runtime-info.js";
 
 function serializeStartupError(error: unknown): Record<string, unknown> {
   if (error instanceof AggregateError) {
@@ -65,10 +66,17 @@ export async function startServer() {
 
   await new Promise<void>((resolve) => {
     server.listen(serverConfig.port, serverConfig.host, () => {
+      const runtime = getBackendRuntimeInfo(serverConfig);
       console.info("[server] listening", {
         host: serverConfig.host,
         port: serverConfig.port,
-        databaseUrl: serverConfig.databaseUrl,
+        pid: runtime.pid,
+        cwd: runtime.cwd,
+        commandLine: runtime.command_line,
+        databaseUrl: runtime.database_url,
+        gitCommit: runtime.git_commit,
+        buildTimestamp: runtime.build_timestamp,
+        backendMode: runtime.backend_mode,
         requestBodyLimitBytes: serverConfig.requestBodyLimitBytes,
         requestBodyLimit: serverConfig.requestBodyLimitLabel
       });

@@ -138,6 +138,7 @@ class InMemoryTelemetryRepository implements TelemetryRepository {
     return {
       decisions: this.decisions.length,
       events: this.events.length,
+      matches: 0,
       unique_state_hashes: new Set(this.decisions.map((decision) => decision.state_hash)).size,
       duplicate_state_hashes: 0,
       unique_legal_actions_hashes: new Set(
@@ -162,6 +163,7 @@ class InMemoryTelemetryRepository implements TelemetryRepository {
         .length,
       latest_decision_ts: this.decisions.at(-1)?.ts ?? null,
       latest_event_ts: this.events.at(-1)?.ts ?? null,
+      latest_match_ts: null,
       decisions_by_provider: countBy(this.decisions, "provider_used"),
       decisions_by_phase: countBy(this.decisions, "phase"),
       decisions_by_seat: countBy(this.decisions, "actor_seat"),
@@ -914,6 +916,47 @@ describe("backend foundation server routes", () => {
       expect(repository.decisions).toHaveLength(1);
       expect(repository.decisions[0]?.policy_name).toBe("heuristics-v1");
       expect(repository.decisions[0]?.chosen_action_is_legal).toBe(true);
+    });
+  });
+
+  it("reports queue and database truth separately in telemetry health", async () => {
+    await withServer(async ({ baseUrl }) => {
+      await fetch(`${baseUrl}/api/telemetry/decision`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(createDecisionPayload())
+      });
+      await fetch(`${baseUrl}/api/telemetry/event`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(createEventPayload("2026-04-17T12:00:01.000Z", "played"))
+      });
+
+      const response = await fetch(`${baseUrl}/api/telemetry/health`);
+      expect(response.status).toBe(200);
+      const payload = (await response.json()) as {
+        shape_version: number;
+        queue_accepted: number;
+        queue_pending: number;
+        queue_persisted: number;
+        persistence_failures: number;
+        last_failure_message: string | null;
+        db_decisions_count: number;
+        db_events_count: number;
+        db_matches_count: number;
+        runtime: { database_url: string; git_commit: string };
+      };
+      expect(payload.shape_version).toBeGreaterThanOrEqual(2);
+      expect(payload.queue_accepted).toBe(2);
+      expect(payload.queue_persisted).toBe(2);
+      expect(payload.queue_pending).toBe(0);
+      expect(payload.persistence_failures).toBe(0);
+      expect(payload.last_failure_message).toBeNull();
+      expect(payload.db_decisions_count).toBe(1);
+      expect(payload.db_events_count).toBe(1);
+      expect(payload.db_matches_count).toBe(0);
+      expect(payload.runtime.database_url).not.toContain("tichu_dev_password");
+      expect(payload.runtime.git_commit).toBeTruthy();
     });
   });
 

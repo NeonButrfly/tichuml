@@ -1,7 +1,8 @@
 # Backend Telemetry Runtime Limits
 
-GitHub issue [#41](https://github.com/NeonButrfly/tichuml/issues/41) tracks the
-simulator/backend telemetry resilience work.
+GitHub issues [#41](https://github.com/NeonButrfly/tichuml/issues/41) and
+[#50](https://github.com/NeonButrfly/tichuml/issues/50) track the simulator,
+gameplay, backend persistence, and health-truth telemetry work.
 
 ## Current Architecture
 
@@ -36,7 +37,22 @@ records structured diagnostics for:
 - `telemetry_backend_rejected`
 
 `GET /api/telemetry/health` returns database telemetry stats plus current ingest
-queue stats.
+queue stats. Queue acceptance is not database truth. The source of truth for ML
+rows is the actual `decisions`, `events`, and `matches` table counts reported as
+`db_decisions_count`, `db_events_count`, and `db_matches_count`.
+
+`GET /health` and `GET /api/telemetry/health` include runtime identity so stale
+backend processes are visible:
+
+- backend process PID
+- command line
+- current working directory
+- sanitized `DATABASE_URL`
+- git commit
+- build timestamp, when available
+- backend mode (`dev`, `dist`, or `server`)
+- backend port
+- telemetry health shape version
 
 ## Defaults
 
@@ -104,6 +120,54 @@ Simulator/controller status includes telemetry failure totals, failure counts by
 endpoint, failure counts by kind, and the current telemetry backoff deadline when
 one is active. This keeps repeated `network_failure` or `fetch failed` symptoms
 visible without spamming the same unreachable endpoint every decision.
+
+Backend persistence failures must never report an empty
+`last_failure_message`. The backend queue preserves the Error name, message,
+stack, Postgres code/detail/hint/constraint/table/column/schema fields, request
+kind, game/hand/phase, accepted timestamp, payload shape summary, and insert
+table context. If the thrown value is a string or object, the serializer records
+a JSON or `util.inspect` preview instead of a blank message.
+
+## End-to-End Verification
+
+Use the doctor for a bounded layer-by-layer check:
+
+```powershell
+npm run sim:doctor -- --backend-url http://127.0.0.1:4310
+```
+
+It verifies backend health, telemetry health, direct decision/event POSTs, DB
+persistence, one bounded simulator game, queue flush, and simulator process
+exit. The output is machine-readable JSON and failures are named by layer:
+`backend_health`, `db_connection`, `telemetry_decision_post`,
+`telemetry_event_post`, `persistence_decision`, `persistence_event`, `flush`,
+or `orphan_process`.
+
+On Windows, use the diagnostic ZIP script for operator evidence:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\verify-sim-one-game-fixed.ps1 -ClearDatabase
+```
+
+The script kills stale simulator/controller processes, clears
+`.runtime\sim-controller`, captures `/health`, captures telemetry health before
+and after, runs exactly one strict telemetry simulator game, records table
+counts and latest rows, captures backend process command lines and sanitized DB
+identity from health, zips all outputs, and fails if `decisions = 0`,
+`events = 0`, the simulator exits unsuccessfully, or a simulator process remains.
+
+Manual DB monitor commands:
+
+```powershell
+docker exec tichu-postgres psql -U tichu -d tichu -c "SELECT COUNT(*) FROM decisions;"
+docker exec tichu-postgres psql -U tichu -d tichu -c "SELECT COUNT(*) FROM events;"
+docker exec tichu-postgres psql -U tichu -d tichu -c "SELECT COUNT(*) FROM matches;"
+```
+
+If health shows `telemetry_persistence_failed`, compare
+`last_failure_message`, `last_failure_detail`, the sanitized runtime
+`DATABASE_URL`, and the table counts above. A queue accepted/persisted counter
+alone is not enough evidence that rows are available for training.
 
 The simulator/controller runtime state now also includes:
 

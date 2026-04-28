@@ -115,6 +115,7 @@ class InMemoryTelemetryRepository implements TelemetryRepository {
     return {
       decisions: this.decisions.length,
       events: this.events.length,
+      matches: 0,
       unique_state_hashes: new Set(
         this.decisions.map((decision) => decision.state_hash)
       ).size,
@@ -142,6 +143,7 @@ class InMemoryTelemetryRepository implements TelemetryRepository {
         .length,
       latest_decision_ts: this.decisions.at(-1)?.ts ?? null,
       latest_event_ts: this.events.at(-1)?.ts ?? null,
+      latest_match_ts: null,
       decisions_by_provider: countBy(this.decisions, "provider_used"),
       decisions_by_phase: countBy(this.decisions, "phase"),
       decisions_by_seat: countBy(this.decisions, "actor_seat"),

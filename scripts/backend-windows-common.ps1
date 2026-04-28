@@ -11,6 +11,13 @@ $script:UpdateStatusFile = Join-Path $script:RuntimeDir "backend-update-status.e
 $script:EvalSummaryFile = Join-Path $script:RepoRoot "eval\results\latest_summary.json"
 $script:DefaultRepoUrl = "https://github.com/NeonButrfly/tichuml.git"
 $script:DefaultBranch = "main"
+$script:CanonicalPostgresContainer = "tichu-postgres"
+$script:CanonicalPostgresUser = "tichu"
+$script:CanonicalPostgresPassword = "tichu_dev_password"
+$script:CanonicalPostgresDb = "tichu"
+$script:CanonicalPostgresPort = "54329"
+$script:CanonicalDatabaseUrl = "postgres://tichu:tichu_dev_password@localhost:54329/tichu"
+$script:CanonicalBootstrapUrl = "postgres://tichu:tichu_dev_password@localhost:54329/postgres"
 
 function Write-Step { param([string]$Message) Write-Host ""; Write-Host "==> $Message" }
 function Write-Ok { param([string]$Message) Write-Host "[OK] $Message" }
@@ -19,6 +26,12 @@ function Write-Warn { param([string]$Message) Write-Host "[WARN] $Message" -Fore
 function Write-Fail { param([string]$Message) Write-Host "[FAIL] $Message" -ForegroundColor Red }
 
 function Test-CommandExists { param([string]$Name) return [bool](Get-Command $Name -ErrorAction SilentlyContinue) }
+
+function ConvertTo-SafeDatabaseUrl {
+  param([string]$Value)
+  if (-not $Value) { return "" }
+  return ($Value -replace "//([^:/@]+):([^@/]+)@", '//$1:***@')
+}
 
 function Invoke-Logged {
   param([string]$FilePath, [string[]]$ArgsList = @(), [string]$WorkingDirectory)
@@ -78,6 +91,26 @@ function Import-DotEnv {
     $value = $line.Substring($idx + 1).Trim().Trim('"')
     if ($name) { Set-Item -Path "Env:$name" -Value $value }
   }
+}
+
+function Set-CanonicalDatabaseIdentity {
+  param(
+    [string]$DatabaseUrl = $script:CanonicalDatabaseUrl,
+    [string]$BootstrapUrl = $script:CanonicalBootstrapUrl,
+    [string]$PostgresContainer = $script:CanonicalPostgresContainer,
+    [string]$PostgresUser = $script:CanonicalPostgresUser,
+    [string]$PostgresPassword = $script:CanonicalPostgresPassword,
+    [string]$PostgresDb = $script:CanonicalPostgresDb,
+    [string]$PostgresPort = $script:CanonicalPostgresPort
+  )
+  $env:DATABASE_URL = $DatabaseUrl
+  $env:PG_BOOTSTRAP_URL = $BootstrapUrl
+  $env:POSTGRES_CONTAINER_NAME = $PostgresContainer
+  $env:POSTGRES_USER = $PostgresUser
+  $env:POSTGRES_PASSWORD = $PostgresPassword
+  $env:POSTGRES_DB = $PostgresDb
+  $env:POSTGRES_PORT = $PostgresPort
+  Write-Info ("Backend DATABASE_URL: {0}" -f (ConvertTo-SafeDatabaseUrl $env:DATABASE_URL))
 }
 
 function Get-RepoUrl { if ($env:REPO_URL) { return $env:REPO_URL } return $script:DefaultRepoUrl }
@@ -147,6 +180,7 @@ function Prepare-RuntimeStack {
   foreach ($cmd in @("git", "node", "npm.cmd", "docker")) { if (-not (Test-CommandExists $cmd)) { throw "Required command missing: $cmd" } }
   Ensure-RuntimeDirs
   Import-DotEnv
+  Set-CanonicalDatabaseIdentity
   Ensure-Docker
   Install-NodeDependenciesIfNeeded
   Install-MLRequirementsIfNeeded
@@ -154,7 +188,21 @@ function Prepare-RuntimeStack {
 
 function Start-Postgres {
   Write-Step "Starting Postgres via docker compose"
+  Test-PostgresContainerIdentity
   Invoke-Logged "docker" @("compose", "up", "-d", "postgres") $script:RepoRoot
+  Test-PostgresContainerIdentity
+}
+
+function Test-PostgresContainerIdentity {
+  $container = if ($env:POSTGRES_CONTAINER_NAME) { $env:POSTGRES_CONTAINER_NAME } else { $script:CanonicalPostgresContainer }
+  $inspect = docker inspect $container 2>$null
+  if ($LASTEXITCODE -ne 0) { return }
+  $envLines = docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' $container 2>$null
+  $hasOldUser = @($envLines | Where-Object { $_ -eq "POSTGRES_USER=postgres" }).Count -gt 0
+  $hasOldDb = @($envLines | Where-Object { $_ -eq "POSTGRES_DB=tichuml" }).Count -gt 0
+  if ($hasOldUser -or $hasOldDb) {
+    throw "Existing $container uses old Postgres identity (POSTGRES_USER=postgres or POSTGRES_DB=tichuml). Run scripts\reset_postgres_windows.ps1 to recreate it."
+  }
 }
 
 function Wait-Postgres {
@@ -177,7 +225,7 @@ function Run-Migrations {
 
 function Build-BackendArtifacts {
   Write-Step "Building backend and simulator runtime artifacts"
-  $scripts = @("build:shared", "build:engine", "build:telemetry", "build:ai", "build:server", "build:sim-runner")
+  $scripts = @("build:shared", "build:engine", "build:telemetry", "build:ai", "build:ui-kit", "build:server", "build:sim-runner", "build:web")
   foreach ($s in $scripts) { Invoke-Logged "npm.cmd" @("run", $s) $script:RepoRoot }
 }
 
@@ -194,12 +242,30 @@ function Get-BackendPid {
 
 function Start-BackendProcess {
   $existing = Get-BackendPid
-  if ($existing) { Write-Warn "Backend is already running with pid $existing"; return }
+  if ($existing) { Write-Warn "Backend is already running with pid $existing"; Stop-BackendProcess }
+  Stop-StaleBackendListeners
   Write-Step "Starting backend process"
   $cmd = "npm run dev:server *> `"$script:LogFile`""
-  $proc = Start-Process -FilePath "powershell.exe" -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "cd `"$script:RepoRoot`"; $cmd") -WindowStyle Minimized -PassThru
+  $proc = Start-Process -FilePath "powershell.exe" -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "cd `"$script:RepoRoot`"; $cmd") -WindowStyle Hidden -PassThru
   Set-Content -Path $script:PidFile -Value $proc.Id -Encoding UTF8
   Write-Ok "Backend started with pid $($proc.Id)"
+}
+
+function Stop-StaleBackendListeners {
+  $port = if ($env:PORT) { [int]$env:PORT } else { 4310 }
+  $listeners = @(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue)
+  foreach ($listener in $listeners) {
+    $owningPid = [int]$listener.OwningProcess
+    if ($owningPid -eq $PID) { continue }
+    $proc = Get-CimInstance Win32_Process -Filter "ProcessId=$owningPid" -ErrorAction SilentlyContinue
+    $cmd = if ($proc) { $proc.CommandLine } else { "" }
+    if ($cmd -match "tichuml|dev:server|@tichuml/server|apps/server|node|tsx|npm") {
+      Write-Warn "Stopping stale backend listener on port $port with pid $owningPid"
+      Stop-Process -Id $owningPid -Force -ErrorAction SilentlyContinue
+    } else {
+      throw "Port $port is already in use by pid $owningPid ($cmd). Stop it or choose another PORT."
+    }
+  }
 }
 
 function Stop-BackendProcess {
@@ -232,7 +298,15 @@ function Show-BackendStatus {
     if ($running -eq "true") { Write-Ok "Postgres container is running" } else { Write-Fail "Postgres container is not running" }
   } catch { Write-Fail "Postgres container not found" }
   $backendPid = Get-BackendPid
-  if ($backendPid) { Write-Ok "Backend process is running with pid $backendPid" } else { Write-Fail "Backend process is not running" }
+  if ($backendPid) {
+    Write-Ok "Backend process is running with pid $backendPid"
+    $proc = Get-CimInstance Win32_Process -Filter "ProcessId=$backendPid" -ErrorAction SilentlyContinue
+    if ($proc) {
+      Write-Info "Backend command line: $($proc.CommandLine)"
+      Write-Info "Backend cwd: $script:RepoRoot"
+      Write-Info ("Backend DATABASE_URL: {0}" -f (ConvertTo-SafeDatabaseUrl $env:DATABASE_URL))
+    }
+  } else { Write-Fail "Backend process is not running" }
   [void](Test-BackendHealth)
 }
 

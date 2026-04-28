@@ -1,3 +1,15 @@
+param(
+  [string]$RepoRoot = "C:\tichu\tichuml",
+  [string]$DatabaseUrl = "postgres://tichu:tichu_dev_password@localhost:54329/tichu",
+  [string]$BootstrapUrl = "postgres://tichu:tichu_dev_password@localhost:54329/postgres",
+  [string]$PostgresContainer = "tichu-postgres",
+  [string]$PostgresUser = "tichu",
+  [string]$PostgresPassword = "tichu_dev_password",
+  [string]$PostgresDb = "tichu",
+  [string]$PostgresPort = "54329"
+)
+
+$env:BACKEND_REPO_ROOT = $RepoRoot
 . "$PSScriptRoot\backend-windows-common.ps1"
 Write-Step "Installing Windows backend host flow"
 if (-not (Test-CommandExists "git")) { throw "Git is required. Install Git for Windows, then rerun." }
@@ -10,6 +22,7 @@ Import-DotEnv
 Force-RefreshRepo
 . "$PSScriptRoot\backend-windows-common.ps1"
 Prepare-RuntimeStack
+Set-CanonicalDatabaseIdentity -DatabaseUrl $DatabaseUrl -BootstrapUrl $BootstrapUrl -PostgresContainer $PostgresContainer -PostgresUser $PostgresUser -PostgresPassword $PostgresPassword -PostgresDb $PostgresDb -PostgresPort $PostgresPort
 Start-Postgres
 Wait-Postgres
 Build-BackendArtifacts

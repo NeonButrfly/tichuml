@@ -617,3 +617,39 @@ supported size limit.`, leaving the control UI stuck at `Batches=0`,
   [6.5 – Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
 - Status:
   Lives in GitHub, not here.
+
+## 2026-04-27 - Repair telemetry persistence truth and Windows one-game diagnostics
+
+- Prompt signal:
+  Simulator telemetry, live gameplay telemetry, backend persistence, Windows
+  scripts, and diagnostics must work end-to-end the first time. Backend logs
+  showed repeated `telemetry_persistence_failed` entries with empty messages
+  while `decisions = 0`, `events = 0`, and `matches = 0`; Windows canonical DB
+  identity is `tichu-postgres` / `tichu` / port `54329`.
+- Interpreted requirement:
+  Issue [#50](https://github.com/NeonButrfly/tichuml/issues/50) tracks the
+  full-pipeline repair: backend health must expose stale-process and sanitized
+  DB identity, telemetry persistence failures must preserve non-empty structured
+  Error/Postgres details, queue health must separate accepted/pending/in-flight
+  from actual DB row counts, simulator strict telemetry must fail on real
+  transport failures, live gameplay must keep posting decision and event
+  telemetry through the shared adapters, and Windows scripts must enforce the
+  canonical local DB identity and provide a one-game diagnostic ZIP.
+- Affected systems:
+  `apps/server/src/routes/router.ts`,
+  `apps/server/src/services/telemetry-ingest-queue.ts`,
+  `apps/server/src/services/telemetry-repository.ts`,
+  `apps/server/src/utils/*`,
+  `apps/sim-runner/src/self-play-batch.ts`,
+  `apps/sim-runner/src/telemetry/async-telemetry.ts`,
+  `scripts/sim-doctor.ts`,
+  `scripts/*windows*.ps1`,
+  `scripts/verify-sim-one-game-fixed.ps1`,
+  `packages/shared/src/backend.ts`,
+  telemetry/backend docs, and integration tests.
+- Linked GitHub issue:
+  [#50](https://github.com/NeonButrfly/tichuml/issues/50)
+- Milestone:
+  [6.5 – Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status:
+  Lives in GitHub, not here.

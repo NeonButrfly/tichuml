@@ -15,13 +15,14 @@ import type { TelemetryRepository } from "../../apps/server/src/services/telemet
 class QueueTestRepository implements TelemetryRepository {
   decisions: StoredTelemetryDecisionRecord[] = [];
   failWrites = false;
+  thrownValue: unknown = new Error("postgres unavailable");
   private decisionId = 1;
 
   async ping(): Promise<void> {}
 
   async insertDecision(payload: TelemetryDecisionPayload): Promise<number> {
     if (this.failWrites) {
-      throw new Error("postgres unavailable");
+      throw this.thrownValue;
     }
     const id = this.decisionId++;
     this.decisions.push({
@@ -36,7 +37,7 @@ class QueueTestRepository implements TelemetryRepository {
 
   async insertEvent(_payload: TelemetryEventPayload): Promise<number> {
     if (this.failWrites) {
-      throw new Error("postgres unavailable");
+      throw this.thrownValue;
     }
     return 1;
   }
@@ -57,6 +58,7 @@ class QueueTestRepository implements TelemetryRepository {
     return {
       decisions: this.decisions.length,
       events: 0,
+      matches: 0,
       unique_state_hashes: 0,
       duplicate_state_hashes: 0,
       unique_legal_actions_hashes: 0,
@@ -69,6 +71,7 @@ class QueueTestRepository implements TelemetryRepository {
       decisions_can_pass: 0,
       latest_decision_ts: null,
       latest_event_ts: null,
+      latest_match_ts: null,
       decisions_by_provider: {},
       decisions_by_phase: {},
       decisions_by_seat: {},
@@ -170,5 +173,55 @@ describe("telemetry ingest queue", () => {
     expect(failingQueue.stats().last_failure_message).toContain(
       "postgres unavailable"
     );
+    expect(failingQueue.stats().persisted).toBe(0);
+  });
+
+  it("preserves empty-message AggregateError details in failure health", async () => {
+    const repository = new QueueTestRepository();
+    repository.failWrites = true;
+    repository.thrownValue = new AggregateError(
+      [
+        Object.assign(new Error("connect ECONNREFUSED 127.0.0.1:5432"), {
+          code: "ECONNREFUSED"
+        })
+      ],
+      ""
+    );
+    const queue = new TelemetryIngestQueue(repository, {
+      maxDepth: 10,
+      batchSize: 1,
+      concurrency: 1
+    });
+
+    queue.enqueueDecision(decisionPayload(3));
+    await queue.drain();
+
+    expect(queue.stats().last_failure_message).toContain("ECONNREFUSED");
+    expect(queue.stats().last_failure_message).not.toBe("");
+    expect(queue.stats().last_failure_detail?.causes[0]?.message).toContain(
+      "connect ECONNREFUSED"
+    );
+  });
+
+  it("serializes thrown strings and objects without blank messages", async () => {
+    for (const thrownValue of [
+      "plain string failure",
+      { code: "23502", detail: "null value violates not-null constraint" }
+    ]) {
+      const repository = new QueueTestRepository();
+      repository.failWrites = true;
+      repository.thrownValue = thrownValue;
+      const queue = new TelemetryIngestQueue(repository, {
+        maxDepth: 10,
+        batchSize: 1,
+        concurrency: 1
+      });
+
+      queue.enqueueDecision(decisionPayload(4));
+      await queue.drain();
+
+      expect(queue.stats().last_failure_message).toBeTruthy();
+      expect(queue.stats().last_failure_message).not.toBe("");
+    }
   });
 });

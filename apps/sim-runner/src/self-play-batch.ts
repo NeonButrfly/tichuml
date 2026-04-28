@@ -2162,9 +2162,11 @@ async function runSingleGame(
     }
   } finally {
     if (telemetryManager) {
-      await telemetryManager.flush(
-        Math.max(100, Math.min(options.telemetryTimeoutMs ?? 1_000, 500))
-      );
+      const flushTimeoutMs =
+        options.strictTelemetry === true
+          ? Math.max(options.telemetryTimeoutMs ?? 10_000, 1_000)
+          : Math.max(100, Math.min(options.telemetryTimeoutMs ?? 1_000, 1_000));
+      await telemetryManager.flush(flushTimeoutMs);
       const telemetrySnapshot = telemetryManager.snapshot();
       mergeTelemetryFailureStats(telemetryFailureStats, telemetrySnapshot.stats);
       if (telemetrySnapshot.telemetryBackoffUntil) {

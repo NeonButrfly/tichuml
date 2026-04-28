@@ -42,6 +42,10 @@ import {
   readJsonBody,
   writeJson
 } from "../utils/http.js";
+import {
+  getBackendRuntimeInfo,
+  TELEMETRY_HEALTH_SHAPE_VERSION
+} from "../utils/runtime-info.js";
 
 type RouterDependencies = {
   config: ServerConfig;
@@ -431,16 +435,22 @@ export function createRouter({
       }
 
       if (request.method === "GET" && url.pathname === BACKEND_HEALTH_PATH) {
+        const runtime = getBackendRuntimeInfo(config);
         writeJson(
           response,
           200,
           {
             ok: true,
             service: "tichuml-server",
-            database: "deferred",
+            runtime,
+            database: {
+              status: "deferred",
+              database_url: runtime.database_url
+            },
             telemetry_ingest: {
               ready: true,
-              health_endpoint: "/api/telemetry/health"
+              health_endpoint: "/api/telemetry/health",
+              health_shape_version: TELEMETRY_HEALTH_SHAPE_VERSION
             }
           },
           config.allowedOrigin
@@ -449,14 +459,32 @@ export function createRouter({
       }
 
       if (request.method === "GET" && url.pathname === "/api/telemetry/health") {
+        const stats = await repository.getHealthStats();
+        const queue = telemetryQueue.stats();
         writeJson(
           response,
           200,
           {
             accepted: true,
             ready: true,
-            stats: await repository.getHealthStats(),
-            queue: telemetryQueue.stats()
+            shape_version: TELEMETRY_HEALTH_SHAPE_VERSION,
+            runtime: getBackendRuntimeInfo(config),
+            queue_accepted: queue.accepted,
+            queue_pending: queue.pending,
+            queue_in_flight: queue.in_flight_batches,
+            queue_persisted: queue.persisted,
+            queue_dropped: queue.dropped_queue_pressure,
+            persistence_failures: queue.persistence_failures,
+            last_failure_at: queue.last_failure_at,
+            last_failure_message: queue.last_failure_message,
+            last_failure_detail: queue.last_failure_detail,
+            db_decisions_count: stats.decisions,
+            db_events_count: stats.events,
+            db_matches_count: stats.matches,
+            db_latest_decision_ts: stats.latest_decision_ts,
+            db_latest_event_ts: stats.latest_event_ts,
+            stats,
+            queue
           },
           config.allowedOrigin
         );

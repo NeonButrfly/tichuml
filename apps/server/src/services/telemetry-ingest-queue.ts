@@ -3,6 +3,10 @@ import type {
   TelemetryEventPayload
 } from "@tichuml/shared";
 import type { TelemetryRepository } from "./telemetry-repository.js";
+import {
+  serializeErrorDetail,
+  type SerializedErrorDetail
+} from "../utils/error-serialization.js";
 
 type TelemetryQueueItem =
   | {
@@ -32,6 +36,7 @@ export type TelemetryQueueStats = {
   last_persisted_at: string | null;
   last_failure_at: string | null;
   last_failure_message: string | null;
+  last_failure_detail: SerializedErrorDetail | null;
 };
 
 export type TelemetryEnqueueResult = {
@@ -85,6 +90,7 @@ export class TelemetryIngestQueue {
   private lastPersistedAt: string | null = null;
   private lastFailureAt: string | null = null;
   private lastFailureMessage: string | null = null;
+  private lastFailureDetail: SerializedErrorDetail | null = null;
   private readonly config: TelemetryQueueConfig;
 
   constructor(
@@ -116,7 +122,8 @@ export class TelemetryIngestQueue {
       persistence_failures: this.persistenceFailures,
       last_persisted_at: this.lastPersistedAt,
       last_failure_at: this.lastFailureAt,
-      last_failure_message: this.lastFailureMessage
+      last_failure_message: this.lastFailureMessage,
+      last_failure_detail: this.lastFailureDetail
     };
   }
 
@@ -188,10 +195,14 @@ export class TelemetryIngestQueue {
           this.persisted += 1;
           this.lastPersistedAt = nowIso();
         } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
+          const detail = serializeErrorDetail(
+            error,
+            "Telemetry persistence failed."
+          );
           this.persistenceFailures += 1;
           this.lastFailureAt = nowIso();
-          this.lastFailureMessage = message;
+          this.lastFailureMessage = detail.message;
+          this.lastFailureDetail = detail;
           logTelemetryQueue("error", "telemetry_persistence_failed", {
             request_kind:
               item.kind === "decision" ? "telemetry_decision" : "telemetry_event",
@@ -199,11 +210,45 @@ export class TelemetryIngestQueue {
             hand_id: item.payload.hand_id,
             phase: item.payload.phase,
             accepted_at: item.acceptedAt,
-            message,
-            failure_kind: "persistence_failure"
+            message: detail.message,
+            error: detail,
+            failure_kind: "persistence_failure",
+            payload_shape: summarizePayloadShape(item.payload),
+            sql_context: {
+              operation:
+                item.kind === "decision"
+                  ? "insert_decision"
+                  : "insert_event",
+              table: item.kind === "decision" ? "decisions" : "events"
+            }
           });
         }
       })
     );
   }
+}
+
+function summarizePayloadShape(
+  payload: TelemetryDecisionPayload | TelemetryEventPayload
+): Record<string, unknown> {
+  return {
+    keys: Object.keys(payload).sort(),
+    metadata_keys:
+      typeof payload.metadata === "object" && payload.metadata !== null
+        ? Object.keys(payload.metadata).sort()
+        : [],
+    state_raw_present: "state_raw" in payload,
+    state_norm_present: payload.state_norm !== null,
+    legal_actions_count:
+      "legal_actions" in payload && Array.isArray(payload.legal_actions)
+        ? payload.legal_actions.length
+        : null,
+    payload_keys:
+      "payload" in payload &&
+      typeof payload.payload === "object" &&
+      payload.payload !== null &&
+      !Array.isArray(payload.payload)
+        ? Object.keys(payload.payload).sort()
+        : null
+  };
 }

@@ -401,6 +401,11 @@ export class AsyncTelemetryManager {
     }
 
     this.recordFailure(result, item.context);
+    if (item.strictTelemetry && this.fatalError === null) {
+      this.fatalError = new Error(
+        `Strict telemetry ${item.requestKind} failed at ${result.endpoint}: ${result.message}`
+      );
+    }
     if (shouldPersistFailure(result.failure_kind)) {
       await this.persistItem(item, result);
     }
@@ -421,6 +426,12 @@ export class AsyncTelemetryManager {
           await this.processItem(item, controller.signal);
         } catch (error) {
           const endpoint = buildEndpoint(item.telemetry, item.requestKind);
+          const message = error instanceof Error ? error.message : String(error);
+          if (item.strictTelemetry && this.fatalError === null) {
+            this.fatalError = new Error(
+              `Strict telemetry ${item.requestKind} failed at ${endpoint}: ${message}`
+            );
+          }
           await this.persistItem(item, {
             ok: false,
             endpoint,
@@ -428,7 +439,7 @@ export class AsyncTelemetryManager {
             request_kind: item.requestKind,
             outcome: "failed",
             failure_kind: "unexpected_failure",
-            message: error instanceof Error ? error.message : String(error),
+            message,
             cause: error instanceof Error ? error.name : "unknown",
             diagnostics: []
           });
@@ -445,6 +456,7 @@ export class AsyncTelemetryManager {
       this.pending.add(task);
     }
     this.emitSnapshot();
+    this.throwIfFatal();
   }
 
   throwIfFatal(): void {
@@ -488,6 +500,12 @@ export class AsyncTelemetryManager {
   private async enqueue(item: TelemetryQueueItem): Promise<void> {
     this.throwIfFatal();
     if (!this.options.enabled) {
+      return;
+    }
+    if (item.strictTelemetry) {
+      const controller = new AbortController();
+      await this.processItem(item, controller.signal);
+      this.throwIfFatal();
       return;
     }
     if (this.queue.length + this.inFlight >= this.maxQueueDepth) {

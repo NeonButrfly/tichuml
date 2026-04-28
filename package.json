@@ -31,6 +31,7 @@
     "db:migrate:status": "tsx infra/db/scripts/migrate.ts status",
     "sim": "tsx apps/sim-runner/src/cli.ts",
     "sim:diag": "tsx scripts/sim-diagnostics.ts",
+    "sim:doctor": "tsx scripts/sim-doctor.ts",
     "telemetry:replay": "tsx apps/sim-runner/src/telemetry/replay.ts",
     "ml:export": "tsx scripts/run-python.ts ml/export_training_rows.py",
     "ml:train": "tsx scripts/run-python.ts ml/train_lightgbm.py",

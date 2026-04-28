@@ -322,6 +322,15 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
         MAX(ts)::TEXT AS latest_event_ts
       FROM events
     `;
+    const [matchStats] = await this.sql<Array<{
+      matches: number;
+      latest_match_ts: string | null;
+    }>>`
+      SELECT
+        COUNT(*)::INTEGER AS matches,
+        MAX(created_at)::TEXT AS latest_match_ts
+      FROM matches
+    `;
     const [duplicateStats] = await this.sql<Array<{ duplicate_state_hashes: number }>>`
       SELECT COUNT(*)::INTEGER AS duplicate_state_hashes
       FROM (
@@ -354,6 +363,7 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
     return {
       decisions: decisionStats?.decisions ?? 0,
       events: eventStats?.events ?? 0,
+      matches: matchStats?.matches ?? 0,
       unique_state_hashes: decisionStats?.unique_state_hashes ?? 0,
       duplicate_state_hashes: duplicateStats?.duplicate_state_hashes ?? 0,
       unique_legal_actions_hashes:
@@ -372,6 +382,7 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
       decisions_can_pass: decisionStats?.decisions_can_pass ?? 0,
       latest_decision_ts: decisionStats?.latest_decision_ts ?? null,
       latest_event_ts: eventStats?.latest_event_ts ?? null,
+      latest_match_ts: matchStats?.latest_match_ts ?? null,
       decisions_by_provider: decisionsByProvider,
       decisions_by_phase: decisionsByPhase,
       decisions_by_seat: decisionsBySeat,

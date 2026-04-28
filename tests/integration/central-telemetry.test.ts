@@ -17,7 +17,10 @@ import {
   resolveDecision,
   runSelfPlayBatch
 } from "../../apps/sim-runner/src/self-play-batch";
-import { emitDecisionTelemetry } from "../../apps/web/src/backend/telemetry";
+import {
+  emitDecisionTelemetry,
+  emitEventTelemetry
+} from "../../apps/web/src/backend/telemetry";
 import type { BackendRuntimeSettings } from "@tichuml/shared";
 import type {
   EngineAction,
@@ -626,6 +629,63 @@ describe("central telemetry subsystem", () => {
       kind: "decision",
       telemetryId: null
     });
+  });
+
+  it("posts live gameplay decision and event payloads through the shared endpoints", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      return new Response(
+        JSON.stringify({
+          accepted: true,
+          telemetry_id: url.endsWith("/api/telemetry/decision") ? 10 : 11
+        }),
+        {
+          status: 202,
+          headers: { "Content-Type": "application/json" }
+        }
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const decisionResult = await emitDecisionTelemetry({
+      settings: {
+        ...WEB_SETTINGS,
+        backendBaseUrl: "http://localhost:43210"
+      },
+      action: PASS_ACTION,
+      phase: "play",
+      gameId: "game-live",
+      handId: "hand-live",
+      decisionIndex: 1,
+      stateRaw: STATE_RAW as unknown as EngineResult["nextState"],
+      stateNorm: STATE_NORM as unknown as EngineResult["derivedView"],
+      legalActions: {
+        "seat-0": [PASS_ACTION]
+      } as unknown as EngineResult["legalActions"],
+      policyName: "test-policy",
+      policySource: "human_ui"
+    });
+    const eventResult = await emitEventTelemetry({
+      settings: {
+        ...WEB_SETTINGS,
+        backendBaseUrl: "http://localhost:43210"
+      },
+      events: [{ type: "turn_passed", seat: "seat-0" } as unknown as EngineEvent],
+      phase: "play",
+      actorSeat: "seat-0",
+      gameId: "game-live",
+      handId: "hand-live"
+    });
+
+    expect(decisionResult?.telemetryId).toBe(10);
+    expect(eventResult?.telemetryIds).toEqual([11]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
+      "/api/telemetry/decision"
+    );
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain(
+      "/api/telemetry/event"
+    );
   });
 
   it("keeps selfplay decisions and controller batches moving when telemetry cannot post", async () => {
