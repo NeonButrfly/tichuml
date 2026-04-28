@@ -303,7 +303,8 @@ npm run sim -- --games 1000 --provider server_heuristic --progress
 
 The simulator:
 
-- plays complete hands from the current engine
+- treats each simulated CLI `game` as one complete scored hand for bounded
+  training and telemetry runs
 - supports `local`, `server_heuristic`, and `lightgbm_model`
 - records pass/exchange/pickup/play telemetry when telemetry is enabled
 - prints a summary with games, hands, decisions by phase, provider usage, fallbacks, and exchange/pass coverage

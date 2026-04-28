@@ -4,6 +4,7 @@ import {
   SYSTEM_ACTOR,
   type ActorId,
   type Card,
+  type Combination,
   type EngineAction,
   type EngineEvent,
   type EngineResult,
@@ -17,6 +18,7 @@ import {
   type PublicDerivedState,
   type RoundScoreSummary,
   type SeatId,
+  type StandardRank,
   type TeamId,
   type TrickState
 } from "./types.js";
@@ -25,15 +27,20 @@ import {
   getCanonicalCardIdsKey,
   getCardById,
   getCardsPoints,
+  getStraightRank,
   getLeftSeat,
   getNextSeat,
   getOpponentSeats,
   getPartnerSeat,
   getRightSeat,
   getTeamForSeat,
+  isDog,
+  isDragon,
   isMahjong,
+  isPhoenix,
   sameTeam,
   shuffleDeck,
+  sortCardsForCombination,
   sortHand
 } from "./cards.js";
 import {
@@ -49,6 +56,24 @@ const EMPTY_MATCH_SCORE: Record<TeamId, number> = {
 };
 
 const logEngineDiagnostic = createThrottledStructuredLogger();
+const STRAIGHT_RESPONSE_LOG_PREVIEW_LIMIT = 6;
+const STRAIGHT_RESPONSE_SLOW_THRESHOLD_MS = 25;
+
+type StraightResponseMetrics = {
+  generationMs: number;
+  duplicateCandidatesSuppressed: number;
+  cacheHit: boolean;
+};
+
+type PlayActionGenerationResult = {
+  actions: LegalAction[];
+  straightResponseMetrics: StraightResponseMetrics | null;
+};
+
+function traceStraightResponsesEnabled(): boolean {
+  const rawValue = process.env.TICHU_TRACE_STRAIGHT_RESPONSES?.trim().toLowerCase();
+  return rawValue === "1" || rawValue === "true" || rawValue === "yes";
+}
 
 function createEmptyHandMap(): Record<SeatId, Card[]> {
   return {
@@ -407,11 +432,10 @@ function summarizeLegalPlayActions(actions: LegalAction[]): string[] {
   return actions.filter(isPlayLegalAction).map((action) => action.combination.key);
 }
 
-const STRAIGHT_RESPONSE_LOG_PREVIEW_LIMIT = 6;
-
 function logActiveStraightResponseActions(
   state: GameState,
-  activeActions: LegalAction[]
+  activeActions: LegalAction[],
+  metrics: StraightResponseMetrics | null
 ): void {
   if (
     state.phase !== "trick_play" ||
@@ -422,28 +446,60 @@ function logActiveStraightResponseActions(
     return;
   }
 
-  const normalizedResponses = summarizeLegalPlayActions(activeActions);
-  logEngineDiagnostic({
-    level: "info",
-    message: "[engine] Straight response availability",
-    throttleKey: `straight-response:${state.activeSeat}`,
-    windowMs: 60_000,
-    payload: {
-      activeSeat: state.activeSeat,
-      leadCombo: state.currentTrick.currentCombination.key,
-      legalResponseCount: normalizedResponses.length,
-      normalizedResponsePreview: normalizedResponses.slice(
-        0,
-        STRAIGHT_RESPONSE_LOG_PREVIEW_LIMIT
-      ),
-      omittedResponseCount: Math.max(
-        normalizedResponses.length - STRAIGHT_RESPONSE_LOG_PREVIEW_LIMIT,
-        0
-      ),
-      canPass: activeActions.some((action) => action.type === "pass_turn"),
-      wishState: state.currentWish
-    }
-  });
+  const traceEnabled = traceStraightResponsesEnabled();
+  const leadCombo = state.currentTrick.currentCombination.key;
+  const throttleKey = [
+    "straight-response",
+    state.activeSeat,
+    leadCombo,
+    state.currentWish ?? "none"
+  ].join(":");
+  const payload: Record<string, unknown> = {
+    activeSeat: state.activeSeat,
+    leadCombo,
+    legalResponseCount: activeActions.filter(isPlayLegalAction).length,
+    canPass: activeActions.some((action) => action.type === "pass_turn"),
+    wishState: state.currentWish,
+    generationMs: metrics?.generationMs ?? null,
+    duplicateCandidatesSuppressed:
+      metrics?.duplicateCandidatesSuppressed ?? 0,
+    cacheHit: metrics?.cacheHit ?? false
+  };
+
+  if (traceEnabled) {
+    const normalizedResponses = summarizeLegalPlayActions(activeActions);
+    logEngineDiagnostic({
+      level: "info",
+      message: "[engine] Straight response availability",
+      throttleKey,
+      windowMs: 60_000,
+      payload: {
+        ...payload,
+        normalizedResponsePreview: normalizedResponses.slice(
+          0,
+          STRAIGHT_RESPONSE_LOG_PREVIEW_LIMIT
+        ),
+        omittedResponseCount: Math.max(
+          normalizedResponses.length - STRAIGHT_RESPONSE_LOG_PREVIEW_LIMIT,
+          0
+        )
+      }
+    });
+    return;
+  }
+
+  if ((metrics?.generationMs ?? 0) >= STRAIGHT_RESPONSE_SLOW_THRESHOLD_MS) {
+    logEngineDiagnostic({
+      level: "warn",
+      message: "[engine] Slow straight response generation",
+      throttleKey,
+      windowMs: 60_000,
+      payload: {
+        ...payload,
+        thresholdMs: STRAIGHT_RESPONSE_SLOW_THRESHOLD_MS
+      }
+    });
+  }
 }
 
 function assertInvariant(condition: boolean, message: string): asserts condition {
@@ -492,13 +548,339 @@ function applyWishConstraintToPlayActions(
   return legalMoves;
 }
 
-function generatePlayActions(state: GameState, seat: SeatId): LegalAction[] {
+function createStraightActionKey(
+  cardIds: readonly string[],
+  phoenixAsRank: StandardRank | null
+): string {
+  return [
+    "play_cards",
+    getCanonicalCardIdsKey(cardIds),
+    phoenixAsRank ?? "none",
+    cardIds.length
+  ].join(":");
+}
+
+function buildPlayActionCacheKey(state: GameState, seat: SeatId): string {
+  return [
+    state.phase,
+    state.activeSeat ?? "none",
+    seat,
+    getCanonicalCardIdsKey(state.hands[seat].map((card) => card.id)),
+    state.currentTrick?.currentCombination.key ?? "lead:none",
+    state.currentWish ?? "wish:none"
+  ].join("|");
+}
+
+function buildStraightCombination(
+  cards: readonly Card[],
+  phoenixAsRank: StandardRank | null
+): Combination {
+  const normalizedCards = sortCardsForCombination(cards);
+  const sortedCardIds = normalizedCards.map((card) => card.id);
+  const actualRanks: Combination["actualRanks"] = normalizedCards
+    .filter((card) => !isPhoenix(card))
+    .map((card) => getStraightRank(card))
+    .filter((rank): rank is NonNullable<typeof rank> => rank !== null);
+
+  if (phoenixAsRank !== null) {
+    actualRanks.push(phoenixAsRank);
+  }
+
+  actualRanks.sort((left, right) => left - right);
+
+  return {
+    key: `straight:${sortedCardIds.join(",")}:${phoenixAsRank ?? "none"}`,
+    kind: "straight",
+    cardIds: sortedCardIds,
+    primaryRank: Math.max(...actualRanks),
+    cardCount: normalizedCards.length,
+    phoenixAsRank,
+    containsMahjong: normalizedCards.some((card) => isMahjong(card)),
+    containsDragon: normalizedCards.some((card) => isDragon(card)),
+    containsPhoenix: normalizedCards.some((card) => isPhoenix(card)),
+    containsDog: normalizedCards.some((card) => isDog(card)),
+    actualRanks,
+    pairCount: null,
+    isBomb: false
+  };
+}
+
+function enumerateRankSelections(
+  rankCards: ReadonlyMap<number, readonly Card[]>,
+  ranks: readonly number[],
+  visit: (cards: Card[]) => void,
+  index = 0,
+  selected: Card[] = []
+): void {
+  if (index >= ranks.length) {
+    visit([...selected]);
+    return;
+  }
+
+  const cardsForRank = rankCards.get(ranks[index]!);
+  if (!cardsForRank || cardsForRank.length === 0) {
+    return;
+  }
+
+  for (const card of cardsForRank) {
+    selected.push(card);
+    enumerateRankSelections(rankCards, ranks, visit, index + 1, selected);
+    selected.pop();
+  }
+}
+
+function isStraightBombCardSet(cards: readonly Card[]): boolean {
+  if (cards.length < 5 || cards.some((card) => card.kind !== "standard")) {
+    return false;
+  }
+
+  const firstCard = cards[0] as Extract<Card, { kind: "standard" }>;
+  return cards.every(
+    (card) => card.kind === "standard" && card.suit === firstCard.suit
+  );
+}
+
+function appendBombActions(
+  hand: Card[],
+  seat: SeatId,
+  currentCombination: Combination,
+  actions: Map<string, LegalAction>
+): number {
+  let duplicateCandidatesSuppressed = 0;
+  const standardCards = hand.filter(
+    (card): card is Extract<Card, { kind: "standard" }> => card.kind === "standard"
+  );
+  const cardsByRank = new Map<number, Extract<Card, { kind: "standard" }>[]>();
+  const cardsBySuit = new Map<string, Extract<Card, { kind: "standard" }>[]>();
+
+  for (const card of standardCards) {
+    const rankCards = cardsByRank.get(card.rank) ?? [];
+    rankCards.push(card);
+    cardsByRank.set(card.rank, rankCards);
+
+    const suitCards = cardsBySuit.get(card.suit) ?? [];
+    suitCards.push(card);
+    cardsBySuit.set(card.suit, suitCards);
+  }
+
+  for (const cards of cardsByRank.values()) {
+    if (cards.length !== 4) {
+      continue;
+    }
+
+    const combination = listCombinationInterpretations(cards, currentCombination).find(
+      (candidate) => candidate.kind === "bomb-four-kind"
+    );
+    if (!combination || !beatsCombination(combination, currentCombination)) {
+      continue;
+    }
+
+    const action: LegalAction = {
+      type: "play_cards",
+      seat,
+      cardIds: combination.cardIds,
+      combination
+    };
+    const actionKey = createStraightActionKey(combination.cardIds, null);
+    if (actions.has(actionKey)) {
+      duplicateCandidatesSuppressed += 1;
+      continue;
+    }
+    actions.set(actionKey, action);
+  }
+
+  for (const suitCards of cardsBySuit.values()) {
+    const sorted = [...suitCards].sort((left, right) => left.rank - right.rank);
+    let runStart = 0;
+
+    while (runStart < sorted.length) {
+      let runEnd = runStart + 1;
+      while (
+        runEnd < sorted.length &&
+        sorted[runEnd]!.rank === sorted[runEnd - 1]!.rank + 1
+      ) {
+        runEnd += 1;
+      }
+
+      const runLength = runEnd - runStart;
+      if (runLength >= 5) {
+        for (let start = runStart; start <= runEnd - 5; start += 1) {
+          for (let end = start + 5; end <= runEnd; end += 1) {
+            const segment = sorted.slice(start, end);
+            const combination = listCombinationInterpretations(
+              segment,
+              currentCombination
+            ).find((candidate) => candidate.kind === "bomb-straight");
+            if (!combination || !beatsCombination(combination, currentCombination)) {
+              continue;
+            }
+
+            const action: LegalAction = {
+              type: "play_cards",
+              seat,
+              cardIds: combination.cardIds,
+              combination
+            };
+            const actionKey = createStraightActionKey(combination.cardIds, null);
+            if (actions.has(actionKey)) {
+              duplicateCandidatesSuppressed += 1;
+              continue;
+            }
+            actions.set(actionKey, action);
+          }
+        }
+      }
+
+      runStart = runEnd;
+    }
+  }
+
+  return duplicateCandidatesSuppressed;
+}
+
+function generateTargetedStraightResponseActions(
+  state: GameState,
+  seat: SeatId,
+  currentCombination: Combination
+): PlayActionGenerationResult {
+  const startedAt = Date.now();
+  const actions = new Map<string, LegalAction>();
+  let duplicateCandidatesSuppressed = 0;
+  const hand = state.hands[seat];
+  const phoenixCard = hand.find(isPhoenix) ?? null;
+  const rankCards = new Map<number, Card[]>();
+
+  for (const card of hand) {
+    if (card.kind === "standard") {
+      const cardsForRank = rankCards.get(card.rank) ?? [];
+      cardsForRank.push(card);
+      rankCards.set(card.rank, cardsForRank);
+      continue;
+    }
+
+    if (isMahjong(card)) {
+      rankCards.set(1, [card]);
+    }
+  }
+
+  const straightLength = currentCombination.cardCount;
+  const minimumPrimaryRank = Math.floor(currentCombination.primaryRank) + 1;
+
+  const appendStraightAction = (
+    cards: Card[],
+    phoenixAsRank: StandardRank | null
+  ) => {
+    if (isStraightBombCardSet(cards)) {
+      return;
+    }
+
+    const combination = buildStraightCombination(cards, phoenixAsRank);
+    if (!beatsCombination(combination, currentCombination)) {
+      return;
+    }
+
+    const action: LegalAction = {
+      type: "play_cards",
+      seat,
+      cardIds: combination.cardIds,
+      ...(phoenixAsRank !== null ? { phoenixAsRank } : {}),
+      ...(combination.containsMahjong
+        ? { availableWishRanks: [...STANDARD_RANKS] }
+        : {}),
+      combination
+    };
+    const actionKey = createStraightActionKey(
+      combination.cardIds,
+      phoenixAsRank
+    );
+
+    if (actions.has(actionKey)) {
+      duplicateCandidatesSuppressed += 1;
+      return;
+    }
+
+    actions.set(actionKey, action);
+  };
+
+  for (let endRank = minimumPrimaryRank; endRank <= 14; endRank += 1) {
+    const startRank = endRank - straightLength + 1;
+    if (startRank < 1) {
+      continue;
+    }
+
+    const ranks = Array.from(
+      { length: straightLength },
+      (_, index) => startRank + index
+    );
+
+    if (
+      ranks.every((rank) => {
+        const cardsForRank = rankCards.get(rank);
+        return Array.isArray(cardsForRank) && cardsForRank.length > 0;
+      })
+    ) {
+      enumerateRankSelections(rankCards, ranks, (cards) => {
+        appendStraightAction(cards, null);
+      });
+    }
+
+    if (!phoenixCard) {
+      continue;
+    }
+
+    for (const phoenixAsRank of ranks) {
+      if (phoenixAsRank < 2) {
+        continue;
+      }
+
+      const concreteRanks = ranks.filter((rank) => rank !== phoenixAsRank);
+      if (
+        concreteRanks.some((rank) => {
+          const cardsForRank = rankCards.get(rank);
+          return !Array.isArray(cardsForRank) || cardsForRank.length === 0;
+        })
+      ) {
+        continue;
+      }
+
+      enumerateRankSelections(rankCards, concreteRanks, (cards) => {
+        appendStraightAction(
+          [...cards, phoenixCard],
+          phoenixAsRank as StandardRank
+        );
+      });
+    }
+  }
+
+  duplicateCandidatesSuppressed += appendBombActions(
+    hand,
+    seat,
+    currentCombination,
+    actions
+  );
+
+  const results = [...actions.values()].sort(compareLegalActions);
+  return {
+    actions: applyWishConstraintToPlayActions(state, seat, results),
+    straightResponseMetrics: {
+      generationMs: Date.now() - startedAt,
+      duplicateCandidatesSuppressed,
+      cacheHit: false
+    }
+  };
+}
+
+function generatePlayActions(
+  state: GameState,
+  seat: SeatId,
+  cache: Map<string, PlayActionGenerationResult>
+): PlayActionGenerationResult {
   if (
     state.phase !== "trick_play" ||
     state.pendingDragonGift ||
     state.hands[seat].length === 0
   ) {
-    return [];
+    return { actions: [], straightResponseMetrics: null };
   }
 
   const hand = state.hands[seat];
@@ -506,7 +888,28 @@ function generatePlayActions(state: GameState, seat: SeatId): LegalAction[] {
   const isActiveSeat = state.activeSeat === seat;
 
   if (!state.currentTrick && !isActiveSeat) {
-    return [];
+    return { actions: [], straightResponseMetrics: null };
+  }
+
+  const cacheKey = buildPlayActionCacheKey(state, seat);
+  const cached = cache.get(cacheKey);
+  if (cached) {
+    return {
+      actions: cached.actions,
+      straightResponseMetrics: cached.straightResponseMetrics
+        ? { ...cached.straightResponseMetrics, cacheHit: true }
+        : null
+    };
+  }
+
+  if (isActiveSeat && currentCombination?.kind === "straight") {
+    const targeted = generateTargetedStraightResponseActions(
+      state,
+      seat,
+      currentCombination
+    );
+    cache.set(cacheKey, targeted);
+    return targeted;
   }
 
   const actions = new Map<string, LegalAction>();
@@ -554,11 +957,18 @@ function generatePlayActions(state: GameState, seat: SeatId): LegalAction[] {
   }
 
   const results = [...actions.values()].sort(compareLegalActions);
-  return applyWishConstraintToPlayActions(state, seat, results);
+  const generated = {
+    actions: applyWishConstraintToPlayActions(state, seat, results),
+    straightResponseMetrics: null
+  } satisfies PlayActionGenerationResult;
+  cache.set(cacheKey, generated);
+  return generated;
 }
 
 export function getLegalActions(state: GameState): LegalActionMap {
   const legalActions: LegalActionMap = {};
+  const playActionCache = new Map<string, PlayActionGenerationResult>();
+  const generatedPlayActions = new Map<SeatId, PlayActionGenerationResult>();
 
   const pushAction = (actor: ActorId, action: LegalAction) => {
     const actions = legalActions[actor] ?? [];
@@ -627,7 +1037,9 @@ export function getLegalActions(state: GameState): LegalActionMap {
 
       pushOptionalSmallTichuActions();
       for (const seat of SEAT_IDS) {
-        for (const playAction of generatePlayActions(state, seat)) {
+        const generated = generatePlayActions(state, seat, playActionCache);
+        generatedPlayActions.set(seat, generated);
+        for (const playAction of generated.actions) {
           pushAction(seat, playAction);
         }
       }
@@ -679,7 +1091,8 @@ export function getLegalActions(state: GameState): LegalActionMap {
 
     logActiveStraightResponseActions(
       state,
-      legalActions[state.activeSeat] ?? []
+      legalActions[state.activeSeat] ?? [],
+      generatedPlayActions.get(state.activeSeat)?.straightResponseMetrics ?? null
     );
   }
 

@@ -55,6 +55,11 @@ export {
   type ServerFastPathState
 } from "./serverFastPath.js";
 
+function traceStraightResponsesEnabled(): boolean {
+  const rawValue = process.env.TICHU_TRACE_STRAIGHT_RESPONSES?.trim().toLowerCase();
+  return rawValue === "1" || rawValue === "true" || rawValue === "yes";
+}
+
 function filterWishLockedActions(
   actions: LegalAction[],
   currentWish: StandardRank | null
@@ -268,14 +273,17 @@ function selectProgressionCandidateForActiveTurn(
       (candidate.action.type === "play_cards" || candidate.action.type === "pass_turn")
   );
 
-  console.info("[ai] Straight response options", {
-    activeSeat: actor,
-    leadCombo: ctx.state.currentTrick.currentCombination.key,
-    legalResponseCount: actorActions.filter(isPlayLegalAction).length,
-    normalizedResponseList: summarizePlayCandidates(actorActions),
-    canPass: actorActions.some(isPassLegalAction),
-    wishState: ctx.state.currentWish
-  });
+  const traceEnabled = traceStraightResponsesEnabled();
+  if (traceEnabled) {
+    console.info("[ai] Straight response options", {
+      activeSeat: actor,
+      leadCombo: ctx.state.currentTrick.currentCombination.key,
+      legalResponseCount: actorActions.filter(isPlayLegalAction).length,
+      normalizedResponseList: summarizePlayCandidates(actorActions),
+      canPass: actorActions.some(isPassLegalAction),
+      wishState: ctx.state.currentWish
+    });
+  }
 
   const leadingCandidate = candidates[0] ?? null;
   if (
@@ -283,26 +291,30 @@ function selectProgressionCandidateForActiveTurn(
     (leadingCandidate.action.type === "play_cards" ||
       leadingCandidate.action.type === "pass_turn")
   ) {
-    console.info("[ai] Straight response selected", {
-      activeSeat: actor,
-      chosenAction: leadingCandidate.action,
-      fallbackUsed: false
-    });
+    if (traceEnabled) {
+      console.info("[ai] Straight response selected", {
+        activeSeat: actor,
+        chosenAction: leadingCandidate.action,
+        fallbackUsed: false
+      });
+    }
     return leadingCandidate;
   }
 
   const selected = progressionCandidates[0] ?? null;
   if (selected) {
-    console.info("[ai] Straight response selected", {
-      activeSeat: actor,
-      chosenAction: selected.action,
-      fallbackUsed: false
-    });
+    if (traceEnabled) {
+      console.info("[ai] Straight response selected", {
+        activeSeat: actor,
+        chosenAction: selected.action,
+        fallbackUsed: false
+      });
+    }
     return selected;
   }
 
   const fallbackPass = selectSeatEmergencyPassCandidate(ctx, actor);
-  if (fallbackPass) {
+  if (fallbackPass && traceEnabled) {
     console.info("[ai] Straight response selected", {
       activeSeat: actor,
       chosenAction: fallbackPass.action,
@@ -399,11 +411,13 @@ export const heuristicsV1Policy: HeuristicPolicy = {
         ctx.state.phase === "trick_play" &&
         ctx.state.currentTrick?.currentCombination.kind === "straight"
       ) {
-        console.info("[ai] Straight response selected", {
-          activeSeat: fallback.actor,
-          chosenAction: fallback.action,
-          fallbackUsed: true
-        });
+        if (traceStraightResponsesEnabled()) {
+          console.info("[ai] Straight response selected", {
+            activeSeat: fallback.actor,
+            chosenAction: fallback.action,
+            fallbackUsed: true
+          });
+        }
       }
 
       const analyzer = createHeuristicFeatureAnalyzer(ctx);

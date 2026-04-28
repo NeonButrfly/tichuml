@@ -1,6 +1,7 @@
 import {
   SEAT_IDS,
   cardsFromIds,
+  getCanonicalCardIdsKey,
   getLegalActions,
   type Card,
   type GameState,
@@ -10,6 +11,12 @@ import {
 import { cloneState, hasOpponentCalledTichu, partnerHasCalledTichu } from "./HeuristicContext.js";
 import type { CardPassMetrics, HandEvaluation, PlayLegalAction } from "./types.js";
 import { cardStrength, isPlayLegalAction, isStandardCard } from "./utils.js";
+
+const handEvaluationCache = new Map<string, HandEvaluation>();
+
+function getHandEvaluationCacheKey(cards: readonly Card[]): string {
+  return getCanonicalCardIdsKey(cards.map((card) => card.id));
+}
 
 function countUniqueCombinations(
   actions: PlayLegalAction[],
@@ -281,6 +288,11 @@ function countNeighborRanks(card: Card, rankCounts: Map<number, number>): number
 
 export function buildHandEvaluation(state: GameState, seat: SeatId): HandEvaluation {
   const cards = [...state.hands[seat]];
+  const cacheKey = getHandEvaluationCacheKey(cards);
+  const cached = handEvaluationCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
   const leadPlayActions = getLeadPlayActions(state, seat);
   const rankCounts = getRankCounts(cards);
   const straightProtectedRanks = getStraightProtectedRanks(cards);
@@ -531,7 +543,7 @@ export function buildHandEvaluation(state: GameState, seat: SeatId): HandEvaluat
     }
   }
 
-  return {
+  const evaluation = {
     strength: handStrength(cards),
     legacyCallStrength: legacyHandStrengthScore(cards),
     leadPlayActions,
@@ -568,6 +580,8 @@ export function buildHandEvaluation(state: GameState, seat: SeatId): HandEvaluat
     tichuViable,
     protectedCardIds
   };
+  handEvaluationCache.set(cacheKey, evaluation);
+  return evaluation;
 }
 
 export function buildHandEvaluationAfterRemovingCards(

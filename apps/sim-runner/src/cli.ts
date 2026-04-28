@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
+import { fileURLToPath } from "node:url";
 import { SEAT_IDS, type SeatId } from "@tichuml/engine";
 import { runSelfPlayBatch, type SeatProviderOverrides } from "./self-play-batch.js";
 import type {
@@ -970,9 +971,31 @@ async function main(): Promise<void> {
   }
 
   console.log(JSON.stringify(summary, null, args.quiet ? 0 : 2));
+
+  if (summary.errors > 0 || summary.gamesPlayed !== args.games) {
+    console.error(
+      JSON.stringify(
+        {
+          accepted: false,
+          reason: "incomplete_sim_batch",
+          requestedGames: args.games,
+          gamesPlayed: summary.gamesPlayed,
+          errors: summary.errors,
+          maxDecisionLimitHit: summary.maxDecisionLimitHit
+        },
+        null,
+        args.quiet ? 0 : 2
+      )
+    );
+    process.exitCode = 1;
+  }
 }
 
-if (import.meta.main) {
+const isMainModule = process.argv[1]
+  ? path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+  : false;
+
+if (isMainModule) {
   main().catch((error) => {
     console.error(
       JSON.stringify(

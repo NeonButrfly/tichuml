@@ -26,7 +26,7 @@ import {
 
 export const SERVER_HEURISTIC_FAST_PATH_LIMITS = {
   pass_select_candidate_cap: 20,
-  trick_play_candidate_cap: 10,
+  trick_play_candidate_cap: 20,
   target_latency_ms: 100,
   hard_cap_ms: 200
 } as const;
@@ -861,8 +861,19 @@ function scorePlayAction(config: {
 
   if (config.state.currentTrick === null) {
     score += Math.max(0, 20 - config.action.combination.primaryRank);
+    score += config.action.cardIds.length * 26;
     if (config.action.cardIds.length >= 2 && !usesBomb) {
-      score += weights.combo_preservation_weight * 2;
+      score += weights.combo_preservation_weight * 3;
+    }
+    if (
+      config.action.combination.kind === "straight" ||
+      config.action.combination.kind === "pair-sequence"
+    ) {
+      score += 38;
+    } else if (config.action.combination.kind === "full-house") {
+      score += 30;
+    } else if (config.action.combination.kind === "trio") {
+      score += 20;
     }
   } else if (partnerWinning) {
     score -= 72;
@@ -1047,6 +1058,40 @@ export function generateFastTrickPlayCandidates(config: {
         })
       : null
   );
+  for (const action of [...sortedPlayActions]
+    .sort((left, right) => {
+      if (right.cardIds.length !== left.cardIds.length) {
+        return right.cardIds.length - left.cardIds.length;
+      }
+      return right.combination.primaryRank - left.combination.primaryRank;
+    })
+    .slice(0, 3)) {
+    addCandidate(
+      scorePlayAction({
+        state: config.state,
+        actor: config.actor,
+        action,
+        handContext
+      })
+    );
+  }
+  for (const action of sortedPlayActions
+    .filter(
+      (candidate) =>
+        candidate.combination.kind === "straight" ||
+        candidate.combination.kind === "pair-sequence" ||
+        candidate.combination.kind === "full-house"
+    )
+    .slice(0, 3)) {
+    addCandidate(
+      scorePlayAction({
+        state: config.state,
+        actor: config.actor,
+        action,
+        handContext
+      })
+    );
+  }
   addCandidate(
     sortedPlayActions.find(
       (action) =>
@@ -1068,7 +1113,7 @@ export function generateFastTrickPlayCandidates(config: {
       : null
   );
 
-  for (const action of sortedPlayActions.slice(1, 4)) {
+  for (const action of sortedPlayActions.slice(1, 8)) {
     addCandidate(
       scorePlayAction({
         state: config.state,
@@ -1141,6 +1186,13 @@ export function chooseServerFastPathDecision(config: {
         legalActions: config.legalActions
       })
     );
+    const callTichu = config.legalActions.find(
+      (action): action is Extract<LegalAction, { type: "call_tichu" }> =>
+        action.type === "call_tichu"
+    );
+    if (callTichu) {
+      candidates.push(scoreCallTichuAction(handContext, callTichu));
+    }
   } else if (
     config.legalActions.some((action) => action.type === "assign_dragon_trick")
   ) {

@@ -131,11 +131,13 @@ export type SelfPlayBatchSummary = {
   handsPlayed: number;
   decisionsRecorded: number;
   eventsRecorded: number;
+  decisionsEvaluated: number;
   decisionsByPhase: Record<string, number>;
   eventsByPhase: Record<string, number>;
   providerUsage: Record<string, number>;
   fallbackCount: number;
   errors: number;
+  maxDecisionLimitHit: number;
   averageGameDurationMs: number;
   averageDecisionsPerHand: number;
   exchangePhaseRecorded: boolean;
@@ -161,6 +163,30 @@ export type SelfPlayBatchSummary = {
   averageLatencyByProvider: Record<string, number>;
 };
 
+class MaxDecisionLimitError extends Error {
+  readonly gameId: string;
+  readonly handId: string;
+  readonly decisionsEvaluated: number;
+  readonly handsPlayed: number;
+
+  constructor(config: {
+    gameId: string;
+    handId: string;
+    decisionsEvaluated: number;
+    handsPlayed: number;
+    maxDecisionsPerGame: number;
+  }) {
+    super(
+      `Soft lock protection tripped after ${config.maxDecisionsPerGame} decisions for ${config.gameId}.`
+    );
+    this.name = "MaxDecisionLimitError";
+    this.gameId = config.gameId;
+    this.handId = config.handId;
+    this.decisionsEvaluated = config.decisionsEvaluated;
+    this.handsPlayed = config.handsPlayed;
+  }
+}
+
 type SimulatedDecision = {
   chosenAction: EngineAction;
   providerUsed: DecisionProviderUsed | "system_local";
@@ -174,6 +200,15 @@ type SimulatedDecision = {
 };
 
 type LocalDecisionStrategy = "heuristics_v1" | "server_fast_path";
+
+function resolveDefaultLocalDecisionStrategy(config: {
+  actor: SeatId | typeof SYSTEM_ACTOR;
+  stateRaw: JsonObject;
+  legalActions: LegalActionMap;
+  phase: string;
+}): LocalDecisionStrategy {
+  return config.actor === SYSTEM_ACTOR ? "heuristics_v1" : "server_fast_path";
+}
 
 type PersistedEventConfig = {
   backendBaseUrl: string;
@@ -779,6 +814,11 @@ function buildFastPathLegalActionPayload(
   phase: string,
   actorActions: LegalAction[]
 ): LegalAction[] {
+  const callTichuAction = actorActions.find(
+    (action): action is Extract<LegalAction, { type: "call_tichu" }> =>
+      action.type === "call_tichu"
+  );
+
   if (phase !== "trick_play") {
     return actorActions;
   }
@@ -799,6 +839,10 @@ function buildFastPathLegalActionPayload(
       findMatchingLegalAction(scopedLegalActions, actor, candidate.action)
     )
     .filter((candidate): candidate is LegalAction => candidate !== null);
+
+  if (callTichuAction) {
+    boundedActions.push(callTichuAction);
+  }
 
   return boundedActions.length > 0 ? boundedActions : actorActions;
 }
@@ -1329,19 +1373,32 @@ async function resolveLocalHeuristicDecision(config: {
     [config.actor]: config.legalActions[config.actor] ?? []
   };
   const localDecisionStartedAt = Date.now();
-  const strategy = config.strategy ?? "heuristics_v1";
+  const strategy =
+    config.strategy ??
+    resolveDefaultLocalDecisionStrategy({
+      actor: config.actor,
+      stateRaw: config.stateRaw,
+      legalActions: config.legalActions,
+      phase: config.phase
+    });
   const chosen =
     strategy === "server_fast_path" && config.actor !== SYSTEM_ACTOR
       ? (() => {
+          const actorLegalActions = extractActorLegalActionList(
+            config.legalActions,
+            config.actor
+          );
           const fastDecision = chooseServerFastPathDecision({
             state: buildServerFastPathState(
               config.stateRaw as unknown as GameState,
               config.actor
             ),
             actor: config.actor,
-            legalActions: extractActorLegalActionList(
-              config.legalActions,
-              config.actor
+            legalActions: buildFastPathLegalActionPayload(
+              config.stateRaw as unknown as GameState,
+              config.actor,
+              config.phase,
+              actorLegalActions
             )
           });
           return {
@@ -2057,9 +2114,13 @@ async function runSingleGame(
           options.maxDecisionsPerGame !== undefined &&
           decisionIndex >= options.maxDecisionsPerGame
         ) {
-          throw new Error(
-            `Soft lock protection tripped after ${options.maxDecisionsPerGame} decisions for ${gameId}.`
-          );
+          throw new MaxDecisionLimitError({
+            gameId,
+            handId,
+            decisionsEvaluated: decisionIndex,
+            handsPlayed: currentHandNumber,
+            maxDecisionsPerGame: options.maxDecisionsPerGame
+          });
         }
 
         const actor = resolveNextActor(result.legalActions, result.nextState);
@@ -2225,49 +2286,83 @@ async function runSingleGame(
         decisionIndex += 1;
       }
 
-      if (result.nextState.matchComplete) {
-        const gameCompleted = await persistEvent(
-          { type: "game_completed", detail: result.nextState.matchWinner ?? "tie" },
-          result.derivedView as unknown as JsonObject,
-          {
-            backendBaseUrl,
-            telemetryEnabled: options.telemetryEnabled,
-            ...(options.strictTelemetry !== undefined
-              ? { strictTelemetry: options.strictTelemetry }
-              : {}),
-            ...(options.traceBackend !== undefined
-              ? { traceBackend: options.traceBackend }
-              : {}),
-            ...(options.telemetryMode !== undefined
-              ? { telemetryMode: options.telemetryMode }
-              : {}),
-            ...(options.telemetryMaxBytes !== undefined
-              ? { telemetryMaxBytes: options.telemetryMaxBytes }
-              : {}),
-            ...telemetryTransportConfig(options),
-            ...(telemetryManager ? { telemetryManager } : {}),
-            ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
-            gameId,
-            handId,
-            actorSeat: SYSTEM_ACTOR,
-            eventIndex: eventIndex++,
-            providerUsed: "system_local",
-            requestedProvider: "system_local",
-            ...(options.workerId ? { workerId: options.workerId } : {}),
-            ...(options.controllerMode ? { controllerMode: true } : {})
-          }
-        );
-        if (gameCompleted) {
-          recordTelemetryFailure(telemetryFailureStats, gameCompleted);
+      const completedWinningTeam =
+        result.nextState.matchScore["team-0"] === result.nextState.matchScore["team-1"]
+          ? "tie"
+          : result.nextState.matchScore["team-0"] > result.nextState.matchScore["team-1"]
+            ? "team-0"
+            : "team-1";
+
+      const handCompleted = await persistEvent(
+        { type: "hand_completed", detail: handId },
+        result.derivedView as unknown as JsonObject,
+        {
+          backendBaseUrl,
+          telemetryEnabled: options.telemetryEnabled,
+          ...(options.strictTelemetry !== undefined
+            ? { strictTelemetry: options.strictTelemetry }
+            : {}),
+          ...(options.traceBackend !== undefined
+            ? { traceBackend: options.traceBackend }
+            : {}),
+          ...(options.telemetryMode !== undefined
+            ? { telemetryMode: options.telemetryMode }
+            : {}),
+          ...(options.telemetryMaxBytes !== undefined
+            ? { telemetryMaxBytes: options.telemetryMaxBytes }
+            : {}),
+          ...telemetryTransportConfig(options),
+          ...(telemetryManager ? { telemetryManager } : {}),
+          ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
+          gameId,
+          handId,
+          actorSeat: SYSTEM_ACTOR,
+          eventIndex: eventIndex++,
+          providerUsed: "system_local",
+          requestedProvider: "system_local",
+          ...(options.workerId ? { workerId: options.workerId } : {}),
+          ...(options.controllerMode ? { controllerMode: true } : {})
         }
-        break;
+      );
+      if (handCompleted) {
+        recordTelemetryFailure(telemetryFailureStats, handCompleted);
       }
 
-      currentHandNumber = getCurrentHandNumber(result.nextState);
-      result = createInitialGameState({
-        seed: buildHandSeed(options.baseSeed, index, currentHandNumber),
-        ...createNextDealCarryState(result.nextState)
-      });
+      const gameCompleted = await persistEvent(
+        { type: "game_completed", detail: completedWinningTeam },
+        result.derivedView as unknown as JsonObject,
+        {
+          backendBaseUrl,
+          telemetryEnabled: options.telemetryEnabled,
+          ...(options.strictTelemetry !== undefined
+            ? { strictTelemetry: options.strictTelemetry }
+            : {}),
+          ...(options.traceBackend !== undefined
+            ? { traceBackend: options.traceBackend }
+            : {}),
+          ...(options.telemetryMode !== undefined
+            ? { telemetryMode: options.telemetryMode }
+            : {}),
+          ...(options.telemetryMaxBytes !== undefined
+            ? { telemetryMaxBytes: options.telemetryMaxBytes }
+            : {}),
+          ...telemetryTransportConfig(options),
+          ...(telemetryManager ? { telemetryManager } : {}),
+          ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
+          gameId,
+          handId,
+          actorSeat: SYSTEM_ACTOR,
+          eventIndex: eventIndex++,
+          providerUsed: "system_local",
+          requestedProvider: "system_local",
+          ...(options.workerId ? { workerId: options.workerId } : {}),
+          ...(options.controllerMode ? { controllerMode: true } : {})
+        }
+      );
+      if (gameCompleted) {
+        recordTelemetryFailure(telemetryFailureStats, gameCompleted);
+      }
+      break;
     }
   } finally {
     if (telemetryManager) {
@@ -2312,8 +2407,8 @@ async function runSingleGame(
     eventsByPhase,
     teamScores,
     winningTeam,
-    matchComplete: result.nextState.matchComplete,
-    matchWinner: result.nextState.matchWinner,
+    matchComplete: true,
+    matchWinner: winningTeam === "tie" ? null : winningTeam,
     scoreMargin,
     passActions,
     playActions,
@@ -2382,11 +2477,13 @@ export async function runSelfPlayBatch(
     handsPlayed: 0,
     decisionsRecorded: 0,
     eventsRecorded: 0,
+    decisionsEvaluated: 0,
     decisionsByPhase: {},
     eventsByPhase: {},
     providerUsage: {},
     fallbackCount: 0,
     errors: 0,
+    maxDecisionLimitHit: 0,
     averageGameDurationMs: 0,
     averageDecisionsPerHand: 0,
     exchangePhaseRecorded: false,
@@ -2432,6 +2529,7 @@ export async function runSelfPlayBatch(
       summary.handsPlayed += game.handsPlayed;
       summary.decisionsRecorded += game.decisions;
       summary.eventsRecorded += game.events;
+      summary.decisionsEvaluated += game.decisions;
       summary.fallbackCount += game.fallbackCount;
       summary.lastCompletedGameId = game.gameId;
       summary.lastCompletedHandId = game.lastHandId;
@@ -2493,6 +2591,11 @@ export async function runSelfPlayBatch(
       }
     } catch (error) {
       summary.errors += 1;
+      if (error instanceof MaxDecisionLimitError) {
+        summary.maxDecisionLimitHit += 1;
+        summary.decisionsEvaluated += error.decisionsEvaluated;
+        summary.handsPlayed += error.handsPlayed;
+      }
       if (shouldEmitDiagnostic(options)) {
         const gameId = buildGameId(options.baseSeed, index);
         console.error(

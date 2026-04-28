@@ -337,11 +337,13 @@ function createEmptyBatchSummary(): SelfPlayBatchSummary {
     handsPlayed: 0,
     decisionsRecorded: 0,
     eventsRecorded: 0,
+    decisionsEvaluated: 0,
     decisionsByPhase: {},
     eventsByPhase: {},
     providerUsage: {},
     fallbackCount: 0,
     errors: 0,
+    maxDecisionLimitHit: 0,
     averageGameDurationMs: 0,
     averageDecisionsPerHand: 0,
     exchangePhaseRecorded: false,
@@ -395,8 +397,10 @@ function mergeBatchSummary(
   target.handsPlayed += source.handsPlayed;
   target.decisionsRecorded += source.decisionsRecorded;
   target.eventsRecorded += source.eventsRecorded;
+  target.decisionsEvaluated += source.decisionsEvaluated;
   target.fallbackCount += source.fallbackCount;
   target.errors += source.errors;
+  target.maxDecisionLimitHit += source.maxDecisionLimitHit;
   target.invalidDecisionCount += source.invalidDecisionCount;
   target.telemetryDecisionFailures += source.telemetryDecisionFailures;
   target.telemetryEventFailures += source.telemetryEventFailures;
@@ -432,7 +436,9 @@ function isSelfPlayBatchSummary(value: unknown): value is SelfPlayBatchSummary {
     isPlainObject(value) &&
     typeof value.gamesPlayed === "number" &&
     typeof value.decisionsRecorded === "number" &&
-    typeof value.eventsRecorded === "number"
+    typeof value.eventsRecorded === "number" &&
+    typeof value.decisionsEvaluated === "number" &&
+    typeof value.maxDecisionLimitHit === "number"
   );
 }
 

@@ -30,7 +30,7 @@ describe("self-play match semantics", () => {
     vi.doUnmock("@tichuml/engine");
   });
 
-  it("continues dealing hands until the cumulative match target is reached", async () => {
+  it("completes each simulated game after the first scored hand", async () => {
     const createInitialGameState = vi
       .fn()
       .mockImplementationOnce((seedOrConfig: unknown) => {
@@ -65,68 +65,6 @@ describe("self-play match semantics", () => {
           legalActions: {},
           events: []
         };
-      })
-      .mockImplementationOnce((seedOrConfig: unknown) => {
-        expect(seedOrConfig).toMatchObject({
-          seed: "semantic-seed-0-hand-2",
-          matchScore: {
-            "team-0": 840,
-            "team-1": 700
-          },
-          matchHistory: [
-            buildMatchHistoryEntry({
-              handNumber: 1,
-              roundSeed: "semantic-seed-0",
-              team0: 840,
-              team1: 700
-            })
-          ]
-        });
-        return {
-          nextState: {
-            phase: "finished",
-            matchComplete: true,
-            matchWinner: "team-0",
-            matchScore: {
-              "team-0": 1040,
-              "team-1": 840
-            },
-            matchHistory: [
-              buildMatchHistoryEntry({
-                handNumber: 1,
-                roundSeed: "semantic-seed-0",
-                team0: 840,
-                team1: 700
-              }),
-              {
-                handNumber: 2,
-                roundSeed: "semantic-seed-0-hand-2",
-                teamScores: {
-                  "team-0": 200,
-                  "team-1": 140
-                },
-                cumulativeScores: {
-                  "team-0": 1040,
-                  "team-1": 840
-                },
-                finishOrder: ["seat-1", "seat-3", "seat-0", "seat-2"] as const,
-                doubleVictory: null,
-                tichuBonuses: []
-              }
-            ]
-          },
-          derivedView: {
-            phase: "finished",
-            matchScore: {
-              "team-0": 1040,
-              "team-1": 840
-            },
-            matchComplete: true,
-            matchWinner: "team-0"
-          },
-          legalActions: {},
-          events: []
-        };
       });
 
     vi.doMock("@tichuml/engine", async () => {
@@ -152,23 +90,23 @@ describe("self-play match semantics", () => {
       quiet: true
     });
 
-    expect(createInitialGameState).toHaveBeenCalledTimes(2);
+    expect(createInitialGameState).toHaveBeenCalledTimes(1);
     expect(summary.gamesPlayed).toBe(1);
-    expect(summary.handsPlayed).toBe(2);
+    expect(summary.handsPlayed).toBe(1);
     expect(summary.lastCompletedGameId).toBe(
       "selfplay-semantic-seed-game-000001"
     );
     expect(summary.lastCompletedHandId).toBe(
-      "selfplay-semantic-seed-game-000001-hand-2"
+      "selfplay-semantic-seed-game-000001-hand-1"
     );
     expect(summary.lastCompletedMatchScore).toEqual({
-      "team-0": 1040,
-      "team-1": 840
+      "team-0": 840,
+      "team-1": 700
     });
     expect(summary.lastCompletedMatchWinner).toBe("team-0");
     expect(summary.totalScoreByTeam).toEqual({
-      "team-0": 1040,
-      "team-1": 840
+      "team-0": 840,
+      "team-1": 700
     });
   });
 });

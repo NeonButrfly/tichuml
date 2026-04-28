@@ -1,9 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   applyEngineAction,
+  beatsCombination,
   cardsFromIds,
   createInitialGameState,
   createScenarioState,
+  getCanonicalCardIdsKey,
   getLegalActions,
   listCombinationInterpretations,
   type Combination,
@@ -39,7 +41,70 @@ function scenario(config: Partial<GameState> = {}): GameState {
   });
 }
 
+function enumerateCardSubsets(cardIds: string[]): string[][] {
+  const subsets: string[][] = [];
+  const limit = 1 << cardIds.length;
+
+  for (let mask = 1; mask < limit; mask += 1) {
+    const selection: string[] = [];
+    for (let bit = 0; bit < cardIds.length; bit += 1) {
+      if ((mask & (1 << bit)) !== 0) {
+        selection.push(cardIds[bit]!);
+      }
+    }
+    subsets.push(selection);
+  }
+
+  return subsets;
+}
+
+function toPlayKey(action: Extract<LegalAction, { type: "play_cards" }>): string {
+  return [
+    action.combination.kind,
+    getCanonicalCardIdsKey(action.cardIds),
+    action.phoenixAsRank ?? "none"
+  ].join(":");
+}
+
+function buildExhaustiveResponseKeys(
+  state: GameState,
+  seat: "seat-0" | "seat-1" | "seat-2" | "seat-3"
+): string[] {
+  const currentCombination = state.currentTrick?.currentCombination ?? null;
+  if (!currentCombination) {
+    return [];
+  }
+
+  const actions = new Map<string, string>();
+  const handCardIds = state.hands[seat].map((card) => card.id);
+
+  for (const subset of enumerateCardSubsets(handCardIds)) {
+    for (const combination of listCombinationInterpretations(
+      cardsFromIds(subset),
+      currentCombination
+    )) {
+      if (!beatsCombination(combination, currentCombination)) {
+        continue;
+      }
+
+      const key = [
+        combination.kind,
+        getCanonicalCardIdsKey(combination.cardIds),
+        combination.phoenixAsRank ?? "none"
+      ].join(":");
+      actions.set(key, key);
+    }
+  }
+
+  return [...actions.values()].sort();
+}
+
 describe("engine core", () => {
+  afterEach(() => {
+    delete process.env.TICHU_TRACE_STRAIGHT_RESPONSES;
+    vi.restoreAllMocks();
+  });
+
   it("deals deterministically from a seed", () => {
     const first = createInitialGameState("alpha-seed");
     const second = createInitialGameState("alpha-seed");
@@ -239,6 +304,48 @@ describe("engine core", () => {
     ).toBe(true);
   });
 
+  it("keeps an active Mahjong wish through an actor who cannot fulfill it and forces a later actor who can", () => {
+    const mahjongLead = combo(["mahjong"]);
+    const state = scenario({
+      currentWish: 8,
+      activeSeat: "seat-1",
+      currentTrick: {
+        leader: "seat-0",
+        currentWinner: "seat-0",
+        currentCombination: mahjongLead,
+        entries: [{ type: "play", seat: "seat-0", combination: mahjongLead }],
+        passingSeats: []
+      },
+      hands: {
+        "seat-1": cardsFromIds(["dragon"]),
+        "seat-2": cardsFromIds(["jade-8", "jade-9"]),
+        "seat-3": cardsFromIds(["jade-10"])
+      }
+    });
+
+    const seat1Actions = getLegalActions(state)["seat-1"] ?? [];
+    expect(seat1Actions.some((action) => action.type === "pass_turn")).toBe(true);
+
+    const afterSeat1Pass = applyEngineAction(state, {
+      type: "pass_turn",
+      seat: "seat-1"
+    });
+
+    expect(afterSeat1Pass.nextState.currentWish).toBe(8);
+
+    const seat2Actions = getLegalActions(afterSeat1Pass.nextState)["seat-2"] ?? [];
+    expect(
+      seat2Actions.filter((action) => action.type === "play_cards")
+    ).toHaveLength(1);
+    expect(
+      seat2Actions.some(
+        (action) =>
+          action.type === "play_cards" && action.cardIds[0] === "jade-8"
+      )
+    ).toBe(true);
+    expect(seat2Actions.some((action) => action.type === "pass_turn")).toBe(false);
+  });
+
   it("never returns zero legal actions after Mahjong creates a wish", () => {
     const initial = scenario({
       currentWish: null,
@@ -324,6 +431,100 @@ describe("engine core", () => {
     });
 
     expect(result.nextState.currentWish).toBeNull();
+  });
+
+  it("keeps the active wish visible in straight-response diagnostics when tracing is enabled", () => {
+    process.env.TICHU_TRACE_STRAIGHT_RESPONSES = "1";
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    const straightLead = combo([
+      "jade-3",
+      "sword-4",
+      "pagoda-5",
+      "star-6",
+      "jade-7"
+    ]);
+    const state = scenario({
+      currentWish: 9,
+      activeSeat: "seat-3",
+      currentTrick: {
+        leader: "seat-2",
+        currentWinner: "seat-2",
+        currentCombination: straightLead,
+        entries: [{ type: "play", seat: "seat-2", combination: straightLead }],
+        passingSeats: []
+      },
+      hands: {
+        "seat-0": cardsFromIds(["jade-2"]),
+        "seat-1": cardsFromIds(["sword-2"]),
+        "seat-2": cardsFromIds(["star-2"]),
+        "seat-3": cardsFromIds([
+          "jade-8",
+          "sword-9",
+          "pagoda-10",
+          "star-11",
+          "jade-12"
+        ])
+      }
+    });
+
+    getLegalActions(state);
+
+    const straightLog = infoSpy.mock.calls.find(
+      (call) => call[0] === "[engine] Straight response availability"
+    );
+
+    expect(straightLog?.[1]).toMatchObject({
+      activeSeat: "seat-3",
+      wishState: 9
+    });
+  });
+
+  it("preserves the exhaustive Phoenix straight-response legal set while deduping generation", () => {
+    const straightLead = combo([
+      "pagoda-4",
+      "star-5",
+      "pagoda-6",
+      "pagoda-7",
+      "pagoda-8"
+    ]);
+    const state = scenario({
+      activeSeat: "seat-1",
+      currentTrick: {
+        leader: "seat-0",
+        currentWinner: "seat-0",
+        currentCombination: straightLead,
+        entries: [{ type: "play", seat: "seat-0", combination: straightLead }],
+        passingSeats: []
+      },
+      hands: {
+        "seat-0": cardsFromIds(["jade-2"]),
+        "seat-1": cardsFromIds([
+          "jade-7",
+          "star-7",
+          "jade-8",
+          "star-9",
+          "jade-10",
+          "sword-10",
+          "star-11",
+          "phoenix"
+        ]),
+        "seat-2": cardsFromIds(["sword-2"]),
+        "seat-3": cardsFromIds(["star-2"])
+      }
+    });
+
+    const optimizedKeys = (getLegalActions(state)["seat-1"] ?? [])
+      .filter(
+        (action): action is Extract<LegalAction, { type: "play_cards" }> =>
+          action.type === "play_cards"
+      )
+      .map((action) => toPlayKey(action))
+      .sort();
+
+    const exhaustiveKeys = buildExhaustiveResponseKeys(state, "seat-1");
+
+    expect(optimizedKeys).toEqual(exhaustiveKeys);
+    expect(new Set(optimizedKeys).size).toBe(optimizedKeys.length);
   });
 
   it("normalizes combination card ids in canonical rank-first order", () => {

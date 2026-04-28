@@ -14,8 +14,32 @@ Use this file to preserve AI and bot-behavior prompt intent and link it to GitHu
 
 ## Entries
 
+### 2026-04-28 - Self-play CLI games must finish as single scored hands for bounded training runs
+
+- Prompt Signal: The latest simulator blocker request required `npm run sim`
+  smoke commands with `--max-decisions-per-game 300` to finish reliably,
+  produce final summaries, and generate real persisted telemetry for long
+  training batches instead of rolling through multi-hand match continuation.
+- Interpreted Requirement: Issue
+  [#52](https://github.com/NeonButrfly/tichuml/issues/52) now tracks bounded
+  self-play semantics where each simulated CLI "game" completes after the first
+  scored hand, emits `hand_completed` and `game_completed`, increments both
+  `gamesPlayed` and `handsPlayed` once per completed hand, and keeps the
+  simulator fast enough for strict smoke tests and long local data generation.
+- Affected Systems: `apps/sim-runner/src/cli.ts`,
+  `apps/sim-runner/src/self-play-batch.ts`,
+  `tests/integration/sim-cli.test.ts`,
+  `tests/integration/self-play-match-semantics.test.ts`,
+  `tests/integration/straight-response.test.ts`,
+  `tests/integration/wish-state.test.ts`.
+- Linked GitHub Issue: [#52](https://github.com/NeonButrfly/tichuml/issues/52)
+- Milestone: [6.5 – Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status Source: GitHub issue state only.
+
 ### 2026-04-26 - Self-play game-vs-hand semantics must stay match-scoped
 
+- Superseded By: [#52](https://github.com/NeonButrfly/tichuml/issues/52) for
+  bounded simulator-training runs as of 2026-04-28.
 - Prompt Signal: The latest self-play semantics request required simulator
   "games" to continue across multiple dealt hands until the cumulative match
   score reaches the engine's `>=1000` completion target, instead of treating a
