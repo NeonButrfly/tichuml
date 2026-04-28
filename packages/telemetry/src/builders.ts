@@ -450,7 +450,8 @@ export function buildTelemetryDecisionPayloads(config: {
     readExplanationField(explanation, "candidateScores");
   const stateFeatures =
     config.stateFeatures ??
-    (readExplanationField(explanation, "stateFeatures") as JsonObject | null);
+    (readExplanationField(explanation, "stateFeatures") as JsonObject | null) ??
+    compactMetadata;
   const baseMetadata = withSourceMetadata({
     source: config.source,
     mode: config.mode,

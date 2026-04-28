@@ -2,6 +2,27 @@
 
 Prompt logs here capture backend/platform prompt intent only. GitHub issue state remains authoritative.
 
+## 2026-04-28 - Full simulator telemetry state snapshots
+
+- Prompt signal:
+  Full simulator telemetry mode posts and persists decisions successfully, but
+  `state_raw` and `state_norm` remain empty in the database even when
+  `--telemetry-mode full --full-state true` is used.
+- Interpreted requirement:
+  Issue [#53](https://github.com/NeonButrfly/tichuml/issues/53) tracks the
+  focused producer-side repair: simulator decision telemetry must pass full mode
+  through to the shared telemetry selector so `state_raw` and `state_norm` are
+  populated in full mode while minimal mode remains compact.
+- Affected systems:
+  `apps/sim-runner/src/self-play-batch.ts`, `packages/telemetry`, simulator
+  telemetry integration tests.
+- Linked GitHub issue:
+  [#53](https://github.com/NeonButrfly/tichuml/issues/53)
+- Milestone:
+  [6.5 - Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status:
+  Lives in GitHub, not here.
+
 ## 2026-04-17 - Local backend foundation with Postgres, telemetry, decision routing, and one-command bootstrap
 
 - Prompt signal:

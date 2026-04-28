@@ -2148,6 +2148,12 @@ async function runSingleGame(
           ...(options.traceBackend !== undefined
             ? { traceBackend: options.traceBackend }
             : {}),
+          ...(options.telemetryMode !== undefined
+            ? { telemetryMode: options.telemetryMode }
+            : {}),
+          ...(options.telemetryMaxBytes !== undefined
+            ? { telemetryMaxBytes: options.telemetryMaxBytes }
+            : {}),
           ...(telemetryManager ? { telemetryManager } : {}),
           ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
           ...telemetryTransportConfig(options),

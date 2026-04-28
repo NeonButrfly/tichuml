@@ -785,6 +785,82 @@ describe("central telemetry subsystem", () => {
     }
   });
 
+  it("posts full selfplay decision snapshots only when full telemetry is requested", async () => {
+    const postedDecisions: JsonObject[] = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/api/telemetry/decision")) {
+        postedDecisions.push(
+          JSON.parse(String(init?.body ?? "{}")) as JsonObject
+        );
+      }
+      return new Response(
+        JSON.stringify(
+          url.endsWith("/health")
+            ? { ok: true }
+            : { accepted: true, telemetry_id: postedDecisions.length + 1 }
+        ),
+        {
+          status: url.endsWith("/health") ? 200 : 202,
+          headers: { "Content-Type": "application/json" }
+        }
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const fullSummary = await runSelfPlayBatch({
+      games: 1,
+      baseSeed: "full-selfplay-state-snapshot",
+      defaultProvider: "local",
+      telemetryEnabled: true,
+      strictTelemetry: true,
+      telemetryMode: "full",
+      fullStateDecisionRequests: true,
+      backendBaseUrl: "http://127.0.0.1:4310",
+      quiet: true,
+      progress: false,
+      maxDecisionsPerGame: 1
+    });
+
+    expect(fullSummary.errors).toBe(1);
+    expect(fullSummary.telemetryFailuresTotal).toBe(0);
+    expect(postedDecisions.length).toBeGreaterThan(0);
+    const fullDecision = postedDecisions[0] as TelemetryDecisionPayload;
+    expect(fullDecision.metadata.telemetry_mode).toBe("full");
+    expect(Object.keys(fullDecision.state_raw).length).toBeGreaterThan(0);
+    expect(fullDecision.state_norm).not.toBeNull();
+    expect(
+      Object.keys(fullDecision.state_norm as JsonObject).length
+    ).toBeGreaterThan(0);
+    expect(fullDecision.legal_actions).toBeDefined();
+    expect(fullDecision.candidateScores).not.toBeNull();
+    expect(fullDecision.stateFeatures).not.toBeNull();
+
+    postedDecisions.length = 0;
+    const minimalSummary = await runSelfPlayBatch({
+      games: 1,
+      baseSeed: "minimal-selfplay-state-snapshot",
+      defaultProvider: "local",
+      telemetryEnabled: true,
+      strictTelemetry: true,
+      telemetryMode: "minimal",
+      fullStateDecisionRequests: true,
+      backendBaseUrl: "http://127.0.0.1:4310",
+      quiet: true,
+      progress: false,
+      maxDecisionsPerGame: 1
+    });
+
+    expect(minimalSummary.errors).toBe(1);
+    expect(minimalSummary.telemetryFailuresTotal).toBe(0);
+    expect(postedDecisions.length).toBeGreaterThan(0);
+    const minimalDecision = postedDecisions[0] as TelemetryDecisionPayload;
+    expect(minimalDecision.metadata.telemetry_mode).toBe("minimal");
+    expect(minimalDecision.state_raw).toEqual({});
+    expect(minimalDecision.state_norm).toBeNull();
+    expect(minimalDecision.legal_actions).toBeDefined();
+  });
+
   it("does not let async telemetry failures stall local selfplay throughput", async () => {
     const fetchMock = vi.fn(
       async () =>
