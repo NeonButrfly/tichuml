@@ -117,6 +117,45 @@ function Get-RepoUrl { if ($env:REPO_URL) { return $env:REPO_URL } return $scrip
 function Get-GitBranch { if ($env:GIT_BRANCH) { return $env:GIT_BRANCH } return $script:DefaultBranch }
 function Get-BackendUrl { if ($env:BACKEND_BASE_URL) { return $env:BACKEND_BASE_URL } return "http://localhost:4310" }
 
+function Read-LsRemoteCommit {
+  param([object[]]$Output, [string]$Branch)
+  $line = @($Output | Where-Object { "$_" -match "^[0-9a-fA-F]{40}\s+" } | Select-Object -First 1)
+  if (-not $line -or [string]::IsNullOrWhiteSpace("$line")) { throw "Live remote refs/heads/${Branch} did not return a commit SHA." }
+  return (("$line" -split "\s+")[0]).Trim()
+}
+
+function Get-LocalCommit {
+  return ((& git -C $script:RepoRoot rev-parse HEAD) -join "").Trim()
+}
+
+function Ensure-OriginRemote {
+  param([string]$RepoUrl = (Get-RepoUrl))
+  & git -C $script:RepoRoot remote get-url origin *> $null
+  if ($LASTEXITCODE -ne 0) { Invoke-Logged "git" @("-C", $script:RepoRoot, "remote", "add", "origin", $RepoUrl) $script:RepoRoot }
+  Invoke-Logged "git" @("-C", $script:RepoRoot, "remote", "set-url", "origin", $RepoUrl) $script:RepoRoot
+}
+
+function Get-LiveRemoteCommit {
+  param([string]$Branch = (Get-GitBranch), [string]$RepoUrl = (Get-RepoUrl))
+  Ensure-OriginRemote -RepoUrl $RepoUrl
+  $output = & git -C $script:RepoRoot ls-remote origin "refs/heads/$Branch" 2>&1
+  if ($LASTEXITCODE -ne 0) { throw "Unable to contact live remote origin refs/heads/${Branch}: $($output -join ' ')" }
+  return Read-LsRemoteCommit -Output $output -Branch $Branch
+}
+
+function Refresh-RemoteBranch {
+  param([string]$Branch = (Get-GitBranch))
+  Invoke-Logged "git" @("-C", $script:RepoRoot, "fetch", "--prune", "origin", "+refs/heads/${Branch}:refs/remotes/origin/${Branch}") $script:RepoRoot
+}
+
+function Get-AheadBehind {
+  param([string]$Branch = (Get-GitBranch))
+  Refresh-RemoteBranch -Branch $Branch
+  $output = & git -C $script:RepoRoot rev-list --left-right --count "HEAD...origin/$Branch"
+  if ($LASTEXITCODE -ne 0) { throw "Unable to compute ahead/behind for origin/${Branch}: $($output -join ' ')" }
+  return (($output -join " ").Trim() -split "\s+")
+}
+
 function Write-UpdateStatus {
   param(
     [string]$Status = "pass",
@@ -127,8 +166,14 @@ function Write-UpdateStatus {
     [string]$RemoteCommit = "",
     [string]$Ahead = "0",
     [string]$Behind = "0",
-    [string]$Dirty = "false"
+    [string]$Dirty = "false",
+    [string]$BeforeLocalCommit = "",
+    [string]$BeforeRemoteCommitLive = "",
+    [string]$AfterLocalCommit = "",
+    [string]$AfterRemoteCommitLive = "",
+    [string]$CodeChanged = "false"
   )
+  Ensure-RuntimeDirs
   $lines = @(
     "LAST_CHECK_AT=$(Get-Date -Format 'yyyy-MM-ddTHH:mm:ssZ')",
     "STATUS=$Status",
@@ -140,26 +185,69 @@ function Write-UpdateStatus {
     "AHEAD=$Ahead",
     "BEHIND=$Behind",
     "DIRTY=$Dirty",
+    "BEFORE_LOCAL_COMMIT=$BeforeLocalCommit",
+    "BEFORE_REMOTE_COMMIT_LIVE=$BeforeRemoteCommitLive",
+    "AFTER_LOCAL_COMMIT=$AfterLocalCommit",
+    "AFTER_REMOTE_COMMIT_LIVE=$AfterRemoteCommitLive",
+    "CODE_CHANGED=$CodeChanged",
     ('MESSAGE="{0}"' -f $Message.Replace('"', '\"'))
   )
   $lines | Set-Content -Path $script:UpdateStatusFile -Encoding UTF8
 }
 
 function Force-RefreshRepo {
+  $repoRootExisted = Test-Path $script:RepoRoot
   Ensure-RuntimeDirs
   $repoUrl = Get-RepoUrl
   $branch = Get-GitBranch
-  if (-not (Test-Path $script:RepoRoot)) { New-Item -ItemType Directory -Force -Path (Split-Path $script:RepoRoot -Parent) | Out-Null; Invoke-Logged "git" @("clone", $repoUrl, $script:RepoRoot) (Split-Path $script:RepoRoot -Parent) }
-  if (-not (Test-Path (Join-Path $script:RepoRoot ".git"))) { throw "Repo root exists but is not a git repo: $script:RepoRoot" }
-  Write-Step "Force-refreshing repository state"
-  Write-Warn "Local tracked and untracked changes in $script:RepoRoot will be overwritten for this backend workflow."
-  Invoke-Logged "git" @("-C", $script:RepoRoot, "remote", "set-url", "origin", $repoUrl) $script:RepoRoot
-  Invoke-Logged "git" @("-C", $script:RepoRoot, "fetch", "--prune", "origin", $branch) $script:RepoRoot
-  Invoke-Logged "git" @("-C", $script:RepoRoot, "checkout", $branch) $script:RepoRoot
-  Invoke-Logged "git" @("-C", $script:RepoRoot, "reset", "--hard", "origin/$branch") $script:RepoRoot
-  Invoke-Logged "git" @("-C", $script:RepoRoot, "clean", "-fd") $script:RepoRoot
-  $localCommit = (& git -C $script:RepoRoot rev-parse HEAD).Trim()
-  Write-UpdateStatus -Status "pass" -UpdateApplied "true" -RestartTriggered "false" -Message "Repository force-refreshed." -LocalCommit $localCommit -RemoteCommit $localCommit
+  $beforeLocalCommit = ""
+  $beforeRemoteCommitLive = ""
+  try {
+    if (-not $repoRootExisted) {
+      New-Item -ItemType Directory -Force -Path (Split-Path $script:RepoRoot -Parent) | Out-Null
+      $remoteOutput = & git ls-remote $repoUrl "refs/heads/$branch" 2>&1
+      if ($LASTEXITCODE -ne 0) { throw "Unable to contact live remote refs/heads/${branch}: $($remoteOutput -join ' ')" }
+      $beforeRemoteCommitLive = Read-LsRemoteCommit -Output $remoteOutput -Branch $branch
+      Remove-Item -LiteralPath $script:RepoRoot -Recurse -Force -ErrorAction SilentlyContinue
+      Invoke-Logged "git" @("clone", "-b", $branch, $repoUrl, $script:RepoRoot) (Split-Path $script:RepoRoot -Parent)
+    }
+    if (-not (Test-Path (Join-Path $script:RepoRoot ".git"))) { throw "Repo root exists but is not a git repo: $script:RepoRoot" }
+    Write-Step "Force-refreshing repository state"
+    Write-Warn "Local tracked and untracked changes in $script:RepoRoot will be overwritten for this backend workflow."
+    $beforeLocalCommit = Get-LocalCommit
+    $beforeRemoteCommitLive = Get-LiveRemoteCommit -Branch $branch -RepoUrl $repoUrl
+    Write-Info "Live remote commit for origin/${branch}: $beforeRemoteCommitLive"
+    Refresh-RemoteBranch -Branch $branch
+    Write-Info ("Running: git -C {0} checkout {1}" -f $script:RepoRoot, $branch)
+    & git -C $script:RepoRoot checkout $branch
+    if ($LASTEXITCODE -ne 0) { Invoke-Logged "git" @("-C", $script:RepoRoot, "checkout", "-B", $branch, "origin/$branch") $script:RepoRoot }
+    Invoke-Logged "git" @("-C", $script:RepoRoot, "reset", "--hard", "origin/$branch") $script:RepoRoot
+    Invoke-Logged "git" @("-C", $script:RepoRoot, "clean", "-fd") $script:RepoRoot
+    $afterLocalCommit = Get-LocalCommit
+    $afterRemoteCommitLive = Get-LiveRemoteCommit -Branch $branch -RepoUrl $repoUrl
+    if ($afterLocalCommit -ne $afterRemoteCommitLive) { throw "After force refresh, local HEAD $afterLocalCommit does not match live remote $afterRemoteCommitLive" }
+    $aheadBehind = Get-AheadBehind -Branch $branch
+    $codeChanged = if ($beforeLocalCommit -ne $afterLocalCommit) { "true" } else { "false" }
+    $updateApplied = $codeChanged
+    $message = if ($codeChanged -eq "true") { "Repository force-refreshed to live origin/$branch." } else { "Repository already matched live origin/$branch." }
+    $script:LastRepoRefreshResult = [pscustomobject]@{
+      BeforeLocalCommit = $beforeLocalCommit
+      BeforeRemoteCommitLive = $beforeRemoteCommitLive
+      AfterLocalCommit = $afterLocalCommit
+      AfterRemoteCommitLive = $afterRemoteCommitLive
+      CodeChanged = $codeChanged
+      Ahead = $aheadBehind[0]
+      Behind = $aheadBehind[1]
+      Message = $message
+    }
+    Write-UpdateStatus -Status "pass" -UpdateApplied $updateApplied -RestartTriggered "false" -Message $message -LocalCommit $afterLocalCommit -RemoteCommit $afterRemoteCommitLive -Ahead $aheadBehind[0] -Behind $aheadBehind[1] -BeforeLocalCommit $beforeLocalCommit -BeforeRemoteCommitLive $beforeRemoteCommitLive -AfterLocalCommit $afterLocalCommit -AfterRemoteCommitLive $afterRemoteCommitLive -CodeChanged $codeChanged
+    Write-Ok "Local HEAD matches live remote $afterRemoteCommitLive"
+  } catch {
+    $localForStatus = if ($beforeLocalCommit) { $beforeLocalCommit } else { try { Get-LocalCommit } catch { "" } }
+    $message = $_.Exception.Message
+    Write-UpdateStatus -Status "fail" -UpdateApplied "false" -RestartTriggered "false" -Message $message -LocalCommit $localForStatus -RemoteCommit $beforeRemoteCommitLive -BeforeLocalCommit $beforeLocalCommit -BeforeRemoteCommitLive $beforeRemoteCommitLive -AfterLocalCommit $localForStatus -AfterRemoteCommitLive $beforeRemoteCommitLive -CodeChanged "false"
+    throw
+  }
 }
 
 function Test-DockerReachable {

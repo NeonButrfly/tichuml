@@ -54,8 +54,7 @@ main() {
   local local_commit remote_commit ahead behind
   local_commit="$(git_local_commit)"
   log_info "Refreshing remote commit metadata for status output"
-  git -C "$BACKEND_REPO_ROOT" fetch origin "$GIT_BRANCH" >/dev/null 2>&1 || true
-  remote_commit="$(git_remote_commit 2>/dev/null || printf '%s\n' "$local_commit")"
+  remote_commit="$(git_remote_commit 2>/dev/null || printf '%s\n' unknown)"
   set -- $(git_ahead_behind 2>/dev/null || printf '0 0')
   ahead="$1"
   behind="$2"

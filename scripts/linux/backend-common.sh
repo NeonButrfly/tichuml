@@ -139,11 +139,42 @@ git_local_commit() {
   git -C "$BACKEND_REPO_ROOT" rev-parse HEAD
 }
 
+git_live_remote_commit() {
+  local branch="${1:-$GIT_BRANCH}"
+  local repo_url="${2:-$REPO_URL}"
+  local repo_root="${3:-$BACKEND_REPO_ROOT}"
+  local output sha
+
+  git -C "$repo_root" remote get-url origin >/dev/null 2>&1 ||
+    git -C "$repo_root" remote add origin "$repo_url"
+  git -C "$repo_root" remote set-url origin "$repo_url"
+
+  if ! output="$(git -C "$repo_root" ls-remote origin "refs/heads/$branch" 2>&1)"; then
+    log_fail "Unable to contact live remote origin refs/heads/$branch: $output"
+    return 1
+  fi
+
+  sha="$(printf '%s\n' "$output" | awk 'NF >= 2 {print $1; exit}')"
+  if [ -z "$sha" ]; then
+    log_fail "Live remote origin refs/heads/$branch did not return a commit SHA."
+    return 1
+  fi
+
+  printf '%s\n' "$sha"
+}
+
+git_refresh_remote_branch() {
+  local branch="${1:-$GIT_BRANCH}"
+  local repo_root="${2:-$BACKEND_REPO_ROOT}"
+  git -C "$repo_root" fetch --prune origin "+refs/heads/$branch:refs/remotes/origin/$branch"
+}
+
 git_remote_commit() {
-  git -C "$BACKEND_REPO_ROOT" rev-parse "origin/$GIT_BRANCH"
+  git_live_remote_commit "$GIT_BRANCH" "$REPO_URL" "$BACKEND_REPO_ROOT"
 }
 
 git_ahead_behind() {
+  git_refresh_remote_branch "$GIT_BRANCH" "$BACKEND_REPO_ROOT"
   git -C "$BACKEND_REPO_ROOT" rev-list --left-right --count "HEAD...origin/$GIT_BRANCH"
 }
 
@@ -151,6 +182,7 @@ git_force_sync_repo() {
   local repo_root="$1"
   local branch="$2"
   local repo_url="$3"
+  local live_remote_commit live_remote_after local_after
 
   log_step "Force-syncing repository to origin/$branch"
   log_info "This intentionally overwrites local changes for the backend install/start workflow."
@@ -160,15 +192,25 @@ git_force_sync_repo() {
 
   log_info "Running git remote set-url origin $repo_url"
   git -C "$repo_root" remote set-url origin "$repo_url"
-  log_info "Running git fetch --prune origin $branch"
-  git -C "$repo_root" fetch --prune origin "$branch"
+  live_remote_commit="$(git_live_remote_commit "$branch" "$repo_url" "$repo_root")" || return 1
+  log_info "Live remote commit for origin/$branch: $live_remote_commit"
+  log_info "Running git fetch --prune origin +refs/heads/$branch:refs/remotes/origin/$branch"
+  git_refresh_remote_branch "$branch" "$repo_root"
   log_info "Running git checkout $branch"
   git -C "$repo_root" checkout "$branch" 2>/dev/null ||
-    git -C "$repo_root" checkout -b "$branch" "origin/$branch"
+    git -C "$repo_root" checkout -B "$branch" "origin/$branch"
   log_info "Running git reset --hard origin/$branch"
   git -C "$repo_root" reset --hard "origin/$branch"
   log_info "Running git clean -fd"
   git -C "$repo_root" clean -fd
+
+  local_after="$(git -C "$repo_root" rev-parse HEAD)"
+  live_remote_after="$(git_live_remote_commit "$branch" "$repo_url" "$repo_root")" || return 1
+  if [ "$local_after" != "$live_remote_after" ]; then
+    log_fail "After force sync, local HEAD $local_after does not match live remote $live_remote_after"
+    return 1
+  fi
+  log_ok "Local HEAD matches live remote $live_remote_after"
 }
 
 shell_quote() {
@@ -195,6 +237,11 @@ write_update_status() {
   local ahead="${7:-0}"
   local behind="${8:-0}"
   local dirty="${9:-false}"
+  local before_local_commit="${10:-unknown}"
+  local before_remote_commit_live="${11:-unknown}"
+  local after_local_commit="${12:-$local_commit}"
+  local after_remote_commit_live="${13:-$remote_commit}"
+  local code_changed="${14:-false}"
 
   {
     write_env_assignment LAST_CHECK_AT "$(backend_now_iso)"
@@ -207,6 +254,11 @@ write_update_status() {
     write_env_assignment AHEAD "$ahead"
     write_env_assignment BEHIND "$behind"
     write_env_assignment DIRTY "$dirty"
+    write_env_assignment BEFORE_LOCAL_COMMIT "$before_local_commit"
+    write_env_assignment BEFORE_REMOTE_COMMIT_LIVE "$before_remote_commit_live"
+    write_env_assignment AFTER_LOCAL_COMMIT "$after_local_commit"
+    write_env_assignment AFTER_REMOTE_COMMIT_LIVE "$after_remote_commit_live"
+    write_env_assignment CODE_CHANGED "$code_changed"
     write_env_assignment MESSAGE "$message"
   } >"$BACKEND_UPDATE_STATUS_FILE"
 
@@ -222,6 +274,11 @@ write_update_status() {
   "ahead": "$ahead",
   "behind": "$behind",
   "dirty": $dirty,
+  "before_local_commit": "$before_local_commit",
+  "before_remote_commit_live": "$before_remote_commit_live",
+  "after_local_commit": "$after_local_commit",
+  "after_remote_commit_live": "$after_remote_commit_live",
+  "code_changed": $code_changed,
   "message": $(node -e 'process.stdout.write(JSON.stringify(process.argv[1] ?? ""))' "$message" 2>/dev/null || printf '"%s"' "$message")
 }
 EOF

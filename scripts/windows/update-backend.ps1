@@ -4,4 +4,14 @@ Ensure-RuntimeDirs
 Ensure-EnvFile
 Import-DotEnv
 Force-RefreshRepo
-Write-Ok "Repository force-refreshed from origin."
+$result = $script:LastRepoRefreshResult
+if ($result) {
+  Write-Info "Before local commit: $($result.BeforeLocalCommit)"
+  Write-Info "Before live remote commit: $($result.BeforeRemoteCommitLive)"
+  Write-Info "After local commit: $($result.AfterLocalCommit)"
+  Write-Info "After live remote commit: $($result.AfterRemoteCommitLive)"
+  Write-Info "Code changed: $($result.CodeChanged)"
+  Write-Ok $result.Message
+} else {
+  Write-Ok "Repository force-refreshed from live origin."
+}

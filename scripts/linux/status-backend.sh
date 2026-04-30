@@ -251,16 +251,19 @@ main() {
     local branch local_commit remote_commit ahead behind
     branch="$(git_current_branch)"
     local_commit="$(git_local_commit)"
-    git -C "$BACKEND_REPO_ROOT" fetch origin "$GIT_BRANCH" >/dev/null 2>&1 || true
-    remote_commit="$(git_remote_commit 2>/dev/null || printf '%s\n' 'unknown')"
-    set -- $(git_ahead_behind 2>/dev/null || printf '0 0')
-    ahead="$1"
-    behind="$2"
 
     status_line "[OK]" "Git branch: $branch"
     status_line "[OK]" "Local commit: $local_commit"
-    status_line "[OK]" "Remote commit: $remote_commit"
-    status_line "[OK]" "Ahead/behind: $ahead/$behind"
+    if remote_commit="$(git_remote_commit 2>/dev/null)"; then
+      set -- $(git_ahead_behind 2>/dev/null || printf '0 0')
+      ahead="$1"
+      behind="$2"
+      status_line "[OK]" "Remote commit live: $remote_commit"
+      status_line "[OK]" "Ahead/behind: $ahead/$behind"
+    else
+      status_line "[FAIL]" "Remote commit live: unknown; unable to contact origin refs/heads/$GIT_BRANCH"
+      status_line "[WARN]" "Ahead/behind: unknown because live remote refresh failed"
+    fi
 
     if repo_dirty; then
       status_line "[WARN]" "Repository has uncommitted changes; install/update/start workflows will force remote state over them"

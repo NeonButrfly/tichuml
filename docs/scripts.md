@@ -128,7 +128,19 @@ Destructive or force-overwrite scripts:
 - `scripts/linux/update-backend.sh`
 - `scripts/linux/reset-db.sh --yes`
 - `scripts/windows/install-backend.ps1`
+- `scripts/windows/update-backend.ps1`
 - `scripts/windows/reset-db.ps1`
+
+Backend update/start force-sync behavior is tracked by
+[#55](https://github.com/NeonButrfly/tichuml/issues/55). These scripts must not
+trust a stale local `origin/<branch>` ref as remote truth. They read the live
+remote branch with `git ls-remote origin refs/heads/<branch>`, force-fetch the
+exact refspec
+`+refs/heads/<branch>:refs/remotes/origin/<branch>`, reset hard to the refreshed
+remote-tracking ref, clean untracked files, and verify local `HEAD` equals the
+live remote SHA before reporting success. If the live remote cannot be reached,
+the update status is written as failed instead of reporting local and remote as
+equal.
 
 Scripts that require explicit confirmation or destructive flags:
 
