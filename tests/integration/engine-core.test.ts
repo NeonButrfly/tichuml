@@ -8,6 +8,7 @@ import {
   getCanonicalCardIdsKey,
   getLegalActions,
   listCombinationInterpretations,
+  STANDARD_RANKS,
   type Combination,
   type GameState,
   type LegalAction
@@ -370,6 +371,28 @@ describe("engine core", () => {
     expect(afterMahjong.nextState.currentWish).toBe(8);
     expect(nextSeat).toBe("seat-1");
     expect((getLegalActions(afterMahjong.nextState)[nextSeat!] ?? []).length).toBeGreaterThan(0);
+  });
+
+  it("exposes available Mahjong wish ranks on legal Mahjong plays", () => {
+    const state = scenario({
+      currentWish: null,
+      activeSeat: "seat-0",
+      currentTrick: null,
+      hands: {
+        "seat-0": cardsFromIds(["mahjong", "jade-7", "sword-9"])
+      }
+    });
+
+    const mahjongAction = (getLegalActions(state)["seat-0"] ?? []).find(
+      (action) =>
+        action.type === "play_cards" && action.cardIds.includes("mahjong")
+    );
+
+    expect(mahjongAction).toBeDefined();
+    if (!mahjongAction || mahjongAction.type !== "play_cards") {
+      throw new Error("Expected a legal Mahjong play.");
+    }
+    expect(mahjongAction.availableWishRanks).toEqual([...STANDARD_RANKS]);
   });
 
   it("treats an explicit null Mahjong wish as no active wish", () => {

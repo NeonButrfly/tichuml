@@ -1426,10 +1426,16 @@ async function resolveLocalHeuristicDecision(config: {
                 action: candidate.action,
                 score: candidate.score,
                 reasons: candidate.reasons,
-                tags: []
+                tags: [],
+                ...(candidate.mahjongWish
+                  ? { mahjongWish: candidate.mahjongWish }
+                  : {})
               })),
               selectedReasonSummary: fastDecision.candidates[0]?.reasons ?? [],
-              selectedTags: []
+              selectedTags: [],
+              ...(fastDecision.candidates[0]?.mahjongWish
+                ? { selectedMahjongWish: fastDecision.candidates[0].mahjongWish }
+                : {})
             }
           } satisfies ChosenDecision;
         })()

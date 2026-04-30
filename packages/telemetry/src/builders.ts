@@ -67,6 +67,7 @@ export type DecisionRecord = {
       score: number;
       reasons: string[];
       tags: string[];
+      mahjongWish?: JsonObject;
       teamplay?: {
         partnerCalledTichu: boolean;
         partnerStillLiveForTichu: boolean;
@@ -83,6 +84,7 @@ export type DecisionRecord = {
     }>;
     selectedReasonSummary: string[];
     selectedTags: string[];
+    selectedMahjongWish?: JsonObject;
     selectedTeamplay?: {
       partnerCalledTichu: boolean;
       partnerStillLiveForTichu: boolean;
@@ -291,11 +293,135 @@ function inferWishSource(state: JsonObject): string | null {
   return null;
 }
 
+function readStringList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string")
+    : [];
+}
+
+function actionIncludesMahjong(action: JsonObject | null | undefined): boolean {
+  if (!action || action.type !== "play_cards") {
+    return false;
+  }
+  const combination = readJsonObject(action.combination);
+  return (
+    readStringList(action.cardIds).includes("mahjong") ||
+    combination?.containsMahjong === true
+  );
+}
+
+function readNumberList(value: unknown): number[] {
+  return Array.isArray(value)
+    ? value.filter(
+        (entry): entry is number =>
+          typeof entry === "number" && Number.isFinite(entry)
+      )
+    : [];
+}
+
+function readBooleanField(value: JsonObject | null, key: string): boolean {
+  return value?.[key] === true;
+}
+
+function readNullableStringField(
+  value: JsonObject | null,
+  key: string
+): string | null {
+  const field = value?.[key];
+  return typeof field === "string" ? field : null;
+}
+
+function readSelectedMahjongWish(
+  explanation: SeedJsonValue | null | undefined
+): JsonObject | null {
+  const explanationObject = readJsonObject(explanation);
+  return readJsonObject(explanationObject?.selectedMahjongWish);
+}
+
+function findWishTemplateForChosenAction(config: {
+  actorLegalActions: SeedJsonValue[];
+  chosenAction?: JsonObject | undefined;
+}): JsonObject | null {
+  if (!config.chosenAction) {
+    return null;
+  }
+  return (
+    config.actorLegalActions.find(
+      (candidate): candidate is JsonObject =>
+        isJsonObjectValue(candidate) &&
+        readStringField(candidate, "type") === "play_cards" &&
+        actionsEquivalent(candidate, config.chosenAction as JsonObject) &&
+        readNumberList(candidate.availableWishRanks).length > 0
+    ) ?? null
+  );
+}
+
+function buildMahjongWishStrategyMetadata(config: {
+  actorLegalActions: SeedJsonValue[];
+  chosenAction?: JsonObject | undefined;
+  explanation?: SeedJsonValue | null | undefined;
+}): JsonObject {
+  const chosenAction = config.chosenAction;
+  const selectedWish = readSelectedMahjongWish(config.explanation);
+  const wishTemplate = findWishTemplateForChosenAction({
+    actorLegalActions: config.actorLegalActions,
+    chosenAction
+  });
+  const availableRanks = [
+    ...readNumberList(wishTemplate?.availableWishRanks),
+    ...readNumberList(chosenAction?.availableWishRanks)
+  ];
+  const mahjongPlayed =
+    actionIncludesMahjong(chosenAction) ||
+    readBooleanField(selectedWish, "mahjong_played");
+  const wishAvailable =
+    availableRanks.length > 0 ||
+    readBooleanField(selectedWish, "mahjong_wish_available");
+  const wishSelected =
+    readFiniteNumber(chosenAction?.wishRank) !== null ||
+    readBooleanField(selectedWish, "mahjong_wish_selected");
+  const skippedReason =
+    readNullableStringField(selectedWish, "mahjong_wish_skipped_reason") ??
+    (mahjongPlayed && wishAvailable && !wishSelected
+      ? "rules_variant_allows_no_wish"
+      : null);
+
+  return {
+    mahjong_played: mahjongPlayed,
+    mahjong_wish_available: mahjongPlayed ? wishAvailable : false,
+    mahjong_wish_selected: mahjongPlayed ? wishSelected : false,
+    mahjong_wish_skipped_reason: mahjongPlayed ? skippedReason : null,
+    wish_reason: mahjongPlayed
+      ? (readNullableStringField(selectedWish, "wish_reason") ??
+        (wishSelected ? null : "skipped"))
+      : null,
+    wish_target_seat: readNullableStringField(selectedWish, "wish_target_seat"),
+    wish_target_team: readNullableStringField(selectedWish, "wish_target_team"),
+    wish_rank_source_card_id: readNullableStringField(
+      selectedWish,
+      "wish_rank_source_card_id"
+    ),
+    wish_rank_source_target: readNullableStringField(
+      selectedWish,
+      "wish_rank_source_target"
+    ),
+    wish_considered_tichu_pressure: readBooleanField(
+      selectedWish,
+      "wish_considered_tichu_pressure"
+    ),
+    wish_considered_grand_tichu_pressure: readBooleanField(
+      selectedWish,
+      "wish_considered_grand_tichu_pressure"
+    )
+  };
+}
+
 function buildWishTelemetryMetadata(config: {
   stateRaw: JsonObject;
   actorSeat: string;
   actorLegalActions: SeedJsonValue[];
   chosenAction?: JsonObject | undefined;
+  explanation?: SeedJsonValue | null | undefined;
 }): JsonObject {
   const wishedRank = readCurrentWish(config.stateRaw);
   const wishActive = wishedRank !== null;
@@ -332,7 +458,12 @@ function buildWishTelemetryMetadata(config: {
     wish_fulfillment_required: wishActive && legalFulfillingMoves > 0,
     chosen_action_fulfilled_wish: chosenActionFulfilledWish,
     chosen_action_failed_required_wish:
-      wishActive && legalFulfillingMoves > 0 && !chosenActionFulfilledWish
+      wishActive && legalFulfillingMoves > 0 && !chosenActionFulfilledWish,
+    ...buildMahjongWishStrategyMetadata({
+      actorLegalActions: config.actorLegalActions,
+      chosenAction: config.chosenAction,
+      explanation: config.explanation
+    })
   };
 }
 
@@ -352,6 +483,7 @@ export function buildDecisionContextMetadata(config: {
   actorLegalActions: SeedJsonValue[];
   actorSeat: string;
   chosenAction?: JsonObject | undefined;
+  explanation?: SeedJsonValue | null | undefined;
   latencyMs?: number | undefined;
 }): JsonObject {
   return {
@@ -368,7 +500,8 @@ export function buildDecisionContextMetadata(config: {
       stateRaw: config.stateRaw,
       actorSeat: config.actorSeat,
       actorLegalActions: config.actorLegalActions,
-      chosenAction: config.chosenAction
+      chosenAction: config.chosenAction,
+      explanation: config.explanation
     })
   };
 }
@@ -378,6 +511,7 @@ export function buildCompactDecisionMetadata(config: {
   actorLegalActions: SeedJsonValue[];
   actorSeat: string;
   chosenAction?: JsonObject | undefined;
+  explanation?: SeedJsonValue | null | undefined;
   latencyMs?: number | undefined;
   telemetryMode: TelemetryMode;
 }): JsonObject {
@@ -407,6 +541,20 @@ export function buildCompactDecisionMetadata(config: {
     chosen_action_fulfilled_wish: detail.chosen_action_fulfilled_wish ?? false,
     chosen_action_failed_required_wish:
       detail.chosen_action_failed_required_wish ?? false,
+    mahjong_played: detail.mahjong_played ?? false,
+    mahjong_wish_available: detail.mahjong_wish_available ?? false,
+    mahjong_wish_selected: detail.mahjong_wish_selected ?? false,
+    mahjong_wish_skipped_reason:
+      detail.mahjong_wish_skipped_reason ?? null,
+    wish_reason: detail.wish_reason ?? null,
+    wish_target_seat: detail.wish_target_seat ?? null,
+    wish_target_team: detail.wish_target_team ?? null,
+    wish_rank_source_card_id: detail.wish_rank_source_card_id ?? null,
+    wish_rank_source_target: detail.wish_rank_source_target ?? null,
+    wish_considered_tichu_pressure:
+      detail.wish_considered_tichu_pressure ?? false,
+    wish_considered_grand_tichu_pressure:
+      detail.wish_considered_grand_tichu_pressure ?? false,
     legal_action_count: config.actorLegalActions.length
   };
 }
@@ -538,6 +686,17 @@ export function selectTelemetryChosenAction(config: {
       actionsEquivalent(candidate, config.chosenAction)
   );
 
+  if (structuralMatch && readStringField(structuralMatch, "type") === "play_cards") {
+    const wishRank = readFiniteNumber(config.chosenAction.wishRank);
+    return {
+      ...structuralMatch,
+      ...(config.chosenAction.phoenixAsRank !== undefined
+        ? { phoenixAsRank: config.chosenAction.phoenixAsRank }
+        : {}),
+      ...(wishRank !== null ? { wishRank } : {})
+    };
+  }
+
   return structuralMatch ?? config.chosenAction;
 }
 
@@ -605,15 +764,16 @@ export function buildTelemetryDecisionPayloads(config: {
     actorLegalActions,
     chosenAction: config.chosenAction
   });
+  const explanation = config.explanation ?? null;
   const compactMetadata = buildCompactDecisionMetadata({
     stateRaw: config.stateRaw,
     actorLegalActions,
     actorSeat: config.actorSeat,
     chosenAction,
+    explanation,
     latencyMs: config.latencyMs,
     telemetryMode: config.mode
   });
-  const explanation = config.explanation ?? null;
   const candidateScores =
     config.candidateScores ??
     readExplanationField(explanation, "candidateScores");

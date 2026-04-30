@@ -14,6 +14,27 @@ Use this file to preserve AI and bot-behavior prompt intent and link it to GitHu
 
 ## Entries
 
+### 2026-04-29 - Strategic Mahjong wish selection for heuristic providers
+
+- Prompt Signal: Full-mode telemetry showed Mahjong plays with
+  `availableWishRanks` present but no chosen `wishRank`, leaving no active wish
+  afterward and producing poor training signal even though no-wish Mahjong is a
+  supported rules variant.
+- Interpreted Requirement: Issue
+  [#56](https://github.com/NeonButrfly/tichuml/issues/56) tracks local and
+  server heuristic behavior that normally selects a deterministic, strategic
+  Mahjong wish when ranks are available, while preserving engine/UI support for
+  no-wish Mahjong. Wish selection must use cheap pass-memory and Tichu/Grand
+  Tichu pressure signals and record stable metadata for selected or skipped
+  wishes.
+- Affected Systems: `packages/ai-heuristics`,
+  `apps/server/src/providers/heuristic-provider.ts`,
+  `apps/sim-runner/src/self-play-batch.ts`, `packages/telemetry`,
+  `scripts/telemetry-sanity.ts`, engine/heuristic/telemetry integration tests.
+- Linked GitHub Issue: [#56](https://github.com/NeonButrfly/tichuml/issues/56)
+- Milestone: [6.5 – Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status Source: GitHub issue state only.
+
 ### 2026-04-28 - Self-play CLI games must finish as single scored hands for bounded training runs
 
 - Prompt Signal: The latest simulator blocker request required `npm run sim`

@@ -2,14 +2,29 @@ import {
   SEAT_IDS,
   cardsFromIds,
   getCanonicalCardIdsKey,
+  getCardById,
+  getLeftSeat,
   getLegalActions,
+  getOpponentSeats,
+  getPartnerSeat,
+  getRightSeat,
+  getTeamForSeat,
+  STANDARD_RANKS,
   type Card,
   type GameState,
+  type PassSelection,
   type SeatId,
   type StandardRank
 } from "@tichuml/engine";
-import { cloneState, hasOpponentCalledTichu, partnerHasCalledTichu } from "./HeuristicContext.js";
-import type { CardPassMetrics, HandEvaluation, PlayLegalAction } from "./types.js";
+import { cloneState } from "./HeuristicContext.js";
+import type {
+  CardPassMetrics,
+  HandEvaluation,
+  MahjongWishMetadata,
+  MahjongWishReason,
+  PassMemoryTarget,
+  PlayLegalAction
+} from "./types.js";
 import { cardStrength, isPlayLegalAction, isStandardCard } from "./utils.js";
 
 const handEvaluationCache = new Map<string, HandEvaluation>();
@@ -680,73 +695,372 @@ export function chooseWishRank(
   seat: SeatId,
   selectedCardIds: string[]
 ): StandardRank {
-  const remainingRanks = state.hands[seat].filter(
-    (
-      card
-    ): card is Extract<(typeof state.hands)[SeatId][number], { kind: "standard" }> =>
-      !selectedCardIds.includes(card.id) && card.kind === "standard"
-  );
-  const remainingCounts = new Map<StandardRank, number>();
-  const seenCounts = getSeenRankCounts(state);
-  const partnerCalled = partnerHasCalledTichu(state, seat);
-  const opponentCalled = hasOpponentCalledTichu(state, seat);
+  return chooseMahjongWishRank({
+    state,
+    seat,
+    selectedCardIds,
+    availableWishRanks: [...STANDARD_RANKS]
+  }).rank;
+}
 
-  if (partnerCalled && !opponentCalled) {
-    return 2;
-  }
+type WishStrategyState = Pick<
+  GameState,
+  "passSelections" | "revealedPasses" | "calls" | "currentTrick" | "collectedCards"
+> & {
+  hands?: Partial<Record<SeatId, Card[]>>;
+  actorHand?: Card[];
+};
 
-  if (opponentCalled && !partnerCalled) {
-    return 14;
-  }
+type PassMemorySnapshot = Pick<
+  MahjongWishMetadata,
+  | "cards_passed_left"
+  | "cards_passed_partner"
+  | "cards_passed_right"
+  | "cards_received_from_left"
+  | "cards_received_from_partner"
+  | "cards_received_from_right"
+>;
 
-  for (const card of remainingRanks) {
-    remainingCounts.set(card.rank, (remainingCounts.get(card.rank) ?? 0) + 1);
-  }
+type PassMemoryRankSignal = {
+  rank: StandardRank;
+  cardId: string;
+  sourceTarget: PassMemoryTarget;
+  targetSeat: SeatId;
+};
 
-  const ranked = [...Array.from({ length: 13 }, (_, index) => (index + 2) as StandardRank)]
-    .map((rank) => {
-      const seen = seenCounts.get(rank) ?? 0;
-      const held = remainingCounts.get(rank) ?? 0;
-      const remaining = Math.max(0, 4 - seen - held);
-      let score = remaining * 12;
+function readPassSelection(
+  selections: Partial<Record<SeatId, PassSelection>>,
+  seat: SeatId
+): PassSelection | null {
+  return selections[seat] ?? null;
+}
 
-      if (held >= 2) {
-        score -= 12;
-      } else if (held === 1) {
-        score += 3;
-      }
+function buildPassMemorySnapshot(
+  state: WishStrategyState,
+  seat: SeatId
+): PassMemorySnapshot {
+  const selections =
+    Object.keys(state.revealedPasses).length > 0
+      ? state.revealedPasses
+      : state.passSelections;
+  const own = readPassSelection(selections, seat);
+  const leftSeat = getLeftSeat(seat);
+  const partnerSeat = getPartnerSeat(seat);
+  const rightSeat = getRightSeat(seat);
+  const fromLeft = readPassSelection(selections, leftSeat);
+  const fromPartner = readPassSelection(selections, partnerSeat);
+  const fromRight = readPassSelection(selections, rightSeat);
 
-      if (rank >= 6 && rank <= 12) {
-        score += 1;
-      }
+  return {
+    cards_passed_left: own?.left ? [own.left] : [],
+    cards_passed_partner: own?.partner ? [own.partner] : [],
+    cards_passed_right: own?.right ? [own.right] : [],
+    cards_received_from_left: fromLeft?.right ? [fromLeft.right] : [],
+    cards_received_from_partner: fromPartner?.partner ? [fromPartner.partner] : [],
+    cards_received_from_right: fromRight?.left ? [fromRight.left] : []
+  };
+}
 
-      if (opponentCalled && !partnerCalled && rank >= 11) {
-        score += 8;
-      }
+function cardIdRank(cardId: string): StandardRank | null {
+  const card = getCardById(cardId);
+  return isStandardCard(card) ? card.rank : null;
+}
 
-      if (partnerCalled && rank <= 5) {
-        score += 7;
-      }
+function collectPassMemoryRankSignals(
+  state: WishStrategyState,
+  seat: SeatId,
+  legalRanks: Set<StandardRank>
+): PassMemoryRankSignal[] {
+  const memory = buildPassMemorySnapshot(state, seat);
+  const targets: Array<{
+    sourceTarget: PassMemoryTarget;
+    targetSeat: SeatId;
+    cardIds: string[];
+  }> = [
+    {
+      sourceTarget: "left",
+      targetSeat: getLeftSeat(seat),
+      cardIds: memory.cards_passed_left
+    },
+    {
+      sourceTarget: "partner",
+      targetSeat: getPartnerSeat(seat),
+      cardIds: memory.cards_passed_partner
+    },
+    {
+      sourceTarget: "right",
+      targetSeat: getRightSeat(seat),
+      cardIds: memory.cards_passed_right
+    }
+  ];
 
-      return { rank, score, held, remaining };
+  return targets.flatMap(({ sourceTarget, targetSeat, cardIds }) =>
+    cardIds.flatMap((cardId) => {
+      const rank = cardIdRank(cardId);
+      return rank !== null && legalRanks.has(rank)
+        ? [{ rank, cardId, sourceTarget, targetSeat }]
+        : [];
     })
+  );
+}
+
+function actorHandForWish(
+  state: WishStrategyState,
+  seat: SeatId,
+  selectedCardIds: string[]
+): Card[] {
+  const hand = state.hands?.[seat] ?? state.actorHand ?? [];
+  return hand.filter((card) => !selectedCardIds.includes(card.id));
+}
+
+function rankSeenCount(state: WishStrategyState, rank: StandardRank): number {
+  let count = 0;
+  for (const cards of Object.values(state.collectedCards ?? {})) {
+    for (const card of cards ?? []) {
+      if (isStandardCard(card) && card.rank === rank) {
+        count += 1;
+      }
+    }
+  }
+  for (const entry of state.currentTrick?.entries ?? []) {
+    if (entry.type !== "play") {
+      continue;
+    }
+    for (const card of cardsFromIds(entry.combination.cardIds)) {
+      if (isStandardCard(card) && card.rank === rank) {
+        count += 1;
+      }
+    }
+  }
+  return count;
+}
+
+function calledTichu(state: WishStrategyState, seat: SeatId): boolean {
+  return state.calls[seat].smallTichu || state.calls[seat].grandTichu;
+}
+
+function scoreWishRankCandidate(config: {
+  state: WishStrategyState;
+  seat: SeatId;
+  rank: StandardRank;
+  selectedCardIds: string[];
+  passSignals: PassMemoryRankSignal[];
+}): MahjongWishMetadata["wish_rank_candidates"][number] {
+  const { state, seat, rank, passSignals } = config;
+  const partner = getPartnerSeat(seat);
+  const opponents = getOpponentSeats(seat);
+  const actorRemaining = actorHandForWish(state, seat, config.selectedCardIds);
+  const heldCount = actorRemaining.filter(
+    (card) => isStandardCard(card) && card.rank === rank
+  ).length;
+  const seen = rankSeenCount(state, rank);
+  const remainingOutsideActor = Math.max(0, 4 - seen - heldCount);
+  const matchingSignals = passSignals.filter((signal) => signal.rank === rank);
+  const preferredSignal = matchingSignals
+    .sort((left, right) => {
+      const leftGrand = state.calls[left.targetSeat].grandTichu ? 1 : 0;
+      const rightGrand = state.calls[right.targetSeat].grandTichu ? 1 : 0;
+      if (rightGrand !== leftGrand) return rightGrand - leftGrand;
+      const leftTichu = calledTichu(state, left.targetSeat) ? 1 : 0;
+      const rightTichu = calledTichu(state, right.targetSeat) ? 1 : 0;
+      if (rightTichu !== leftTichu) return rightTichu - leftTichu;
+      return right.rank - left.rank;
+    })[0] ?? null;
+  let score = remainingOutsideActor * 12;
+  let reason: MahjongWishReason =
+    rank >= 12 ? "control_rank" : rank >= 7 && rank <= 11 ? "break_sequence" : "default_safe_pressure";
+  let targetSeat: SeatId | null = null;
+  let sourceCardId: string | null = null;
+  let sourceTarget: PassMemoryTarget | null = null;
+
+  if (remainingOutsideActor === 0 && matchingSignals.length === 0) {
+    score -= 120;
+  }
+  if (heldCount >= 2) {
+    score -= 18;
+  } else if (heldCount === 1) {
+    score -= 4;
+  }
+  if (rank >= 12) {
+    score += 16;
+  } else if (rank >= 7) {
+    score += 10;
+  } else {
+    score += 4;
+  }
+
+  if (preferredSignal) {
+    targetSeat = preferredSignal.targetSeat;
+    sourceCardId = preferredSignal.cardId;
+    sourceTarget = preferredSignal.sourceTarget;
+    const targetCall = state.calls[targetSeat];
+    const targetIsPartner = targetSeat === partner;
+    const targetIsOpponent = opponents.includes(targetSeat);
+    if (targetCall.grandTichu) {
+      score += targetIsOpponent ? (rank <= 4 ? -18 : 118) : 68;
+      reason = targetIsOpponent
+        ? "passed_to_grand_tichu_caller"
+        : "support_partner_grand_tichu";
+    } else if (targetCall.smallTichu) {
+      score += targetIsOpponent ? (rank <= 4 ? -12 : 92) : 52;
+      reason = targetIsOpponent
+        ? "passed_to_tichu_caller"
+        : "support_partner_tichu";
+    } else if (targetIsOpponent) {
+      score += rank <= 5 ? 20 : 42;
+      reason =
+        preferredSignal.sourceTarget === "left"
+          ? "passed_to_left"
+          : "passed_to_right";
+    } else if (targetIsPartner) {
+      score += calledTichu(state, partner) ? 44 : 22;
+      reason = preferredSignal.sourceTarget === "partner" ? "passed_to_partner" : reason;
+    }
+  }
+
+  for (const opponent of opponents) {
+    if (state.calls[opponent].grandTichu) {
+      score += rank >= 10 ? 42 : -10;
+      if (!preferredSignal && rank >= 10) {
+        reason = "sabotage_grand_tichu_caller";
+        targetSeat = opponent;
+      }
+    } else if (state.calls[opponent].smallTichu) {
+      score += rank >= 10 ? 28 : -6;
+      if (!preferredSignal && rank >= 10) {
+        reason = "sabotage_tichu_caller";
+        targetSeat = opponent;
+      }
+    }
+  }
+
+  if (state.calls[partner].grandTichu && !opponents.includes(targetSeat as SeatId)) {
+    score += rank <= 6 ? 34 : 8;
+    if (!preferredSignal || targetSeat === partner) {
+      reason = "support_partner_grand_tichu";
+      targetSeat = partner;
+    }
+  } else if (state.calls[partner].smallTichu && !opponents.includes(targetSeat as SeatId)) {
+    score += rank <= 6 ? 26 : 6;
+    if (!preferredSignal || targetSeat === partner) {
+      reason = "support_partner_tichu";
+      targetSeat = partner;
+    }
+  }
+
+  if (
+    targetSeat &&
+    getTeamForSeat(targetSeat) !== getTeamForSeat(seat) &&
+    calledTichu(state, targetSeat) &&
+    rank <= 4
+  ) {
+    score -= state.calls[targetSeat].grandTichu ? 42 : 28;
+  }
+
+  return {
+    rank,
+    score,
+    reason,
+    targetSeat,
+    sourceCardId,
+    sourceTarget
+  };
+}
+
+export function chooseMahjongWishRank(config: {
+  state: WishStrategyState;
+  seat: SeatId;
+  selectedCardIds: string[];
+  availableWishRanks: readonly StandardRank[];
+}): { rank: StandardRank; metadata: MahjongWishMetadata } {
+  const legalRanks = new Set(config.availableWishRanks);
+  const passMemory = buildPassMemorySnapshot(config.state, config.seat);
+  const passSignals = collectPassMemoryRankSignals(
+    config.state,
+    config.seat,
+    legalRanks
+  );
+  const candidates = [...config.availableWishRanks]
+    .map((rank) =>
+      scoreWishRankCandidate({
+        state: config.state,
+        seat: config.seat,
+        rank,
+        selectedCardIds: config.selectedCardIds,
+        passSignals
+      })
+    )
     .sort((left, right) => {
       if (right.score !== left.score) {
         return right.score - left.score;
       }
-
-      if (right.remaining !== left.remaining) {
-        return right.remaining - left.remaining;
-      }
-
-      if (partnerCalled && !opponentCalled) {
-        return left.rank - right.rank;
-      }
-
       return right.rank - left.rank;
     });
+  const selected = candidates[0] ?? {
+    rank: 14 as StandardRank,
+    score: 0,
+    reason: "default_safe_pressure" as MahjongWishReason,
+    targetSeat: null,
+    sourceCardId: null,
+    sourceTarget: null
+  };
+  const consideredTichuPressure = SEAT_IDS.some(
+    (seatId) => config.state.calls[seatId].smallTichu
+  );
+  const consideredGrandTichuPressure = SEAT_IDS.some(
+    (seatId) => config.state.calls[seatId].grandTichu
+  );
 
-  return ranked[0]?.rank ?? 14;
+  return {
+    rank: selected.rank,
+    metadata: {
+      mahjong_played: true,
+      mahjong_wish_available: config.availableWishRanks.length > 0,
+      mahjong_wish_selected: config.availableWishRanks.length > 0,
+      mahjong_wish_skipped_reason: null,
+      wish_reason:
+        selected.reason === "default_safe_pressure"
+          ? "default_safe_pressure"
+          : selected.reason,
+      wish_target_seat: selected.targetSeat,
+      wish_target_team: selected.targetSeat
+        ? getTeamForSeat(selected.targetSeat)
+        : null,
+      wish_rank_source_card_id: selected.sourceCardId,
+      wish_rank_source_target: selected.sourceTarget,
+      wish_considered_tichu_pressure: consideredTichuPressure,
+      wish_considered_grand_tichu_pressure: consideredGrandTichuPressure,
+      ...passMemory,
+      wish_rank_candidates: candidates.slice(0, 5)
+    }
+  };
+}
+
+export function describeMahjongWishSkip(
+  state: WishStrategyState,
+  seat: SeatId,
+  availableWishRanks: readonly StandardRank[]
+): MahjongWishMetadata {
+  return {
+    mahjong_played: true,
+    mahjong_wish_available: availableWishRanks.length > 0,
+    mahjong_wish_selected: false,
+    mahjong_wish_skipped_reason:
+      availableWishRanks.length > 0 ? "rules_variant_allows_no_wish" : null,
+    wish_reason: "skipped",
+    wish_target_seat: null,
+    wish_target_team: null,
+    wish_rank_source_card_id: null,
+    wish_rank_source_target: null,
+    wish_considered_tichu_pressure: SEAT_IDS.some(
+      (seatId) => state.calls[seatId].smallTichu
+    ),
+    wish_considered_grand_tichu_pressure: SEAT_IDS.some(
+      (seatId) => state.calls[seatId].grandTichu
+    ),
+    ...buildPassMemorySnapshot(state, seat),
+    wish_rank_candidates: []
+  };
 }
 
 export function hasWishSatisfiedOption(actions: PlayLegalAction[], wish: StandardRank | null): boolean {

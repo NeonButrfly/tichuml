@@ -26,9 +26,18 @@ function createFastPathExplanation(config: {
   return {
     policy: "server-fast-path",
     actor: config.actor,
-    candidateScores: [],
+    candidateScores: config.candidates.map((candidate) => ({
+      action: candidate.action,
+      score: candidate.score,
+      reasons: candidate.reasons,
+      tags: [],
+      ...(candidate.mahjongWish ? { mahjongWish: candidate.mahjongWish } : {})
+    })),
     selectedReasonSummary: config.candidates[0]?.reasons ?? [],
-    selectedTags: []
+    selectedTags: [],
+    ...(config.candidates[0]?.mahjongWish
+      ? { selectedMahjongWish: config.candidates[0].mahjongWish }
+      : {})
   };
 }
 

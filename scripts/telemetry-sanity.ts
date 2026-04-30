@@ -128,6 +128,16 @@ function printHumanSummary(summary: Record<string, unknown>): void {
   );
   console.log(`- active wish decisions: ${metrics.active_wish_decision_count}`);
   console.log(`- active wish events: ${metrics.active_wish_event_count}`);
+  console.log(`- Mahjong played: ${metrics.mahjong_played_count}`);
+  console.log(
+    `- Mahjong with wish rank: ${metrics.mahjong_with_wish_rank_count}`
+  );
+  console.log(
+    `- Mahjong available but skipped: ${metrics.mahjong_wish_available_but_skipped_count}`
+  );
+  console.log(
+    `- required wish violations: ${metrics.required_wish_violation_count}`
+  );
   console.log(
     `- legal chosen action pass rate: ${metrics.legal_chosen_action_pass_rate}`
   );
@@ -197,8 +207,41 @@ async function main(): Promise<void> {
         select_pass_legal_count: number;
         candidate_score_covered_count: number;
         candidate_score_denominator: number;
+        mahjong_played_count: number;
+        mahjong_with_wish_rank_count: number;
+        mahjong_without_wish_rank_count: number;
+        mahjong_wish_available_but_skipped_count: number;
+        required_wish_fulfilled_count: number;
+        required_wish_violation_count: number;
+        wish_considered_tichu_pressure_count: number;
+        wish_considered_grand_tichu_pressure_count: number;
       }>
     >`
+      WITH decision_flags AS (
+        SELECT
+          *,
+          (
+            metadata->>'mahjong_played' = 'true'
+            OR EXISTS (
+              SELECT 1
+              FROM jsonb_array_elements_text(
+                COALESCE(chosen_action->'cardIds', '[]'::jsonb)
+              ) AS card_ids(card_id)
+              WHERE card_id = 'mahjong'
+            )
+          ) AS mahjong_played_flag,
+          (
+            metadata->>'mahjong_wish_available' = 'true'
+            OR jsonb_array_length(
+              COALESCE(chosen_action->'availableWishRanks', '[]'::jsonb)
+            ) > 0
+          ) AS mahjong_wish_available_flag,
+          (
+            metadata->>'mahjong_wish_selected' = 'true'
+            OR chosen_action ? 'wishRank'
+          ) AS mahjong_wish_selected_flag
+        FROM decisions
+      )
       SELECT
         (SELECT COUNT(*)::INTEGER FROM matches) AS match_count,
         (
@@ -210,7 +253,7 @@ async function main(): Promise<void> {
         (SELECT COUNT(*)::INTEGER FROM events) AS event_count,
         (
           SELECT COUNT(*)::INTEGER
-          FROM decisions
+          FROM decision_flags
           WHERE has_wish
              OR metadata->>'wish_active' = 'true'
              OR metadata->>'current_wish' IS NOT NULL
@@ -223,27 +266,95 @@ async function main(): Promise<void> {
         ) AS active_wish_event_count,
         (
           SELECT COUNT(*)::INTEGER
-          FROM decisions
+          FROM decision_flags
           WHERE chosen_action_is_legal
         ) AS legal_chosen_action_count,
         (
           SELECT COUNT(*)::INTEGER
-          FROM decisions
+          FROM decision_flags
           WHERE chosen_action_type = 'select_pass'
         ) AS select_pass_count,
         (
           SELECT COUNT(*)::INTEGER
-          FROM decisions
+          FROM decision_flags
           WHERE chosen_action_type = 'select_pass'
             AND chosen_action_is_legal
         ) AS select_pass_legal_count,
         (
           SELECT COUNT(*)::INTEGER
-          FROM decisions
+          FROM decision_flags
           WHERE metadata->>'chosen_action_has_scored_candidate' = 'true'
              OR COALESCE(metadata->>'chosen_action_unscored_reason', '') <> ''
         ) AS candidate_score_covered_count,
-        (SELECT COUNT(*)::INTEGER FROM decisions) AS candidate_score_denominator
+        (SELECT COUNT(*)::INTEGER FROM decision_flags) AS candidate_score_denominator,
+        (
+          SELECT COUNT(*)::INTEGER
+          FROM decision_flags
+          WHERE mahjong_played_flag
+        ) AS mahjong_played_count,
+        (
+          SELECT COUNT(*)::INTEGER
+          FROM decision_flags
+          WHERE mahjong_played_flag
+            AND mahjong_wish_selected_flag
+        ) AS mahjong_with_wish_rank_count,
+        (
+          SELECT COUNT(*)::INTEGER
+          FROM decision_flags
+          WHERE mahjong_played_flag
+            AND NOT mahjong_wish_selected_flag
+        ) AS mahjong_without_wish_rank_count,
+        (
+          SELECT COUNT(*)::INTEGER
+          FROM decision_flags
+          WHERE mahjong_played_flag
+            AND mahjong_wish_available_flag
+            AND NOT mahjong_wish_selected_flag
+        ) AS mahjong_wish_available_but_skipped_count,
+        (
+          SELECT COUNT(*)::INTEGER
+          FROM decision_flags
+          WHERE metadata->>'wish_fulfillment_required' = 'true'
+            AND metadata->>'chosen_action_fulfilled_wish' = 'true'
+        ) AS required_wish_fulfilled_count,
+        (
+          SELECT COUNT(*)::INTEGER
+          FROM decision_flags
+          WHERE metadata->>'chosen_action_failed_required_wish' = 'true'
+        ) AS required_wish_violation_count,
+        (
+          SELECT COUNT(*)::INTEGER
+          FROM decision_flags
+          WHERE metadata->>'wish_considered_tichu_pressure' = 'true'
+        ) AS wish_considered_tichu_pressure_count,
+        (
+          SELECT COUNT(*)::INTEGER
+          FROM decision_flags
+          WHERE metadata->>'wish_considered_grand_tichu_pressure' = 'true'
+        ) AS wish_considered_grand_tichu_pressure_count
+    `;
+    const skippedReasonRows = await sql<
+      Array<{ reason: string; count: number }>
+    >`
+      SELECT
+        COALESCE(metadata->>'mahjong_wish_skipped_reason', 'unknown') AS reason,
+        COUNT(*)::INTEGER AS count
+      FROM decisions
+      WHERE metadata->>'mahjong_played' = 'true'
+        AND metadata->>'mahjong_wish_available' = 'true'
+        AND metadata->>'mahjong_wish_selected' <> 'true'
+      GROUP BY reason
+      ORDER BY count DESC, reason ASC
+    `;
+    const wishReasonRows = await sql<Array<{ reason: string; count: number }>>`
+      SELECT
+        COALESCE(metadata->>'wish_reason', 'unknown') AS reason,
+        COUNT(*)::INTEGER AS count
+      FROM decisions
+      WHERE metadata->>'mahjong_played' = 'true'
+        AND COALESCE(metadata->>'wish_reason', '') <> ''
+      GROUP BY reason
+      ORDER BY count DESC, reason ASC
     `;
     const [ordering] = await sql<
       Array<{
@@ -303,7 +414,15 @@ async function main(): Promise<void> {
       select_pass_count: 0,
       select_pass_legal_count: 0,
       candidate_score_covered_count: 0,
-      candidate_score_denominator: 0
+      candidate_score_denominator: 0,
+      mahjong_played_count: 0,
+      mahjong_with_wish_rank_count: 0,
+      mahjong_without_wish_rank_count: 0,
+      mahjong_wish_available_but_skipped_count: 0,
+      required_wish_fulfilled_count: 0,
+      required_wish_violation_count: 0,
+      wish_considered_tichu_pressure_count: 0,
+      wish_considered_grand_tichu_pressure_count: 0
     };
     const orderingCounts = ordering ?? {
       duplicate_event_indexes: 0,
@@ -330,6 +449,7 @@ async function main(): Promise<void> {
       rowCounts.event_count > 0 &&
       providerSummary.falseFallbackSuspicionCount === 0 &&
       eventOrderingProblems === 0 &&
+      rowCounts.required_wish_violation_count === 0 &&
       (legalPassRate ?? 0) >= 0.99 &&
       (selectPassRate ?? 1) >= 0.99 &&
       (candidateCoverageRate ?? 0) >= 0.95;
@@ -348,6 +468,26 @@ async function main(): Promise<void> {
           providerSummary.falseFallbackSuspicionCount,
         active_wish_event_count: rowCounts.active_wish_event_count,
         active_wish_decision_count: rowCounts.active_wish_decision_count,
+        mahjong_played_count: rowCounts.mahjong_played_count,
+        mahjong_with_wish_rank_count: rowCounts.mahjong_with_wish_rank_count,
+        mahjong_without_wish_rank_count:
+          rowCounts.mahjong_without_wish_rank_count,
+        mahjong_wish_available_but_skipped_count:
+          rowCounts.mahjong_wish_available_but_skipped_count,
+        mahjong_wish_skipped_reasons: Object.fromEntries(
+          skippedReasonRows.map((row) => [row.reason, row.count])
+        ),
+        wish_reason_counts: Object.fromEntries(
+          wishReasonRows.map((row) => [row.reason, row.count])
+        ),
+        required_wish_fulfilled_count:
+          rowCounts.required_wish_fulfilled_count,
+        required_wish_violation_count:
+          rowCounts.required_wish_violation_count,
+        wish_considered_tichu_pressure_count:
+          rowCounts.wish_considered_tichu_pressure_count,
+        wish_considered_grand_tichu_pressure_count:
+          rowCounts.wish_considered_grand_tichu_pressure_count,
         legal_chosen_action_pass_rate: legalPassRate,
         select_pass_semantic_validation_pass_rate: selectPassRate,
         candidate_score_coverage_rate: candidateCoverageRate,

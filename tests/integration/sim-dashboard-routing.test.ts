@@ -29,8 +29,8 @@ describe("simulator dashboard routing", () => {
     expect(source).toContain("controlApiBaseUrl");
     expect(source).toContain("getSimControllerStatus(controlApiBaseUrl)");
     expect(source).toContain("testBackendHealth(controlApiBaseUrl)");
-    expect(source).toContain("postSimControllerAction(\n        controlApiBaseUrl");
+    expect(source).toMatch(/postSimControllerAction\(\s*controlApiBaseUrl/);
     expect(source).toContain("backend_url: form.backendUrl");
-    expect(source).not.toContain("postSimControllerAction(\n        form.backendUrl");
+    expect(source).not.toMatch(/postSimControllerAction\(\s*form\.backendUrl/);
   });
 });

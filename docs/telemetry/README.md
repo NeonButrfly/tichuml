@@ -108,6 +108,19 @@ Wish telemetry uses authoritative game state. Decision metadata and
 explicitly null/false. Event telemetry carries the active wish rank from
 `state_norm` in metadata so event counts can be audited without full state.
 
+Mahjong wish strategy telemetry distinguishes the action that created or skipped
+a wish from later active-wish enforcement. When Mahjong is played, decision
+metadata and `stateFeatures` include `mahjong_played`,
+`mahjong_wish_available`, `mahjong_wish_selected`,
+`mahjong_wish_skipped_reason`, `wish_reason`, `wish_target_seat`,
+`wish_target_team`, `wish_rank_source_card_id`,
+`wish_rank_source_target`, `wish_considered_tichu_pressure`, and
+`wish_considered_grand_tichu_pressure`. Heuristic explanations also carry
+`selectedMahjongWish` and per-candidate `mahjongWish` metadata. No-wish Mahjong
+remains legal when the engine accepts it; heuristic skips must use stable
+enum-like reasons such as `rules_variant_allows_no_wish`, and normal heuristic
+runs should usually select a wish when `availableWishRanks` is non-empty.
+
 Candidate scores are recorded as `expanded_candidate_actions`. They may be an
 expanded or filtered candidate set rather than a one-to-one copy of compact
 legal actions. Metadata records `compact_legal_action_count`,
@@ -173,9 +186,12 @@ npm run telemetry:sanity -- --database-url "$env:DATABASE_URL" --json-output dia
 
 The command prints a human summary and a JSON summary with match, completed
 match, decision, and event counts; provider mismatch and false-fallback
-suspicion counts; active wish decision/event counts; legal chosen-action and
-`select_pass` semantic pass rates; candidate-score coverage; event ordering
-problems; JSON parse errors; and a training-readiness verdict.
+suspicion counts; active wish decision/event counts; Mahjong played/with-wish/
+without-wish/available-but-skipped counts; skipped-reason and `wish_reason`
+breakdowns; required-wish fulfillment and violation counts; Tichu/Grand Tichu
+wish-pressure counts; legal chosen-action and `select_pass` semantic pass rates;
+candidate-score coverage; event ordering problems; JSON parse errors; and a
+training-readiness verdict.
 
 Use deterministic exports for offline analysis:
 

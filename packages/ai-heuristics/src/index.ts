@@ -8,7 +8,7 @@ import {
 } from "@tichuml/engine";
 import { engineFoundation } from "@tichuml/engine";
 import { createHeuristicFeatureAnalyzer } from "./HeuristicFeatureAnalyzer.js";
-import { chooseWishRank } from "./HandAnalysis.js";
+import { chooseMahjongWishRank } from "./HandAnalysis.js";
 import { createPassSelectionAction, scorePassSelection } from "./PassHeuristicEngine.js";
 import { scorePlayAction, scorePassTurn } from "./PlayHeuristicEngine.js";
 import { deepenTacticalCandidates } from "./TacticalLookahead.js";
@@ -39,7 +39,9 @@ export type {
 export {
   buildHandEvaluation,
   buildHandEvaluationAfterRemovingCards,
-  chooseWishRank
+  chooseMahjongWishRank,
+  chooseWishRank,
+  describeMahjongWishSkip
 } from "./HandAnalysis.js";
 export { buildUrgencyProfile } from "./HeuristicContext.js";
 export { createHeuristicFeatureAnalyzer } from "./HeuristicFeatureAnalyzer.js";
@@ -85,13 +87,23 @@ function toConcreteAction(
     return createPassSelectionAction(state, legalAction.seat);
   }
 
-  if (legalAction.type === "play_cards" && legalAction.availableWishRanks) {
+  if (
+    legalAction.type === "play_cards" &&
+    legalAction.availableWishRanks &&
+    legalAction.combination.containsMahjong
+  ) {
+    const wishSelection = chooseMahjongWishRank({
+      state,
+      seat: legalAction.seat,
+      selectedCardIds: legalAction.cardIds,
+      availableWishRanks: legalAction.availableWishRanks
+    });
     return {
       type: "play_cards",
       seat: legalAction.seat,
       cardIds: legalAction.cardIds,
       ...(legalAction.phoenixAsRank !== undefined ? { phoenixAsRank: legalAction.phoenixAsRank } : {}),
-      wishRank: chooseWishRank(state, legalAction.seat, legalAction.cardIds)
+      wishRank: wishSelection.rank
     };
   }
 
@@ -169,7 +181,19 @@ function scoreConcreteAction(
   }
 
   if (isPlayLegalAction(legalAction) && action.type === "play_cards") {
-    return withSharedFeatures(scorePlayAction(ctx, actor, legalAction, action, analyzer));
+    const candidate = scorePlayAction(ctx, actor, legalAction, action, analyzer);
+    if (legalAction.availableWishRanks && legalAction.combination.containsMahjong) {
+      return withSharedFeatures({
+        ...candidate,
+        mahjongWish: chooseMahjongWishRank({
+          state: ctx.state,
+          seat: actor,
+          selectedCardIds: legalAction.cardIds,
+          availableWishRanks: legalAction.availableWishRanks
+        }).metadata
+      });
+    }
+    return withSharedFeatures(candidate);
   }
 
   return withSharedFeatures({
@@ -343,12 +367,14 @@ function toChosenDecision(
         reasons: candidate.reasons,
         tags: candidate.tags,
         ...(candidate.teamplay ? { teamplay: candidate.teamplay } : {}),
-        ...(candidate.features ? { features: candidate.features } : {})
+        ...(candidate.features ? { features: candidate.features } : {}),
+        ...(candidate.mahjongWish ? { mahjongWish: candidate.mahjongWish } : {})
       })),
       selectedReasonSummary: selected.reasons,
       selectedTags: selected.tags,
       ...(selected.teamplay ? { selectedTeamplay: selected.teamplay } : {}),
-      ...(selected.features ? { selectedFeatures: selected.features } : {})
+      ...(selected.features ? { selectedFeatures: selected.features } : {}),
+      ...(selected.mahjongWish ? { selectedMahjongWish: selected.mahjongWish } : {})
     }
   };
 }

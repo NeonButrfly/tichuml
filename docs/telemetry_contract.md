@@ -147,4 +147,11 @@ Normal gameplay and selfplay now feed the same backend decision/event tables thr
 Use `npm run telemetry:sanity -- --backend-url http://127.0.0.1:4310` before
 training to verify provider fallback truth, wish coverage, legal chosen actions,
 `select_pass` semantic validity, candidate-score coverage, deterministic event
-ordering, and JSON health.
+ordering, and JSON health. The sanity summary also reports Mahjong wish quality:
+`mahjong_played_count`, `mahjong_with_wish_rank_count`,
+`mahjong_without_wish_rank_count`,
+`mahjong_wish_available_but_skipped_count`,
+`mahjong_wish_skipped_reasons`, `wish_reason_counts`,
+`required_wish_fulfilled_count`, `required_wish_violation_count`,
+`wish_considered_tichu_pressure_count`, and
+`wish_considered_grand_tichu_pressure_count`.

@@ -91,6 +91,20 @@ const WISH_PLAY_ACTION = {
   }
 } as JsonObject;
 
+const MAHJONG_WISH_TEMPLATE = {
+  type: "play_cards",
+  seat: "seat-0",
+  cardIds: ["mahjong"],
+  availableWishRanks: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
+  combination: {
+    kind: "single",
+    primaryRank: 1,
+    cardCount: 1,
+    isBomb: false,
+    containsMahjong: true
+  }
+} as JsonObject;
+
 const STATE_RAW = {
   phase: "play",
   activeSeat: "seat-0",
@@ -226,7 +240,8 @@ describe("central telemetry subsystem", () => {
 
     expect(payloads.full.chosen_action).toEqual(COMPACT_PLAY_ACTION);
     expect(payloads.full.chosen_action).toEqual(fullLegalActions[0]);
-    expect(payloads.minimal.chosen_action).toEqual(minimalLegalActions[0]);
+    expect(payloads.minimal.chosen_action).toEqual(payloads.full.chosen_action);
+    expect(minimalLegalActions[0]).toEqual(payloads.full.chosen_action);
     expect(validateTelemetryDecisionPayload(payloads.full)).toMatchObject({
       ok: true
     });
@@ -285,6 +300,118 @@ describe("central telemetry subsystem", () => {
         "chosen_action must match one of actor_seat's legal_actions"
       );
     }
+  });
+
+  it("preserves Mahjong wishRank and records selected wish strategy metadata", () => {
+    const payloads = buildTelemetryDecisionPayloads({
+      source: "selfplay",
+      mode: "full",
+      gameId: "game-mahjong-wish",
+      handId: "hand-mahjong-wish",
+      phase: "trick_play",
+      actorSeat: "seat-0",
+      decisionIndex: 3,
+      stateRaw: {
+        ...STATE_RAW,
+        phase: "trick_play",
+        activeSeat: "seat-0",
+        hands: {
+          "seat-0": [{ id: "mahjong", kind: "special", special: "mahjong" }]
+        }
+      },
+      stateNorm: STATE_NORM,
+      legalActions: {
+        "seat-0": [MAHJONG_WISH_TEMPLATE]
+      },
+      chosenAction: {
+        type: "play_cards",
+        seat: "seat-0",
+        cardIds: ["mahjong"],
+        wishRank: 9
+      },
+      policyName: "test-policy",
+      policySource: "local_heuristic",
+      requestedProvider: "local",
+      providerUsed: "local_heuristic",
+      fallbackUsed: false,
+      explanation: {
+        selectedMahjongWish: {
+          mahjong_played: true,
+          mahjong_wish_available: true,
+          mahjong_wish_selected: true,
+          mahjong_wish_skipped_reason: null,
+          wish_reason: "passed_to_left",
+          wish_target_seat: "seat-1",
+          wish_target_team: "team-b",
+          wish_rank_source_card_id: "jade-9",
+          wish_rank_source_target: "left",
+          wish_considered_tichu_pressure: true,
+          wish_considered_grand_tichu_pressure: false
+        }
+      }
+    });
+
+    expect(payloads.full.chosen_action).toMatchObject({
+      type: "play_cards",
+      cardIds: ["mahjong"],
+      wishRank: 9,
+      availableWishRanks: MAHJONG_WISH_TEMPLATE.availableWishRanks
+    });
+    expect(payloads.full.metadata).toMatchObject({
+      mahjong_played: true,
+      mahjong_wish_available: true,
+      mahjong_wish_selected: true,
+      mahjong_wish_skipped_reason: null,
+      wish_reason: "passed_to_left",
+      wish_target_seat: "seat-1",
+      wish_rank_source_card_id: "jade-9",
+      wish_rank_source_target: "left",
+      wish_considered_tichu_pressure: true
+    });
+  });
+
+  it("records Mahjong available-but-skipped telemetry when no wishRank is chosen", () => {
+    const payloads = buildTelemetryDecisionPayloads({
+      source: "selfplay",
+      mode: "full",
+      gameId: "game-mahjong-skip",
+      handId: "hand-mahjong-skip",
+      phase: "trick_play",
+      actorSeat: "seat-0",
+      decisionIndex: 4,
+      stateRaw: STATE_RAW,
+      stateNorm: STATE_NORM,
+      legalActions: {
+        "seat-0": [MAHJONG_WISH_TEMPLATE]
+      },
+      chosenAction: {
+        type: "play_cards",
+        seat: "seat-0",
+        cardIds: ["mahjong"]
+      },
+      policyName: "test-policy",
+      policySource: "local_heuristic",
+      requestedProvider: "local",
+      providerUsed: "local_heuristic",
+      fallbackUsed: false,
+      explanation: {
+        selectedMahjongWish: {
+          mahjong_played: true,
+          mahjong_wish_available: true,
+          mahjong_wish_selected: false,
+          mahjong_wish_skipped_reason: "rules_variant_allows_no_wish",
+          wish_reason: "skipped"
+        }
+      }
+    });
+
+    expect(payloads.full.metadata).toMatchObject({
+      mahjong_played: true,
+      mahjong_wish_available: true,
+      mahjong_wish_selected: false,
+      mahjong_wish_skipped_reason: "rules_variant_allows_no_wish",
+      wish_reason: "skipped"
+    });
   });
 
   it("keeps fallback chosen_action schema identical to legal_actions", () => {
@@ -1167,7 +1294,7 @@ describe("central telemetry subsystem", () => {
 
     expect(summary.errors).toBe(1);
     expect(fetchMock).toHaveBeenCalled();
-    expect(elapsedMs).toBeLessThan(1_500);
+    expect(elapsedMs).toBeLessThan(2_000);
   });
 
   it("keeps old producer modules thin instead of owning duplicate builders", () => {

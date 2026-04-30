@@ -23,6 +23,8 @@ import {
   isPointCard,
   isStandardCard
 } from "./utils.js";
+import { chooseMahjongWishRank } from "./HandAnalysis.js";
+import type { MahjongWishMetadata } from "./types.js";
 
 export const SERVER_HEURISTIC_FAST_PATH_LIMITS = {
   pass_select_candidate_cap: 20,
@@ -56,10 +58,6 @@ export const SERVER_HEURISTIC_FAST_PATH_WEIGHTS = {
   phoenix_conservation_bonus: 72
 } as const;
 
-type FastPathCurrentTrick = Pick<
-  TrickState,
-  "leader" | "currentWinner" | "currentCombination"
->;
 type FastPathDragonGift = Pick<
   DragonGiftState,
   "winner" | "nextLeader" | "roundEndsAfterGift"
@@ -69,12 +67,14 @@ export type ServerFastPathState = {
   phase: GameState["phase"];
   activeSeat: SeatId | null;
   passSelections: Partial<Record<SeatId, PassSelection>>;
+  revealedPasses: Partial<Record<SeatId, PassSelection>>;
+  collectedCards: GameState["collectedCards"];
   handCounts: Record<SeatId, number>;
   actorHand: Card[];
   currentWish: StandardRank | null;
   calls: Record<SeatId, CallState>;
   finishedOrder: SeatId[];
-  currentTrick: FastPathCurrentTrick | null;
+  currentTrick: TrickState | null;
   pendingDragonGift: FastPathDragonGift | null;
 };
 
@@ -82,6 +82,7 @@ export type ServerFastPathCandidate = {
   action: EngineAction;
   score: number;
   reasons: string[];
+  mahjongWish?: MahjongWishMetadata;
 };
 
 export type ServerFastPathDecision = {
@@ -506,6 +507,8 @@ export function buildServerFastPathState(
     phase: state.phase,
     activeSeat: state.activeSeat,
     passSelections: state.passSelections,
+    revealedPasses: state.revealedPasses,
+    collectedCards: state.collectedCards,
     handCounts: {
       "seat-0": state.hands["seat-0"].length,
       "seat-1": state.hands["seat-1"].length,
@@ -516,13 +519,7 @@ export function buildServerFastPathState(
     currentWish: state.currentWish,
     calls: state.calls,
     finishedOrder: [...state.finishedOrder],
-    currentTrick: state.currentTrick
-      ? {
-          leader: state.currentTrick.leader,
-          currentWinner: state.currentTrick.currentWinner,
-          currentCombination: state.currentTrick.currentCombination
-        }
-      : null,
+    currentTrick: state.currentTrick,
     pendingDragonGift: state.pendingDragonGift
       ? {
           winner: state.pendingDragonGift.winner,
@@ -583,7 +580,8 @@ function scoreGrandTichuActions(
 
 function toFallbackConcreteAction(
   actor: SeatId,
-  action: LegalAction
+  action: LegalAction,
+  state?: ServerFastPathState
 ): EngineAction {
   switch (action.type) {
     case "call_grand_tichu":
@@ -600,6 +598,27 @@ function toFallbackConcreteAction(
         recipient: action.recipient
       };
     case "play_cards":
+      if (
+        state &&
+        action.availableWishRanks &&
+        action.combination.containsMahjong
+      ) {
+        const wishSelection = chooseMahjongWishRank({
+          state,
+          seat: actor,
+          selectedCardIds: action.cardIds,
+          availableWishRanks: action.availableWishRanks
+        });
+        return {
+          type: "play_cards",
+          seat: actor,
+          cardIds: action.cardIds,
+          ...(action.phoenixAsRank !== undefined
+            ? { phoenixAsRank: action.phoenixAsRank }
+            : {}),
+          wishRank: wishSelection.rank
+        };
+      }
       return {
         type: "play_cards",
         seat: actor,
@@ -839,6 +858,15 @@ function scorePlayAction(config: {
   const usesPhoenix = config.action.combination.containsPhoenix;
   const usesDog = config.action.combination.containsDog;
   const usesMahjong = config.action.combination.containsMahjong;
+  const mahjongWish =
+    usesMahjong && config.action.availableWishRanks
+      ? chooseMahjongWishRank({
+          state: config.state,
+          seat: config.actor,
+          selectedCardIds: config.action.cardIds,
+          availableWishRanks: config.action.availableWishRanks
+        })
+      : null;
   const selfNearOut = config.state.handCounts[config.actor] <= 3;
   const partnerNearOut = config.state.handCounts[partner] <= 2;
   const partnerCalled =
@@ -920,6 +948,8 @@ function scorePlayAction(config: {
     score -= weights.control_preservation_weight * 3;
   }
 
+  const wishRankFields = mahjongWish ? { wishRank: mahjongWish.rank } : {};
+
   return {
     action: {
       type: "play_cards",
@@ -928,14 +958,16 @@ function scorePlayAction(config: {
       ...(config.action.phoenixAsRank !== undefined
         ? { phoenixAsRank: config.action.phoenixAsRank }
         : {}),
-      ...(satisfiesWish && config.state.currentWish !== null
-        ? { wishRank: config.state.currentWish }
-        : {})
+      ...wishRankFields
     },
     score,
     reasons: [
-      "bounded trick-play search favors cheap winning lines that preserve bombs, Phoenix flexibility, and future shape"
-    ]
+      "bounded trick-play search favors cheap winning lines that preserve bombs, Phoenix flexibility, and future shape",
+      ...(mahjongWish
+        ? [`mahjong wish selected via ${mahjongWish.metadata.wish_reason}`]
+        : [])
+    ],
+    ...(mahjongWish ? { mahjongWish: mahjongWish.metadata } : {})
   };
 }
 
@@ -1219,7 +1251,7 @@ export function chooseServerFastPathDecision(config: {
   } else {
     candidates.push(
       ...config.legalActions.map((action, index) => ({
-        action: toFallbackConcreteAction(config.actor, action),
+        action: toFallbackConcreteAction(config.actor, action, config.state),
         score: 100 - index,
         reasons: ["deterministic fallback preserves a legal action even outside the hot path buckets"]
       }))

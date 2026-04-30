@@ -5,7 +5,9 @@ import {
   type GameState,
   type LegalAction,
   type LegalActionMap,
-  type SeatId
+  type SeatId,
+  type StandardRank,
+  type TeamId
 } from "@tichuml/engine";
 
 export type PolicyTag =
@@ -144,11 +146,13 @@ export type PolicyExplanation = {
     tags: PolicyTag[];
     teamplay?: TeamplaySnapshot;
     features?: CandidateActionFeatureSnapshot;
+    mahjongWish?: MahjongWishMetadata;
   }>;
   selectedReasonSummary: string[];
   selectedTags: PolicyTag[];
   selectedTeamplay?: TeamplaySnapshot;
   selectedFeatures?: CandidateActionFeatureSnapshot;
+  selectedMahjongWish?: MahjongWishMetadata;
 };
 
 export type HeadlessDecisionContext = {
@@ -175,6 +179,61 @@ export type CandidateDecision = {
   tags: PolicyTag[];
   teamplay?: TeamplaySnapshot;
   features?: CandidateActionFeatureSnapshot;
+  mahjongWish?: MahjongWishMetadata;
+};
+
+export type MahjongWishSkippedReason =
+  | "no_strategic_wish"
+  | "avoid_helping_opponents"
+  | "all_wishes_low_value"
+  | "rules_variant_allows_no_wish";
+
+export type MahjongWishReason =
+  | "sabotage_tichu_caller"
+  | "sabotage_grand_tichu_caller"
+  | "passed_to_tichu_caller"
+  | "passed_to_grand_tichu_caller"
+  | "break_sequence"
+  | "drain_control"
+  | "support_partner_tichu"
+  | "support_partner_grand_tichu"
+  | "passed_to_left"
+  | "passed_to_partner"
+  | "passed_to_right"
+  | "hand_pressure"
+  | "control_rank"
+  | "default_lowest_safe"
+  | "default_safe_pressure"
+  | "skipped";
+
+export type PassMemoryTarget = "left" | "partner" | "right";
+
+export type MahjongWishMetadata = {
+  mahjong_played: boolean;
+  mahjong_wish_available: boolean;
+  mahjong_wish_selected: boolean;
+  mahjong_wish_skipped_reason: MahjongWishSkippedReason | null;
+  wish_reason: MahjongWishReason;
+  wish_target_seat: SeatId | null;
+  wish_target_team: TeamId | null;
+  wish_rank_source_card_id: string | null;
+  wish_rank_source_target: PassMemoryTarget | null;
+  wish_considered_tichu_pressure: boolean;
+  wish_considered_grand_tichu_pressure: boolean;
+  cards_passed_left: string[];
+  cards_passed_partner: string[];
+  cards_passed_right: string[];
+  cards_received_from_left: string[];
+  cards_received_from_partner: string[];
+  cards_received_from_right: string[];
+  wish_rank_candidates: Array<{
+    rank: StandardRank;
+    score: number;
+    reason: MahjongWishReason;
+    targetSeat: SeatId | null;
+    sourceCardId: string | null;
+    sourceTarget: PassMemoryTarget | null;
+  }>;
 };
 
 export type PlayLegalAction = Extract<LegalAction, { type: "play_cards" }>;

@@ -5,6 +5,7 @@ import {
   getCanonicalCardIdsKey,
   getLegalActions,
   listCombinationInterpretations,
+  STANDARD_RANKS,
   type GameState
 } from "@tichuml/engine";
 import {
@@ -135,6 +136,44 @@ describe("server heuristic fast path", () => {
       type: "play_cards",
       seat: "seat-0",
       cardIds: ["jade-8"]
+    });
+  });
+
+  it("selects a Mahjong wish rank and strategy metadata on the fast path", () => {
+    const state = scenario({
+      phase: "trick_play",
+      activeSeat: "seat-0",
+      hands: {
+        "seat-0": cardsFromIds(["mahjong", "jade-7", "sword-11"])
+      }
+    });
+    const fastState = buildServerFastPathState(state, "seat-0");
+    const legalActions = [
+      {
+        type: "play_cards" as const,
+        seat: "seat-0" as const,
+        cardIds: ["mahjong"],
+        combination: combo(["mahjong"]),
+        availableWishRanks: [...STANDARD_RANKS]
+      }
+    ];
+
+    const chosen = chooseServerFastPathDecision({
+      state: fastState,
+      actor: "seat-0",
+      legalActions
+    });
+
+    expect(chosen.action.type).toBe("play_cards");
+    if (chosen.action.type !== "play_cards") {
+      throw new Error("Expected a play_cards fast-path decision.");
+    }
+    expect(chosen.action.wishRank).toBeDefined();
+    expect(chosen.candidates[0]?.mahjongWish).toMatchObject({
+      mahjong_played: true,
+      mahjong_wish_available: true,
+      mahjong_wish_selected: true,
+      mahjong_wish_skipped_reason: null
     });
   });
 

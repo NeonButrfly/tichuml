@@ -9,9 +9,11 @@ import {
   STANDARD_RANKS,
   type Combination,
   type GameState,
-  type LegalActionMap
+  type LegalActionMap,
+  type SeatId,
+  type StandardRank
 } from "@tichuml/engine";
-import { heuristicsV1Policy } from "@tichuml/ai-heuristics";
+import { describeMahjongWishSkip, heuristicsV1Policy } from "@tichuml/ai-heuristics";
 
 function combo(cardIds: string[], current: Combination | null = null): Combination {
   const result = listCombinationInterpretations(cardsFromIds(cardIds), current)[0];
@@ -45,6 +47,23 @@ function playCandidateByCards(
       candidate.action.type === "play_cards" &&
       getCanonicalCardIdsKey(candidate.action.cardIds) === target
   );
+}
+
+function mahjongOnlyLegalActions(
+  seat: SeatId = "seat-0",
+  availableWishRanks: StandardRank[] = [...STANDARD_RANKS]
+): LegalActionMap {
+  return {
+    [seat]: [
+      {
+        type: "play_cards",
+        seat,
+        cardIds: ["mahjong"],
+        combination: combo(["mahjong"]),
+        availableWishRanks
+      }
+    ]
+  } as LegalActionMap;
 }
 
 function expectSelectedFeatures(
@@ -179,6 +198,228 @@ describe("heuristics v1", () => {
     expect(chosen.action).toEqual({ type: "pass_turn", seat: "seat-0" });
     expect(blockedCall?.reasons).toContain(
       "partner already holds the team Tichu call slot"
+    );
+  });
+
+  it("chooses a deterministic Mahjong wish when available ranks exist", () => {
+    const state = scenario({
+      phase: "trick_play",
+      activeSeat: "seat-0",
+      hands: {
+        "seat-0": cardsFromIds(["mahjong", "jade-6", "sword-10"])
+      }
+    });
+
+    const chosen = heuristicsV1Policy.chooseAction({
+      state,
+      legalActions: mahjongOnlyLegalActions()
+    });
+
+    expect(chosen.action).toMatchObject({
+      type: "play_cards",
+      seat: "seat-0",
+      cardIds: ["mahjong"]
+    });
+    if (chosen.action.type !== "play_cards") {
+      throw new Error("Expected Mahjong play.");
+    }
+    expect(chosen.action.wishRank).toBeDefined();
+    expect(STANDARD_RANKS).toContain(chosen.action.wishRank);
+    expect(chosen.explanation.selectedMahjongWish).toMatchObject({
+      mahjong_played: true,
+      mahjong_wish_available: true,
+      mahjong_wish_selected: true,
+      mahjong_wish_skipped_reason: null
+    });
+  });
+
+  it("reports a stable reason if a no-wish Mahjong variant is selected", () => {
+    const state = scenario({
+      phase: "trick_play",
+      activeSeat: "seat-0",
+      hands: {
+        "seat-0": cardsFromIds(["mahjong"])
+      }
+    });
+
+    expect(describeMahjongWishSkip(state, "seat-0", [8])).toMatchObject({
+      mahjong_played: true,
+      mahjong_wish_available: true,
+      mahjong_wish_selected: false,
+      mahjong_wish_skipped_reason: "rules_variant_allows_no_wish",
+      wish_reason: "skipped"
+    });
+  });
+
+  it("uses pass memory to wish a known rank passed to an opponent", () => {
+    const state = scenario({
+      phase: "trick_play",
+      activeSeat: "seat-0",
+      revealedPasses: {
+        "seat-0": {
+          left: "jade-9",
+          partner: "sword-4",
+          right: "pagoda-5"
+        }
+      },
+      hands: {
+        "seat-0": cardsFromIds(["mahjong", "jade-6", "sword-10"])
+      }
+    });
+
+    const chosen = heuristicsV1Policy.chooseAction({
+      state,
+      legalActions: mahjongOnlyLegalActions()
+    });
+
+    expect(chosen.action.type).toBe("play_cards");
+    if (chosen.action.type !== "play_cards") {
+      throw new Error("Expected Mahjong play.");
+    }
+    expect(chosen.action.wishRank).toBe(9);
+    expect(chosen.explanation.selectedMahjongWish).toMatchObject({
+      wish_reason: "passed_to_left",
+      wish_target_seat: "seat-3",
+      wish_rank_source_card_id: "jade-9",
+      wish_rank_source_target: "left"
+    });
+  });
+
+  it("can support partner tempo with a rank passed to a Tichu partner", () => {
+    const state = scenario({
+      phase: "trick_play",
+      activeSeat: "seat-0",
+      calls: {
+        "seat-0": { grandTichu: false, smallTichu: false, hasPlayedFirstCard: false },
+        "seat-1": { grandTichu: false, smallTichu: false, hasPlayedFirstCard: false },
+        "seat-2": { grandTichu: false, smallTichu: true, hasPlayedFirstCard: false },
+        "seat-3": { grandTichu: false, smallTichu: false, hasPlayedFirstCard: false }
+      },
+      revealedPasses: {
+        "seat-0": {
+          left: "jade-3",
+          partner: "sword-6",
+          right: "pagoda-4"
+        }
+      },
+      hands: {
+        "seat-0": cardsFromIds(["mahjong", "jade-12", "sword-13"])
+      }
+    });
+
+    const chosen = heuristicsV1Policy.chooseAction({
+      state,
+      legalActions: mahjongOnlyLegalActions()
+    });
+
+    expect(chosen.action.type).toBe("play_cards");
+    if (chosen.action.type !== "play_cards") {
+      throw new Error("Expected Mahjong play.");
+    }
+    expect(chosen.action.wishRank).toBe(6);
+    expect(chosen.explanation.selectedMahjongWish).toMatchObject({
+      wish_reason: "support_partner_tichu",
+      wish_target_seat: "seat-2",
+      wish_rank_source_card_id: "sword-6",
+      wish_rank_source_target: "partner",
+      wish_considered_tichu_pressure: true
+    });
+  });
+
+  it("prioritizes passed ranks held by opponent Tichu and Grand Tichu callers", () => {
+    const tichuState = scenario({
+      phase: "trick_play",
+      activeSeat: "seat-0",
+      calls: {
+        "seat-0": { grandTichu: false, smallTichu: false, hasPlayedFirstCard: false },
+        "seat-1": { grandTichu: false, smallTichu: true, hasPlayedFirstCard: false },
+        "seat-2": { grandTichu: false, smallTichu: false, hasPlayedFirstCard: false },
+        "seat-3": { grandTichu: false, smallTichu: false, hasPlayedFirstCard: false }
+      },
+      revealedPasses: {
+        "seat-0": {
+          left: "jade-3",
+          partner: "sword-4",
+          right: "jade-10"
+        }
+      },
+      hands: {
+        "seat-0": cardsFromIds(["mahjong", "jade-12", "sword-13"])
+      }
+    });
+    const grandState = scenario({
+      ...tichuState,
+      calls: {
+        ...tichuState.calls,
+        "seat-1": { grandTichu: true, smallTichu: false, hasPlayedFirstCard: false }
+      }
+    });
+
+    const tichuChosen = heuristicsV1Policy.chooseAction({
+      state: tichuState,
+      legalActions: mahjongOnlyLegalActions()
+    });
+    const grandChosen = heuristicsV1Policy.chooseAction({
+      state: grandState,
+      legalActions: mahjongOnlyLegalActions()
+    });
+
+    expect(tichuChosen.action.type).toBe("play_cards");
+    expect(grandChosen.action.type).toBe("play_cards");
+    if (
+      tichuChosen.action.type !== "play_cards" ||
+      grandChosen.action.type !== "play_cards"
+    ) {
+      throw new Error("Expected Mahjong plays.");
+    }
+    expect(tichuChosen.action.wishRank).toBe(10);
+    expect(grandChosen.action.wishRank).toBe(10);
+    expect(tichuChosen.explanation.selectedMahjongWish?.wish_reason).toBe(
+      "passed_to_tichu_caller"
+    );
+    expect(grandChosen.explanation.selectedMahjongWish?.wish_reason).toBe(
+      "passed_to_grand_tichu_caller"
+    );
+    expect(
+      grandChosen.explanation.selectedMahjongWish
+        ?.wish_considered_grand_tichu_pressure
+    ).toBe(true);
+  });
+
+  it("penalizes low wishes that would feed an opponent Tichu caller", () => {
+    const state = scenario({
+      phase: "trick_play",
+      activeSeat: "seat-0",
+      calls: {
+        "seat-0": { grandTichu: false, smallTichu: false, hasPlayedFirstCard: false },
+        "seat-1": { grandTichu: false, smallTichu: true, hasPlayedFirstCard: false },
+        "seat-2": { grandTichu: false, smallTichu: false, hasPlayedFirstCard: false },
+        "seat-3": { grandTichu: false, smallTichu: false, hasPlayedFirstCard: false }
+      },
+      revealedPasses: {
+        "seat-0": {
+          left: "jade-3",
+          partner: "sword-4",
+          right: "jade-2"
+        }
+      },
+      hands: {
+        "seat-0": cardsFromIds(["mahjong", "jade-12", "sword-13"])
+      }
+    });
+
+    const chosen = heuristicsV1Policy.chooseAction({
+      state,
+      legalActions: mahjongOnlyLegalActions()
+    });
+
+    expect(chosen.action.type).toBe("play_cards");
+    if (chosen.action.type !== "play_cards") {
+      throw new Error("Expected Mahjong play.");
+    }
+    expect(chosen.action.wishRank).not.toBe(2);
+    expect(chosen.explanation.selectedMahjongWish?.wish_reason).toBe(
+      "sabotage_tichu_caller"
     );
   });
 
@@ -430,8 +671,11 @@ describe("heuristics v1", () => {
       type: "play_cards",
       seat: "seat-0",
       cardIds: ["mahjong"],
-      wishRank: 2
+      wishRank: 6
     });
+    expect(chosen.explanation.selectedMahjongWish?.wish_reason).toBe(
+      "support_partner_tichu"
+    );
   });
 
   it("chooses a high disruptive wish against an opponent Tichu call", () => {
