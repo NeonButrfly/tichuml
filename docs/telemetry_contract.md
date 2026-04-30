@@ -33,12 +33,33 @@ Required canonical decision fields:
 - `chosen_action`
 - `metadata`
 
+Provider fields preserve the requested/used display names for compatibility,
+but fallback detection uses the shared canonical provider normalizer.
+`local`, UI local heuristic labels, and `local_heuristic` normalize to the same
+provider, so that alias pair is not fallback. `fallback_used=true` means an
+actual provider failure or unavailable requested provider caused another
+provider to handle the decision.
+
 Rich optional fields are preserved when available:
 
 - `explanation`
 - `candidateScores`
 - `stateFeatures`
 - `antipattern_tags`
+
+Wish fields are explicit in decision metadata and normalized state features:
+`current_wish` / `wish_rank`, `wish_owner` / `wish_source` when inferable,
+`actor_holds_fulfilling_wish_card`, `legal_fulfilling_wish_move_count`,
+`legal_fulfilling_wish_moves_exist`, `wish_fulfillment_required`,
+`chosen_action_fulfilled_wish`, and
+`chosen_action_failed_required_wish`. No active wish is represented as null
+rank/source fields plus false booleans.
+
+Candidate-score arrays use `expanded_candidate_actions` semantics. They may not
+have the same count as compact legal actions because template actions can be
+expanded and candidates can be filtered. Producers record compact legal-action
+count, scored candidate count, chosen-action scored coverage, and an explicit
+unscored reason when the chosen action is not directly represented.
 
 Minimal mode keeps the validator-compatible core compact by using `state_raw: {}`, `state_norm: null`, actor-scoped legal actions, the selected action, provider context, source metadata, and compact state features. Full mode keeps raw state, normalized state, richer legal-action context, explanations, candidate scores, and state features for training and debugging. Adaptive currently follows the same central size policy and is reserved for future expansion.
 
@@ -61,6 +82,10 @@ Required canonical event fields:
 - `state_norm` snapshot when available
 - raw `payload`
 - `metadata`
+
+Event metadata carries provider canonicalization fields and active wish rank
+when `state_norm` exposes one. Event fallback flags follow the same canonical
+provider rule as decisions.
 
 ## Stored Fields
 
@@ -109,9 +134,17 @@ checks and training-readiness diagnostics, not as a UI contract.
 
 ## ML Export
 
-`ml/export_training_rows.py` reads decisions as the canonical ML source. It prefers canonical rich columns and falls back to legacy metadata paths for explanation, `candidateScores`, and `stateFeatures`.
+`ml/export_training_rows.py` reads decisions as the canonical ML source. It
+orders rows by `game_id`, `hand_id`, `decision_index`, `ts`, then `id`, prefers
+canonical rich columns, and falls back to legacy metadata paths for explanation,
+`candidateScores`, and `stateFeatures`.
 Rows from malformed legacy decisions are filtered when `chosen_action_is_legal`
 is explicitly false or actor-scoped legal actions are missing, and diagnostics
 report the filtered count.
 
 Normal gameplay and selfplay now feed the same backend decision/event tables through `@tichuml/telemetry`, so training exports can use one dataset path while retaining producer/source metadata.
+
+Use `npm run telemetry:sanity -- --backend-url http://127.0.0.1:4310` before
+training to verify provider fallback truth, wish coverage, legal chosen actions,
+`select_pass` semantic validity, candidate-score coverage, deterministic event
+ordering, and JSON health.

@@ -9,6 +9,8 @@ import type {
 } from "@tichuml/engine";
 import {
   extractActorScopedLegalActions,
+  inferTelemetryFallbackUsed,
+  normalizeDecisionProviderName,
   type JsonObject,
   type SeedJsonValue
 } from "@tichuml/shared";
@@ -204,40 +206,154 @@ function summarizeCurrentCombination(state: JsonObject): JsonObject | null {
   };
 }
 
+function readFiniteNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function readJsonObject(value: unknown): JsonObject | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as JsonObject)
+    : null;
+}
+
+function readCurrentWish(state: JsonObject | null | undefined): number | null {
+  if (!state) {
+    return null;
+  }
+  return (
+    readFiniteNumber(state.currentWish) ??
+    readFiniteNumber(state.current_wish) ??
+    readFiniteNumber(state.wish_rank)
+  );
+}
+
+function actionFulfillsWish(
+  action: unknown,
+  wishedRank: number | null
+): boolean {
+  if (wishedRank === null) {
+    return false;
+  }
+  const actionObject = readJsonObject(action);
+  if (!actionObject || actionObject.type !== "play_cards") {
+    return false;
+  }
+  const combination = readJsonObject(actionObject.combination);
+  if (!combination) {
+    return readFiniteNumber(actionObject.wishRank) === wishedRank;
+  }
+  return (
+    readFiniteNumber(combination.primaryRank) === wishedRank ||
+    (Array.isArray(combination.actualRanks) &&
+      combination.actualRanks.includes(wishedRank))
+  );
+}
+
+function actorHoldsWishCard(
+  state: JsonObject,
+  actorSeat: string,
+  wishedRank: number | null
+): boolean | null {
+  if (wishedRank === null) {
+    return false;
+  }
+  const hands = readJsonObject(state.hands);
+  const hand = hands?.[actorSeat];
+  if (!Array.isArray(hand)) {
+    return null;
+  }
+  return hand.some((card) => {
+    const cardObject = readJsonObject(card);
+    return (
+      cardObject?.kind === "standard" &&
+      readFiniteNumber(cardObject.rank) === wishedRank
+    );
+  });
+}
+
+function inferWishSource(state: JsonObject): string | null {
+  const currentTrick = readJsonObject(state.currentTrick);
+  const entries = currentTrick?.entries;
+  if (!Array.isArray(entries)) {
+    return null;
+  }
+  for (const entry of entries) {
+    const entryObject = readJsonObject(entry);
+    const combination = readJsonObject(entryObject?.combination);
+    if (
+      entryObject?.type === "play" &&
+      typeof entryObject.seat === "string" &&
+      combination?.containsMahjong === true
+    ) {
+      return entryObject.seat;
+    }
+  }
+  return null;
+}
+
+function buildWishTelemetryMetadata(config: {
+  stateRaw: JsonObject;
+  actorSeat: string;
+  actorLegalActions: SeedJsonValue[];
+  chosenAction?: JsonObject | undefined;
+}): JsonObject {
+  const wishedRank = readCurrentWish(config.stateRaw);
+  const wishActive = wishedRank !== null;
+  const legalFulfillingMoves = wishActive
+    ? config.actorLegalActions.filter((action) =>
+        actionFulfillsWish(action, wishedRank)
+      ).length
+    : 0;
+  const chosenActionFulfilledWish =
+    wishActive && config.chosenAction
+      ? actionFulfillsWish(config.chosenAction, wishedRank)
+      : false;
+  const actorHoldsFulfillingCard = actorHoldsWishCard(
+    config.stateRaw,
+    config.actorSeat,
+    wishedRank
+  );
+  const wishSource = wishActive ? inferWishSource(config.stateRaw) : null;
+
+  return {
+    wish_active: wishActive,
+    has_wish: wishActive,
+    current_wish: wishedRank,
+    wish_rank: wishedRank,
+    wished_rank: wishedRank,
+    wish_owner: wishSource,
+    wish_source: wishSource,
+    actor_holds_fulfilling_wish_card: actorHoldsFulfillingCard,
+    legal_fulfilling_wish_move_count: legalFulfillingMoves,
+    legal_fulfilling_wish_moves_exist: legalFulfillingMoves > 0,
+    wish_satisfiable: legalFulfillingMoves > 0,
+    active_wish_no_legal_fulfilling_move:
+      wishActive && legalFulfillingMoves === 0,
+    wish_fulfillment_required: wishActive && legalFulfillingMoves > 0,
+    chosen_action_fulfilled_wish: chosenActionFulfilledWish,
+    chosen_action_failed_required_wish:
+      wishActive && legalFulfillingMoves > 0 && !chosenActionFulfilledWish
+  };
+}
+
+function buildEventWishMetadata(stateNorm: JsonObject | null): JsonObject {
+  const wishedRank = readCurrentWish(stateNorm);
+  return {
+    wish_active: wishedRank !== null,
+    has_wish: wishedRank !== null,
+    current_wish: wishedRank,
+    wish_rank: wishedRank,
+    wished_rank: wishedRank
+  };
+}
+
 export function buildDecisionContextMetadata(config: {
   stateRaw: JsonObject;
   actorLegalActions: SeedJsonValue[];
+  actorSeat: string;
+  chosenAction?: JsonObject | undefined;
   latencyMs?: number | undefined;
 }): JsonObject {
-  const currentWish = config.stateRaw.currentWish ?? null;
-  const wishActive = currentWish !== null;
-  const wishSatisfiable =
-    wishActive &&
-    config.actorLegalActions.some((action) => {
-      if (
-        typeof action !== "object" ||
-        action === null ||
-        !("combination" in action)
-      ) {
-        return false;
-      }
-      const combination = (action as JsonObject).combination;
-      if (
-        typeof combination !== "object" ||
-        combination === null ||
-        Array.isArray(combination)
-      ) {
-        return false;
-      }
-      return (
-        (combination as JsonObject).primaryRank === currentWish ||
-        (Array.isArray((combination as JsonObject).actualRanks) &&
-          ((combination as JsonObject).actualRanks as SeedJsonValue[]).includes(
-            currentWish
-          ))
-      );
-    });
-
   return {
     seed: config.stateRaw.seed ?? null,
     latency_ms: config.latencyMs ?? null,
@@ -248,16 +364,20 @@ export function buildDecisionContextMetadata(config: {
         ? ((config.stateRaw.currentTrick as JsonObject).currentWinner ?? null)
         : null,
     current_combination: summarizeCurrentCombination(config.stateRaw),
-    wish_active: wishActive,
-    current_wish: currentWish,
-    wish_satisfiable: wishSatisfiable,
-    active_wish_no_legal_fulfilling_move: wishActive && !wishSatisfiable
+    ...buildWishTelemetryMetadata({
+      stateRaw: config.stateRaw,
+      actorSeat: config.actorSeat,
+      actorLegalActions: config.actorLegalActions,
+      chosenAction: config.chosenAction
+    })
   };
 }
 
 export function buildCompactDecisionMetadata(config: {
   stateRaw: JsonObject;
   actorLegalActions: SeedJsonValue[];
+  actorSeat: string;
+  chosenAction?: JsonObject | undefined;
   latencyMs?: number | undefined;
   telemetryMode: TelemetryMode;
 }): JsonObject {
@@ -268,8 +388,25 @@ export function buildCompactDecisionMetadata(config: {
     current_lead_seat: detail.current_lead_seat ?? null,
     current_combination: detail.current_combination ?? null,
     wish_active: detail.wish_active ?? false,
+    has_wish: detail.has_wish ?? false,
     current_wish: detail.current_wish ?? null,
+    wish_rank: detail.wish_rank ?? null,
+    wished_rank: detail.wished_rank ?? null,
+    wish_owner: detail.wish_owner ?? null,
+    wish_source: detail.wish_source ?? null,
+    actor_holds_fulfilling_wish_card:
+      detail.actor_holds_fulfilling_wish_card ?? null,
+    legal_fulfilling_wish_move_count:
+      detail.legal_fulfilling_wish_move_count ?? 0,
+    legal_fulfilling_wish_moves_exist:
+      detail.legal_fulfilling_wish_moves_exist ?? false,
     wish_satisfiable: detail.wish_satisfiable ?? false,
+    active_wish_no_legal_fulfilling_move:
+      detail.active_wish_no_legal_fulfilling_move ?? false,
+    wish_fulfillment_required: detail.wish_fulfillment_required ?? false,
+    chosen_action_fulfilled_wish: detail.chosen_action_fulfilled_wish ?? false,
+    chosen_action_failed_required_wish:
+      detail.chosen_action_failed_required_wish ?? false,
     legal_action_count: config.actorLegalActions.length
   };
 }
@@ -404,6 +541,36 @@ export function selectTelemetryChosenAction(config: {
   return structuralMatch ?? config.chosenAction;
 }
 
+function summarizeCandidateScoreCoverage(config: {
+  candidateScores: SeedJsonValue | null;
+  chosenAction: JsonObject;
+  legalActionCount: number;
+}): JsonObject {
+  const candidateScores = Array.isArray(config.candidateScores)
+    ? config.candidateScores
+    : [];
+  const chosenActionScored = candidateScores.some((candidate) => {
+    const candidateObject = readJsonObject(candidate);
+    const action = readJsonObject(candidateObject?.action);
+    return action ? actionsEquivalent(action, config.chosenAction) : false;
+  });
+  const chosenActionUnscoredReason = chosenActionScored
+    ? null
+    : candidateScores.length === 0
+      ? "candidate_scores_empty"
+      : "chosen_action_not_in_scored_candidate_set";
+
+  return {
+    candidate_scores_representation: "expanded_candidate_actions",
+    candidate_scores_alignment:
+      "candidateScores may expand or filter compact legal action templates; use action equivalence, not array length, for coverage.",
+    compact_legal_action_count: config.legalActionCount,
+    scored_candidate_count: candidateScores.length,
+    chosen_action_has_scored_candidate: chosenActionScored,
+    chosen_action_unscored_reason: chosenActionUnscoredReason
+  };
+}
+
 export function buildTelemetryDecisionPayloads(config: {
   source: TelemetrySource;
   mode: TelemetryMode;
@@ -441,6 +608,8 @@ export function buildTelemetryDecisionPayloads(config: {
   const compactMetadata = buildCompactDecisionMetadata({
     stateRaw: config.stateRaw,
     actorLegalActions,
+    actorSeat: config.actorSeat,
+    chosenAction,
     latencyMs: config.latencyMs,
     telemetryMode: config.mode
   });
@@ -448,20 +617,45 @@ export function buildTelemetryDecisionPayloads(config: {
   const candidateScores =
     config.candidateScores ??
     readExplanationField(explanation, "candidateScores");
-  const stateFeatures =
+  const providedStateFeatures =
     config.stateFeatures ??
-    (readExplanationField(explanation, "stateFeatures") as JsonObject | null) ??
-    compactMetadata;
+    (readExplanationField(explanation, "stateFeatures") as JsonObject | null);
+  const stateFeatures =
+    providedStateFeatures === null || providedStateFeatures === undefined
+      ? compactMetadata
+      : {
+          ...providedStateFeatures,
+          ...compactMetadata
+        };
+  const requestedProviderCanonical = normalizeDecisionProviderName(
+    config.requestedProvider
+  );
+  const providerUsedCanonical = normalizeDecisionProviderName(
+    config.providerUsed
+  );
+  const fallbackUsed = inferTelemetryFallbackUsed({
+    requestedProvider: config.requestedProvider,
+    providerUsed: config.providerUsed,
+    explicitFallbackUsed: config.fallbackUsed
+  });
+  const candidateScoreCoverage = summarizeCandidateScoreCoverage({
+    candidateScores,
+    chosenAction,
+    legalActionCount: actorLegalActions.length
+  });
   const baseMetadata = withSourceMetadata({
     source: config.source,
     mode: config.mode,
     metadata: {
       requested_provider: config.requestedProvider,
       provider_used: config.providerUsed,
-      fallback_used: config.fallbackUsed,
-      ...compactMetadata,
+      ...candidateScoreCoverage,
       ...(explanation ? { explanation } : {}),
-      ...(config.metadata ?? {})
+      ...(config.metadata ?? {}),
+      ...compactMetadata,
+      requested_provider_canonical: requestedProviderCanonical,
+      provider_used_canonical: providerUsedCanonical,
+      fallback_used: fallbackUsed
     },
     workerId: config.workerId,
     controllerMode: config.controllerMode
@@ -479,7 +673,7 @@ export function buildTelemetryDecisionPayloads(config: {
     sim_version: TELEMETRY_SIM_VERSION,
     requested_provider: config.requestedProvider,
     provider_used: config.providerUsed,
-    fallback_used: config.fallbackUsed,
+    fallback_used: fallbackUsed,
     policy_name: config.policyName,
     policy_source: config.policySource,
     chosen_action: chosenAction,
@@ -530,15 +724,30 @@ export function buildTelemetryEventPayloads(config: {
   workerId?: string | undefined;
   controllerMode?: boolean | undefined;
 }): TelemetryEventBuildResult {
+  const requestedProviderCanonical = normalizeDecisionProviderName(
+    config.requestedProvider
+  );
+  const providerUsedCanonical = normalizeDecisionProviderName(
+    config.providerUsed
+  );
+  const fallbackUsed = inferTelemetryFallbackUsed({
+    requestedProvider: config.requestedProvider,
+    providerUsed: config.providerUsed,
+    explicitFallbackUsed: config.fallbackUsed
+  });
+  const eventWishMetadata = buildEventWishMetadata(config.stateNorm ?? null);
   const metadata = withSourceMetadata({
     source: config.source,
     mode: config.mode,
     metadata: {
       requested_provider: config.requestedProvider ?? null,
       provider_used: config.providerUsed ?? null,
-      fallback_used: config.fallbackUsed ?? false,
       event_index: config.eventIndex,
-      ...(config.metadata ?? {})
+      ...(config.metadata ?? {}),
+      requested_provider_canonical: requestedProviderCanonical,
+      provider_used_canonical: providerUsedCanonical,
+      fallback_used: fallbackUsed,
+      ...eventWishMetadata
     },
     workerId: config.workerId,
     controllerMode: config.controllerMode
@@ -556,7 +765,7 @@ export function buildTelemetryEventPayloads(config: {
     sim_version: TELEMETRY_SIM_VERSION,
     requested_provider: config.requestedProvider ?? null,
     provider_used: config.providerUsed ?? null,
-    fallback_used: config.fallbackUsed ?? false,
+    fallback_used: fallbackUsed,
     metadata
   };
 

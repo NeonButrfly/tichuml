@@ -25,7 +25,11 @@ The server read path exposes:
 - `GET /api/games/:gameId/events`
 - `GET /api/games/:gameId/replay`
 
-`/api/games/:gameId/replay` returns ordered decisions, ordered events, and one combined timeline sorted by timestamp then insertion id.
+`/api/games/:gameId/replay` returns ordered decisions, ordered events, and one
+combined timeline. Decision reads are ordered by `game_id`, `hand_id`,
+`decision_index`, `ts`, then `id`; event reads are ordered by `game_id`,
+`hand_id`, `event_index`, `ts`, then `id`. Replay, training export, validation,
+and analysis code must not rely on raw table/export row order.
 
 ## Web Runtime Wiring
 
@@ -88,6 +92,28 @@ resolved `left` / `partner` / `right` selection. Shared validation now treats a
 `select_pass` choice as legal when it satisfies the template constraints for the
 same seat instead of requiring object equality against the template.
 
+Provider names are normalized before fallback detection. `local`, UI local
+heuristic labels, and `local_heuristic` are equivalent aliases. `fallback_used`
+is true only when a requested provider actually failed or was unavailable and a
+different provider handled the decision. Normal local heuristic use must not be
+counted as fallback.
+
+Wish telemetry uses authoritative game state. Decision metadata and
+`stateFeatures` include `current_wish` / `wish_rank`, `wish_owner` /
+`wish_source` when inferable from the Mahjong play in the current trick,
+`actor_holds_fulfilling_wish_card`, `legal_fulfilling_wish_move_count`,
+`legal_fulfilling_wish_moves_exist`, `wish_fulfillment_required`,
+`chosen_action_fulfilled_wish`, and
+`chosen_action_failed_required_wish`. When no wish exists the same fields stay
+explicitly null/false. Event telemetry carries the active wish rank from
+`state_norm` in metadata so event counts can be audited without full state.
+
+Candidate scores are recorded as `expanded_candidate_actions`. They may be an
+expanded or filtered candidate set rather than a one-to-one copy of compact
+legal actions. Metadata records `compact_legal_action_count`,
+`scored_candidate_count`, `chosen_action_has_scored_candidate`, and
+`chosen_action_unscored_reason` so mismatches are explicit.
+
 ## Failure Policy
 
 Telemetry is best-effort by default. With `strictTelemetry=false`, telemetry upload, validation, backend, network, and oversize failures return structured results and diagnostics without throwing into gameplay, UI turns, selfplay decisions, controller loops, or worker shutdown. `strictTelemetry=true` is reserved for targeted debugging and may surface a `TelemetryError`.
@@ -130,6 +156,34 @@ simulator-side transport path with:
 Replay moves successfully resent files into `.runtime/telemetry/replayed/` so
 operators can distinguish still-pending telemetry from already recovered local
 spillover.
+
+## Sanity And Deterministic Export
+
+Run the telemetry sanity checker against the same database the backend uses:
+
+```powershell
+npm run telemetry:sanity -- --backend-url http://127.0.0.1:4310
+```
+
+For direct DB use:
+
+```powershell
+npm run telemetry:sanity -- --database-url "$env:DATABASE_URL" --json-output diagnostics/telemetry-sanity.json
+```
+
+The command prints a human summary and a JSON summary with match, completed
+match, decision, and event counts; provider mismatch and false-fallback
+suspicion counts; active wish decision/event counts; legal chosen-action and
+`select_pass` semantic pass rates; candidate-score coverage; event ordering
+problems; JSON parse errors; and a training-readiness verdict.
+
+Use deterministic exports for offline analysis:
+
+```bash
+psql "$DATABASE_URL" -c "\copy (SELECT * FROM matches ORDER BY game_id ASC, COALESCE(completed_at, updated_at, started_at, created_at) ASC, id ASC) TO 'matches.csv' WITH CSV HEADER"
+psql "$DATABASE_URL" -c "\copy (SELECT * FROM decisions ORDER BY game_id ASC, hand_id ASC, decision_index ASC, ts ASC, id ASC) TO 'decisions.csv' WITH CSV HEADER"
+psql "$DATABASE_URL" -c "\copy (SELECT * FROM events ORDER BY game_id ASC, hand_id ASC, event_index ASC, ts ASC, id ASC) TO 'events.csv' WITH CSV HEADER"
+```
 
 ## Versioning
 

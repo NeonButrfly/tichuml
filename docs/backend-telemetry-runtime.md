@@ -69,6 +69,16 @@ queries Postgres directly and fails if decisions, events, or matches are empty,
 or if any decision/event row cannot join back to its match row by `match_id` and
 `game_id`.
 
+`npm run telemetry:sanity -- --backend-url http://127.0.0.1:4310` performs the
+training-signal check used by issue
+[#54](https://github.com/NeonButrfly/tichuml/issues/54). It reports human and
+JSON summaries for match/decision/event counts, provider alias mismatches, false
+fallback suspicions, active wish coverage, legal chosen actions,
+`select_pass` semantic validity, candidate-score coverage, event ordering
+problems, JSON parse errors, and the training-readiness verdict. Use
+`--database-url "$DATABASE_URL"` for direct DB checks and `--json-output <path>`
+when preserving machine-readable evidence.
+
 `GET /health` and `GET /api/telemetry/health` include runtime identity so stale
 backend processes are visible:
 
@@ -249,6 +259,18 @@ Replay commands:
 Use replay after backend outages, long operator-network interruptions, or after
 controller stop drained only part of the queue.
 
+Replay and training readers must order persisted events by `game_id`,
+`hand_id`, `event_index`, and `ts` with `id` as a final tiebreaker. Raw CSV row
+order is not a contract.
+
+Deterministic export examples:
+
+```bash
+psql "$DATABASE_URL" -c "\copy (SELECT * FROM matches ORDER BY game_id ASC, COALESCE(completed_at, updated_at, started_at, created_at) ASC, id ASC) TO 'matches.csv' WITH CSV HEADER"
+psql "$DATABASE_URL" -c "\copy (SELECT * FROM decisions ORDER BY game_id ASC, hand_id ASC, decision_index ASC, ts ASC, id ASC) TO 'decisions.csv' WITH CSV HEADER"
+psql "$DATABASE_URL" -c "\copy (SELECT * FROM events ORDER BY game_id ASC, hand_id ASC, event_index ASC, ts ASC, id ASC) TO 'events.csv' WITH CSV HEADER"
+```
+
 ## Backend URL Selection
 
 Normal browser gameplay uses the browser/runtime backend setting. The simulator
@@ -270,26 +292,26 @@ shared telemetry client should therefore show the same effective endpoint.
 
 Canonical local environment shared by Windows and Linux:
 
-| Setting | Value |
-| --- | --- |
-| Postgres container | `tichu-postgres` |
-| Postgres user/db | `tichu` / `tichu` |
-| Postgres host port | `54329` |
-| `DATABASE_URL` | `postgres://tichu:tichu_dev_password@localhost:54329/tichu` |
+| Setting            | Value                                                          |
+| ------------------ | -------------------------------------------------------------- |
+| Postgres container | `tichu-postgres`                                               |
+| Postgres user/db   | `tichu` / `tichu`                                              |
+| Postgres host port | `54329`                                                        |
+| `DATABASE_URL`     | `postgres://tichu:tichu_dev_password@localhost:54329/tichu`    |
 | `PG_BOOTSTRAP_URL` | `postgres://tichu:tichu_dev_password@localhost:54329/postgres` |
-| Backend URL | `http://127.0.0.1:4310` |
-| Linux repo path | `/opt/tichuml` |
+| Backend URL        | `http://127.0.0.1:4310`                                        |
+| Linux repo path    | `/opt/tichuml`                                                 |
 
-| Task | Windows | Linux |
-| --- | --- | --- |
-| Start backend | `powershell -ExecutionPolicy Bypass -File scripts\windows\start-backend.ps1` | `./scripts/linux/start-backend.sh` |
-| Stop backend | `powershell -ExecutionPolicy Bypass -File scripts\windows\stop-backend.ps1` | `./scripts/linux/stop-backend.sh` |
-| Restart backend | `powershell -ExecutionPolicy Bypass -File scripts\windows\restart-backend.ps1` | `./scripts/linux/restart-backend.sh` |
-| Check status | `powershell -ExecutionPolicy Bypass -File scripts\windows\status-backend.ps1` | `./scripts/linux/status-backend.sh` |
-| Reset DB | `powershell -ExecutionPolicy Bypass -File scripts\windows\reset-db.ps1` | `./scripts/linux/reset-db.sh --yes` |
-| One-game verification | `powershell -ExecutionPolicy Bypass -File scripts\windows\verify-sim-one-game-fixed.ps1 -ClearDatabase -TimeoutSeconds 90` | `./scripts/linux/verify-sim-one-game-fixed.sh --clear-database --timeout-seconds 90` |
-| Sim doctor | `powershell -ExecutionPolicy Bypass -File scripts\windows\sim-doctor.ps1 --backend-url http://127.0.0.1:4310 --timeout-ms 30000` | `./scripts/linux/sim-doctor.sh --backend-url http://127.0.0.1:4310 --timeout-ms 30000` |
-| Training simulator | `powershell -ExecutionPolicy Bypass -File scripts\windows\run-training-sim.ps1 -Provider local -Telemetry true -StrictTelemetry false -BackendUrl http://127.0.0.1:4310 -GamesPerLoop 100` | `./scripts/linux/run-training-sim.sh --provider local --telemetry true --strict-telemetry false --backend-url http://127.0.0.1:4310 --games-per-loop 100 --log-dir /opt/tichuml/logs/sim-training` |
+| Task                  | Windows                                                                                                                                                                                    | Linux                                                                                                                                                                                              |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Start backend         | `powershell -ExecutionPolicy Bypass -File scripts\windows\start-backend.ps1`                                                                                                               | `./scripts/linux/start-backend.sh`                                                                                                                                                                 |
+| Stop backend          | `powershell -ExecutionPolicy Bypass -File scripts\windows\stop-backend.ps1`                                                                                                                | `./scripts/linux/stop-backend.sh`                                                                                                                                                                  |
+| Restart backend       | `powershell -ExecutionPolicy Bypass -File scripts\windows\restart-backend.ps1`                                                                                                             | `./scripts/linux/restart-backend.sh`                                                                                                                                                               |
+| Check status          | `powershell -ExecutionPolicy Bypass -File scripts\windows\status-backend.ps1`                                                                                                              | `./scripts/linux/status-backend.sh`                                                                                                                                                                |
+| Reset DB              | `powershell -ExecutionPolicy Bypass -File scripts\windows\reset-db.ps1`                                                                                                                    | `./scripts/linux/reset-db.sh --yes`                                                                                                                                                                |
+| One-game verification | `powershell -ExecutionPolicy Bypass -File scripts\windows\verify-sim-one-game-fixed.ps1 -ClearDatabase -TimeoutSeconds 90`                                                                 | `./scripts/linux/verify-sim-one-game-fixed.sh --clear-database --timeout-seconds 90`                                                                                                               |
+| Sim doctor            | `powershell -ExecutionPolicy Bypass -File scripts\windows\sim-doctor.ps1 --backend-url http://127.0.0.1:4310 --timeout-ms 30000`                                                           | `./scripts/linux/sim-doctor.sh --backend-url http://127.0.0.1:4310 --timeout-ms 30000`                                                                                                             |
+| Training simulator    | `powershell -ExecutionPolicy Bypass -File scripts\windows\run-training-sim.ps1 -Provider local -Telemetry true -StrictTelemetry false -BackendUrl http://127.0.0.1:4310 -GamesPerLoop 100` | `./scripts/linux/run-training-sim.sh --provider local --telemetry true --strict-telemetry false --backend-url http://127.0.0.1:4310 --games-per-loop 100 --log-dir /opt/tichuml/logs/sim-training` |
 
 Logs:
 

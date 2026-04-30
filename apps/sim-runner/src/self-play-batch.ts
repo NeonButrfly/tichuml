@@ -10,6 +10,7 @@ import {
   BACKEND_HEALTH_PATH,
   DECISION_REQUEST_PATH,
   getDecisionScoringPath,
+  inferTelemetryFallbackUsed,
   normalizeBackendBaseUrl,
   type DecisionScoringPath,
   type DecisionMode,
@@ -86,7 +87,9 @@ export type SelfPlayBatchOptions = {
   controllerMode?: boolean;
   fullStateDecisionRequests?: boolean;
   telemetryStorageRoot?: string;
-  onTelemetryRuntimeState?: ((state: TelemetryRuntimeState) => void) | undefined;
+  onTelemetryRuntimeState?:
+    | ((state: TelemetryRuntimeState) => void)
+    | undefined;
 };
 
 export type SelfPlayGameResult = {
@@ -485,7 +488,10 @@ function findMatchingLegalAction(
             candidate.phoenixAsRank === chosenAction.phoenixAsRank
           );
         case "select_pass":
-          if (chosenAction.type !== "select_pass" || candidate.seat !== chosenAction.seat) {
+          if (
+            chosenAction.type !== "select_pass" ||
+            candidate.seat !== chosenAction.seat
+          ) {
             return false;
           }
           if (
@@ -665,8 +671,11 @@ function summarizeBackendPayload(
           typeof body.state_norm === "object" && body.state_norm !== null,
         legal_action_count: Array.isArray(body.legal_actions)
           ? body.legal_actions.length
-          : typeof body.legal_actions === "object" && body.legal_actions !== null
-            ? Object.values(body.legal_actions as Record<string, unknown>).reduce(
+          : typeof body.legal_actions === "object" &&
+              body.legal_actions !== null
+            ? Object.values(
+                body.legal_actions as Record<string, unknown>
+              ).reduce(
                 (count: number, entry) =>
                   count + (Array.isArray(entry) ? entry.length : 0),
                 0
@@ -897,8 +906,9 @@ export function validateServerHeuristicDecisionRequestContract(
   const phase = String(contractState.phase);
   const actorActions = Array.isArray(request.legal_actions)
     ? (request.legal_actions as unknown as LegalAction[])
-    : ((request.legal_actions as Record<string, LegalAction[]>)[request.actor_seat] ??
-      []);
+    : ((request.legal_actions as Record<string, LegalAction[]>)[
+        request.actor_seat
+      ] ?? []);
   const legalActions = {
     [request.actor_seat]: actorActions
   } as LegalActionMap;
@@ -1043,7 +1053,10 @@ export function buildDecisionRequestPayload(config: {
 }): DecisionRequestPayload {
   const actorSeat = getCanonicalActiveSeatFromState(config.stateRaw);
   const scoringPath = resolveDecisionScoringPath(config);
-  const actorActions = extractActorLegalActionList(config.legalActions, actorSeat);
+  const actorActions = extractActorLegalActionList(
+    config.legalActions,
+    actorSeat
+  );
   const fastPathActions = buildFastPathLegalActionPayload(
     config.stateRaw as unknown as GameState,
     actorSeat,
@@ -1109,7 +1122,9 @@ async function requestJson(
       : {}),
     ...(context?.trace_backend ? { trace_backend: true } : {}),
     ...(context?.quiet ? { quiet: true } : {}),
-    ...(context?.timeout_ms !== undefined ? { timeout_ms: context.timeout_ms } : {}),
+    ...(context?.timeout_ms !== undefined
+      ? { timeout_ms: context.timeout_ms }
+      : {}),
     payload_summary: summarizeBackendPayload(
       context?.request_kind ?? "decision",
       body
@@ -1422,22 +1437,28 @@ async function resolveLocalHeuristicDecision(config: {
           state: config.stateRaw as never,
           legalActions: actorScopedLegalActions
         });
-  emitDiagnosticsTiming(config, "local_decision_policy", localDecisionStartedAt, {
-    game_id: config.gameId,
-    hand_id: config.handId,
-    phase: config.phase,
-    actor_seat: String(config.actor),
-    decision_index: config.decisionIndex,
-    requested_provider: config.requestedProvider,
-    scoring_path: strategy === "server_fast_path" ? "fast_path" : "rich_path"
-  });
+  emitDiagnosticsTiming(
+    config,
+    "local_decision_policy",
+    localDecisionStartedAt,
+    {
+      game_id: config.gameId,
+      hand_id: config.handId,
+      phase: config.phase,
+      actor_seat: String(config.actor),
+      decision_index: config.decisionIndex,
+      requested_provider: config.requestedProvider,
+      scoring_path: strategy === "server_fast_path" ? "fast_path" : "rich_path"
+    }
+  );
   const latencyMs = Date.now() - config.startedAt;
 
   if (config.telemetryEnabled) {
     const providerUsed =
       config.actor === SYSTEM_ACTOR ? "system_local" : "local_heuristic";
-    const telemetrySource: "controller" | "selfplay" =
-      config.controllerMode ? "controller" : "selfplay";
+    const telemetrySource: "controller" | "selfplay" = config.controllerMode
+      ? "controller"
+      : "selfplay";
     const payloads = buildSelfPlayDecisionTelemetry({
       gameId: config.gameId,
       handId: config.handId,
@@ -1560,8 +1581,9 @@ async function persistEvent(
     ...(config.workerId ? { workerId: config.workerId } : {}),
     ...(config.controllerMode ? { controllerMode: true } : {})
   });
-  const telemetrySource: "controller" | "selfplay" =
-    config.controllerMode ? "controller" : "selfplay";
+  const telemetrySource: "controller" | "selfplay" = config.controllerMode
+    ? "controller"
+    : "selfplay";
   const telemetryConfig: TelemetryConfigInput = {
     enabled: true,
     strictTelemetry: false,
@@ -1592,7 +1614,12 @@ async function persistEvent(
       context: telemetryContext,
       strictTelemetry: config.strictTelemetry === true
     });
-    emitDiagnosticsTiming(config, "telemetry_queue_event", telemetryStartedAt, telemetryContext);
+    emitDiagnosticsTiming(
+      config,
+      "telemetry_queue_event",
+      telemetryStartedAt,
+      telemetryContext
+    );
     return null;
   }
 
@@ -1604,7 +1631,12 @@ async function persistEvent(
     },
     payloads
   });
-  emitDiagnosticsTiming(config, "telemetry_emit_event", telemetryStartedAt, telemetryContext);
+  emitDiagnosticsTiming(
+    config,
+    "telemetry_emit_event",
+    telemetryStartedAt,
+    telemetryContext
+  );
   return result;
 }
 
@@ -1718,15 +1750,20 @@ export async function resolveDecision(config: {
           ? "server_fast_path"
           : "heuristics_v1"
     });
-    emitDiagnosticsTiming(config, "fallback_local_resolution", fallbackStartedAt, {
-      game_id: config.gameId,
-      hand_id: config.handId,
-      phase: config.phase,
-      actor_seat: String(config.actor),
-      decision_index: config.decisionIndex,
-      requested_provider: requestedProvider,
-      failure_kind: failure.kind
-    });
+    emitDiagnosticsTiming(
+      config,
+      "fallback_local_resolution",
+      fallbackStartedAt,
+      {
+        game_id: config.gameId,
+        hand_id: config.handId,
+        phase: config.phase,
+        actor_seat: String(config.actor),
+        decision_index: config.decisionIndex,
+        requested_provider: requestedProvider,
+        failure_kind: failure.kind
+      }
+    );
     emitDecisionDiagnostic(config, "decision_fallback", {
       kind: failure.kind,
       requested_provider: requestedProvider,
@@ -1808,15 +1845,20 @@ export async function resolveDecision(config: {
         ? { fullStateDecisionRequests: config.fullStateDecisionRequests }
         : {})
     });
-    emitDiagnosticsTiming(config, "decision_request_payload_build", payloadBuildStartedAt, {
-      game_id: config.gameId,
-      hand_id: config.handId,
-      phase: config.phase,
-      actor_seat: String(config.actor),
-      decision_index: config.decisionIndex,
-      requested_provider: requestedProvider,
-      scoring_path: scoringPath
-    });
+    emitDiagnosticsTiming(
+      config,
+      "decision_request_payload_build",
+      payloadBuildStartedAt,
+      {
+        game_id: config.gameId,
+        hand_id: config.handId,
+        phase: config.phase,
+        actor_seat: String(config.actor),
+        decision_index: config.decisionIndex,
+        requested_provider: requestedProvider,
+        scoring_path: scoringPath
+      }
+    );
   } catch (error) {
     return fallbackLocally(
       new DecisionRequestFailure(
@@ -1849,17 +1891,22 @@ export async function resolveDecision(config: {
         ...(config.controllerMode ? { controller_mode: true } : {})
       }
     );
-    emitDiagnosticsTiming(config, "server_request_roundtrip", requestStartedAt, {
-      game_id: config.gameId,
-      hand_id: config.handId,
-      phase: config.phase,
-      actor_seat: String(config.actor),
-      decision_index: config.decisionIndex,
-      requested_provider: requestedProvider,
-      scoring_path: scoringPath,
-      parse_ms: decisionResponse.parse_ms,
-      response_ms: decisionResponse.response_ms
-    });
+    emitDiagnosticsTiming(
+      config,
+      "server_request_roundtrip",
+      requestStartedAt,
+      {
+        game_id: config.gameId,
+        hand_id: config.handId,
+        phase: config.phase,
+        actor_seat: String(config.actor),
+        decision_index: config.decisionIndex,
+        requested_provider: requestedProvider,
+        scoring_path: scoringPath,
+        parse_ms: decisionResponse.parse_ms,
+        response_ms: decisionResponse.response_ms
+      }
+    );
   } catch (error) {
     if (error instanceof BackendRequestFailure) {
       return fallbackLocally(
@@ -1915,8 +1962,15 @@ export async function resolveDecision(config: {
   const metadata = payload.metadata ?? {};
   const fallbackUsed =
     metadata.fallback_provider !== undefined ||
-    metadata.fallback_used === true ||
-    payload.provider_used !== requestedProvider;
+    inferTelemetryFallbackUsed({
+      requestedProvider,
+      providerUsed: payload.provider_used,
+      explicitFallbackUsed:
+        typeof metadata.fallback_used === "boolean"
+          ? metadata.fallback_used
+          : undefined,
+      fallbackReason: metadata.fallback_reason
+    });
 
   return {
     chosenAction,
@@ -2293,9 +2347,11 @@ async function runSingleGame(
       }
 
       const completedWinningTeam =
-        result.nextState.matchScore["team-0"] === result.nextState.matchScore["team-1"]
+        result.nextState.matchScore["team-0"] ===
+        result.nextState.matchScore["team-1"]
           ? "tie"
-          : result.nextState.matchScore["team-0"] > result.nextState.matchScore["team-1"]
+          : result.nextState.matchScore["team-0"] >
+              result.nextState.matchScore["team-1"]
             ? "team-0"
             : "team-1";
 
@@ -2378,7 +2434,10 @@ async function runSingleGame(
           : Math.max(100, Math.min(options.telemetryTimeoutMs ?? 1_000, 1_000));
       await telemetryManager.flush(flushTimeoutMs);
       const telemetrySnapshot = telemetryManager.snapshot();
-      mergeTelemetryFailureStats(telemetryFailureStats, telemetrySnapshot.stats);
+      mergeTelemetryFailureStats(
+        telemetryFailureStats,
+        telemetrySnapshot.stats
+      );
       if (telemetrySnapshot.telemetryBackoffUntil) {
         telemetryBackoffUntil = telemetrySnapshot.telemetryBackoffUntil;
       }

@@ -2,6 +2,31 @@
 
 Prompt logs here capture backend/platform prompt intent only. GitHub issue state remains authoritative.
 
+## 2026-04-29 - Telemetry decision sanity signals from export
+
+- Prompt signal:
+  The 2026-04-29 telemetry export had 5,000 completed matches with mostly sane
+  decision rows, but event telemetry falsely marked normal `local` /
+  `local_heuristic` use as fallback, wish fields were null/false in samples,
+  exports were not naturally ordered, `select_pass` validation needed semantic
+  template handling, and candidate-score counts needed explicit schema meaning.
+- Interpreted requirement:
+  Issue [#54](https://github.com/NeonButrfly/tichuml/issues/54) tracks the
+  cross-surface telemetry sanity repair: shared provider normalization for
+  decisions/events/sim/backend/UI, authoritative wish metadata in decisions,
+  events, normalized features, and training paths, deterministic replay/export
+  ordering, semantic `select_pass` legality, candidate-score coverage metadata,
+  and a `telemetry:sanity` verifier with human and JSON output.
+- Affected systems:
+  `packages/shared`, `packages/telemetry`, `apps/sim-runner`, `apps/server`,
+  `ml/export_training_rows.py`, telemetry docs, integration tests.
+- Linked GitHub issue:
+  [#54](https://github.com/NeonButrfly/tichuml/issues/54)
+- Milestone:
+  [6.5 - Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status:
+  Lives in GitHub, not here.
+
 ## 2026-04-28 - Full simulator telemetry state snapshots
 
 - Prompt signal:

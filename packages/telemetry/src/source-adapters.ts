@@ -6,6 +6,7 @@ import type {
 } from "@tichuml/engine";
 import { SYSTEM_ACTOR, type SeatId } from "@tichuml/engine";
 import type { JsonObject, SeedJsonValue } from "@tichuml/shared";
+import { inferTelemetryFallbackUsed } from "@tichuml/shared";
 import {
   buildTelemetryDecisionPayloads,
   buildTelemetryEventPayloads,
@@ -103,9 +104,11 @@ export function buildGameplayDecisionTelemetry(config: {
     config.policySource;
   const providerUsed =
     readStringMetadata(config.metadata, "provider_used") ?? config.policySource;
-  const fallbackUsed =
-    readBooleanMetadata(config.metadata, "fallback_used") ??
-    providerUsed !== requestedProvider;
+  const fallbackUsed = inferTelemetryFallbackUsed({
+    requestedProvider,
+    providerUsed,
+    explicitFallbackUsed: readBooleanMetadata(config.metadata, "fallback_used")
+  });
   const explanation = readExplanationMetadata(config.metadata);
 
   return buildTelemetryDecisionPayloads({
@@ -276,7 +279,10 @@ export function buildSelfPlayEventTelemetry(config: {
     eventIndex: config.eventIndex,
     requestedProvider: config.requestedProvider,
     providerUsed: config.providerUsed,
-    fallbackUsed: config.providerUsed !== config.requestedProvider,
+    fallbackUsed: inferTelemetryFallbackUsed({
+      requestedProvider: config.requestedProvider,
+      providerUsed: config.providerUsed
+    }),
     stateNorm: config.stateNorm,
     payload: {
       event_type: config.event.type,

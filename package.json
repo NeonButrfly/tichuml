@@ -35,6 +35,7 @@
     "sim:doctor:linux": "bash scripts/linux/sim-doctor.sh",
     "sim:training:linux": "bash scripts/linux/run-training-sim.sh",
     "telemetry:truth": "tsx scripts/telemetry-truth.ts",
+    "telemetry:sanity": "tsx scripts/telemetry-sanity.ts",
     "verify:sim:one:windows": "powershell -ExecutionPolicy Bypass -File scripts/windows/verify-sim-one-game-fixed.ps1",
     "verify:sim:one:linux": "bash scripts/linux/verify-sim-one-game-fixed.sh",
     "telemetry:replay": "tsx apps/sim-runner/src/telemetry/replay.ts",

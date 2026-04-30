@@ -1,6 +1,7 @@
 import {
   deriveTelemetryDecisionFields,
   deriveTelemetryEventFields,
+  inferTelemetryFallbackUsed,
   type AdminClearResult,
   type JsonObject,
   type ReplayPayload,
@@ -49,7 +50,10 @@ function readMetadataString(metadata: JsonObject, key: string): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value : null;
 }
 
-function readMetadataBoolean(metadata: JsonObject, key: string): boolean | null {
+function readMetadataBoolean(
+  metadata: JsonObject,
+  key: string
+): boolean | null {
   const value = metadata[key];
   return typeof value === "boolean" ? value : null;
 }
@@ -69,9 +73,11 @@ function isCompletionEvent(payload: TelemetryPayload): boolean {
 
 function matchLifecycleFields(payload: TelemetryPayload): MatchLifecycleFields {
   const requestedProvider =
-    payload.requested_provider ?? readMetadataString(payload.metadata, "requested_provider");
+    payload.requested_provider ??
+    readMetadataString(payload.metadata, "requested_provider");
   const provider =
-    payload.provider_used ?? readMetadataString(payload.metadata, "provider_used");
+    payload.provider_used ??
+    readMetadataString(payload.metadata, "provider_used");
   const completedAt = isCompletionEvent(payload) ? payload.ts : null;
   return {
     gameId: payload.game_id,
@@ -96,6 +102,20 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
   }
 
   async insertDecision(payload: TelemetryDecisionPayload): Promise<number> {
+    const fallbackUsed = inferTelemetryFallbackUsed({
+      requestedProvider: payload.requested_provider,
+      providerUsed: payload.provider_used,
+      explicitFallbackUsed: payload.fallback_used,
+      fallbackReason: payload.metadata.fallback_reason
+    });
+    payload = {
+      ...payload,
+      fallback_used: fallbackUsed,
+      metadata: {
+        ...payload.metadata,
+        fallback_used: fallbackUsed
+      }
+    };
     const derived = deriveTelemetryDecisionFields(payload);
     const matchId = await this.ensureMatchForTelemetry(payload);
     const [row] = await this.sql<{ id: number }[]>`
@@ -186,6 +206,20 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
   }
 
   async insertEvent(payload: TelemetryEventPayload): Promise<number> {
+    const fallbackUsed = inferTelemetryFallbackUsed({
+      requestedProvider: payload.requested_provider,
+      providerUsed: payload.provider_used,
+      explicitFallbackUsed: payload.fallback_used,
+      fallbackReason: payload.metadata.fallback_reason
+    });
+    payload = {
+      ...payload,
+      fallback_used: fallbackUsed,
+      metadata: {
+        ...payload.metadata,
+        fallback_used: fallbackUsed
+      }
+    };
     const derived = deriveTelemetryEventFields(payload);
     const matchId = await this.ensureMatchForTelemetry(payload);
     const [row] = await this.sql<{ id: number }[]>`
@@ -284,7 +318,7 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
         created_at
       FROM decisions
       WHERE game_id = ${gameId}
-      ORDER BY ts ASC, id ASC
+      ORDER BY game_id ASC, hand_id ASC, decision_index ASC, ts ASC, id ASC
     `;
   }
 
@@ -315,7 +349,7 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
         created_at
       FROM events
       WHERE game_id = ${gameId}
-      ORDER BY ts ASC, id ASC
+      ORDER BY game_id ASC, hand_id ASC, event_index ASC, ts ASC, id ASC
     `;
   }
 
@@ -342,6 +376,29 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
         payload
       }))
     ].sort((left, right) => {
+      const gameDiff = left.payload.game_id.localeCompare(
+        right.payload.game_id
+      );
+      if (gameDiff !== 0) {
+        return gameDiff;
+      }
+      const handDiff = left.payload.hand_id.localeCompare(
+        right.payload.hand_id
+      );
+      if (handDiff !== 0) {
+        return handDiff;
+      }
+      const leftIndex =
+        left.kind === "decision"
+          ? left.payload.decision_index
+          : left.payload.event_index;
+      const rightIndex =
+        right.kind === "decision"
+          ? right.payload.decision_index
+          : right.payload.event_index;
+      if (leftIndex !== rightIndex) {
+        return leftIndex - rightIndex;
+      }
       const timestampDiff =
         new Date(left.ts).getTime() - new Date(right.ts).getTime();
       return timestampDiff !== 0 ? timestampDiff : left.id - right.id;
@@ -356,18 +413,20 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
   }
 
   async getHealthStats(): Promise<TelemetryHealthStats> {
-    const [decisionStats] = await this.sql<Array<{
-      decisions: number;
-      unique_state_hashes: number;
-      unique_legal_actions_hashes: number;
-      decisions_with_explanation: number;
-      decisions_with_candidate_scores: number;
-      decisions_with_state_features: number;
-      decisions_with_legal_chosen_action: number;
-      decisions_with_wish: number;
-      decisions_can_pass: number;
-      latest_decision_ts: string | null;
-    }>>`
+    const [decisionStats] = await this.sql<
+      Array<{
+        decisions: number;
+        unique_state_hashes: number;
+        unique_legal_actions_hashes: number;
+        decisions_with_explanation: number;
+        decisions_with_candidate_scores: number;
+        decisions_with_state_features: number;
+        decisions_with_legal_chosen_action: number;
+        decisions_with_wish: number;
+        decisions_can_pass: number;
+        latest_decision_ts: string | null;
+      }>
+    >`
       SELECT
         COUNT(*)::INTEGER AS decisions,
         COUNT(DISTINCT state_hash)::INTEGER AS unique_state_hashes,
@@ -381,25 +440,31 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
         MAX(ts)::TEXT AS latest_decision_ts
       FROM decisions
     `;
-    const [eventStats] = await this.sql<Array<{
-      events: number;
-      latest_event_ts: string | null;
-    }>>`
+    const [eventStats] = await this.sql<
+      Array<{
+        events: number;
+        latest_event_ts: string | null;
+      }>
+    >`
       SELECT
         COUNT(*)::INTEGER AS events,
         MAX(ts)::TEXT AS latest_event_ts
       FROM events
     `;
-    const [matchStats] = await this.sql<Array<{
-      matches: number;
-      latest_match_ts: string | null;
-    }>>`
+    const [matchStats] = await this.sql<
+      Array<{
+        matches: number;
+        latest_match_ts: string | null;
+      }>
+    >`
       SELECT
         COUNT(*)::INTEGER AS matches,
         MAX(COALESCE(completed_at, updated_at, started_at, created_at))::TEXT AS latest_match_ts
       FROM matches
     `;
-    const [duplicateStats] = await this.sql<Array<{ duplicate_state_hashes: number }>>`
+    const [duplicateStats] = await this.sql<
+      Array<{ duplicate_state_hashes: number }>
+    >`
       SELECT COUNT(*)::INTEGER AS duplicate_state_hashes
       FROM (
         SELECT state_hash
@@ -409,7 +474,9 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
         HAVING COUNT(*) > 1
       ) duplicate_states
     `;
-    const [duplicateLegalActionStats] = await this.sql<Array<{ duplicate_legal_actions_hashes: number }>>`
+    const [duplicateLegalActionStats] = await this.sql<
+      Array<{ duplicate_legal_actions_hashes: number }>
+    >`
       SELECT COUNT(*)::INTEGER AS duplicate_legal_actions_hashes
       FROM (
         SELECT legal_actions_hash
@@ -473,8 +540,13 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
   }
 
   async clearDatabase(): Promise<AdminClearResult> {
-    const rowCounts = await this.countTables(["decisions", "events", "matches"]);
-    await this.sql`TRUNCATE TABLE decisions, events, matches RESTART IDENTITY CASCADE`;
+    const rowCounts = await this.countTables([
+      "decisions",
+      "events",
+      "matches"
+    ]);
+    await this
+      .sql`TRUNCATE TABLE decisions, events, matches RESTART IDENTITY CASCADE`;
     console.warn("[admin] cleared app-owned database tables", rowCounts);
     return {
       accepted: true,
@@ -511,7 +583,9 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
     return counts;
   }
 
-  private async ensureMatchForTelemetry(payload: TelemetryPayload): Promise<string> {
+  private async ensureMatchForTelemetry(
+    payload: TelemetryPayload
+  ): Promise<string> {
     const fields = matchLifecycleFields(payload);
     const [row] = await this.sql<Array<{ id: string }>>`
       INSERT INTO matches (
@@ -565,7 +639,9 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
     `;
 
     if (!row?.id) {
-      throw new Error(`Unable to upsert match lifecycle row for game_id=${fields.gameId}`);
+      throw new Error(
+        `Unable to upsert match lifecycle row for game_id=${fields.gameId}`
+      );
     }
     return row.id;
   }
@@ -584,7 +660,9 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
       throw new Error(`Unsupported telemetry aggregate column: ${column}`);
     }
 
-    const rows = await this.sql.unsafe<Array<{ key: string | null; count: number }>>(
+    const rows = await this.sql.unsafe<
+      Array<{ key: string | null; count: number }>
+    >(
       `SELECT ${column}::TEXT AS key, COUNT(*)::INTEGER AS count FROM ${table} GROUP BY ${column}`
     );
 

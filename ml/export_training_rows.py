@@ -89,7 +89,7 @@ def build_query(phase: str | None, provider: str | None, limit: int | None) -> t
             metadata
         FROM decisions
         {where_clause}
-        ORDER BY ts ASC, id ASC
+        ORDER BY game_id ASC, hand_id ASC, decision_index ASC, ts ASC, id ASC
         {limit_clause}
     """
     return query, params

@@ -4,11 +4,13 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildGameplayDecisionTelemetry,
   buildSelfPlayDecisionTelemetry,
+  buildSelfPlayEventTelemetry,
   buildTelemetryDecisionPayloads,
   emitTelemetryDecision,
   TelemetryError
 } from "@tichuml/telemetry";
 import {
+  inferTelemetryFallbackUsed,
   validateTelemetryDecisionPayload,
   type JsonObject,
   type TelemetryDecisionPayload
@@ -74,6 +76,20 @@ const RAW_PLAY_ACTION = {
     cards: ["jade-5", "red-5"]
   }
 } as unknown as EngineAction;
+
+const WISH_PLAY_ACTION = {
+  type: "play_cards",
+  seat: "seat-0",
+  cardIds: ["jade-8"],
+  combination: {
+    kind: "single",
+    primaryRank: 8,
+    cardCount: 1,
+    isBomb: false,
+    actualRanks: [8],
+    containsMahjong: false
+  }
+} as JsonObject;
 
 const STATE_RAW = {
   phase: "play",
@@ -631,6 +647,265 @@ describe("central telemetry subsystem", () => {
     });
   });
 
+  it("treats local and local_heuristic as provider aliases, not fallback", () => {
+    const payloads = buildTelemetryDecisionPayloads({
+      source: "selfplay",
+      mode: "minimal",
+      gameId: "game-provider-alias",
+      handId: "hand-provider-alias",
+      phase: "play",
+      actorSeat: "seat-0",
+      decisionIndex: 4,
+      stateRaw: STATE_RAW,
+      stateNorm: STATE_NORM,
+      legalActions: {
+        "seat-0": [PASS_ACTION]
+      },
+      chosenAction: PASS_ACTION as unknown as JsonObject,
+      policyName: "test-policy",
+      policySource: "local_heuristic",
+      requestedProvider: "local",
+      providerUsed: "local_heuristic",
+      fallbackUsed: false
+    });
+
+    expect(payloads.minimal.fallback_used).toBe(false);
+    expect(payloads.minimal.metadata).toMatchObject({
+      requested_provider_canonical: "local_heuristic",
+      provider_used_canonical: "local_heuristic",
+      fallback_used: false
+    });
+    expect(
+      inferTelemetryFallbackUsed({
+        requestedProvider: "local",
+        providerUsed: "local_heuristic"
+      })
+    ).toBe(false);
+  });
+
+  it("still marks an actual backend provider fallback as fallback", () => {
+    const payloads = buildTelemetryDecisionPayloads({
+      source: "selfplay",
+      mode: "minimal",
+      gameId: "game-real-fallback",
+      handId: "hand-real-fallback",
+      phase: "play",
+      actorSeat: "seat-0",
+      decisionIndex: 5,
+      stateRaw: STATE_RAW,
+      stateNorm: STATE_NORM,
+      legalActions: {
+        "seat-0": [PASS_ACTION]
+      },
+      chosenAction: PASS_ACTION as unknown as JsonObject,
+      policyName: "test-policy",
+      policySource: "local_heuristic",
+      requestedProvider: "server_heuristic",
+      providerUsed: "local_heuristic",
+      fallbackUsed: true
+    });
+
+    expect(payloads.minimal.fallback_used).toBe(true);
+    expect(payloads.minimal.metadata).toMatchObject({
+      requested_provider_canonical: "server_heuristic",
+      provider_used_canonical: "local_heuristic",
+      fallback_used: true
+    });
+  });
+
+  it("captures active wish telemetry when the actor can fulfill it", () => {
+    const payloads = buildTelemetryDecisionPayloads({
+      source: "selfplay",
+      mode: "full",
+      gameId: "game-wish-can-fulfill",
+      handId: "hand-wish-can-fulfill",
+      phase: "trick_play",
+      actorSeat: "seat-0",
+      decisionIndex: 6,
+      stateRaw: {
+        phase: "trick_play",
+        activeSeat: "seat-0",
+        currentWish: 8,
+        hands: {
+          "seat-0": [{ id: "jade-8", kind: "standard", rank: 8 }],
+          "seat-1": [],
+          "seat-2": [],
+          "seat-3": []
+        },
+        currentTrick: {
+          entries: [
+            {
+              type: "play",
+              seat: "seat-2",
+              combination: { containsMahjong: true }
+            }
+          ]
+        }
+      } as JsonObject,
+      stateNorm: { phase: "trick_play", currentWish: 8 },
+      legalActions: {
+        "seat-0": [WISH_PLAY_ACTION]
+      },
+      chosenAction: WISH_PLAY_ACTION,
+      policyName: "test-policy",
+      policySource: "local_heuristic",
+      requestedProvider: "local",
+      providerUsed: "local_heuristic",
+      fallbackUsed: false
+    });
+
+    expect(payloads.full.metadata).toMatchObject({
+      wish_active: true,
+      current_wish: 8,
+      wish_rank: 8,
+      wish_owner: "seat-2",
+      actor_holds_fulfilling_wish_card: true,
+      legal_fulfilling_wish_moves_exist: true,
+      chosen_action_fulfilled_wish: true,
+      chosen_action_failed_required_wish: false
+    });
+    expect(payloads.full.stateFeatures).toMatchObject({
+      current_wish: 8,
+      legal_fulfilling_wish_move_count: 1
+    });
+  });
+
+  it("captures active wish telemetry when the actor cannot fulfill it", () => {
+    const payloads = buildTelemetryDecisionPayloads({
+      source: "selfplay",
+      mode: "minimal",
+      gameId: "game-wish-cannot-fulfill",
+      handId: "hand-wish-cannot-fulfill",
+      phase: "trick_play",
+      actorSeat: "seat-0",
+      decisionIndex: 7,
+      stateRaw: {
+        phase: "trick_play",
+        activeSeat: "seat-0",
+        currentWish: 8,
+        hands: {
+          "seat-0": [{ id: "jade-9", kind: "standard", rank: 9 }],
+          "seat-1": [],
+          "seat-2": [],
+          "seat-3": []
+        }
+      } as JsonObject,
+      stateNorm: { phase: "trick_play", currentWish: 8 },
+      legalActions: {
+        "seat-0": [PASS_ACTION]
+      },
+      chosenAction: PASS_ACTION as unknown as JsonObject,
+      policyName: "test-policy",
+      policySource: "local_heuristic",
+      requestedProvider: "local",
+      providerUsed: "local_heuristic",
+      fallbackUsed: false
+    });
+
+    expect(payloads.minimal.metadata).toMatchObject({
+      wish_active: true,
+      current_wish: 8,
+      actor_holds_fulfilling_wish_card: false,
+      legal_fulfilling_wish_moves_exist: false,
+      active_wish_no_legal_fulfilling_move: true,
+      chosen_action_fulfilled_wish: false
+    });
+  });
+
+  it("adds wish and alias-safe fallback metadata to event telemetry", () => {
+    const eventPayloads = buildSelfPlayEventTelemetry({
+      mode: "minimal",
+      gameId: "game-event-wish",
+      handId: "hand-event-wish",
+      event: { type: "turn_passed", seat: "seat-0" } as unknown as EngineEvent,
+      stateNorm: {
+        phase: "trick_play",
+        currentWish: 8
+      },
+      actorSeat: "seat-0",
+      eventIndex: 3,
+      requestedProvider: "local",
+      providerUsed: "local_heuristic"
+    });
+
+    expect(eventPayloads.minimal.fallback_used).toBe(false);
+    expect(eventPayloads.minimal.metadata).toMatchObject({
+      wish_active: true,
+      current_wish: 8,
+      requested_provider_canonical: "local_heuristic",
+      provider_used_canonical: "local_heuristic",
+      fallback_used: false
+    });
+  });
+
+  it("declares candidate score representation and chosen-action coverage", () => {
+    const payloads = buildTelemetryDecisionPayloads({
+      source: "selfplay",
+      mode: "full",
+      gameId: "game-candidate-coverage",
+      handId: "hand-candidate-coverage",
+      phase: "play",
+      actorSeat: "seat-0",
+      decisionIndex: 8,
+      stateRaw: STATE_RAW,
+      stateNorm: STATE_NORM,
+      legalActions: {
+        "seat-0": [PASS_ACTION]
+      },
+      chosenAction: PASS_ACTION as unknown as JsonObject,
+      policyName: "test-policy",
+      policySource: "local_heuristic",
+      requestedProvider: "local",
+      providerUsed: "local_heuristic",
+      fallbackUsed: false,
+      candidateScores: [
+        {
+          action: PASS_ACTION,
+          score: 1,
+          reasons: ["covered"],
+          tags: []
+        }
+      ]
+    });
+
+    expect(payloads.full.metadata).toMatchObject({
+      candidate_scores_representation: "expanded_candidate_actions",
+      compact_legal_action_count: 1,
+      scored_candidate_count: 1,
+      chosen_action_has_scored_candidate: true,
+      chosen_action_unscored_reason: null
+    });
+  });
+
+  it("keeps replay and training database reads deterministically ordered", () => {
+    const root = process.cwd();
+    const repository = fs.readFileSync(
+      path.join(
+        root,
+        "apps",
+        "server",
+        "src",
+        "services",
+        "telemetry-repository.ts"
+      ),
+      "utf8"
+    );
+    const trainingExport = fs.readFileSync(
+      path.join(root, "ml", "export_training_rows.py"),
+      "utf8"
+    );
+
+    expect(repository).toContain(
+      "ORDER BY game_id ASC, hand_id ASC, event_index ASC, ts ASC, id ASC"
+    );
+    expect(repository).toContain(
+      "ORDER BY game_id ASC, hand_id ASC, decision_index ASC, ts ASC, id ASC"
+    );
+    expect(trainingExport).toContain(
+      "ORDER BY game_id ASC, hand_id ASC, decision_index ASC, ts ASC, id ASC"
+    );
+  });
+
   it("posts live gameplay decision and event payloads through the shared endpoints", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -670,7 +945,9 @@ describe("central telemetry subsystem", () => {
         ...WEB_SETTINGS,
         backendBaseUrl: "http://localhost:43210"
       },
-      events: [{ type: "turn_passed", seat: "seat-0" } as unknown as EngineEvent],
+      events: [
+        { type: "turn_passed", seat: "seat-0" } as unknown as EngineEvent
+      ],
       phase: "play",
       actorSeat: "seat-0",
       gameId: "game-live",
@@ -787,25 +1064,27 @@ describe("central telemetry subsystem", () => {
 
   it("posts full selfplay decision snapshots only when full telemetry is requested", async () => {
     const postedDecisions: JsonObject[] = [];
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      if (url.endsWith("/api/telemetry/decision")) {
-        postedDecisions.push(
-          JSON.parse(String(init?.body ?? "{}")) as JsonObject
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith("/api/telemetry/decision")) {
+          postedDecisions.push(
+            JSON.parse(String(init?.body ?? "{}")) as JsonObject
+          );
+        }
+        return new Response(
+          JSON.stringify(
+            url.endsWith("/health")
+              ? { ok: true }
+              : { accepted: true, telemetry_id: postedDecisions.length + 1 }
+          ),
+          {
+            status: url.endsWith("/health") ? 200 : 202,
+            headers: { "Content-Type": "application/json" }
+          }
         );
       }
-      return new Response(
-        JSON.stringify(
-          url.endsWith("/health")
-            ? { ok: true }
-            : { accepted: true, telemetry_id: postedDecisions.length + 1 }
-        ),
-        {
-          status: url.endsWith("/health") ? 200 : 202,
-          headers: { "Content-Type": "application/json" }
-        }
-      );
-    });
+    );
     vi.stubGlobal("fetch", fetchMock);
 
     const fullSummary = await runSelfPlayBatch({

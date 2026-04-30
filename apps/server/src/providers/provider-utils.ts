@@ -20,6 +20,7 @@ import type {
   RequestedDecisionProvider,
   TelemetryDecisionPayload
 } from "@tichuml/shared";
+import { inferTelemetryFallbackUsed } from "@tichuml/shared";
 import { buildTelemetryDecisionPayloads } from "@tichuml/telemetry";
 
 export type RoutedDecision = {
@@ -46,18 +47,24 @@ function isCanonicalActorState(
   return typeof value === "object" && value !== null && "phase" in value;
 }
 
-export function isUsableLegalActionMap(value: unknown): value is LegalActionMap {
+export function isUsableLegalActionMap(
+  value: unknown
+): value is LegalActionMap {
   return typeof value === "object" && value !== null;
 }
 
-function legalActionTypesForDiagnostics(legalActions: LegalActionMap): string[] {
+function legalActionTypesForDiagnostics(
+  legalActions: LegalActionMap
+): string[] {
   return Object.values(legalActions)
     .flat()
     .slice(0, 6)
     .map((action) => action.type);
 }
 
-export function summarizeDecisionRequest(payload: DecisionRequestPayload): JsonObject {
+export function summarizeDecisionRequest(
+  payload: DecisionRequestPayload
+): JsonObject {
   const legalActions = payload.legal_actions as unknown as LegalActionMap;
   const legalActionKeys =
     typeof payload.legal_actions === "object" && payload.legal_actions !== null
@@ -107,10 +114,12 @@ export function formatActorMismatchDiagnostics(config: {
 }): string {
   const stateRaw = config.payload.state_raw;
   const stateNorm = config.payload.state_norm;
-  const legalActions = config.payload.legal_actions as unknown as LegalActionMap;
+  const legalActions = config.payload
+    .legal_actions as unknown as LegalActionMap;
   const turnMetadata = {
-    stateRawActiveSeat:
-      isUsableState(stateRaw) ? stateRaw.activeSeat : undefined,
+    stateRawActiveSeat: isUsableState(stateRaw)
+      ? stateRaw.activeSeat
+      : undefined,
     stateNormActiveSeat:
       stateNorm && typeof stateNorm.activeSeat === "string"
         ? stateNorm.activeSeat
@@ -155,7 +164,10 @@ export function validateDecisionRequestActorContract(
     actor: canonicalActorSeat
   });
 
-  if (payload.actor_seat !== canonicalActorSeat || legalActionIssues.length > 0) {
+  if (
+    payload.actor_seat !== canonicalActorSeat ||
+    legalActionIssues.length > 0
+  ) {
     throw new Error(
       formatActorMismatchDiagnostics({
         payload,
@@ -213,9 +225,9 @@ export function extractActorLegalActions(
     payload.legal_actions !== null &&
     payload.actor_seat in payload.legal_actions
   ) {
-    const actorActions = (
-      payload.legal_actions as Record<string, unknown>
-    )[payload.actor_seat];
+    const actorActions = (payload.legal_actions as Record<string, unknown>)[
+      payload.actor_seat
+    ];
     if (Array.isArray(actorActions)) {
       return actorActions as LegalAction[];
     }
@@ -290,7 +302,10 @@ function summarizeCurrentCombination(state: GameState): JsonObject | null {
     : null;
 }
 
-function legalActionFulfillsWish(state: GameState, legalAction: LegalAction): boolean {
+function legalActionFulfillsWish(
+  state: GameState,
+  legalAction: LegalAction
+): boolean {
   if (state.currentWish === null || legalAction.type !== "play_cards") {
     return false;
   }
@@ -333,10 +348,12 @@ export function createTelemetryPayload(config: {
   metadata?: JsonObject;
 }): TelemetryDecisionPayload {
   const stateRaw = config.payload.state_raw;
-  const actorLegalActions =
-    isUsableState(stateRaw) ? extractActorLegalActions(config.payload) : [];
+  const actorLegalActions = isUsableState(stateRaw)
+    ? extractActorLegalActions(config.payload)
+    : [];
   const explanation =
-    config.metadata?.explanation && typeof config.metadata.explanation === "object"
+    config.metadata?.explanation &&
+    typeof config.metadata.explanation === "object"
       ? config.metadata.explanation
       : null;
   const candidateScores =
@@ -354,10 +371,15 @@ export function createTelemetryPayload(config: {
     !Array.isArray((explanation as JsonObject).stateFeatures)
       ? ((explanation as JsonObject).stateFeatures as JsonObject)
       : null;
-  const fallbackUsed =
-    typeof config.metadata?.fallback_used === "boolean"
-      ? config.metadata.fallback_used
-      : config.providerUsed !== config.payload.requested_provider;
+  const fallbackUsed = inferTelemetryFallbackUsed({
+    requestedProvider: config.payload.requested_provider,
+    providerUsed: config.providerUsed,
+    explicitFallbackUsed:
+      typeof config.metadata?.fallback_used === "boolean"
+        ? config.metadata.fallback_used
+        : undefined,
+    fallbackReason: config.metadata?.fallback_reason
+  });
   return buildTelemetryDecisionPayloads({
     source: "gameplay",
     mode: "full",

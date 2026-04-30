@@ -641,16 +641,16 @@ describe("server_heuristic actor contract", () => {
           );
         });
       try {
-      await runSelfPlayBatch({
-        games: 1,
-        baseSeed: "server-heuristic-contract",
-        defaultProvider: "server_heuristic",
-        telemetryEnabled: false,
-        backendBaseUrl: baseUrl,
-        quiet: true,
-        maxDecisionsPerGame: 1
-      });
-      expect(repository.decisions).toHaveLength(0);
+        await runSelfPlayBatch({
+          games: 1,
+          baseSeed: "server-heuristic-contract",
+          defaultProvider: "server_heuristic",
+          telemetryEnabled: false,
+          backendBaseUrl: baseUrl,
+          quiet: true,
+          maxDecisionsPerGame: 1
+        });
+        expect(repository.decisions).toHaveLength(0);
       } finally {
         debugSpy.mockRestore();
         logSpy.mockRestore();
@@ -809,7 +809,7 @@ describe("server_heuristic actor contract", () => {
         expect(decision.telemetryFailureStats.telemetryFailuresTotal).toBe(1);
         expect(decision.telemetryFailure).toMatchObject({
           ok: false,
-          failure_kind: "backend_rejection",
+          failure_kind: "backend_error",
           status: 500,
           body: {
             error: "Request body exceeded the supported size limit."
@@ -960,9 +960,12 @@ describe("server_heuristic actor contract", () => {
 
   it("keeps rich-path server_heuristic telemetry and metadata when explicitly requested", async () => {
     await withServer(async ({ baseUrl, repository }) => {
-      const request = createServerHeuristicPayload(advanceToGrandTichuWindow(), {
-        fullStateDecisionRequests: true
-      });
+      const request = createServerHeuristicPayload(
+        advanceToGrandTichuWindow(),
+        {
+          fullStateDecisionRequests: true
+        }
+      );
       const response = await fetch(`${baseUrl}${DECISION_REQUEST_PATH}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -1033,20 +1036,20 @@ describe("server_heuristic actor contract", () => {
   it("resolves activeSeat=null trick boundaries locally instead of attempting server_heuristic", async () => {
     const state = {
       ...scenario({
-      phase: "trick_play",
-      hands: {
-        "seat-0": cardsFromIds(["dragon"]),
-        "seat-1": cardsFromIds(["jade-7"]),
-        "seat-2": cardsFromIds(["jade-6"]),
-        "seat-3": cardsFromIds(["jade-5"])
-      },
-      pendingDragonGift: {
-        winner: "seat-0",
-        trickCards: cardsFromIds(["dragon"]),
-        nextLeader: "seat-1",
-        roundEndsAfterGift: false
-      }
-    }),
+        phase: "trick_play",
+        hands: {
+          "seat-0": cardsFromIds(["dragon"]),
+          "seat-1": cardsFromIds(["jade-7"]),
+          "seat-2": cardsFromIds(["jade-6"]),
+          "seat-3": cardsFromIds(["jade-5"])
+        },
+        pendingDragonGift: {
+          winner: "seat-0",
+          trickCards: cardsFromIds(["dragon"]),
+          nextLeader: "seat-1",
+          roundEndsAfterGift: false
+        }
+      }),
       activeSeat: null
     } as GameState;
     const legalActions = getLegalActions(state);

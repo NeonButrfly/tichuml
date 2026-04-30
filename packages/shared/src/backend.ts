@@ -35,8 +35,17 @@ export type ValidationResult<T> =
 
 export type DecisionMode = "local" | "server_heuristic" | "lightgbm_model";
 export type RequestedDecisionProvider = "server_heuristic" | "lightgbm_model";
-export type DecisionProviderUsed = RequestedDecisionProvider | "local_heuristic";
+export type DecisionProviderUsed =
+  | RequestedDecisionProvider
+  | "local_heuristic";
 export type DecisionScoringPath = "fast_path" | "rich_path";
+export type CanonicalDecisionProvider =
+  | "local_heuristic"
+  | "server_heuristic"
+  | "lightgbm_model"
+  | "human_ui"
+  | "system_local"
+  | "unknown";
 export type BackendReachabilityState =
   | "unknown"
   | "checking"
@@ -148,6 +157,102 @@ export type SimWorkerRuntimeState = {
   last_heartbeat: string | null;
   last_error: string | null;
 };
+
+export function normalizeDecisionProviderName(
+  provider: string | null | undefined
+): CanonicalDecisionProvider {
+  const normalized = String(provider ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/-/g, "_");
+
+  if (
+    normalized === "local" ||
+    normalized === "local_heuristic" ||
+    normalized === "local_heuristics" ||
+    normalized === "heuristics_v1" ||
+    normalized === "heuristic" ||
+    normalized === "local_ai"
+  ) {
+    return "local_heuristic";
+  }
+
+  if (
+    normalized === "server" ||
+    normalized === "server_heuristic" ||
+    normalized === "server_heuristics" ||
+    normalized === "server_fast_path" ||
+    normalized === "backend_heuristic"
+  ) {
+    return "server_heuristic";
+  }
+
+  if (
+    normalized === "lightgbm" ||
+    normalized === "lightgbm_model" ||
+    normalized === "lgbm" ||
+    normalized === "ml_model"
+  ) {
+    return "lightgbm_model";
+  }
+
+  if (
+    normalized === "human" ||
+    normalized === "human_ui" ||
+    normalized === "ui"
+  ) {
+    return "human_ui";
+  }
+
+  if (normalized === "system" || normalized === "system_local") {
+    return "system_local";
+  }
+
+  return "unknown";
+}
+
+export function areDecisionProvidersEquivalent(
+  requestedProvider: string | null | undefined,
+  providerUsed: string | null | undefined
+): boolean {
+  const requested = normalizeDecisionProviderName(requestedProvider);
+  const used = normalizeDecisionProviderName(providerUsed);
+  return requested !== "unknown" && requested === used;
+}
+
+export function inferTelemetryFallbackUsed(config: {
+  requestedProvider: string | null | undefined;
+  providerUsed: string | null | undefined;
+  explicitFallbackUsed?: boolean | null | undefined;
+  fallbackReason?: unknown;
+}): boolean {
+  const hasRequestedProvider =
+    typeof config.requestedProvider === "string" &&
+    config.requestedProvider.trim().length > 0;
+  const hasProviderUsed =
+    typeof config.providerUsed === "string" &&
+    config.providerUsed.trim().length > 0;
+  const hasFallbackReason =
+    config.fallbackReason !== undefined && config.fallbackReason !== null;
+  if (!hasRequestedProvider && !hasProviderUsed && !hasFallbackReason) {
+    return config.explicitFallbackUsed === true;
+  }
+  const providersEquivalent = areDecisionProvidersEquivalent(
+    config.requestedProvider,
+    config.providerUsed
+  );
+  if (typeof config.explicitFallbackUsed === "boolean") {
+    return config.explicitFallbackUsed
+      ? !providersEquivalent || hasFallbackReason
+      : hasFallbackReason;
+  }
+
+  return (
+    hasFallbackReason ||
+    (hasRequestedProvider && hasProviderUsed && !providersEquivalent)
+  );
+}
 
 export type TelemetryTransportStatus =
   | "connected"
@@ -711,9 +816,7 @@ function readActionStringField(
   return typeof value === "string" && value.trim().length > 0 ? value : null;
 }
 
-function isSelectPassTemplateAction(
-  action: Record<string, unknown>
-): boolean {
+function isSelectPassTemplateAction(action: Record<string, unknown>): boolean {
   return (
     action.type === "select_pass" &&
     Array.isArray(action.availableCardIds) &&
@@ -721,9 +824,7 @@ function isSelectPassTemplateAction(
   );
 }
 
-function isConcreteSelectPassAction(
-  action: Record<string, unknown>
-): boolean {
+function isConcreteSelectPassAction(action: Record<string, unknown>): boolean {
   return (
     action.type === "select_pass" &&
     typeof action.left === "string" &&
@@ -770,11 +871,16 @@ function validateSelectPassTemplateAction(
     return false;
   }
 
-  const availableCardIds = new Set(sortedStringList(candidate.availableCardIds));
+  const availableCardIds = new Set(
+    sortedStringList(candidate.availableCardIds)
+  );
   return chosenCardIds.every((cardId) => availableCardIds.has(cardId));
 }
 
-function concreteActionsEquivalent(candidate: unknown, chosen: unknown): boolean {
+function concreteActionsEquivalent(
+  candidate: unknown,
+  chosen: unknown
+): boolean {
   if (!isPlainObject(candidate) || !isPlainObject(chosen)) {
     return false;
   }
@@ -844,7 +950,10 @@ function chosenActionMatchesLegalAction(
   return concreteActionsEquivalent(candidate, chosen);
 }
 
-export function actionsEquivalent(candidate: unknown, chosen: unknown): boolean {
+export function actionsEquivalent(
+  candidate: unknown,
+  chosen: unknown
+): boolean {
   return chosenActionMatchesLegalAction(candidate, chosen);
 }
 
@@ -866,17 +975,25 @@ export function extractActorScopedLegalActions(
   return [];
 }
 
-export function getDecisionScoringPath(payload: Pick<DecisionRequestPayload, "metadata">): DecisionScoringPath {
+export function getDecisionScoringPath(
+  payload: Pick<DecisionRequestPayload, "metadata">
+): DecisionScoringPath {
   const value = payload.metadata.scoring_path;
   return value === "rich_path" ? "rich_path" : "fast_path";
 }
 
-function extractExplanationFromMetadata(metadata: JsonObject | null): SeedJsonValue | null {
+function extractExplanationFromMetadata(
+  metadata: JsonObject | null
+): SeedJsonValue | null {
   const explanation = metadata?.explanation ?? metadata?.policy_explanation;
-  return explanation !== undefined && isJsonValue(explanation) ? explanation : null;
+  return explanation !== undefined && isJsonValue(explanation)
+    ? explanation
+    : null;
 }
 
-function extractCandidateScores(explanation: SeedJsonValue | null): SeedJsonValue | null {
+function extractCandidateScores(
+  explanation: SeedJsonValue | null
+): SeedJsonValue | null {
   if (isPlainObject(explanation) && isJsonValue(explanation.candidateScores)) {
     return explanation.candidateScores;
   }
@@ -884,7 +1001,9 @@ function extractCandidateScores(explanation: SeedJsonValue | null): SeedJsonValu
   return null;
 }
 
-function extractStateFeatures(explanation: SeedJsonValue | null): JsonObject | null {
+function extractStateFeatures(
+  explanation: SeedJsonValue | null
+): JsonObject | null {
   if (isPlainObject(explanation) && isPlainObject(explanation.stateFeatures)) {
     return isJsonValue(explanation.stateFeatures)
       ? (explanation.stateFeatures as JsonObject)
@@ -930,7 +1049,9 @@ export function deriveTelemetryDecisionFields(
     explanation_quality_level: explanationQualityLevel,
     has_wish: wishRank !== null,
     wish_rank: wishRank,
-    can_pass: actorActions.some((action) => getActionType(action) === "pass_turn"),
+    can_pass: actorActions.some(
+      (action) => getActionType(action) === "pass_turn"
+    ),
     state_hash: stableTelemetryHash(payload.state_norm ?? payload.state_raw),
     legal_actions_hash: stableTelemetryHash(actorActions),
     chosen_action_hash: stableTelemetryHash(payload.chosen_action)
@@ -941,7 +1062,9 @@ export function deriveTelemetryEventFields(
   payload: TelemetryEventPayload
 ): DerivedTelemetryEventFields {
   return {
-    state_hash: payload.state_norm ? stableTelemetryHash(payload.state_norm) : null,
+    state_hash: payload.state_norm
+      ? stableTelemetryHash(payload.state_norm)
+      : null,
     event_hash: stableTelemetryHash(payload.payload)
   };
 }
@@ -1016,7 +1139,8 @@ export function validateTelemetryDecisionPayload(
     expectOptionalJsonObject(context, payload, "stateFeatures") ??
     extractStateFeatures(explanation);
   const policySourceForFallback =
-    typeof payload.policy_source === "string" && payload.policy_source.trim().length > 0
+    typeof payload.policy_source === "string" &&
+    payload.policy_source.trim().length > 0
       ? payload.policy_source
       : "";
   const requestedProvider =
@@ -1078,7 +1202,8 @@ export function validateTelemetryDecisionPayload(
     candidateScores,
     stateFeatures,
     metadata,
-    antipattern_tags: expectJsonValue(context, payload, "antipattern_tags") ?? []
+    antipattern_tags:
+      expectJsonValue(context, payload, "antipattern_tags") ?? []
   };
 
   validateDecisionConsistency(context, value);
