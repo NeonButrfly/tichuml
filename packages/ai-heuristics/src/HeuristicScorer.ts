@@ -119,12 +119,12 @@ export const HEURISTIC_WEIGHTS = {
     }
   },
   calls: {
-    grandThreshold: 620,
-    tichuThreshold14: 520,
-    tichuThreshold10: 440,
-    tichuThreshold6: 340,
-    legacyGrandThreshold: 110,
-    legacyTichuThreshold: 158
+    grandThreshold: 720,
+    tichuThreshold14: 620,
+    tichuThreshold10: 540,
+    tichuThreshold6: 420,
+    legacyGrandThreshold: 145,
+    legacyTichuThreshold: 170
   },
   dragonGift: {
     base: 500,

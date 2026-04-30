@@ -147,12 +147,14 @@ export type PolicyExplanation = {
     teamplay?: TeamplaySnapshot;
     features?: CandidateActionFeatureSnapshot;
     mahjongWish?: MahjongWishMetadata;
+    tichuCall?: TichuCallMetadata;
   }>;
   selectedReasonSummary: string[];
   selectedTags: PolicyTag[];
   selectedTeamplay?: TeamplaySnapshot;
   selectedFeatures?: CandidateActionFeatureSnapshot;
   selectedMahjongWish?: MahjongWishMetadata;
+  selectedTichuCall?: TichuCallMetadata;
 };
 
 export type HeadlessDecisionContext = {
@@ -180,6 +182,21 @@ export type CandidateDecision = {
   teamplay?: TeamplaySnapshot;
   features?: CandidateActionFeatureSnapshot;
   mahjongWish?: MahjongWishMetadata;
+  tichuCall?: TichuCallMetadata;
+};
+
+export type TichuCallMetadata = {
+  tichu_call_score: number;
+  tichu_call_threshold: number;
+  tichu_call_reason: string;
+  tichu_call_risk_flags: string[];
+  hand_quality_score: number;
+  control_score: number;
+  exit_path_score: number;
+  fragmentation_penalty: number;
+  tichu_context_notes: string[];
+  tichu_call_selected: boolean;
+  tichu_call_kind: "regular" | "grand";
 };
 
 export type MahjongWishSkippedReason =

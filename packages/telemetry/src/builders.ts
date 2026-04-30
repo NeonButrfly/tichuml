@@ -1,11 +1,13 @@
-import type {
-  EngineAction,
-  EngineEvent,
-  GameState,
-  LegalAction,
-  PublicDerivedState,
-  RoundPhase,
-  SeatId
+import {
+  getCardById,
+  type Card,
+  type EngineAction,
+  type EngineEvent,
+  type GameState,
+  type LegalAction,
+  type PublicDerivedState,
+  type RoundPhase,
+  type SeatId
 } from "@tichuml/engine";
 import {
   extractActorScopedLegalActions,
@@ -41,6 +43,12 @@ export type SerializableLegalAction = {
     primaryRank: number;
     cardCount: number;
     isBomb: boolean;
+    actualRanks?: number[];
+    phoenixAsRank?: number | null;
+    containsMahjong?: boolean;
+    containsDragon?: boolean;
+    containsPhoenix?: boolean;
+    containsDog?: boolean;
   };
 };
 
@@ -68,6 +76,7 @@ export type DecisionRecord = {
       reasons: string[];
       tags: string[];
       mahjongWish?: JsonObject;
+      tichuCall?: JsonObject;
       teamplay?: {
         partnerCalledTichu: boolean;
         partnerStillLiveForTichu: boolean;
@@ -85,6 +94,7 @@ export type DecisionRecord = {
     selectedReasonSummary: string[];
     selectedTags: string[];
     selectedMahjongWish?: JsonObject;
+    selectedTichuCall?: JsonObject;
     selectedTeamplay?: {
       partnerCalledTichu: boolean;
       partnerStillLiveForTichu: boolean;
@@ -130,6 +140,28 @@ export function serializeLegalAction(
   if (action.type !== "play_cards") {
     return action;
   }
+  const combination: NonNullable<SerializableLegalAction["combination"]> = {
+    kind: action.combination.kind,
+    primaryRank: action.combination.primaryRank,
+    cardCount: action.combination.cardCount,
+    isBomb: action.combination.isBomb,
+    actualRanks: [...action.combination.actualRanks]
+  };
+  if (action.combination.phoenixAsRank !== undefined) {
+    combination.phoenixAsRank = action.combination.phoenixAsRank;
+  }
+  if (action.combination.containsMahjong !== undefined) {
+    combination.containsMahjong = action.combination.containsMahjong;
+  }
+  if (action.combination.containsDragon !== undefined) {
+    combination.containsDragon = action.combination.containsDragon;
+  }
+  if (action.combination.containsPhoenix !== undefined) {
+    combination.containsPhoenix = action.combination.containsPhoenix;
+  }
+  if (action.combination.containsDog !== undefined) {
+    combination.containsDog = action.combination.containsDog;
+  }
 
   return {
     type: action.type,
@@ -141,12 +173,7 @@ export function serializeLegalAction(
     ...(action.availableWishRanks
       ? { availableWishRanks: action.availableWishRanks }
       : {}),
-    combination: {
-      kind: action.combination.kind,
-      primaryRank: action.combination.primaryRank,
-      cardCount: action.combination.cardCount,
-      isBomb: action.combination.isBomb
-    }
+    combination
   };
 }
 
@@ -218,6 +245,16 @@ function readJsonObject(value: unknown): JsonObject | null {
     : null;
 }
 
+function cardRankFromId(cardId: string): number | null {
+  let card: Card | null = null;
+  try {
+    card = getCardById(cardId);
+  } catch {
+    card = null;
+  }
+  return card?.kind === "standard" ? card.rank : null;
+}
+
 function readCurrentWish(state: JsonObject | null | undefined): number | null {
   if (!state) {
     return null;
@@ -241,13 +278,26 @@ function actionFulfillsWish(
     return false;
   }
   const combination = readJsonObject(actionObject.combination);
-  if (!combination) {
-    return readFiniteNumber(actionObject.wishRank) === wishedRank;
+  if (readFiniteNumber(actionObject.phoenixAsRank) === wishedRank) {
+    return true;
   }
+  if (
+    combination &&
+    (readFiniteNumber(combination.primaryRank) === wishedRank ||
+      readFiniteNumber(combination.phoenixAsRank) === wishedRank ||
+      readNumberList(combination.actualRanks).includes(wishedRank))
+  ) {
+    return true;
+  }
+  return readStringList(actionObject.cardIds).some(
+    (cardId) => cardRankFromId(cardId) === wishedRank
+  );
+}
+
+function actionResolvesWishObligation(action: unknown): boolean {
+  const actionObject = readJsonObject(action);
   return (
-    readFiniteNumber(combination.primaryRank) === wishedRank ||
-    (Array.isArray(combination.actualRanks) &&
-      combination.actualRanks.includes(wishedRank))
+    actionObject?.type === "play_cards" || actionObject?.type === "pass_turn"
   );
 }
 
@@ -336,6 +386,58 @@ function readSelectedMahjongWish(
 ): JsonObject | null {
   const explanationObject = readJsonObject(explanation);
   return readJsonObject(explanationObject?.selectedMahjongWish);
+}
+
+function readSelectedTichuCall(
+  explanation: SeedJsonValue | null | undefined
+): JsonObject | null {
+  const explanationObject = readJsonObject(explanation);
+  return readJsonObject(explanationObject?.selectedTichuCall);
+}
+
+function buildTichuCallTelemetryMetadata(config: {
+  chosenAction?: JsonObject | undefined;
+  explanation?: SeedJsonValue | null | undefined;
+}): JsonObject {
+  const selectedTichu = readSelectedTichuCall(config.explanation);
+  const actionType =
+    typeof config.chosenAction?.type === "string" ? config.chosenAction.type : null;
+  const tichuCallSelected =
+    actionType === "call_tichu" || actionType === "call_grand_tichu";
+
+  return {
+    tichu_call_score:
+      readFiniteNumber(selectedTichu?.tichu_call_score) ?? null,
+    tichu_call_threshold:
+      readFiniteNumber(selectedTichu?.tichu_call_threshold) ?? null,
+    tichu_call_reason:
+      readNullableStringField(selectedTichu, "tichu_call_reason") ??
+      (tichuCallSelected
+        ? actionType === "call_grand_tichu"
+          ? "grand_call_without_metadata"
+          : "regular_call_without_metadata"
+        : null),
+    tichu_call_risk_flags: readStringList(
+      selectedTichu?.tichu_call_risk_flags
+    ),
+    hand_quality_score:
+      readFiniteNumber(selectedTichu?.hand_quality_score) ?? null,
+    control_score: readFiniteNumber(selectedTichu?.control_score) ?? null,
+    exit_path_score:
+      readFiniteNumber(selectedTichu?.exit_path_score) ?? null,
+    fragmentation_penalty:
+      readFiniteNumber(selectedTichu?.fragmentation_penalty) ?? null,
+    tichu_context_notes: readStringList(selectedTichu?.tichu_context_notes),
+    tichu_call_selected:
+      selectedTichu?.tichu_call_selected === true || tichuCallSelected,
+    tichu_call_kind:
+      readNullableStringField(selectedTichu, "tichu_call_kind") ??
+      (actionType === "call_grand_tichu"
+        ? "grand"
+        : actionType === "call_tichu"
+          ? "regular"
+          : null)
+  };
 }
 
 function findWishTemplateForChosenAction(config: {
@@ -434,6 +536,9 @@ function buildWishTelemetryMetadata(config: {
     wishActive && config.chosenAction
       ? actionFulfillsWish(config.chosenAction, wishedRank)
       : false;
+  const chosenActionResolvesWishObligation = actionResolvesWishObligation(
+    config.chosenAction
+  );
   const actorHoldsFulfillingCard = actorHoldsWishCard(
     config.stateRaw,
     config.actorSeat,
@@ -458,7 +563,10 @@ function buildWishTelemetryMetadata(config: {
     wish_fulfillment_required: wishActive && legalFulfillingMoves > 0,
     chosen_action_fulfilled_wish: chosenActionFulfilledWish,
     chosen_action_failed_required_wish:
-      wishActive && legalFulfillingMoves > 0 && !chosenActionFulfilledWish,
+      wishActive &&
+      legalFulfillingMoves > 0 &&
+      chosenActionResolvesWishObligation &&
+      !chosenActionFulfilledWish,
     ...buildMahjongWishStrategyMetadata({
       actorLegalActions: config.actorLegalActions,
       chosenAction: config.chosenAction,
@@ -500,6 +608,10 @@ export function buildDecisionContextMetadata(config: {
       stateRaw: config.stateRaw,
       actorSeat: config.actorSeat,
       actorLegalActions: config.actorLegalActions,
+      chosenAction: config.chosenAction,
+      explanation: config.explanation
+    }),
+    ...buildTichuCallTelemetryMetadata({
       chosenAction: config.chosenAction,
       explanation: config.explanation
     })
@@ -555,6 +667,17 @@ export function buildCompactDecisionMetadata(config: {
       detail.wish_considered_tichu_pressure ?? false,
     wish_considered_grand_tichu_pressure:
       detail.wish_considered_grand_tichu_pressure ?? false,
+    tichu_call_score: detail.tichu_call_score ?? null,
+    tichu_call_threshold: detail.tichu_call_threshold ?? null,
+    tichu_call_reason: detail.tichu_call_reason ?? null,
+    tichu_call_risk_flags: detail.tichu_call_risk_flags ?? [],
+    hand_quality_score: detail.hand_quality_score ?? null,
+    control_score: detail.control_score ?? null,
+    exit_path_score: detail.exit_path_score ?? null,
+    fragmentation_penalty: detail.fragmentation_penalty ?? null,
+    tichu_context_notes: detail.tichu_context_notes ?? [],
+    tichu_call_selected: detail.tichu_call_selected ?? false,
+    tichu_call_kind: detail.tichu_call_kind ?? null,
     legal_action_count: config.actorLegalActions.length
   };
 }

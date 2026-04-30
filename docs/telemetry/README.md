@@ -105,7 +105,11 @@ Wish telemetry uses authoritative game state. Decision metadata and
 `legal_fulfilling_wish_moves_exist`, `wish_fulfillment_required`,
 `chosen_action_fulfilled_wish`, and
 `chosen_action_failed_required_wish`. When no wish exists the same fields stay
-explicitly null/false. Event telemetry carries the active wish rank from
+explicitly null/false. A play fulfills an active numeric wish when the wished
+rank appears anywhere in the played combination, including straights, pair
+sequences, full houses, and bombs. Phoenix only fulfills a wish when the action
+or serialized combination explicitly records `phoenixAsRank` as the wished
+rank; raw Phoenix is not treated as every possible rank. Event telemetry carries the active wish rank from
 `state_norm` in metadata so event counts can be audited without full state.
 
 Mahjong wish strategy telemetry distinguishes the action that created or skipped
@@ -126,6 +130,14 @@ expanded or filtered candidate set rather than a one-to-one copy of compact
 legal actions. Metadata records `compact_legal_action_count`,
 `scored_candidate_count`, `chosen_action_has_scored_candidate`, and
 `chosen_action_unscored_reason` so mismatches are explicit.
+
+Tichu teacher metadata is emitted when the heuristic scores regular or Grand
+Tichu calls. Candidate and selected explanations may include
+`tichu_call_score`, `tichu_call_threshold`, `tichu_call_reason`,
+`tichu_call_risk_flags`, `hand_quality_score`, `control_score`,
+`exit_path_score`, `fragmentation_penalty`, and `tichu_context_notes`. These
+fields are teacher diagnostics for training review; they do not change engine
+eligibility rules.
 
 ## Failure Policy
 
@@ -188,7 +200,9 @@ The command prints a human summary and a JSON summary with match, completed
 match, decision, and event counts; provider mismatch and false-fallback
 suspicion counts; active wish decision/event counts; Mahjong played/with-wish/
 without-wish/available-but-skipped counts; skipped-reason and `wish_reason`
-breakdowns; required-wish fulfillment and violation counts; Tichu/Grand Tichu
+breakdowns; required-wish fulfillment and violation counts; regular Tichu and
+Grand Tichu counts, per-game rates, seat rates, call-reason counts, decline
+reason counts, and configurable warning thresholds; Tichu/Grand Tichu
 wish-pressure counts; legal chosen-action and `select_pass` semantic pass rates;
 candidate-score coverage; event ordering problems; JSON parse errors; and a
 training-readiness verdict.

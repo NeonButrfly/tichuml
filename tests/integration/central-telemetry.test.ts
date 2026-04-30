@@ -91,6 +91,74 @@ const WISH_PLAY_ACTION = {
   }
 } as JsonObject;
 
+function compactPlayTemplate(config: {
+  cardIds: string[];
+  primaryRank: number;
+  kind?: string;
+  phoenixAsRank?: number;
+  actualRanks?: number[];
+}): JsonObject {
+  return {
+    type: "play_cards",
+    seat: "seat-0",
+    cardIds: config.cardIds,
+    ...(config.phoenixAsRank !== undefined
+      ? { phoenixAsRank: config.phoenixAsRank }
+      : {}),
+    combination: {
+      kind: config.kind ?? "straight",
+      primaryRank: config.primaryRank,
+      cardCount: config.cardIds.length,
+      isBomb: false,
+      ...(config.phoenixAsRank !== undefined
+        ? { phoenixAsRank: config.phoenixAsRank }
+        : {}),
+      ...(config.actualRanks ? { actualRanks: config.actualRanks } : {})
+    }
+  };
+}
+
+function buildWishDecision(config: {
+  wishedRank: number;
+  legalAction: JsonObject;
+  chosenAction?: JsonObject;
+}) {
+  return buildTelemetryDecisionPayloads({
+    source: "selfplay",
+    mode: "full",
+    gameId: "game-wish-combo",
+    handId: "hand-wish-combo",
+    phase: "trick_play",
+    actorSeat: "seat-0",
+    decisionIndex: 10,
+    stateRaw: {
+      ...STATE_RAW,
+      phase: "trick_play",
+      currentWish: config.wishedRank,
+      hands: {
+        "seat-0": []
+      }
+    },
+    stateNorm: STATE_NORM,
+    legalActions: {
+      "seat-0": [config.legalAction]
+    },
+    chosenAction: config.chosenAction ?? {
+      type: "play_cards",
+      seat: "seat-0",
+      cardIds: config.legalAction.cardIds,
+      ...(config.legalAction.phoenixAsRank !== undefined
+        ? { phoenixAsRank: config.legalAction.phoenixAsRank }
+        : {})
+    },
+    policyName: "test-policy",
+    policySource: "local_heuristic",
+    requestedProvider: "local",
+    providerUsed: "local_heuristic",
+    fallbackUsed: false
+  });
+}
+
 const MAHJONG_WISH_TEMPLATE = {
   type: "play_cards",
   seat: "seat-0",
@@ -895,6 +963,151 @@ describe("central telemetry subsystem", () => {
       current_wish: 8,
       legal_fulfilling_wish_move_count: 1
     });
+  });
+
+  it("counts a wished rank inside a straight as fulfilled even when compact chosen action omits combination ranks", () => {
+    const payloads = buildWishDecision({
+      wishedRank: 8,
+      legalAction: compactPlayTemplate({
+        cardIds: ["star-6", "jade-7", "sword-8", "pagoda-9", "star-10"],
+        primaryRank: 10
+      })
+    });
+
+    expect(payloads.full.metadata).toMatchObject({
+      wish_fulfillment_required: true,
+      chosen_action_fulfilled_wish: true,
+      chosen_action_failed_required_wish: false
+    });
+  });
+
+  it("counts a wished rank inside a pair sequence as fulfilled", () => {
+    const payloads = buildWishDecision({
+      wishedRank: 6,
+      legalAction: compactPlayTemplate({
+        kind: "pair-sequence",
+        cardIds: ["star-5", "jade-5", "sword-6", "pagoda-6", "star-7", "jade-7"],
+        primaryRank: 7
+      })
+    });
+
+    expect(payloads.full.metadata.chosen_action_fulfilled_wish).toBe(true);
+    expect(payloads.full.metadata.chosen_action_failed_required_wish).toBe(false);
+  });
+
+  it("counts a wished rank inside a full house as fulfilled", () => {
+    const payloads = buildWishDecision({
+      wishedRank: 10,
+      legalAction: compactPlayTemplate({
+        kind: "full-house",
+        cardIds: ["star-13", "jade-13", "sword-13", "pagoda-10", "star-10"],
+        primaryRank: 13
+      })
+    });
+
+    expect(payloads.full.metadata.chosen_action_fulfilled_wish).toBe(true);
+    expect(payloads.full.metadata.chosen_action_failed_required_wish).toBe(false);
+  });
+
+  it("counts Phoenix as fulfilling only when phoenixAsRank matches the active wish", () => {
+    const matching = buildWishDecision({
+      wishedRank: 8,
+      legalAction: compactPlayTemplate({
+        cardIds: ["phoenix", "star-7"],
+        primaryRank: 8,
+        phoenixAsRank: 8
+      })
+    });
+    const absent = buildWishDecision({
+      wishedRank: 9,
+      legalAction: compactPlayTemplate({
+        cardIds: ["phoenix", "star-7"],
+        primaryRank: 8,
+        phoenixAsRank: 8
+      })
+    });
+
+    expect(matching.full.metadata.chosen_action_fulfilled_wish).toBe(true);
+    expect(matching.full.metadata.chosen_action_failed_required_wish).toBe(false);
+    expect(absent.full.metadata.chosen_action_fulfilled_wish).toBe(false);
+    expect(absent.full.metadata.chosen_action_failed_required_wish).toBe(false);
+  });
+
+  it("does not count a special-only play as fulfilling a numeric wish without rank context", () => {
+    const payloads = buildWishDecision({
+      wishedRank: 8,
+      legalAction: compactPlayTemplate({
+        kind: "single",
+        cardIds: ["dragon"],
+        primaryRank: 15
+      })
+    });
+
+    expect(payloads.full.metadata.chosen_action_fulfilled_wish).toBe(false);
+    expect(payloads.full.metadata.chosen_action_failed_required_wish).toBe(false);
+  });
+
+  it("does not mark an optional Tichu call as a failed required wish before the play decision", () => {
+    const fulfillingPlay = compactPlayTemplate({
+      kind: "single",
+      cardIds: ["jade-8"],
+      primaryRank: 8
+    });
+    const payloads = buildTelemetryDecisionPayloads({
+      source: "selfplay",
+      mode: "full",
+      gameId: "game-wish-call-tichu",
+      handId: "hand-wish-call-tichu",
+      phase: "trick_play",
+      actorSeat: "seat-0",
+      decisionIndex: 12,
+      stateRaw: {
+        ...STATE_RAW,
+        phase: "trick_play",
+        currentWish: 8,
+        hands: {
+          "seat-0": [{ id: "jade-8", kind: "standard", suit: "jade", rank: 8 }]
+        }
+      },
+      stateNorm: { phase: "trick_play", currentWish: 8 },
+      legalActions: {
+        "seat-0": [{ type: "call_tichu", seat: "seat-0" }, fulfillingPlay]
+      },
+      chosenAction: { type: "call_tichu", seat: "seat-0" },
+      policyName: "test-policy",
+      policySource: "local_heuristic",
+      requestedProvider: "local",
+      providerUsed: "local_heuristic",
+      fallbackUsed: false
+    });
+
+    expect(payloads.full.metadata).toMatchObject({
+      wish_fulfillment_required: true,
+      chosen_action_fulfilled_wish: false,
+      chosen_action_failed_required_wish: false
+    });
+  });
+
+  it("regresses observed high-straight wish fulfillment patterns", () => {
+    const wishEight = buildWishDecision({
+      wishedRank: 8,
+      legalAction: compactPlayTemplate({
+        cardIds: ["star-6", "jade-7", "sword-8", "pagoda-9", "star-10"],
+        primaryRank: 10
+      })
+    });
+    const wishKing = buildWishDecision({
+      wishedRank: 13,
+      legalAction: compactPlayTemplate({
+        cardIds: ["star-10", "jade-11", "sword-12", "pagoda-13", "star-14"],
+        primaryRank: 14
+      })
+    });
+
+    expect(wishEight.full.metadata.chosen_action_fulfilled_wish).toBe(true);
+    expect(wishEight.full.metadata.chosen_action_failed_required_wish).toBe(false);
+    expect(wishKing.full.metadata.chosen_action_fulfilled_wish).toBe(true);
+    expect(wishKing.full.metadata.chosen_action_failed_required_wish).toBe(false);
   });
 
   it("captures active wish telemetry when the actor cannot fulfill it", () => {

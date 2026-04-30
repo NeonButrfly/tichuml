@@ -53,13 +53,25 @@ Wish fields are explicit in decision metadata and normalized state features:
 `legal_fulfilling_wish_moves_exist`, `wish_fulfillment_required`,
 `chosen_action_fulfilled_wish`, and
 `chosen_action_failed_required_wish`. No active wish is represented as null
-rank/source fields plus false booleans.
+rank/source fields plus false booleans. Wish fulfillment checks combination
+rank content, not just single-card primary rank: a wished rank inside a
+straight, pair sequence, full house, or bomb counts as fulfilled. Phoenix counts
+only when `phoenixAsRank` in the action or serialized combination names the
+wished rank.
 
 Candidate-score arrays use `expanded_candidate_actions` semantics. They may not
 have the same count as compact legal actions because template actions can be
 expanded and candidates can be filtered. Producers record compact legal-action
 count, scored candidate count, chosen-action scored coverage, and an explicit
 unscored reason when the chosen action is not directly represented.
+
+Heuristic Tichu scoring metadata may be present in candidate scores,
+`selectedTichuCall`, state features, and metadata. The stable fields are
+`tichu_call_score`, `tichu_call_threshold`, `tichu_call_reason`,
+`tichu_call_risk_flags`, `hand_quality_score`, `control_score`,
+`exit_path_score`, `fragmentation_penalty`, and `tichu_context_notes`. These
+fields describe teacher intent and risk; the engine remains the authority for
+whether a Tichu or Grand Tichu call is legal.
 
 Minimal mode keeps the validator-compatible core compact by using `state_raw: {}`, `state_norm: null`, actor-scoped legal actions, the selected action, provider context, source metadata, and compact state features. Full mode keeps raw state, normalized state, richer legal-action context, explanations, candidate scores, and state features for training and debugging. Adaptive currently follows the same central size policy and is reserved for future expansion.
 
@@ -154,4 +166,8 @@ ordering, and JSON health. The sanity summary also reports Mahjong wish quality:
 `mahjong_wish_skipped_reasons`, `wish_reason_counts`,
 `required_wish_fulfilled_count`, `required_wish_violation_count`,
 `wish_considered_tichu_pressure_count`, and
-`wish_considered_grand_tichu_pressure_count`.
+`wish_considered_grand_tichu_pressure_count`. It also reports regular Tichu and
+Grand Tichu counts, per-game rates, per-seat rates, selected call reasons, and
+decline reasons. Regular Tichu rate warnings are configurable with
+`TICHU_CALLS_PER_GAME_WARN_THRESHOLD`; Grand Tichu warnings use
+`GRAND_TICHU_CALLS_PER_GAME_WARN_THRESHOLD`.

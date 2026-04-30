@@ -1429,12 +1429,18 @@ async function resolveLocalHeuristicDecision(config: {
                 tags: [],
                 ...(candidate.mahjongWish
                   ? { mahjongWish: candidate.mahjongWish }
+                  : {}),
+                ...(candidate.tichuCall
+                  ? { tichuCall: candidate.tichuCall }
                   : {})
               })),
               selectedReasonSummary: fastDecision.candidates[0]?.reasons ?? [],
               selectedTags: [],
               ...(fastDecision.candidates[0]?.mahjongWish
                 ? { selectedMahjongWish: fastDecision.candidates[0].mahjongWish }
+                : {}),
+              ...(fastDecision.candidates[0]?.tichuCall
+                ? { selectedTichuCall: fastDecision.candidates[0].tichuCall }
                 : {})
             }
           } satisfies ChosenDecision;

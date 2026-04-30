@@ -177,6 +177,83 @@ describe("server heuristic fast path", () => {
     });
   });
 
+  it("selects Tichu only for fast-path hands with strong control and exit metadata", () => {
+    const state = scenario({
+      phase: "trick_play",
+      activeSeat: "seat-0",
+      hands: {
+        "seat-0": cardsFromIds([
+          "dragon",
+          "phoenix",
+          "star-14",
+          "jade-14",
+          "sword-13",
+          "pagoda-13",
+          "star-12",
+          "jade-12",
+          "sword-11",
+          "pagoda-10",
+          "star-9",
+          "jade-8",
+          "sword-7",
+          "pagoda-6"
+        ])
+      }
+    });
+    const chosen = chooseServerFastPathDecision({
+      state: buildServerFastPathState(state, "seat-0"),
+      actor: "seat-0",
+      legalActions: [
+        { type: "call_tichu", seat: "seat-0" },
+        { type: "pass_turn", seat: "seat-0" }
+      ]
+    });
+
+    expect(chosen.action).toEqual({ type: "call_tichu", seat: "seat-0" });
+    expect(chosen.candidates[0]?.tichuCall).toMatchObject({
+      tichu_call_selected: true,
+      tichu_call_kind: "regular"
+    });
+  });
+
+  it("declines fast-path Tichu for medium hands without enough control", () => {
+    const state = scenario({
+      phase: "trick_play",
+      activeSeat: "seat-0",
+      hands: {
+        "seat-0": cardsFromIds([
+          "star-14",
+          "jade-12",
+          "sword-10",
+          "pagoda-9",
+          "star-8",
+          "jade-7",
+          "sword-6",
+          "pagoda-5",
+          "star-4",
+          "jade-3",
+          "sword-2"
+        ])
+      }
+    });
+    const chosen = chooseServerFastPathDecision({
+      state: buildServerFastPathState(state, "seat-0"),
+      actor: "seat-0",
+      legalActions: [
+        { type: "call_tichu", seat: "seat-0" },
+        { type: "pass_turn", seat: "seat-0" }
+      ]
+    });
+    const callCandidate = chosen.candidates.find(
+      (candidate) => candidate.action.type === "call_tichu"
+    );
+
+    expect(chosen.action).toEqual({ type: "pass_turn", seat: "seat-0" });
+    expect(callCandidate?.tichuCall).toMatchObject({
+      tichu_call_selected: false
+    });
+  });
+
   it("avoids wasteful bombs when a cheap legal win exists", () => {
     const lead = combo(["jade-7"]);
     const state = scenario({

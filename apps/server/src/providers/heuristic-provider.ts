@@ -31,12 +31,16 @@ function createFastPathExplanation(config: {
       score: candidate.score,
       reasons: candidate.reasons,
       tags: [],
-      ...(candidate.mahjongWish ? { mahjongWish: candidate.mahjongWish } : {})
+      ...(candidate.mahjongWish ? { mahjongWish: candidate.mahjongWish } : {}),
+      ...(candidate.tichuCall ? { tichuCall: candidate.tichuCall } : {})
     })),
     selectedReasonSummary: config.candidates[0]?.reasons ?? [],
     selectedTags: [],
     ...(config.candidates[0]?.mahjongWish
       ? { selectedMahjongWish: config.candidates[0].mahjongWish }
+      : {}),
+    ...(config.candidates[0]?.tichuCall
+      ? { selectedTichuCall: config.candidates[0].tichuCall }
       : {})
   };
 }

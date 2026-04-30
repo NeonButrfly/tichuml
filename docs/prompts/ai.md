@@ -155,3 +155,12 @@ Use this file to preserve AI and bot-behavior prompt intent and link it to GitHu
 - Linked GitHub Issue: [#46](https://github.com/NeonButrfly/tichuml/issues/46)
 - Milestone: [6.5 – Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
 - Status Source: GitHub issue state only.
+
+### 2026-04-30 - Tichu teacher selectivity and wish fulfillment telemetry
+
+- Prompt Signal: A 1000-game full-mode telemetry sanity run showed roughly two regular Tichu calls per game and several false-positive required-wish violations on multi-card plays that contained the wished rank.
+- Interpreted Requirement: Local and server heuristic teachers should call regular Tichu more selectively, keep Grand Tichu rare, emit stable Tichu score/risk metadata, and keep wish fulfillment telemetry aligned with actual combo contents rather than only single-card exact matches.
+- Affected Systems: `packages/ai-heuristics/src/*`, `packages/telemetry/src/builders.ts`, `scripts/telemetry-sanity.ts`, telemetry and heuristic integration tests.
+- Linked GitHub Issue: [#57](https://github.com/NeonButrfly/tichuml/issues/57)
+- Milestone: [6.5 – Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status Source: GitHub issue state only.

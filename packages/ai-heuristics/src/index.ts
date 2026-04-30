@@ -368,13 +368,15 @@ function toChosenDecision(
         tags: candidate.tags,
         ...(candidate.teamplay ? { teamplay: candidate.teamplay } : {}),
         ...(candidate.features ? { features: candidate.features } : {}),
-        ...(candidate.mahjongWish ? { mahjongWish: candidate.mahjongWish } : {})
+        ...(candidate.mahjongWish ? { mahjongWish: candidate.mahjongWish } : {}),
+        ...(candidate.tichuCall ? { tichuCall: candidate.tichuCall } : {})
       })),
       selectedReasonSummary: selected.reasons,
       selectedTags: selected.tags,
       ...(selected.teamplay ? { selectedTeamplay: selected.teamplay } : {}),
       ...(selected.features ? { selectedFeatures: selected.features } : {}),
-      ...(selected.mahjongWish ? { selectedMahjongWish: selected.mahjongWish } : {})
+      ...(selected.mahjongWish ? { selectedMahjongWish: selected.mahjongWish } : {}),
+      ...(selected.tichuCall ? { selectedTichuCall: selected.tichuCall } : {})
     }
   };
 }

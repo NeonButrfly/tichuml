@@ -24,7 +24,7 @@ import {
   isStandardCard
 } from "./utils.js";
 import { chooseMahjongWishRank } from "./HandAnalysis.js";
-import type { MahjongWishMetadata } from "./types.js";
+import type { MahjongWishMetadata, TichuCallMetadata } from "./types.js";
 
 export const SERVER_HEURISTIC_FAST_PATH_LIMITS = {
   pass_select_candidate_cap: 20,
@@ -83,6 +83,7 @@ export type ServerFastPathCandidate = {
   score: number;
   reasons: string[];
   mahjongWish?: MahjongWishMetadata;
+  tichuCall?: TichuCallMetadata;
 };
 
 export type ServerFastPathDecision = {
@@ -115,8 +116,55 @@ type RemainingHandMetrics = {
   removedIsolatedLowCount: number;
 };
 
-const FAST_TICHU_CALL_THRESHOLD = 165;
-const FAST_GRAND_TICHU_CALL_THRESHOLD = 235;
+const FAST_TICHU_CALL_THRESHOLD = 245;
+const FAST_GRAND_TICHU_CALL_THRESHOLD = 300;
+
+function roundFastScore(value: number): number {
+  return Number(value.toFixed(2));
+}
+
+function buildFastTichuMetadata(config: {
+  handContext: HandContext;
+  kind: "regular" | "grand";
+  threshold: number;
+  selected: boolean;
+  reason: string;
+  riskFlags: string[];
+  contextNotes: string[];
+}): TichuCallMetadata {
+  const controlScore =
+    config.handContext.controlCardIds.size * 62 +
+    config.handContext.bombCardIds.size * 18 +
+    config.handContext.tripleLikeCount * 16 +
+    config.handContext.pairLikeCount * 9;
+  const exitPathScore =
+    config.handContext.handStrength * 0.9 +
+    config.handContext.straightLinkCount * 11 +
+    config.handContext.tripleLikeCount * 18 +
+    config.handContext.pairLikeCount * 10;
+  const fragmentationPenalty =
+    config.handContext.deadSingleCount * 24 +
+    config.handContext.isolatedLowCardIds.size * 18;
+
+  return {
+    tichu_call_score: roundFastScore(config.handContext.handStrength),
+    tichu_call_threshold: config.threshold,
+    tichu_call_reason: config.reason,
+    tichu_call_risk_flags: config.riskFlags,
+    hand_quality_score: roundFastScore(
+      config.handContext.handStrength +
+        config.handContext.pairLikeCount * 12 +
+        config.handContext.tripleLikeCount * 18 +
+        config.handContext.straightLinkCount * 5
+    ),
+    control_score: roundFastScore(controlScore),
+    exit_path_score: roundFastScore(exitPathScore),
+    fragmentation_penalty: roundFastScore(fragmentationPenalty),
+    tichu_context_notes: config.contextNotes,
+    tichu_call_selected: config.selected,
+    tichu_call_kind: config.kind
+  };
+}
 
 function countPairs(rankCounts: Map<number, number>): number {
   return [...rankCounts.values()].filter((count) => count >= 2).length;
@@ -534,15 +582,53 @@ function scoreCallTichuAction(
   handContext: HandContext,
   action: Extract<LegalAction, { type: "call_tichu" }>
 ): ServerFastPathCandidate {
-  const strongEnough = handContext.handStrength >= FAST_TICHU_CALL_THRESHOLD;
+  const structuralEvidence =
+    handContext.controlCardIds.size >= 4 ||
+    handContext.bombCardIds.size > 0 ||
+    (handContext.controlCardIds.size >= 3 && handContext.tripleLikeCount > 0);
+  const exitEvidence =
+    handContext.deadSingleCount <= 3 &&
+    handContext.straightLinkCount + handContext.pairLikeCount * 2 >= 8;
+  const strongEnough =
+    handContext.handStrength >= FAST_TICHU_CALL_THRESHOLD &&
+    structuralEvidence &&
+    exitEvidence;
+  const riskFlags = [
+    ...(handContext.controlCardIds.size < 3 && handContext.bombCardIds.size === 0
+      ? ["low_control"]
+      : []),
+    ...(handContext.deadSingleCount >= 4 ? ["too_many_dead_singles"] : []),
+    ...(handContext.isolatedLowCardIds.size >= 3 ? ["fragmented_hand"] : []),
+    ...(!exitEvidence ? ["weak_exit_path"] : [])
+  ];
+  const metadata = buildFastTichuMetadata({
+    handContext,
+    kind: "regular",
+    threshold: FAST_TICHU_CALL_THRESHOLD,
+    selected: strongEnough,
+    reason: strongEnough
+      ? "fast_strong_control_exit_path"
+      : riskFlags[0]
+        ? `decline_${riskFlags[0]}`
+        : "decline_below_threshold",
+    riskFlags,
+    contextNotes: [
+      "fast_path_uses_bounded_hand_context",
+      structuralEvidence
+        ? "structural_evidence_present"
+        : "structural_evidence_absent",
+      exitEvidence ? "exit_path_clear" : "exit_path_unclear"
+    ]
+  });
   return {
     action,
-    score: strongEnough ? 220 + handContext.handStrength : -40,
+    score: strongEnough ? 170 + handContext.handStrength : -90,
     reasons: [
       strongEnough
         ? "fast-path call keeps strong closeout hands aggressive"
         : "fast-path declines speculative Tichu calls from medium-strength hands"
-    ]
+    ],
+    tichuCall: metadata
   };
 }
 
@@ -553,8 +639,49 @@ function scoreGrandTichuActions(
       Extract<LegalAction, { type: "decline_grand_tichu" }>
   >
 ): ServerFastPathCandidate[] {
-  const strongEnough = handContext.handStrength >= FAST_GRAND_TICHU_CALL_THRESHOLD;
+  const structuralEvidence =
+    handContext.controlCardIds.size >= 5 ||
+    (handContext.controlCardIds.size >= 4 && handContext.tripleLikeCount > 0) ||
+    handContext.bombCardIds.size > 0;
+  const exitEvidence =
+    handContext.deadSingleCount <= 2 &&
+    handContext.straightLinkCount + handContext.pairLikeCount * 2 >= 7;
+  const strongEnough =
+    handContext.handStrength >= FAST_GRAND_TICHU_CALL_THRESHOLD &&
+    structuralEvidence &&
+    exitEvidence;
+  const riskFlags = [
+    ...(handContext.controlCardIds.size < 4 && handContext.bombCardIds.size === 0
+      ? ["low_control"]
+      : []),
+    ...(handContext.deadSingleCount >= 3 ? ["too_many_dead_singles"] : []),
+    ...(!exitEvidence ? ["weak_exit_path"] : [])
+  ];
   return actions.map((action) => {
+    const metadata = buildFastTichuMetadata({
+      handContext,
+      kind: "grand",
+      threshold: FAST_GRAND_TICHU_CALL_THRESHOLD,
+      selected: action.type === "call_grand_tichu" ? strongEnough : !strongEnough,
+      reason:
+        action.type === "call_grand_tichu"
+          ? strongEnough
+            ? "fast_grand_premium_opening"
+            : riskFlags[0]
+              ? `decline_${riskFlags[0]}`
+              : "decline_below_grand_threshold"
+          : strongEnough
+            ? "decline_premium_hand_not_preferred"
+            : "decline_below_grand_threshold",
+      riskFlags,
+      contextNotes: [
+        "fast_path_grand_tichu_requires_premium_opening",
+        structuralEvidence
+          ? "structural_evidence_present"
+          : "structural_evidence_absent",
+        exitEvidence ? "exit_path_clear" : "exit_path_unclear"
+      ]
+    });
     if (action.type === "call_grand_tichu") {
       return {
         action,
@@ -563,7 +690,8 @@ function scoreGrandTichuActions(
           strongEnough
             ? "fast-path grand Tichu calls require a clearly premium opening hand"
             : "fast-path declines marginal grand Tichu openings"
-        ]
+        ],
+        tichuCall: metadata
       };
     }
     return {
@@ -573,7 +701,8 @@ function scoreGrandTichuActions(
         strongEnough
           ? "decline is kept available, but a premium hand should press the grand Tichu edge"
           : "decline preserves stability when the opening hand is not premium enough"
-      ]
+      ],
+      tichuCall: metadata
     };
   });
 }

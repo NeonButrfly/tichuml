@@ -163,6 +163,149 @@ describe("heuristics v1", () => {
     expect(chosen.action).toEqual({ type: "call_tichu", seat: "seat-0" });
   });
 
+  it("declines Tichu with a weak fragmented hand", () => {
+    const state = scenario({
+      phase: "trick_play",
+      activeSeat: "seat-0",
+      hands: {
+        "seat-0": cardsFromIds([
+          "jade-2",
+          "sword-4",
+          "pagoda-6",
+          "star-8",
+          "jade-10",
+          "sword-12",
+          "pagoda-3",
+          "star-5",
+          "jade-7",
+          "sword-9",
+          "pagoda-11",
+          "star-13",
+          "jade-4",
+          "sword-6"
+        ])
+      }
+    });
+    const legalActions: LegalActionMap = {
+      "seat-0": [
+        { type: "call_tichu", seat: "seat-0" },
+        { type: "pass_turn", seat: "seat-0" }
+      ],
+      "seat-1": [],
+      "seat-2": [],
+      "seat-3": []
+    };
+
+    const chosen = heuristicsV1Policy.chooseAction({ state, legalActions });
+    const callCandidate = chosen.explanation.candidateScores.find(
+      (candidate) => candidate.action.type === "call_tichu"
+    );
+
+    expect(chosen.action).toEqual({ type: "pass_turn", seat: "seat-0" });
+    expect(callCandidate?.tichuCall).toMatchObject({
+      tichu_call_selected: false
+    });
+    expect(callCandidate?.tichuCall?.tichu_call_risk_flags).toContain(
+      "low_control"
+    );
+  });
+
+  it("declines Tichu with a medium hand that lacks enough exit certainty", () => {
+    const state = scenario({
+      phase: "trick_play",
+      activeSeat: "seat-0",
+      hands: {
+        "seat-0": cardsFromIds([
+          "dragon",
+          "star-14",
+          "jade-13",
+          "sword-11",
+          "pagoda-10",
+          "jade-9",
+          "sword-8",
+          "pagoda-7",
+          "star-6",
+          "jade-5",
+          "sword-4",
+          "pagoda-3",
+          "star-2",
+          "dog"
+        ])
+      }
+    });
+    const legalActions: LegalActionMap = {
+      "seat-0": [
+        { type: "call_tichu", seat: "seat-0" },
+        { type: "pass_turn", seat: "seat-0" }
+      ],
+      "seat-1": [],
+      "seat-2": [],
+      "seat-3": []
+    };
+
+    const chosen = heuristicsV1Policy.chooseAction({ state, legalActions });
+    const callCandidate = chosen.explanation.candidateScores.find(
+      (candidate) => candidate.action.type === "call_tichu"
+    );
+
+    expect(chosen.action).toEqual({ type: "pass_turn", seat: "seat-0" });
+    expect(callCandidate?.tichuCall).toMatchObject({
+      tichu_call_selected: false,
+      tichu_call_kind: "regular"
+    });
+  });
+
+  it("records Tichu score metadata when a strong hand calls", () => {
+    const state = scenario({
+      phase: "trick_play",
+      activeSeat: "seat-0",
+      hands: {
+        "seat-0": cardsFromIds([
+          "dragon",
+          "phoenix",
+          "star-14",
+          "jade-14",
+          "sword-13",
+          "pagoda-13",
+          "star-12",
+          "jade-11",
+          "sword-10",
+          "pagoda-9",
+          "jade-8",
+          "sword-7",
+          "pagoda-6",
+          "star-5"
+        ])
+      }
+    });
+    const legalActions: LegalActionMap = {
+      "seat-0": [
+        { type: "call_tichu", seat: "seat-0" },
+        { type: "pass_turn", seat: "seat-0" }
+      ],
+      "seat-1": [],
+      "seat-2": [],
+      "seat-3": []
+    };
+
+    const chosen = heuristicsV1Policy.chooseAction({ state, legalActions });
+
+    expect(chosen.action).toEqual({ type: "call_tichu", seat: "seat-0" });
+    expect(chosen.explanation.selectedTichuCall).toMatchObject({
+      tichu_call_kind: "regular",
+      tichu_call_selected: true
+    });
+    expect(chosen.explanation.selectedTichuCall?.tichu_call_score).toBeGreaterThan(
+      chosen.explanation.selectedTichuCall?.tichu_call_threshold ?? Number.POSITIVE_INFINITY
+    );
+    expect(chosen.explanation.selectedTichuCall?.tichu_call_risk_flags).toEqual(
+      expect.any(Array)
+    );
+    expect(chosen.explanation.selectedTichuCall?.hand_quality_score).toEqual(
+      expect.any(Number)
+    );
+  });
+
   it("refuses to call Tichu when the partner already called Grand Tichu", () => {
     const state = scenario({
       phase: "trick_play",

@@ -21,6 +21,13 @@ type ProviderRow = {
   fallback_used: boolean | null;
 };
 
+const TICHU_CALLS_PER_GAME_WARN_THRESHOLD = Number(
+  process.env.TICHU_CALLS_PER_GAME_WARN_THRESHOLD ?? "1.25"
+);
+const GRAND_TICHU_CALLS_PER_GAME_WARN_THRESHOLD = Number(
+  process.env.GRAND_TICHU_CALLS_PER_GAME_WARN_THRESHOLD ?? "0.08"
+);
+
 function repoRoot(): string {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 }
@@ -138,6 +145,12 @@ function printHumanSummary(summary: Record<string, unknown>): void {
   console.log(
     `- required wish violations: ${metrics.required_wish_violation_count}`
   );
+  console.log(`- Tichu calls: ${metrics.tichu_call_count}`);
+  console.log(`- Grand Tichu calls: ${metrics.grand_tichu_call_count}`);
+  console.log(`- Tichu calls/game: ${metrics.tichu_calls_per_game}`);
+  console.log(
+    `- Grand Tichu calls/game: ${metrics.grand_tichu_calls_per_game}`
+  );
   console.log(
     `- legal chosen action pass rate: ${metrics.legal_chosen_action_pass_rate}`
   );
@@ -149,6 +162,12 @@ function printHumanSummary(summary: Record<string, unknown>): void {
   );
   console.log(`- event ordering problems: ${metrics.event_ordering_problems}`);
   console.log(`- JSON parse errors: ${metrics.json_parse_errors}`);
+  const warnings = Array.isArray(summary.warnings)
+    ? (summary.warnings as unknown[])
+    : [];
+  for (const warning of warnings) {
+    console.log(`- warning: ${String(warning)}`);
+  }
   console.log(`- training readiness: ${summary.training_readiness_verdict}`);
 }
 
@@ -213,6 +232,8 @@ async function main(): Promise<void> {
         mahjong_wish_available_but_skipped_count: number;
         required_wish_fulfilled_count: number;
         required_wish_violation_count: number;
+        tichu_call_count: number;
+        grand_tichu_call_count: number;
         wish_considered_tichu_pressure_count: number;
         wish_considered_grand_tichu_pressure_count: number;
       }>
@@ -325,6 +346,16 @@ async function main(): Promise<void> {
         (
           SELECT COUNT(*)::INTEGER
           FROM decision_flags
+          WHERE chosen_action_type = 'call_tichu'
+        ) AS tichu_call_count,
+        (
+          SELECT COUNT(*)::INTEGER
+          FROM decision_flags
+          WHERE chosen_action_type = 'call_grand_tichu'
+        ) AS grand_tichu_call_count,
+        (
+          SELECT COUNT(*)::INTEGER
+          FROM decision_flags
           WHERE metadata->>'wish_considered_tichu_pressure' = 'true'
         ) AS wish_considered_tichu_pressure_count,
         (
@@ -355,6 +386,39 @@ async function main(): Promise<void> {
         AND COALESCE(metadata->>'wish_reason', '') <> ''
       GROUP BY reason
       ORDER BY count DESC, reason ASC
+    `;
+    const tichuReasonRows = await sql<
+      Array<{ reason: string; count: number }>
+    >`
+      SELECT
+        COALESCE(metadata->>'tichu_call_reason', 'unknown') AS reason,
+        COUNT(*)::INTEGER AS count
+      FROM decisions
+      WHERE chosen_action_type IN ('call_tichu', 'call_grand_tichu')
+      GROUP BY reason
+      ORDER BY count DESC, reason ASC
+    `;
+    const tichuDeclineReasonRows = await sql<
+      Array<{ reason: string; count: number }>
+    >`
+      SELECT
+        COALESCE(candidate->'tichuCall'->>'tichu_call_reason', 'unknown') AS reason,
+        COUNT(*)::INTEGER AS count
+      FROM decisions
+      CROSS JOIN LATERAL jsonb_array_elements(COALESCE(candidate_scores, '[]'::jsonb)) AS candidates(candidate)
+      WHERE candidate->'action'->>'type' IN ('call_tichu', 'call_grand_tichu')
+        AND COALESCE(candidate->'tichuCall'->>'tichu_call_selected', 'false') <> 'true'
+      GROUP BY reason
+      ORDER BY count DESC, reason ASC
+    `;
+    const tichuSeatRows = await sql<
+      Array<{ seat: string; count: number; kind: string }>
+    >`
+      SELECT actor_seat AS seat, COUNT(*)::INTEGER AS count, chosen_action_type AS kind
+      FROM decisions
+      WHERE chosen_action_type IN ('call_tichu', 'call_grand_tichu')
+      GROUP BY actor_seat, chosen_action_type
+      ORDER BY actor_seat ASC, chosen_action_type ASC
     `;
     const [ordering] = await sql<
       Array<{
@@ -421,6 +485,8 @@ async function main(): Promise<void> {
       mahjong_wish_available_but_skipped_count: 0,
       required_wish_fulfilled_count: 0,
       required_wish_violation_count: 0,
+      tichu_call_count: 0,
+      grand_tichu_call_count: 0,
       wish_considered_tichu_pressure_count: 0,
       wish_considered_grand_tichu_pressure_count: 0
     };
@@ -443,6 +509,64 @@ async function main(): Promise<void> {
       rowCounts.candidate_score_covered_count,
       rowCounts.candidate_score_denominator
     );
+    const tichuCallsPerGame =
+      rowCounts.completed_match_count > 0
+        ? Number(
+            (rowCounts.tichu_call_count / rowCounts.completed_match_count).toFixed(6)
+          )
+        : null;
+    const grandTichuCallsPerGame =
+      rowCounts.completed_match_count > 0
+        ? Number(
+            (
+              rowCounts.grand_tichu_call_count /
+              rowCounts.completed_match_count
+            ).toFixed(6)
+          )
+        : null;
+    const tichuSeatRates = Object.fromEntries(
+      ["seat-0", "seat-1", "seat-2", "seat-3"].map((seat) => [
+        seat,
+        Number(
+          (
+            ((tichuSeatRows.find(
+              (row) => row.seat === seat && row.kind === "call_tichu"
+            )?.count ?? 0) / Math.max(1, rowCounts.completed_match_count))
+          ).toFixed(6)
+        )
+      ])
+    );
+    const grandTichuSeatRates = Object.fromEntries(
+      ["seat-0", "seat-1", "seat-2", "seat-3"].map((seat) => [
+        seat,
+        Number(
+          (
+            ((tichuSeatRows.find(
+              (row) => row.seat === seat && row.kind === "call_grand_tichu"
+            )?.count ?? 0) / Math.max(1, rowCounts.completed_match_count))
+          ).toFixed(6)
+        )
+      ])
+    );
+    const warnings: string[] = [];
+    if (
+      rowCounts.completed_match_count >= 100 &&
+      tichuCallsPerGame !== null &&
+      tichuCallsPerGame > TICHU_CALLS_PER_GAME_WARN_THRESHOLD
+    ) {
+      warnings.push(
+        `regular Tichu calls per game ${tichuCallsPerGame} exceed warning threshold ${TICHU_CALLS_PER_GAME_WARN_THRESHOLD}`
+      );
+    }
+    if (
+      rowCounts.completed_match_count >= 100 &&
+      grandTichuCallsPerGame !== null &&
+      grandTichuCallsPerGame > GRAND_TICHU_CALLS_PER_GAME_WARN_THRESHOLD
+    ) {
+      warnings.push(
+        `Grand Tichu calls per game ${grandTichuCallsPerGame} exceed warning threshold ${GRAND_TICHU_CALLS_PER_GAME_WARN_THRESHOLD}`
+      );
+    }
     const trainingReady =
       rowCounts.completed_match_count > 0 &&
       rowCounts.decision_count > 0 &&
@@ -468,6 +592,18 @@ async function main(): Promise<void> {
           providerSummary.falseFallbackSuspicionCount,
         active_wish_event_count: rowCounts.active_wish_event_count,
         active_wish_decision_count: rowCounts.active_wish_decision_count,
+        tichu_call_count: rowCounts.tichu_call_count,
+        grand_tichu_call_count: rowCounts.grand_tichu_call_count,
+        tichu_calls_per_game: tichuCallsPerGame,
+        grand_tichu_calls_per_game: grandTichuCallsPerGame,
+        tichu_call_rate_by_seat: tichuSeatRates,
+        grand_tichu_call_rate_by_seat: grandTichuSeatRates,
+        tichu_call_reason_counts: Object.fromEntries(
+          tichuReasonRows.map((row) => [row.reason, row.count])
+        ),
+        tichu_call_decline_reason_counts: Object.fromEntries(
+          tichuDeclineReasonRows.map((row) => [row.reason, row.count])
+        ),
         mahjong_played_count: rowCounts.mahjong_played_count,
         mahjong_with_wish_rank_count: rowCounts.mahjong_with_wish_rank_count,
         mahjong_without_wish_rank_count:
@@ -497,6 +633,7 @@ async function main(): Promise<void> {
           orderingCounts.nonmonotonic_insert_order_events,
         json_parse_errors: 0
       },
+      warnings,
       training_readiness_verdict: trainingReady ? "ready" : "not_ready",
       telemetry_health: telemetryHealth
     };
