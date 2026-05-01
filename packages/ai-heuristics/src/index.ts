@@ -46,6 +46,11 @@ export {
 export { buildUrgencyProfile } from "./HeuristicContext.js";
 export { createHeuristicFeatureAnalyzer } from "./HeuristicFeatureAnalyzer.js";
 export {
+  evaluateGrandTichuCall,
+  evaluateTichuCall,
+  type TichuCallEvaluation
+} from "./tichu-call-evaluator.js";
+export {
   SERVER_HEURISTIC_FAST_PATH_LIMITS,
   SERVER_HEURISTIC_FAST_PATH_WEIGHTS,
   buildServerFastPathState,

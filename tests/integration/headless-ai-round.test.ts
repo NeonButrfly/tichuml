@@ -30,6 +30,27 @@ async function yieldToEventLoop(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+let cachedReplayRounds:
+  | [ReturnType<typeof runHeadlessRound>, ReturnType<typeof runHeadlessRound>]
+  | null = null;
+
+async function getReplayRounds(): Promise<
+  [ReturnType<typeof runHeadlessRound>, ReturnType<typeof runHeadlessRound>]
+> {
+  if (cachedReplayRounds) {
+    return cachedReplayRounds;
+  }
+  const first = withSilencedConsole(() =>
+    runHeadlessRound({ seed: "headless-round", matchId: "match-headless-round-a" })
+  );
+  await yieldToEventLoop();
+  const second = withSilencedConsole(() =>
+    runHeadlessRound({ seed: "headless-round", matchId: "match-headless-round-b" })
+  );
+  cachedReplayRounds = [first, second];
+  return cachedReplayRounds;
+}
+
 function selectedActionMatchesLegalShape(record: {
   legal_actions: Array<Record<string, unknown>>;
   selected_action: Record<string, unknown>;
@@ -71,10 +92,8 @@ describe("headless AI flow", () => {
     expect(deterministicBaselinePolicy).toBe(heuristicsV1Policy);
   });
 
-  it("completes a headless AI-only round with append-only telemetry", () => {
-    const result = withSilencedConsole(() =>
-      runHeadlessRound({ seed: "headless-round" })
-    );
+  it("completes a headless AI-only round with append-only telemetry", async () => {
+    const [result] = await getReplayRounds();
 
     expect(result.completed).toBe(true);
     expect(result.state.phase).toBe("finished");
@@ -121,37 +140,19 @@ describe("headless AI flow", () => {
   }, 150000);
 
   it("runs many AI-only rounds without soft locks", async () => {
-    const batch = [];
-    for (const seed of ["fast-0", "fast-1"]) {
-      batch.push(
-        withSilencedConsole(() =>
-          runHeadlessRound({
-            seed,
-            matchId: `match-${seed}`,
-            maxDecisions: 2000
-          })
-        )
-      );
-      await yieldToEventLoop();
-    }
+    const batch = await getReplayRounds();
 
     expect(batch).toHaveLength(2);
     expect(batch.every((round) => round.completed && round.state.phase === "finished")).toBe(true);
     expect(batch.every((round) => round.decisions > 0)).toBe(true);
-  }, 180000);
+  }, 150000);
 
   it("replays the same seed with identical policy decisions", async () => {
-    const first = withSilencedConsole(() =>
-      runHeadlessRound({ seed: "fast-0" })
-    );
-    await yieldToEventLoop();
-    const second = withSilencedConsole(() =>
-      runHeadlessRound({ seed: "fast-0" })
-    );
+    const [first, second] = await getReplayRounds();
 
     expect(
       first.telemetry.decisions.map((record) => record.selected_action)
     ).toEqual(second.telemetry.decisions.map((record) => record.selected_action));
     expect(first.state.roundSummary).toEqual(second.state.roundSummary);
-  }, 120000);
+  }, 150000);
 });

@@ -25,7 +25,13 @@ const TICHU_CALLS_PER_GAME_WARN_THRESHOLD = Number(
   process.env.TICHU_CALLS_PER_GAME_WARN_THRESHOLD ?? "1.25"
 );
 const GRAND_TICHU_CALLS_PER_GAME_WARN_THRESHOLD = Number(
-  process.env.GRAND_TICHU_CALLS_PER_GAME_WARN_THRESHOLD ?? "0.08"
+  process.env.GRAND_TICHU_CALLS_PER_GAME_WARN_THRESHOLD ?? "0.05"
+);
+const TICHU_CALLS_PER_GAME_LOW_WARN_THRESHOLD = Number(
+  process.env.TICHU_CALLS_PER_GAME_LOW_WARN_THRESHOLD ?? "0.25"
+);
+const GRAND_TICHU_ZERO_WARN_GAME_THRESHOLD = Number(
+  process.env.GRAND_TICHU_ZERO_WARN_GAME_THRESHOLD ?? "1000"
 );
 
 function repoRoot(): string {
@@ -234,6 +240,13 @@ async function main(): Promise<void> {
         required_wish_violation_count: number;
         tichu_call_count: number;
         grand_tichu_call_count: number;
+        average_tichu_call_score: number | null;
+        average_tichu_call_threshold: number | null;
+        average_grand_tichu_call_score: number | null;
+        average_grand_tichu_call_threshold: number | null;
+        tichu_call_metadata_missing_count: number;
+        tichu_call_decline_selected_bug_count: number;
+        grand_tichu_call_decline_selected_bug_count: number;
         wish_considered_tichu_pressure_count: number;
         wish_considered_grand_tichu_pressure_count: number;
       }>
@@ -354,6 +367,67 @@ async function main(): Promise<void> {
           WHERE chosen_action_type = 'call_grand_tichu'
         ) AS grand_tichu_call_count,
         (
+          SELECT AVG((metadata->>'tichu_call_score')::DOUBLE PRECISION)::DOUBLE PRECISION
+          FROM decision_flags
+          WHERE chosen_action_type = 'call_tichu'
+            AND COALESCE(metadata->>'tichu_call_score', '') ~ '^-?[0-9]+(\\.[0-9]+)?$'
+        ) AS average_tichu_call_score,
+        (
+          SELECT AVG((metadata->>'tichu_call_threshold')::DOUBLE PRECISION)::DOUBLE PRECISION
+          FROM decision_flags
+          WHERE chosen_action_type = 'call_tichu'
+            AND COALESCE(metadata->>'tichu_call_threshold', '') ~ '^-?[0-9]+(\\.[0-9]+)?$'
+        ) AS average_tichu_call_threshold,
+        (
+          SELECT AVG((COALESCE(metadata->>'grand_tichu_call_score', metadata->>'tichu_call_score'))::DOUBLE PRECISION)::DOUBLE PRECISION
+          FROM decision_flags
+          WHERE chosen_action_type = 'call_grand_tichu'
+            AND COALESCE(metadata->>'grand_tichu_call_score', metadata->>'tichu_call_score', '') ~ '^-?[0-9]+(\\.[0-9]+)?$'
+        ) AS average_grand_tichu_call_score,
+        (
+          SELECT AVG((COALESCE(metadata->>'grand_tichu_call_threshold', metadata->>'tichu_call_threshold'))::DOUBLE PRECISION)::DOUBLE PRECISION
+          FROM decision_flags
+          WHERE chosen_action_type = 'call_grand_tichu'
+            AND COALESCE(metadata->>'grand_tichu_call_threshold', metadata->>'tichu_call_threshold', '') ~ '^-?[0-9]+(\\.[0-9]+)?$'
+        ) AS average_grand_tichu_call_threshold,
+        (
+          SELECT COUNT(*)::INTEGER
+          FROM decision_flags
+          WHERE chosen_action_type IN ('call_tichu', 'call_grand_tichu')
+            AND (
+              metadata->>'tichu_call_reason' IS NULL
+              OR metadata->>'tichu_call_reason' IN ('regular_call_without_metadata', 'grand_call_without_metadata')
+            )
+        ) AS tichu_call_metadata_missing_count,
+        (
+          SELECT COUNT(*)::INTEGER
+          FROM decision_flags
+          WHERE chosen_action_type = 'call_tichu'
+            AND (
+              metadata->>'tichu_call_reason' LIKE 'decline_%'
+              OR metadata->>'tichu_call_decline_selected_bug' = 'true'
+              OR (
+                COALESCE(metadata->>'tichu_call_score', '') ~ '^-?[0-9]+(\\.[0-9]+)?$'
+                AND COALESCE(metadata->>'tichu_call_threshold', '') ~ '^-?[0-9]+(\\.[0-9]+)?$'
+                AND (metadata->>'tichu_call_score')::DOUBLE PRECISION < (metadata->>'tichu_call_threshold')::DOUBLE PRECISION
+              )
+            )
+        ) AS tichu_call_decline_selected_bug_count,
+        (
+          SELECT COUNT(*)::INTEGER
+          FROM decision_flags
+          WHERE chosen_action_type = 'call_grand_tichu'
+            AND (
+              COALESCE(metadata->>'grand_tichu_call_reason', metadata->>'tichu_call_reason') LIKE 'decline_%'
+              OR metadata->>'tichu_call_decline_selected_bug' = 'true'
+              OR (
+                COALESCE(metadata->>'grand_tichu_call_score', metadata->>'tichu_call_score', '') ~ '^-?[0-9]+(\\.[0-9]+)?$'
+                AND COALESCE(metadata->>'grand_tichu_call_threshold', metadata->>'tichu_call_threshold', '') ~ '^-?[0-9]+(\\.[0-9]+)?$'
+                AND (COALESCE(metadata->>'grand_tichu_call_score', metadata->>'tichu_call_score'))::DOUBLE PRECISION < (COALESCE(metadata->>'grand_tichu_call_threshold', metadata->>'tichu_call_threshold'))::DOUBLE PRECISION
+              )
+            )
+        ) AS grand_tichu_call_decline_selected_bug_count,
+        (
           SELECT COUNT(*)::INTEGER
           FROM decision_flags
           WHERE metadata->>'wish_considered_tichu_pressure' = 'true'
@@ -394,7 +468,18 @@ async function main(): Promise<void> {
         COALESCE(metadata->>'tichu_call_reason', 'unknown') AS reason,
         COUNT(*)::INTEGER AS count
       FROM decisions
-      WHERE chosen_action_type IN ('call_tichu', 'call_grand_tichu')
+      WHERE chosen_action_type = 'call_tichu'
+      GROUP BY reason
+      ORDER BY count DESC, reason ASC
+    `;
+    const grandTichuReasonRows = await sql<
+      Array<{ reason: string; count: number }>
+    >`
+      SELECT
+        COALESCE(metadata->>'grand_tichu_call_reason', metadata->>'tichu_call_reason', 'unknown') AS reason,
+        COUNT(*)::INTEGER AS count
+      FROM decisions
+      WHERE chosen_action_type = 'call_grand_tichu'
       GROUP BY reason
       ORDER BY count DESC, reason ASC
     `;
@@ -406,7 +491,20 @@ async function main(): Promise<void> {
         COUNT(*)::INTEGER AS count
       FROM decisions
       CROSS JOIN LATERAL jsonb_array_elements(COALESCE(candidate_scores, '[]'::jsonb)) AS candidates(candidate)
-      WHERE candidate->'action'->>'type' IN ('call_tichu', 'call_grand_tichu')
+      WHERE candidate->'action'->>'type' = 'call_tichu'
+        AND COALESCE(candidate->'tichuCall'->>'tichu_call_selected', 'false') <> 'true'
+      GROUP BY reason
+      ORDER BY count DESC, reason ASC
+    `;
+    const grandTichuDeclineReasonRows = await sql<
+      Array<{ reason: string; count: number }>
+    >`
+      SELECT
+        COALESCE(candidate->'tichuCall'->>'grand_tichu_call_reason', candidate->'tichuCall'->>'tichu_call_reason', 'unknown') AS reason,
+        COUNT(*)::INTEGER AS count
+      FROM decisions
+      CROSS JOIN LATERAL jsonb_array_elements(COALESCE(candidate_scores, '[]'::jsonb)) AS candidates(candidate)
+      WHERE candidate->'action'->>'type' = 'call_grand_tichu'
         AND COALESCE(candidate->'tichuCall'->>'tichu_call_selected', 'false') <> 'true'
       GROUP BY reason
       ORDER BY count DESC, reason ASC
@@ -487,6 +585,13 @@ async function main(): Promise<void> {
       required_wish_violation_count: 0,
       tichu_call_count: 0,
       grand_tichu_call_count: 0,
+      average_tichu_call_score: null,
+      average_tichu_call_threshold: null,
+      average_grand_tichu_call_score: null,
+      average_grand_tichu_call_threshold: null,
+      tichu_call_metadata_missing_count: 0,
+      tichu_call_decline_selected_bug_count: 0,
+      grand_tichu_call_decline_selected_bug_count: 0,
       wish_considered_tichu_pressure_count: 0,
       wish_considered_grand_tichu_pressure_count: 0
     };
@@ -560,11 +665,36 @@ async function main(): Promise<void> {
     }
     if (
       rowCounts.completed_match_count >= 100 &&
+      tichuCallsPerGame !== null &&
+      tichuCallsPerGame < TICHU_CALLS_PER_GAME_LOW_WARN_THRESHOLD
+    ) {
+      warnings.push(
+        `regular Tichu calls per game ${tichuCallsPerGame} are below warning threshold ${TICHU_CALLS_PER_GAME_LOW_WARN_THRESHOLD}`
+      );
+    }
+    if (
+      rowCounts.completed_match_count >= 100 &&
       grandTichuCallsPerGame !== null &&
       grandTichuCallsPerGame > GRAND_TICHU_CALLS_PER_GAME_WARN_THRESHOLD
     ) {
       warnings.push(
         `Grand Tichu calls per game ${grandTichuCallsPerGame} exceed warning threshold ${GRAND_TICHU_CALLS_PER_GAME_WARN_THRESHOLD}`
+      );
+    }
+    if (
+      rowCounts.completed_match_count >= GRAND_TICHU_ZERO_WARN_GAME_THRESHOLD &&
+      rowCounts.grand_tichu_call_count === 0
+    ) {
+      warnings.push(
+        `Grand Tichu calls are zero over ${rowCounts.completed_match_count} completed games`
+      );
+    }
+    if (
+      rowCounts.tichu_call_decline_selected_bug_count > 0 ||
+      rowCounts.grand_tichu_call_decline_selected_bug_count > 0
+    ) {
+      warnings.push(
+        `decline metadata was selected by call actions: regular=${rowCounts.tichu_call_decline_selected_bug_count}, grand=${rowCounts.grand_tichu_call_decline_selected_bug_count}`
       );
     }
     const trainingReady =
@@ -601,9 +731,27 @@ async function main(): Promise<void> {
         tichu_call_reason_counts: Object.fromEntries(
           tichuReasonRows.map((row) => [row.reason, row.count])
         ),
-        tichu_call_decline_reason_counts: Object.fromEntries(
+        grand_tichu_call_reason_counts: Object.fromEntries(
+          grandTichuReasonRows.map((row) => [row.reason, row.count])
+        ),
+        tichu_decline_reason_counts: Object.fromEntries(
           tichuDeclineReasonRows.map((row) => [row.reason, row.count])
         ),
+        grand_tichu_decline_reason_counts: Object.fromEntries(
+          grandTichuDeclineReasonRows.map((row) => [row.reason, row.count])
+        ),
+        average_tichu_call_score: rowCounts.average_tichu_call_score,
+        average_tichu_call_threshold: rowCounts.average_tichu_call_threshold,
+        average_grand_tichu_call_score:
+          rowCounts.average_grand_tichu_call_score,
+        average_grand_tichu_call_threshold:
+          rowCounts.average_grand_tichu_call_threshold,
+        tichu_call_metadata_missing_count:
+          rowCounts.tichu_call_metadata_missing_count,
+        tichu_call_decline_selected_bug_count:
+          rowCounts.tichu_call_decline_selected_bug_count,
+        grand_tichu_call_decline_selected_bug_count:
+          rowCounts.grand_tichu_call_decline_selected_bug_count,
         mahjong_played_count: rowCounts.mahjong_played_count,
         mahjong_with_wish_rank_count: rowCounts.mahjong_with_wish_rank_count,
         mahjong_without_wish_rank_count:

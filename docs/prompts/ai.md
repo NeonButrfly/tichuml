@@ -14,6 +14,29 @@ Use this file to preserve AI and bot-behavior prompt intent and link it to GitHu
 
 ## Entries
 
+### 2026-05-01 - Predictive Tichu and Grand Tichu call evaluator
+
+- Prompt Signal: Follow-up telemetry after Tichu teacher tuning still showed
+  143 regular Tichu calls in 100 games (1.43/game), zero Grand Tichu calls, and
+  one consistency bug where `call_tichu` was selected despite
+  `tichu_call_score=187`, `tichu_call_threshold=245`, and
+  `tichu_call_reason=decline_below_threshold`.
+- Interpreted Requirement: Issue
+  [#57](https://github.com/NeonButrfly/tichuml/issues/57) tracks a
+  deterministic human-style predictive evaluator for regular Tichu and Grand
+  Tichu calls. Calls must estimate first-out realism, exit steps, control
+  recovery, fragmentation, premium control, partner/opponent pressure, and score
+  context; any `decline_*` evaluator result must make the corresponding call
+  action non-competitive.
+- Affected Systems: `packages/ai-heuristics/src/tichu-call-evaluator.ts`,
+  `packages/ai-heuristics/src/TichuDecisionEngine.ts`,
+  `packages/ai-heuristics/src/serverFastPath.ts`, `packages/telemetry`,
+  `scripts/telemetry-sanity.ts`, and heuristic/server-fast-path integration
+  tests.
+- Linked GitHub Issue: [#57](https://github.com/NeonButrfly/tichuml/issues/57)
+- Milestone: [6.5 – Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status Source: GitHub issue state only.
+
 ### 2026-04-29 - Strategic Mahjong wish selection for heuristic providers
 
 - Prompt Signal: Full-mode telemetry showed Mahjong plays with

@@ -404,22 +404,36 @@ function buildTichuCallTelemetryMetadata(config: {
     typeof config.chosenAction?.type === "string" ? config.chosenAction.type : null;
   const tichuCallSelected =
     actionType === "call_tichu" || actionType === "call_grand_tichu";
+  const tichuCallReason =
+    readNullableStringField(selectedTichu, "tichu_call_reason") ??
+    (tichuCallSelected
+      ? actionType === "call_grand_tichu"
+        ? "grand_call_without_metadata"
+        : "regular_call_without_metadata"
+      : null);
+  const tichuCallScore = readFiniteNumber(selectedTichu?.tichu_call_score) ?? null;
+  const tichuCallThreshold =
+    readFiniteNumber(selectedTichu?.tichu_call_threshold) ?? null;
+  const declineSelectedBug =
+    tichuCallSelected &&
+    (tichuCallReason?.startsWith("decline_") === true ||
+      (tichuCallScore !== null &&
+        tichuCallThreshold !== null &&
+        tichuCallScore < tichuCallThreshold));
 
   return {
-    tichu_call_score:
-      readFiniteNumber(selectedTichu?.tichu_call_score) ?? null,
-    tichu_call_threshold:
-      readFiniteNumber(selectedTichu?.tichu_call_threshold) ?? null,
-    tichu_call_reason:
-      readNullableStringField(selectedTichu, "tichu_call_reason") ??
-      (tichuCallSelected
-        ? actionType === "call_grand_tichu"
-          ? "grand_call_without_metadata"
-          : "regular_call_without_metadata"
-        : null),
+    tichu_call_score: tichuCallScore,
+    tichu_call_threshold: tichuCallThreshold,
+    tichu_call_reason: tichuCallReason,
     tichu_call_risk_flags: readStringList(
       selectedTichu?.tichu_call_risk_flags
     ),
+    tichu_call_confidence:
+      readFiniteNumber(selectedTichu?.tichu_call_confidence) ?? null,
+    tichu_call_decision:
+      readNullableStringField(selectedTichu, "tichu_call_decision") ?? null,
+    tichu_call_type:
+      readNullableStringField(selectedTichu, "tichu_call_type") ?? null,
     hand_quality_score:
       readFiniteNumber(selectedTichu?.hand_quality_score) ?? null,
     control_score: readFiniteNumber(selectedTichu?.control_score) ?? null,
@@ -427,9 +441,53 @@ function buildTichuCallTelemetryMetadata(config: {
       readFiniteNumber(selectedTichu?.exit_path_score) ?? null,
     fragmentation_penalty:
       readFiniteNumber(selectedTichu?.fragmentation_penalty) ?? null,
+    premium_card_score:
+      readFiniteNumber(selectedTichu?.premium_card_score) ?? null,
+    bomb_score: readFiniteNumber(selectedTichu?.bomb_score) ?? null,
+    low_card_burden: readFiniteNumber(selectedTichu?.low_card_burden) ?? null,
+    combo_coherence_score:
+      readFiniteNumber(selectedTichu?.combo_coherence_score) ?? null,
+    lead_recovery_score:
+      readFiniteNumber(selectedTichu?.lead_recovery_score) ?? null,
+    partner_context_score:
+      readFiniteNumber(selectedTichu?.partner_context_score) ?? null,
+    opponent_pressure_score:
+      readFiniteNumber(selectedTichu?.opponent_pressure_score) ?? null,
+    score_context_score:
+      readFiniteNumber(selectedTichu?.score_context_score) ?? null,
+    predicted_exit_steps:
+      readFiniteNumber(selectedTichu?.predicted_exit_steps) ?? null,
+    predicted_control_recoveries:
+      readFiniteNumber(selectedTichu?.predicted_control_recoveries) ?? null,
+    predicted_loser_groups:
+      readFiniteNumber(selectedTichu?.predicted_loser_groups) ?? null,
+    predicted_winner_groups:
+      readFiniteNumber(selectedTichu?.predicted_winner_groups) ?? null,
+    predicted_deadwood_count:
+      readFiniteNumber(selectedTichu?.predicted_deadwood_count) ?? null,
+    predicted_needs_partner_help:
+      selectedTichu?.predicted_needs_partner_help === true,
+    first_out_probability_proxy:
+      readFiniteNumber(selectedTichu?.first_out_probability_proxy) ?? null,
+    grand_tichu_call_score:
+      readFiniteNumber(selectedTichu?.grand_tichu_call_score) ?? null,
+    grand_tichu_call_threshold:
+      readFiniteNumber(selectedTichu?.grand_tichu_call_threshold) ?? null,
+    grand_tichu_call_reason:
+      readNullableStringField(selectedTichu, "grand_tichu_call_reason"),
+    grand_tichu_risk_flags: readStringList(
+      selectedTichu?.grand_tichu_risk_flags
+    ),
+    grand_tichu_premium_count:
+      readFiniteNumber(selectedTichu?.grand_tichu_premium_count) ?? null,
+    grand_tichu_unknown_card_risk:
+      readFiniteNumber(selectedTichu?.grand_tichu_unknown_card_risk) ?? null,
+    grand_tichu_first8_exit_proxy:
+      readFiniteNumber(selectedTichu?.grand_tichu_first8_exit_proxy) ?? null,
+    tichu_call_decline_selected_bug: declineSelectedBug,
     tichu_context_notes: readStringList(selectedTichu?.tichu_context_notes),
     tichu_call_selected:
-      selectedTichu?.tichu_call_selected === true || tichuCallSelected,
+      selectedTichu ? selectedTichu.tichu_call_selected === true : tichuCallSelected,
     tichu_call_kind:
       readNullableStringField(selectedTichu, "tichu_call_kind") ??
       (actionType === "call_grand_tichu"
@@ -671,11 +729,8 @@ export function buildCompactDecisionMetadata(config: {
     tichu_call_threshold: detail.tichu_call_threshold ?? null,
     tichu_call_reason: detail.tichu_call_reason ?? null,
     tichu_call_risk_flags: detail.tichu_call_risk_flags ?? [],
-    hand_quality_score: detail.hand_quality_score ?? null,
-    control_score: detail.control_score ?? null,
-    exit_path_score: detail.exit_path_score ?? null,
-    fragmentation_penalty: detail.fragmentation_penalty ?? null,
-    tichu_context_notes: detail.tichu_context_notes ?? [],
+    tichu_call_decline_selected_bug:
+      detail.tichu_call_decline_selected_bug ?? false,
     tichu_call_selected: detail.tichu_call_selected ?? false,
     tichu_call_kind: detail.tichu_call_kind ?? null,
     legal_action_count: config.actorLegalActions.length
@@ -788,6 +843,23 @@ function actionsEquivalent(candidate: JsonObject, chosen: JsonObject): boolean {
   }
 
   return true;
+}
+
+function compactLegalActionsWithChosen(config: {
+  actorLegalActions: SeedJsonValue[];
+  chosenAction: JsonObject;
+}): SeedJsonValue[] {
+  if (config.actorLegalActions.length === 0) {
+    return [config.chosenAction];
+  }
+
+  const containsChosenAction = config.actorLegalActions.some((action) =>
+    isJsonObjectValue(action) && actionsEquivalent(action, config.chosenAction)
+  );
+
+  return containsChosenAction
+    ? config.actorLegalActions
+    : [...config.actorLegalActions, config.chosenAction];
 }
 
 export function selectTelemetryChosenAction(config: {
@@ -933,7 +1005,7 @@ export function buildTelemetryDecisionPayloads(config: {
       requested_provider: config.requestedProvider,
       provider_used: config.providerUsed,
       ...candidateScoreCoverage,
-      ...(explanation ? { explanation } : {}),
+      ...(config.mode === "full" && explanation ? { explanation } : {}),
       ...(config.metadata ?? {}),
       ...compactMetadata,
       requested_provider_canonical: requestedProviderCanonical,
@@ -978,8 +1050,10 @@ export function buildTelemetryDecisionPayloads(config: {
       ...common,
       state_raw: {},
       state_norm: null,
-      legal_actions:
-        actorLegalActions.length > 0 ? actorLegalActions : [chosenAction],
+      legal_actions: compactLegalActionsWithChosen({
+        actorLegalActions,
+        chosenAction
+      }),
       explanation: null,
       candidateScores: null,
       stateFeatures: compactMetadata,

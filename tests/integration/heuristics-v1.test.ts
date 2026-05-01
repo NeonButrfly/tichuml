@@ -13,7 +13,12 @@ import {
   type SeatId,
   type StandardRank
 } from "@tichuml/engine";
-import { describeMahjongWishSkip, heuristicsV1Policy } from "@tichuml/ai-heuristics";
+import {
+  describeMahjongWishSkip,
+  evaluateGrandTichuCall,
+  evaluateTichuCall,
+  heuristicsV1Policy
+} from "@tichuml/ai-heuristics";
 
 function combo(cardIds: string[], current: Combination | null = null): Combination {
   const result = listCombinationInterpretations(cardsFromIds(cardIds), current)[0];
@@ -127,6 +132,142 @@ describe("heuristics v1", () => {
     });
 
     expect(chosen.action).toEqual({ type: "decline_grand_tichu", seat: "seat-0" });
+  });
+
+  it("does not call Grand Tichu from junk first eight cards", () => {
+    const state = scenario({
+      phase: "grand_tichu_window",
+      activeSeat: "seat-0",
+      grandTichuQueue: ["seat-0"],
+      hands: {
+        "seat-0": cardsFromIds([
+          "jade-2",
+          "sword-4",
+          "pagoda-6",
+          "star-8",
+          "jade-9",
+          "sword-10",
+          "pagoda-11",
+          "star-12"
+        ])
+      }
+    });
+
+    const evaluation = evaluateGrandTichuCall({ state, seat: "seat-0" });
+
+    expect(evaluation.decision).toBe("decline");
+    expect(evaluation.reason).toMatch(/^decline_/);
+  });
+
+  it("calls Grand Tichu with Dragon plus Phoenix first-eight premium control", () => {
+    const state = scenario({
+      phase: "grand_tichu_window",
+      activeSeat: "seat-0",
+      grandTichuQueue: ["seat-0"],
+      hands: {
+        "seat-0": cardsFromIds([
+          "dragon",
+          "phoenix",
+          "star-14",
+          "jade-14",
+          "sword-13",
+          "pagoda-13",
+          "star-12",
+          "jade-12"
+        ])
+      }
+    });
+
+    const evaluation = evaluateGrandTichuCall({ state, seat: "seat-0" });
+
+    expect(evaluation.decision).toBe("call");
+    expect(evaluation.premium_count).toBeGreaterThanOrEqual(4);
+    expect(evaluation.unknown_card_risk).toBeLessThan(100);
+  });
+
+  it("can call Grand Tichu with three Aces in the first eight", () => {
+    const state = scenario({
+      phase: "grand_tichu_window",
+      activeSeat: "seat-0",
+      grandTichuQueue: ["seat-0"],
+      hands: {
+        "seat-0": cardsFromIds([
+          "star-14",
+          "jade-14",
+          "sword-14",
+          "dragon",
+          "phoenix",
+          "star-13",
+          "jade-13",
+          "mahjong"
+        ])
+      }
+    });
+
+    expect(evaluateGrandTichuCall({ state, seat: "seat-0" }).decision).toBe(
+      "call"
+    );
+  });
+
+  it("does not let a first-eight bomb alone force Grand Tichu", () => {
+    const state = scenario({
+      phase: "grand_tichu_window",
+      activeSeat: "seat-0",
+      grandTichuQueue: ["seat-0"],
+      hands: {
+        "seat-0": cardsFromIds([
+          "jade-9",
+          "sword-9",
+          "pagoda-9",
+          "star-9",
+          "jade-2",
+          "sword-4",
+          "pagoda-6",
+          "dog"
+        ])
+      }
+    });
+
+    const evaluation = evaluateGrandTichuCall({ state, seat: "seat-0" });
+
+    expect(evaluation.decision).toBe("decline");
+    expect(evaluation.risk_flags).toContain("too_few_premium_cards");
+  });
+
+  it("keeps Grand Tichu score context bounded for junk and leaders", () => {
+    const junk = [
+      "jade-2",
+      "sword-4",
+      "pagoda-6",
+      "star-8",
+      "jade-9",
+      "sword-10",
+      "pagoda-11",
+      "dog"
+    ];
+    const behindState = scenario({
+      phase: "grand_tichu_window",
+      activeSeat: "seat-0",
+      grandTichuQueue: ["seat-0"],
+      matchScore: { "team-0": 100, "team-1": 850 },
+      hands: { "seat-0": cardsFromIds(junk) }
+    });
+    const aheadState = scenario({
+      phase: "grand_tichu_window",
+      activeSeat: "seat-0",
+      grandTichuQueue: ["seat-0"],
+      matchScore: { "team-0": 850, "team-1": 100 },
+      hands: { "seat-0": cardsFromIds(junk) }
+    });
+
+    expect(evaluateGrandTichuCall({ state: behindState, seat: "seat-0" }).decision).toBe(
+      "decline"
+    );
+    expect(
+      evaluateGrandTichuCall({ state: aheadState, seat: "seat-0" }).threshold
+    ).toBeGreaterThan(
+      evaluateGrandTichuCall({ state: behindState, seat: "seat-0" }).threshold
+    );
   });
 
   it("calls Tichu with a high-control pre-play hand", () => {
@@ -253,6 +394,104 @@ describe("heuristics v1", () => {
       tichu_call_selected: false,
       tichu_call_kind: "regular"
     });
+  });
+
+  it("declines high-card Tichu hands without a credible exit path", () => {
+    const state = scenario({
+      phase: "trick_play",
+      activeSeat: "seat-0",
+      hands: {
+        "seat-0": cardsFromIds([
+          "dragon",
+          "star-14",
+          "jade-14",
+          "sword-13",
+          "pagoda-12",
+          "jade-10",
+          "sword-8",
+          "pagoda-6",
+          "star-4",
+          "jade-2",
+          "sword-3",
+          "pagoda-5",
+          "star-7",
+          "dog"
+        ])
+      }
+    });
+
+    const evaluation = evaluateTichuCall({ state, seat: "seat-0" });
+
+    expect(evaluation.decision).toBe("decline");
+    expect(evaluation.reason).toMatch(/^decline_/);
+  });
+
+  it("can call regular Tichu with a coherent fast hand plus control", () => {
+    const state = scenario({
+      phase: "trick_play",
+      activeSeat: "seat-0",
+      hands: {
+        "seat-0": cardsFromIds([
+          "dragon",
+          "phoenix",
+          "star-14",
+          "jade-14",
+          "sword-13",
+          "pagoda-13",
+          "star-12",
+          "jade-11",
+          "sword-10",
+          "pagoda-9",
+          "jade-8",
+          "sword-7",
+          "pagoda-6",
+          "star-5"
+        ])
+      }
+    });
+
+    const evaluation = evaluateTichuCall({ state, seat: "seat-0" });
+
+    expect(evaluation.decision).toBe("call");
+    expect(evaluation.predicted.estimated_exit_steps).toBeLessThanOrEqual(6);
+  });
+
+  it("uses score context to split a borderline regular Tichu hand", () => {
+    const hand = [
+      "dragon",
+      "phoenix",
+      "star-14",
+      "jade-13",
+      "sword-12",
+      "pagoda-11",
+      "star-10",
+      "jade-9",
+      "sword-8",
+      "pagoda-7",
+      "star-6",
+      "jade-5",
+      "sword-4",
+      "dog"
+    ];
+    const behindState = scenario({
+      phase: "trick_play",
+      activeSeat: "seat-0",
+      matchScore: { "team-0": 100, "team-1": 850 },
+      hands: { "seat-0": cardsFromIds(hand) }
+    });
+    const aheadState = scenario({
+      phase: "trick_play",
+      activeSeat: "seat-0",
+      matchScore: { "team-0": 850, "team-1": 100 },
+      hands: { "seat-0": cardsFromIds(hand) }
+    });
+
+    expect(evaluateTichuCall({ state: behindState, seat: "seat-0" }).decision).toBe(
+      "call"
+    );
+    expect(evaluateTichuCall({ state: aheadState, seat: "seat-0" }).decision).toBe(
+      "decline"
+    );
   });
 
   it("records Tichu score metadata when a strong hand calls", () => {

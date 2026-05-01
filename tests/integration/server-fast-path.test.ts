@@ -254,6 +254,50 @@ describe("server heuristic fast path", () => {
     });
   });
 
+  it("cannot select call_tichu when metadata declines below threshold", () => {
+    const state = scenario({
+      phase: "trick_play",
+      activeSeat: "seat-0",
+      hands: {
+        "seat-0": cardsFromIds([
+          "dragon",
+          "star-14",
+          "jade-13",
+          "sword-11",
+          "pagoda-10",
+          "jade-9",
+          "sword-8",
+          "pagoda-7",
+          "star-6",
+          "jade-5",
+          "sword-4",
+          "pagoda-3",
+          "dog"
+        ])
+      }
+    });
+    const chosen = chooseServerFastPathDecision({
+      state: buildServerFastPathState(state, "seat-0"),
+      actor: "seat-0",
+      legalActions: [
+        { type: "call_tichu", seat: "seat-0" },
+        { type: "pass_turn", seat: "seat-0" }
+      ]
+    });
+    const callCandidate = chosen.candidates.find(
+      (candidate) => candidate.action.type === "call_tichu"
+    );
+
+    expect(chosen.action).toEqual({ type: "pass_turn", seat: "seat-0" });
+    expect(callCandidate?.score).toBeLessThan(-10_000);
+    expect(callCandidate?.tichuCall).toMatchObject({
+      tichu_call_score: 187,
+      tichu_call_threshold: 245,
+      tichu_call_reason: "decline_below_threshold",
+      tichu_call_selected: false
+    });
+  });
+
   it("avoids wasteful bombs when a cheap legal win exists", () => {
     const lead = combo(["jade-7"]);
     const state = scenario({

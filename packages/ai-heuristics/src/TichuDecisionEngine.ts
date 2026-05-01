@@ -2,8 +2,12 @@ import { getOpponentSeats, type EngineAction, type GameState, type SeatId } from
 import type { HeuristicFeatureAnalyzer } from "./HeuristicFeatureAnalyzer.js";
 import { HEURISTIC_WEIGHTS } from "./HeuristicScorer.js";
 import { buildHandEvaluation } from "./HandAnalysis.js";
-import { partnerHasCalledTichu } from "./HeuristicContext.js";
 import type { CandidateDecision, TichuCallMetadata } from "./types.js";
+import {
+  evaluateGrandTichuCall,
+  evaluateTichuCall,
+  type TichuCallEvaluation
+} from "./tichu-call-evaluator.js";
 import { appendUniqueTags } from "./utils.js";
 
 function roundScore(value: number): number {
@@ -15,110 +19,60 @@ function roundScore(value: number): number {
 
 function buildTichuCallMetadata(config: {
   kind: "regular" | "grand";
-  score: number;
-  threshold: number;
-  reason: string;
-  selected: boolean;
-  riskFlags: string[];
-  contextNotes: string[];
-  analysis: ReturnType<typeof buildHandEvaluation>;
-  stateFeatures: ReturnType<HeuristicFeatureAnalyzer["getStateFeatures"]> | undefined;
+  evaluation: TichuCallEvaluation;
 }): TichuCallMetadata {
-  const controlScore =
-    config.analysis.controlCount * 72 +
-    config.analysis.bombCount * 115 +
-    config.analysis.highClusterCount * 34 +
-    config.analysis.highRankCount * 12;
-  const exitPathScore =
-    config.analysis.expectedTrickWins * 62 +
-    config.analysis.finishPlanScore * 0.006 +
-    config.analysis.handSpeed * 48 +
-    config.analysis.longestStraightLength * 18 +
-    config.analysis.longestPairSequenceLength * 14;
-  const fragmentationPenalty =
-    config.analysis.fragmentation * 64 +
-    config.analysis.loserCount * 34 +
-    config.analysis.deadSingleCount * 36 +
-    config.analysis.isolatedLowSinglesCount * 18 +
-    Math.max(0, config.analysis.singlesCount - 9) * 10;
-
   return {
-    tichu_call_score: roundScore(config.score),
-    tichu_call_threshold: roundScore(config.threshold),
-    tichu_call_reason: config.reason,
-    tichu_call_risk_flags: config.riskFlags,
-    hand_quality_score: roundScore(
-      config.analysis.legacyCallStrength * 1.4 +
-        config.analysis.handQualityScore * 0.004 +
-        (config.stateFeatures?.hand_quality_score ?? 0) * 0.002
-    ),
-    control_score: roundScore(controlScore),
-    exit_path_score: roundScore(exitPathScore),
-    fragmentation_penalty: roundScore(fragmentationPenalty),
-    tichu_context_notes: config.contextNotes,
-    tichu_call_selected: config.selected,
+    tichu_call_score: roundScore(config.evaluation.score),
+    tichu_call_threshold: roundScore(config.evaluation.threshold),
+    tichu_call_reason: config.evaluation.reason,
+    tichu_call_risk_flags: config.evaluation.risk_flags,
+    tichu_call_confidence: config.evaluation.confidence,
+    tichu_call_decision: config.evaluation.decision,
+    tichu_call_type: config.evaluation.call_type,
+    hand_quality_score: config.evaluation.feature_scores.hand_quality,
+    control_score: config.evaluation.feature_scores.control,
+    exit_path_score: config.evaluation.feature_scores.exit_path,
+    fragmentation_penalty: config.evaluation.feature_scores.fragmentation,
+    premium_card_score: config.evaluation.feature_scores.premium_cards,
+    bomb_score: config.evaluation.feature_scores.bomb_value,
+    low_card_burden: config.evaluation.feature_scores.low_card_burden,
+    combo_coherence_score: config.evaluation.feature_scores.combo_coherence,
+    lead_recovery_score: config.evaluation.feature_scores.lead_recovery,
+    partner_context_score: config.evaluation.feature_scores.partner_context,
+    opponent_pressure_score: config.evaluation.feature_scores.opponent_pressure,
+    score_context_score: config.evaluation.feature_scores.score_context,
+    predicted_exit_steps: config.evaluation.predicted.estimated_exit_steps,
+    predicted_control_recoveries: config.evaluation.predicted.control_recoveries,
+    predicted_loser_groups: config.evaluation.predicted.loser_groups,
+    predicted_winner_groups: config.evaluation.predicted.winner_groups,
+    predicted_deadwood_count: config.evaluation.predicted.deadwood_count,
+    predicted_needs_partner_help: config.evaluation.predicted.needs_partner_help,
+    first_out_probability_proxy:
+      config.evaluation.predicted.first_out_probability_proxy,
+    grand_tichu_call_score:
+      config.evaluation.call_type === "grand_tichu" ? config.evaluation.score : null,
+    grand_tichu_call_threshold:
+      config.evaluation.call_type === "grand_tichu"
+        ? config.evaluation.threshold
+        : null,
+    grand_tichu_call_reason:
+      config.evaluation.call_type === "grand_tichu"
+        ? config.evaluation.reason
+        : null,
+    grand_tichu_risk_flags:
+      config.evaluation.call_type === "grand_tichu"
+        ? config.evaluation.risk_flags
+        : [],
+    grand_tichu_premium_count:
+      config.evaluation.call_type === "grand_tichu"
+        ? config.evaluation.premium_count
+        : null,
+    grand_tichu_unknown_card_risk: config.evaluation.unknown_card_risk,
+    grand_tichu_first8_exit_proxy: config.evaluation.first8_exit_proxy,
+    tichu_context_notes: config.evaluation.context_notes,
+    tichu_call_selected: config.evaluation.decision === "call",
     tichu_call_kind: config.kind
   };
-}
-
-function collectTichuRiskFlags(config: {
-  analysis: ReturnType<typeof buildHandEvaluation>;
-  hasPartnerCall: boolean;
-  opponentCallCount: number;
-  handSize: number;
-}): string[] {
-  const flags: string[] = [];
-  if (config.hasPartnerCall) flags.push("partner_already_called");
-  if (config.analysis.controlCount < 2 && config.analysis.bombCount === 0) {
-    flags.push("low_control");
-  }
-  if (config.analysis.fragmentation >= 3) flags.push("fragmented_hand");
-  if (config.analysis.deadSingleCount >= 4) flags.push("too_many_dead_singles");
-  if (config.analysis.loserCount >= 3) flags.push("too_many_low_losers");
-  if (config.analysis.expectedTrickWins < 4 && config.handSize > 6) {
-    flags.push("weak_exit_path");
-  }
-  if (config.opponentCallCount > 0) flags.push("opponent_tichu_pressure");
-  if (config.analysis.dogAvailable && config.analysis.controlCount < 3) {
-    flags.push("dog_without_control");
-  }
-  return flags;
-}
-
-function chooseTichuReason(config: {
-  shouldCall: boolean;
-  kind: "regular" | "grand";
-  riskFlags: string[];
-  analysis: ReturnType<typeof buildHandEvaluation>;
-}): string {
-  if (config.shouldCall) {
-    if (config.kind === "grand") {
-      return "premium_opening_control";
-    }
-    if (config.analysis.bombCount > 0) {
-      return "bomb_control_exit_path";
-    }
-    if (config.analysis.controlCount >= 3) {
-      return "strong_control_exit_path";
-    }
-    return "clear_exit_path";
-  }
-
-  if (config.riskFlags.includes("partner_already_called")) {
-    return "decline_partner_already_called";
-  }
-  if (config.riskFlags.includes("low_control")) {
-    return "decline_low_control";
-  }
-  if (config.riskFlags.includes("fragmented_hand")) {
-    return "decline_fragmented";
-  }
-  if (config.riskFlags.includes("weak_exit_path")) {
-    return "decline_weak_exit_path";
-  }
-  return config.kind === "grand"
-    ? "decline_below_grand_threshold"
-    : "decline_below_threshold";
 }
 
 export function scoreGrandTichu(
@@ -128,78 +82,27 @@ export function scoreGrandTichu(
   analyzer?: HeuristicFeatureAnalyzer
 ): CandidateDecision {
   const analysis = analyzer?.getHandEvaluation(seat) ?? buildHandEvaluation(state, seat);
-  const stateFeatures = analyzer?.getStateFeatures(seat);
-  const opponentCallCount = getOpponentSeats(seat).filter(
-    (opponent) =>
-      state.calls[opponent].smallTichu || state.calls[opponent].grandTichu
-  ).length;
-  const hasMahjong = state.hands[seat].some(
-    (card) => card.kind === "special" && card.special === "mahjong"
-  );
-  const confidence =
-    analysis.legacyCallStrength * 2.6 +
-    analysis.expectedTrickWins * 92 +
-    analysis.synergyScore * 8 +
-    analysis.controlCount * 78 +
-    analysis.bombCount * 118 -
-    analysis.fragmentation * 42 -
-    analysis.loserCount * 16 +
-    analysis.finishPlanScore * 1.6 -
-    analysis.deadSingleCount * 22 +
-    (stateFeatures?.hand_quality_score ?? 0) * 0.004 +
-    (hasMahjong ? 18 : 0);
-  const riskFlags = collectTichuRiskFlags({
-    analysis,
-    hasPartnerCall: partnerHasCalledTichu(state, seat),
-    opponentCallCount,
-    handSize: state.hands[seat].length
-  });
-  const structuralEvidence =
-    analysis.controlCount >= 3 ||
-    analysis.bombCount > 0 ||
-    (analysis.controlCount >= 2 && analysis.highClusterCount >= 2);
-  const shouldCall =
-    state.hands[seat].length === 8 &&
-    analysis.legacyCallStrength >= HEURISTIC_WEIGHTS.calls.legacyGrandThreshold &&
-    analysis.tichuViable &&
-    structuralEvidence &&
-    analysis.expectedTrickWins >= 5.5 &&
-    analysis.loserCount <= 1 &&
-    analysis.deadSingleCount <= 2 &&
-    confidence >= HEURISTIC_WEIGHTS.calls.grandThreshold;
-  const reason = chooseTichuReason({
-    shouldCall,
-    kind: "grand",
-    riskFlags,
+  const evaluation = evaluateGrandTichuCall({
+    state,
+    seat,
     analysis
   });
   const metadata = buildTichuCallMetadata({
     kind: "grand",
-    score: confidence,
-    threshold: HEURISTIC_WEIGHTS.calls.grandThreshold,
-    reason,
-    selected: shouldCall,
-    riskFlags,
-    contextNotes: [
-      "grand_tichu_requires_pre_exchange_premium_control",
-      structuralEvidence
-        ? "premium_control_structure_present"
-        : "premium_control_structure_absent"
-    ],
-    analysis,
-    stateFeatures
+    evaluation
   });
+  const shouldCall = evaluation.decision === "call";
 
   if (action.type === "call_grand_tichu") {
     return {
       actor: seat,
       action,
-      score: shouldCall ? 820 + confidence : -120,
+      score: shouldCall ? 820 + evaluation.score : -100_000,
       tags: [],
       reasons: shouldCall
         ? [
-            "opening hand has enough control and combo density for Grand Tichu",
-            "legacy call strength and current structure both clear the Grand Tichu threshold"
+            "opening hand has enough premium control and exit structure for Grand Tichu",
+            "predictive first-8-card formula clears the Grand Tichu threshold"
           ]
         : ["opening hand does not justify a Grand Tichu commitment"],
       tichuCall: metadata
@@ -219,7 +122,7 @@ export function scoreGrandTichu(
       tichu_call_selected: !shouldCall,
       tichu_call_reason: shouldCall
         ? "decline_premium_hand_not_preferred"
-        : reason
+        : evaluation.reason
     }
   };
 }
@@ -231,128 +134,32 @@ export function scoreTichu(
   analyzer?: HeuristicFeatureAnalyzer
 ): CandidateDecision {
   const analysis = analyzer?.getHandEvaluation(seat) ?? buildHandEvaluation(state, seat);
-  const stateFeatures = analyzer?.getStateFeatures(seat);
-  const opponentCallCount = getOpponentSeats(seat).filter(
-    (opponent) =>
-      state.calls[opponent].smallTichu || state.calls[opponent].grandTichu
-  ).length;
-  const partnerCalled = partnerHasCalledTichu(state, seat);
-  const riskFlags = collectTichuRiskFlags({
-    analysis,
-    hasPartnerCall: partnerCalled,
-    opponentCallCount,
-    handSize: state.hands[seat].length
-  });
-
-  if (partnerHasCalledTichu(state, seat)) {
-    const metadata = buildTichuCallMetadata({
-      kind: "regular",
-      score: Number.NEGATIVE_INFINITY,
-      threshold: HEURISTIC_WEIGHTS.calls.tichuThreshold14,
-      reason: "decline_partner_already_called",
-      selected: false,
-      riskFlags,
-      contextNotes: ["partner_call_blocks_second_team_tichu_commitment"],
-      analysis,
-      stateFeatures
-    });
-    return {
-      actor: seat,
-      action,
-      score: -1000,
-      tags: [],
-      reasons: ["partner already holds the team Tichu call slot"],
-      tichuCall: metadata
-    };
-  }
-
-  const hasMahjong = state.hands[seat].some(
-    (card) => card.kind === "special" && card.special === "mahjong"
-  );
-  const confidence =
-    analysis.legacyCallStrength * 1.8 +
-    analysis.expectedTrickWins * 78 +
-    analysis.synergyScore * 6 +
-    analysis.controlCount * 64 +
-    analysis.bombCount * 96 -
-    analysis.fragmentation * 34 -
-    state.hands[seat].length * 2 -
-    analysis.loserCount * 14 +
-    analysis.finishPlanScore * 1.35 -
-    analysis.deadSingleCount * 18 +
-    (stateFeatures?.hand_quality_score ?? 0) * 0.003 -
-    (stateFeatures?.premium_resource_pressure ?? 0) * 0.005 +
-    (hasMahjong ? 12 : 0);
-  const callThreshold =
-    state.hands[seat].length <= 6
-      ? HEURISTIC_WEIGHTS.calls.tichuThreshold6
-      : state.hands[seat].length <= 10
-        ? HEURISTIC_WEIGHTS.calls.tichuThreshold10
-        : HEURISTIC_WEIGHTS.calls.tichuThreshold14;
-  const minimumLegacy =
-    state.hands[seat].length <= 6
-      ? HEURISTIC_WEIGHTS.calls.legacyTichuThreshold - 8
-      : state.hands[seat].length <= 10
-        ? HEURISTIC_WEIGHTS.calls.legacyTichuThreshold + 10
-        : HEURISTIC_WEIGHTS.calls.legacyTichuThreshold + 24;
-  const structuralEvidence =
-    analysis.controlCount >= 3 ||
-    analysis.bombCount > 0 ||
-    (state.hands[seat].length <= 6 &&
-      analysis.controlCount >= 1 &&
-      analysis.expectedTrickWins >= 2.8);
-  const exitEvidence =
-    state.hands[seat].length <= 6
-      ? analysis.expectedTrickWins >= 2.8 && analysis.deadSingleCount <= 1
-      : analysis.expectedTrickWins >= 13 &&
-        analysis.finishPlanScore >= 8_000 &&
-        analysis.deadSingleCount <= 3;
-  const shouldCall =
-    analysis.legacyCallStrength >= minimumLegacy &&
-    analysis.tichuViable &&
-    structuralEvidence &&
-    exitEvidence &&
-    analysis.loserCount <= 2 &&
-    analysis.fragmentation <= 2 &&
-    confidence >= callThreshold;
-  const reason = chooseTichuReason({
-    shouldCall,
-    kind: "regular",
-    riskFlags,
+  const evaluation = evaluateTichuCall({
+    state,
+    seat,
     analysis
   });
   const metadata = buildTichuCallMetadata({
     kind: "regular",
-    score: confidence,
-    threshold: callThreshold,
-    reason,
-    selected: shouldCall,
-    riskFlags,
-    contextNotes: [
-      `minimum_legacy=${minimumLegacy}`,
-      structuralEvidence
-        ? "structural_evidence_present"
-        : "structural_evidence_absent",
-      exitEvidence ? "exit_path_clear" : "exit_path_unclear",
-      opponentCallCount > 0
-        ? "opponent_call_context_considered"
-        : "no_opponent_tichu_pressure"
-    ],
-    analysis,
-    stateFeatures
+    evaluation
   });
+  const shouldCall = evaluation.decision === "call";
 
   return {
     actor: seat,
     action,
-    score: shouldCall ? 760 + confidence : -2_000,
+    score: shouldCall ? 760 + evaluation.score : -100_000,
     tags: [],
     reasons: shouldCall
       ? [
-          "control cards and combo density support a Tichu line",
-          "legacy call strength agrees with the current structural evaluation"
+          "predictive formula sees a realistic first-out path",
+          "control recovery and exit structure clear the Tichu threshold"
         ]
-      : ["hand quality is not strong enough to justify a Tichu call"],
+      : [
+          evaluation.reason === "decline_partner_called"
+            ? "partner already holds the team Tichu call slot"
+            : "predictive formula declines this Tichu call"
+        ],
     tichuCall: metadata
   };
 }
