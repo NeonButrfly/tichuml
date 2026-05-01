@@ -43,11 +43,21 @@ type MatchLifecycleFields = {
   observedAt: string;
   completedAt: string | null;
   status: "running" | "completed" | "failed";
+  finalTeam0Score: number | null;
+  finalTeam1Score: number | null;
+  winnerTeam: string | null;
+  handsPlayed: number | null;
+  failureReason: string | null;
 };
 
 function readMetadataString(metadata: JsonObject, key: string): string | null {
   const value = metadata[key];
   return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function readMetadataNumber(metadata: JsonObject, key: string): number | null {
+  const value = metadata[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function readMetadataBoolean(
@@ -71,6 +81,87 @@ function isCompletionEvent(payload: TelemetryPayload): boolean {
   );
 }
 
+function readNestedScore(
+  value: unknown,
+  key: "team-0" | "team-1"
+): number | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null;
+  }
+  const candidate = (value as Record<string, unknown>)[key];
+  return typeof candidate === "number" && Number.isFinite(candidate)
+    ? candidate
+    : null;
+}
+
+function readPayloadScore(
+  payload: TelemetryPayload,
+  key: "team-0" | "team-1"
+): number | null {
+  if ("state_norm" in payload) {
+    const stateNormScore = readNestedScore(payload.state_norm?.matchScore, key);
+    if (stateNormScore !== null) {
+      return stateNormScore;
+    }
+  }
+
+  if ("payload" in payload) {
+    const payloadObject =
+      typeof payload.payload === "object" &&
+      payload.payload !== null &&
+      !Array.isArray(payload.payload)
+        ? (payload.payload as Record<string, unknown>)
+        : null;
+    const direct = payloadObject?.[
+      key === "team-0" ? "final_team_0_score" : "final_team_1_score"
+    ];
+    if (typeof direct === "number" && Number.isFinite(direct)) {
+      return direct;
+    }
+  }
+
+  return null;
+}
+
+function readHandsPlayed(payload: TelemetryPayload): number | null {
+  if ("state_norm" in payload) {
+    const stateNorm =
+      payload.state_norm &&
+      typeof payload.state_norm === "object" &&
+      !Array.isArray(payload.state_norm)
+        ? (payload.state_norm as Record<string, unknown>)
+        : null;
+    const roundSummary = stateNorm?.roundSummary;
+    if (stateNorm?.matchComplete === true && typeof stateNorm?.matchWinner === "string") {
+      const numericHands = readMetadataNumber(payload.metadata, "hands_played");
+      if (numericHands !== null) {
+        return numericHands;
+      }
+      const metadataHands = readMetadataString(payload.metadata, "hands_played");
+      if (metadataHands) {
+        const parsed = Number.parseInt(metadataHands, 10);
+        if (Number.isFinite(parsed)) {
+          return parsed;
+        }
+      }
+    }
+    if (roundSummary) {
+      const numericHandNumber = readMetadataNumber(payload.metadata, "hand_number");
+      if (numericHandNumber !== null) {
+        return numericHandNumber;
+      }
+      const handNumber = readMetadataString(payload.metadata, "hand_number");
+      if (handNumber) {
+        const parsed = Number.parseInt(handNumber, 10);
+        if (Number.isFinite(parsed)) {
+          return parsed;
+        }
+      }
+    }
+  }
+  return null;
+}
+
 function matchLifecycleFields(payload: TelemetryPayload): MatchLifecycleFields {
   const requestedProvider =
     payload.requested_provider ??
@@ -79,6 +170,10 @@ function matchLifecycleFields(payload: TelemetryPayload): MatchLifecycleFields {
     payload.provider_used ??
     readMetadataString(payload.metadata, "provider_used");
   const completedAt = isCompletionEvent(payload) ? payload.ts : null;
+  const winnerTeam =
+    "state_norm" in payload && typeof payload.state_norm?.matchWinner === "string"
+      ? payload.state_norm.matchWinner
+      : readMetadataString(payload.metadata, "winner_team");
   return {
     gameId: payload.game_id,
     handId: payload.hand_id,
@@ -90,7 +185,12 @@ function matchLifecycleFields(payload: TelemetryPayload): MatchLifecycleFields {
     engineVersion: payload.engine_version,
     observedAt: payload.ts,
     completedAt,
-    status: completedAt ? "completed" : "running"
+    status: completedAt ? "completed" : "running",
+    finalTeam0Score: readPayloadScore(payload, "team-0"),
+    finalTeam1Score: readPayloadScore(payload, "team-1"),
+    winnerTeam,
+    handsPlayed: readHandsPlayed(payload),
+    failureReason: readMetadataString(payload.metadata, "failure_reason"),
   };
 }
 
@@ -597,6 +697,11 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
         strict_telemetry,
         sim_version,
         engine_version,
+        final_team_0_score,
+        final_team_1_score,
+        winner_team,
+        hands_played,
+        failure_reason,
         started_at,
         completed_at,
         status,
@@ -611,6 +716,11 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
         ${fields.strictTelemetry},
         ${fields.simVersion},
         ${fields.engineVersion},
+        ${fields.finalTeam0Score},
+        ${fields.finalTeam1Score},
+        ${fields.winnerTeam},
+        ${fields.handsPlayed},
+        ${fields.failureReason},
         ${fields.observedAt},
         ${fields.completedAt},
         ${fields.status},
@@ -624,6 +734,11 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
         strict_telemetry = COALESCE(matches.strict_telemetry, EXCLUDED.strict_telemetry),
         sim_version = COALESCE(matches.sim_version, EXCLUDED.sim_version),
         engine_version = COALESCE(matches.engine_version, EXCLUDED.engine_version),
+        final_team_0_score = COALESCE(matches.final_team_0_score, EXCLUDED.final_team_0_score),
+        final_team_1_score = COALESCE(matches.final_team_1_score, EXCLUDED.final_team_1_score),
+        winner_team = COALESCE(matches.winner_team, EXCLUDED.winner_team),
+        hands_played = COALESCE(matches.hands_played, EXCLUDED.hands_played),
+        failure_reason = COALESCE(matches.failure_reason, EXCLUDED.failure_reason),
         started_at = LEAST(
           COALESCE(matches.started_at, EXCLUDED.started_at),
           EXCLUDED.started_at

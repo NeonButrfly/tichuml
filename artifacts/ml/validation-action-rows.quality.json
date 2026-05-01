@@ -1,0 +1,38 @@
+{
+  "decisions_read": 120,
+  "decisions_processed": 120,
+  "candidate_rows_written": 1358,
+  "rows_by_phase": {
+    "trick_play": 1358
+  },
+  "rows_by_provider": {
+    "local_heuristic": 1358
+  },
+  "rows_by_actor_seat": {
+    "seat-1": 396,
+    "seat-2": 220,
+    "seat-3": 104,
+    "seat-0": 638
+  },
+  "fallback_rows": 0,
+  "malformed_decisions": 0,
+  "missing_state_raw_count": 55,
+  "missing_state_norm_count": 55,
+  "missing_legal_actions_count": 0,
+  "chosen_action_match_count": 120,
+  "chosen_action_match_rate": 1.0,
+  "observed_outcome_available_rows": 878,
+  "observed_hand_outcome_available_rows": 878,
+  "observed_match_outcome_available_rows": 878,
+  "games_with_outcomes": 1,
+  "hands_with_outcomes": 1,
+  "missing_outcome_reason_counts": {
+    "no_hand_or_match_outcome": 480
+  },
+  "label_mode": "imitation",
+  "feature_count": 128,
+  "output_format": "parquet",
+  "chunk_size": 40,
+  "peak_memory_bytes": 33468443,
+  "schema_version": 2
+}

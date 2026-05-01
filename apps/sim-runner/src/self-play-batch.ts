@@ -107,6 +107,12 @@ export type SelfPlayGameResult = {
   eventsByPhase: Record<string, number>;
   teamScores: Record<TeamId, number>;
   winningTeam: TeamId | "tie";
+  handWinCountsByTeam: Record<TeamId | "tie", number>;
+  doubleVictoryCountsByTeam: Record<TeamId, number>;
+  tichuCalls: number;
+  tichuSuccesses: number;
+  grandTichuCalls: number;
+  grandTichuSuccesses: number;
   matchComplete: boolean;
   matchWinner: TeamId | null;
   scoreMargin: number;
@@ -146,11 +152,18 @@ export type SelfPlayBatchSummary = {
   exchangePhaseRecorded: boolean;
   passSelectRecorded: boolean;
   winCountsByTeam: Record<TeamId | "tie", number>;
+  handWinCountsByTeam: Record<TeamId | "tie", number>;
   totalScoreByTeam: Record<TeamId, number>;
   averageScoreMargin: number;
   passRate: number;
   bombUsageRate: number;
   wishSatisfactionRate: number | null;
+  tichuCallRate: number | null;
+  tichuSuccessRate: number | null;
+  grandTichuCallRate: number | null;
+  grandTichuSuccessRate: number | null;
+  doubleVictoryRate: number | null;
+  doubleVictoryCountsByTeam: Record<TeamId, number>;
   lastCompletedGameId: string | null;
   lastCompletedHandId: string | null;
   lastCompletedMatchWinner: TeamId | "tie" | null;
@@ -234,6 +247,7 @@ type PersistedEventConfig = {
   quiet?: boolean;
   workerId?: string;
   controllerMode?: boolean;
+  metadata?: JsonObject;
 };
 
 function diagnosticsEnabled(): boolean {
@@ -395,12 +409,72 @@ function createTeamScoreBucket(): Record<TeamId, number> {
   };
 }
 
+function createWinCountBucket(): Record<TeamId | "tie", number> {
+  return {
+    "team-0": 0,
+    "team-1": 0,
+    tie: 0
+  };
+}
+
 function cloneTeamScores(
   source?: Record<TeamId, number> | null
 ): Record<TeamId, number> {
   return {
     "team-0": source?.["team-0"] ?? 0,
     "team-1": source?.["team-1"] ?? 0
+  };
+}
+
+function summarizeMatchHistory(
+  history: GameState["matchHistory"]
+): {
+  handWinCountsByTeam: Record<TeamId | "tie", number>;
+  doubleVictoryCountsByTeam: Record<TeamId, number>;
+  tichuCalls: number;
+  tichuSuccesses: number;
+  grandTichuCalls: number;
+  grandTichuSuccesses: number;
+} {
+  const handWinCountsByTeam = createWinCountBucket();
+  const doubleVictoryCountsByTeam = createTeamScoreBucket();
+  let tichuCalls = 0;
+  let tichuSuccesses = 0;
+  let grandTichuCalls = 0;
+  let grandTichuSuccesses = 0;
+
+  for (const hand of history) {
+    const team0 = hand.teamScores["team-0"];
+    const team1 = hand.teamScores["team-1"];
+    const handWinner =
+      team0 === team1 ? "tie" : team0 > team1 ? "team-0" : "team-1";
+    countByKey(handWinCountsByTeam, handWinner);
+    if (hand.doubleVictory !== null) {
+      doubleVictoryCountsByTeam[hand.doubleVictory] += 1;
+    }
+    for (const bonus of hand.tichuBonuses) {
+      if (bonus.label === "small") {
+        tichuCalls += 1;
+        if (bonus.amount > 0) {
+          tichuSuccesses += 1;
+        }
+      }
+      if (bonus.label === "grand") {
+        grandTichuCalls += 1;
+        if (bonus.amount > 0) {
+          grandTichuSuccesses += 1;
+        }
+      }
+    }
+  }
+
+  return {
+    handWinCountsByTeam,
+    doubleVictoryCountsByTeam,
+    tichuCalls,
+    tichuSuccesses,
+    grandTichuCalls,
+    grandTichuSuccesses
   };
 }
 
@@ -1590,6 +1664,7 @@ async function persistEvent(
     requestedProvider: config.requestedProvider,
     providerUsed: config.providerUsed,
     strictTelemetry: config.strictTelemetry === true,
+    metadata: config.metadata,
     ...(config.workerId ? { workerId: config.workerId } : {}),
     ...(config.controllerMode ? { controllerMode: true } : {})
   });
@@ -2394,6 +2469,13 @@ async function runSingleGame(
           eventIndex: eventIndex++,
           providerUsed: "system_local",
           requestedProvider: "system_local",
+          metadata: {
+            hand_number: String(result.nextState.matchHistory.length),
+            hands_played: String(result.nextState.matchHistory.length),
+            winner_team: completedWinningTeam === "tie" ? null : completedWinningTeam,
+            final_team_0_score: result.nextState.matchScore["team-0"],
+            final_team_1_score: result.nextState.matchScore["team-1"],
+          },
           ...(options.workerId ? { workerId: options.workerId } : {}),
           ...(options.controllerMode ? { controllerMode: true } : {})
         }
@@ -2429,6 +2511,13 @@ async function runSingleGame(
           eventIndex: eventIndex++,
           providerUsed: "system_local",
           requestedProvider: "system_local",
+          metadata: {
+            hand_number: String(result.nextState.matchHistory.length),
+            hands_played: String(result.nextState.matchHistory.length),
+            winner_team: completedWinningTeam === "tie" ? null : completedWinningTeam,
+            final_team_0_score: result.nextState.matchScore["team-0"],
+            final_team_1_score: result.nextState.matchScore["team-1"],
+          },
           ...(options.workerId ? { workerId: options.workerId } : {}),
           ...(options.controllerMode ? { controllerMode: true } : {})
         }
@@ -2443,7 +2532,7 @@ async function runSingleGame(
       const flushTimeoutMs =
         options.strictTelemetry === true
           ? Math.max(options.telemetryTimeoutMs ?? 10_000, 1_000)
-          : Math.max(100, Math.min(options.telemetryTimeoutMs ?? 1_000, 1_000));
+          : Math.max(50, Math.min(options.telemetryTimeoutMs ?? 250, 250));
       await telemetryManager.flush(flushTimeoutMs);
       const telemetrySnapshot = telemetryManager.snapshot();
       mergeTelemetryFailureStats(
@@ -2461,6 +2550,7 @@ async function runSingleGame(
   const handsPlayed = result.nextState.matchHistory.length;
   const handId = buildHandId(gameId, handsPlayed);
   const teamScores = cloneTeamScores(result.nextState.matchScore);
+  const historyMetrics = summarizeMatchHistory(result.nextState.matchHistory);
   const scoreMargin = Math.abs(teamScores["team-0"] - teamScores["team-1"]);
   const winningTeam =
     teamScores["team-0"] === teamScores["team-1"]
@@ -2484,6 +2574,12 @@ async function runSingleGame(
     eventsByPhase,
     teamScores,
     winningTeam,
+    handWinCountsByTeam: historyMetrics.handWinCountsByTeam,
+    doubleVictoryCountsByTeam: historyMetrics.doubleVictoryCountsByTeam,
+    tichuCalls: historyMetrics.tichuCalls,
+    tichuSuccesses: historyMetrics.tichuSuccesses,
+    grandTichuCalls: historyMetrics.grandTichuCalls,
+    grandTichuSuccesses: historyMetrics.grandTichuSuccesses,
     matchComplete: true,
     matchWinner: winningTeam === "tie" ? null : winningTeam,
     scoreMargin,
@@ -2570,11 +2666,22 @@ export async function runSelfPlayBatch(
       "team-1": 0,
       tie: 0
     },
+    handWinCountsByTeam: {
+      "team-0": 0,
+      "team-1": 0,
+      tie: 0
+    },
     totalScoreByTeam: createTeamScoreBucket(),
     averageScoreMargin: 0,
     passRate: 0,
     bombUsageRate: 0,
     wishSatisfactionRate: null,
+    tichuCallRate: null,
+    tichuSuccessRate: null,
+    grandTichuCallRate: null,
+    grandTichuSuccessRate: null,
+    doubleVictoryRate: null,
+    doubleVictoryCountsByTeam: createTeamScoreBucket(),
     lastCompletedGameId: null,
     lastCompletedHandId: null,
     lastCompletedMatchWinner: null,
@@ -2597,6 +2704,10 @@ export async function runSelfPlayBatch(
   let totalBombPlays = 0;
   let totalWishSatisfiedPlays = 0;
   let totalWishActiveDecisions = 0;
+  let totalTichuCalls = 0;
+  let totalTichuSuccesses = 0;
+  let totalGrandTichuCalls = 0;
+  let totalGrandTichuSuccesses = 0;
   const latencyTotals: Record<string, { count: number; totalMs: number }> = {};
 
   for (let index = 0; index < options.games; index += 1) {
@@ -2633,10 +2744,19 @@ export async function runSelfPlayBatch(
       totalBombPlays += game.bombPlays;
       totalWishSatisfiedPlays += game.wishSatisfiedPlays;
       totalWishActiveDecisions += game.wishActiveDecisions;
+      totalTichuCalls += game.tichuCalls;
+      totalTichuSuccesses += game.tichuSuccesses;
+      totalGrandTichuCalls += game.grandTichuCalls;
+      totalGrandTichuSuccesses += game.grandTichuSuccesses;
       mergeCounts(summary.decisionsByPhase, game.decisionsByPhase);
       mergeCounts(summary.eventsByPhase, game.eventsByPhase);
       mergeCounts(summary.providerUsage, game.providerUsage);
       mergeCounts(summary.totalScoreByTeam, game.teamScores);
+      mergeCounts(summary.handWinCountsByTeam, game.handWinCountsByTeam);
+      mergeCounts(
+        summary.doubleVictoryCountsByTeam,
+        game.doubleVictoryCountsByTeam
+      );
       countByKey(summary.winCountsByTeam, game.winningTeam);
       summary.exchangePhaseRecorded =
         summary.exchangePhaseRecorded ||
@@ -2713,6 +2833,32 @@ export async function runSelfPlayBatch(
   summary.wishSatisfactionRate =
     totalWishActiveDecisions > 0
       ? Number((totalWishSatisfiedPlays / totalWishActiveDecisions).toFixed(4))
+      : null;
+  summary.tichuCallRate =
+    summary.handsPlayed > 0
+      ? Number((totalTichuCalls / summary.handsPlayed).toFixed(4))
+      : null;
+  summary.tichuSuccessRate =
+    totalTichuCalls > 0
+      ? Number((totalTichuSuccesses / totalTichuCalls).toFixed(4))
+      : null;
+  summary.grandTichuCallRate =
+    summary.handsPlayed > 0
+      ? Number((totalGrandTichuCalls / summary.handsPlayed).toFixed(4))
+      : null;
+  summary.grandTichuSuccessRate =
+    totalGrandTichuCalls > 0
+      ? Number((totalGrandTichuSuccesses / totalGrandTichuCalls).toFixed(4))
+      : null;
+  summary.doubleVictoryRate =
+    summary.handsPlayed > 0
+      ? Number(
+          (
+            (summary.doubleVictoryCountsByTeam["team-0"] +
+              summary.doubleVictoryCountsByTeam["team-1"]) /
+            summary.handsPlayed
+          ).toFixed(4)
+        )
       : null;
   summary.averageLatencyByProvider = Object.fromEntries(
     Object.entries(latencyTotals).map(([provider, metrics]) => [

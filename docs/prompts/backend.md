@@ -26,6 +26,31 @@ Prompt logs here capture backend/platform prompt intent only. GitHub issue state
 - Status:
   Lives in GitHub, not here.
 
+## 2026-05-01 - Strategy-improvement telemetry and ML export/training path
+
+- Prompt signal:
+  Refactor telemetry plus the existing LightGBM pipeline so the repo supports
+  real strategy-improvement ML rather than only behavior cloning, while keeping
+  gameplay, sim, backend routing, telemetry ingest, npm scripts, and database
+  compatibility stable.
+- Interpreted requirement:
+  Issue [#59](https://github.com/NeonButrfly/tichuml/issues/59) tracks the
+  cross-surface backend and ML data upgrade: telemetry must capture replay- and
+  outcome-ready decision/event/match context, `ml:export` must stream
+  candidate-action rows with honest `observed_*` labels plus manifests and
+  quality reports, rollout infrastructure must create resumable counterfactual
+  labels, and the evaluation harness must gate model claims against heuristic
+  baselines.
+- Affected systems:
+  `apps/server`, `apps/sim-runner`, `packages/telemetry`, `infra/db/migrations`,
+  `ml/*`, `package.json`, telemetry/ML docs, validation artifacts.
+- Linked GitHub issue:
+  [#59](https://github.com/NeonButrfly/tichuml/issues/59)
+- Milestone:
+  [6.5 - Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status:
+  Lives in GitHub, not here.
+
 ## 2026-04-29 - Telemetry decision sanity signals from export
 
 - Prompt signal:

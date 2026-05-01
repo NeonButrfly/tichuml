@@ -68,13 +68,21 @@ class ModelRuntime:
             )
 
         frame = pd.DataFrame(rows)
+        runtime_feature_count = len(frame.columns)
+        missing_feature_count = 0
         for feature_name in self.feature_names:
             if feature_name not in frame.columns:
                 frame[feature_name] = 0.0
+                missing_feature_count += 1
         scores = self.booster.predict(frame[self.feature_names]) if len(frame.index) > 0 else []
         return {
             "scores": [float(score) for score in scores],
             "model_metadata": self.model_metadata,
+            "runtime_metadata": {
+                "runtime_feature_count": int(runtime_feature_count),
+                "missing_feature_count": int(missing_feature_count),
+                "model_feature_count": int(len(self.feature_names)),
+            },
         }
 
 

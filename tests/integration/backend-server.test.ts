@@ -1147,7 +1147,18 @@ describe("backend foundation server routes", () => {
           scores: request.legalActions.map((_, index) => (index === 0 ? 0.9 : 0.1)),
           modelMetadata: {
             model_type: "lightgbm_action_model",
-            feature_names: ["phase_trick_play"]
+            feature_names: ["phase_trick_play"],
+            model_id: "model-123",
+            model_version: "model-123",
+            objective: "rollout_ranker",
+            label_mode: "rollout",
+            target_column: "rollout_mean_actor_team_delta",
+            feature_schema_version: 2
+          },
+          runtimeMetadata: {
+            runtime_feature_count: 64,
+            missing_feature_count: 3,
+            model_feature_count: 41
           }
         };
       },
@@ -1174,8 +1185,60 @@ describe("backend foundation server routes", () => {
         expect(payload.accepted).toBe(true);
         expect(payload.provider_used).toBe("lightgbm_model");
         expect(payload.metadata?.scores?.[0]?.score).toBe(0.9);
+        expect(payload.metadata?.model_id).toBe("model-123");
+        expect(payload.metadata?.objective).toBe("rollout_ranker");
+        expect(payload.metadata?.selected_candidate_score).toBe(0.9);
+        expect(payload.metadata?.candidate_score_distribution?.count).toBeGreaterThan(0);
+        expect(payload.metadata?.top_k_candidate_scores?.[0]?.score).toBe(0.9);
+        expect(payload.metadata?.runtime_feature_count).toBe(64);
+        expect(payload.metadata?.missing_feature_count).toBe(3);
         expect(repository.decisions).toHaveLength(1);
         expect(repository.decisions[0]?.policy_source).toBe("lightgbm_model");
+      },
+      { lightgbmScorer: scorer }
+    );
+  });
+
+  it("falls back safely when the LightGBM scorer returns non-finite scores", async () => {
+    const scorer: LightgbmScorer = {
+      async score(request) {
+        return {
+          scores: request.legalActions.map(() => Number.NaN),
+          modelMetadata: {
+            model_type: "lightgbm_action_model"
+          },
+          runtimeMetadata: {}
+        };
+      },
+      async close() {}
+    };
+
+    await withServer(
+      async ({ baseUrl, repository }) => {
+        const response = await fetch(`${baseUrl}/api/decision/request`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...createDecisionRequestBody({ fullStateDecisionRequests: true }),
+            requested_provider: "lightgbm_model"
+          })
+        });
+
+        expect(response.status).toBe(200);
+        const payload = (await response.json()) as {
+          accepted: boolean;
+          provider_used: string;
+          metadata?: { fallback_used?: boolean; lightgbm_error?: string };
+        };
+        expect(payload.accepted).toBe(true);
+        expect(payload.provider_used).toBe("server_heuristic");
+        expect(payload.metadata?.fallback_used).toBe(true);
+        expect(String(payload.metadata?.lightgbm_error ?? "")).toMatch(
+          /non-finite candidate score/i
+        );
+        expect(repository.decisions).toHaveLength(1);
+        expect(repository.decisions[0]?.policy_source).toBe("server_heuristic");
+        expect(repository.decisions[0]?.metadata.lightgbm_error).toBeTruthy();
       },
       { lightgbmScorer: scorer }
     );

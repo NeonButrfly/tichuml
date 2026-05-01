@@ -264,6 +264,7 @@ export function buildSelfPlayEventTelemetry(config: {
   requestedProvider: string;
   providerUsed: string;
   strictTelemetry?: boolean | undefined;
+  metadata?: JsonObject | undefined;
   workerId?: string | undefined;
   controllerMode?: boolean | undefined;
 }): TelemetryEventBuildResult {
@@ -296,7 +297,8 @@ export function buildSelfPlayEventTelemetry(config: {
     },
     metadata: {
       simulation_mode: true,
-      strict_telemetry: config.strictTelemetry === true
+      strict_telemetry: config.strictTelemetry === true,
+      ...(config.metadata ?? {})
     },
     workerId: config.workerId,
     controllerMode: config.controllerMode

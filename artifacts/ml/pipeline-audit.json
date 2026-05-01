@@ -1,0 +1,271 @@
+{
+  "generated_at": "2026-05-01T18:44:00Z",
+  "tracker_issue": 59,
+  "milestone": {
+    "number": 24,
+    "title": "6.5 - Local ML Integration & Reproducible Backend"
+  },
+  "scope": "pre_change_repo_audit",
+  "snapshot_commit": {
+    "sha": "69e0b6d",
+    "message": "chore: snapshot before telemetry/controller changes"
+  },
+  "live_database_probe": {
+    "attempted": true,
+    "ok": false,
+    "database_url": "postgresql://tichu_app:Dexedrine1!@localhost:5432/tichuml",
+    "failure": "password authentication failed for configured local DATABASE_URL",
+    "note": "Schema answers below use migrations plus repository insert/select code as source of truth."
+  },
+  "telemetry": {
+    "decisions": {
+      "fields": [
+        "id",
+        "match_id",
+        "ts",
+        "game_id",
+        "hand_id",
+        "phase",
+        "actor_seat",
+        "decision_index",
+        "schema_version",
+        "engine_version",
+        "sim_version",
+        "requested_provider",
+        "provider_used",
+        "fallback_used",
+        "policy_name",
+        "policy_source",
+        "worker_id",
+        "state_raw",
+        "state_norm",
+        "legal_actions",
+        "chosen_action",
+        "explanation",
+        "candidate_scores",
+        "state_features",
+        "metadata",
+        "antipattern_tags",
+        "chosen_action_type",
+        "legal_action_count",
+        "chosen_action_is_legal",
+        "has_explanation",
+        "has_candidate_scores",
+        "has_state_features",
+        "explanation_quality_level",
+        "has_wish",
+        "wish_rank",
+        "can_pass",
+        "state_hash",
+        "legal_actions_hash",
+        "chosen_action_hash",
+        "created_at"
+      ],
+      "pre_action_state_captured": "partial",
+      "legal_actions_captured": true,
+      "chosen_actions_captured": true,
+      "candidate_scores_captured": true,
+      "candidate_features_captured": "partial_via_metadata_and_explanation",
+      "full_hands_in_state_raw": "full_mode_only",
+      "normalized_states_captured": "full_mode_only_for_some_producers",
+      "rng_seed_context": "partial_via_state_raw_seed_seedProvenance_and_matchHistory_roundSeed",
+      "join_to_outcomes": "possible_but_not_materialized",
+      "offline_rollout_reconstruction": "possible_only_for_full_state_decisions",
+      "gaps": [
+        "no decision event_index column",
+        "no extracted latency_ms column",
+        "no extracted model metadata columns",
+        "no extracted replay seed columns"
+      ]
+    },
+    "events": {
+      "fields": [
+        "id",
+        "match_id",
+        "ts",
+        "game_id",
+        "hand_id",
+        "phase",
+        "event_type",
+        "actor_seat",
+        "event_index",
+        "schema_version",
+        "engine_version",
+        "sim_version",
+        "requested_provider",
+        "provider_used",
+        "worker_id",
+        "fallback_used",
+        "state_norm",
+        "payload",
+        "metadata",
+        "state_hash",
+        "event_hash",
+        "created_at"
+      ],
+      "supports_outcome_derivation": "partial",
+      "hand_and_match_completion_events_exist": true,
+      "finish_order_available": "via_state_norm_roundSummary_when_present",
+      "team_scores_available": "via_state_norm_roundSummary_and_matchScore_when_present",
+      "tichu_and_grand_tichu_bonuses_available": "via_state_norm_roundSummary_when_present",
+      "double_victory_available": "via_state_norm_roundSummary_when_present",
+      "winner_available": "via_state_norm_matchWinner_when_present",
+      "gaps": [
+        "no extracted final score columns",
+        "no extracted winner columns",
+        "no extracted finish order columns",
+        "no extracted hand score delta columns"
+      ]
+    },
+    "matches": {
+      "fields": [
+        "id",
+        "status",
+        "created_at",
+        "game_id",
+        "last_hand_id",
+        "provider",
+        "requested_provider",
+        "telemetry_mode",
+        "strict_telemetry",
+        "sim_version",
+        "engine_version",
+        "started_at",
+        "completed_at",
+        "updated_at"
+      ],
+      "lifecycle_persisted": true,
+      "final_team_scores_available": false,
+      "winner_team_available": false,
+      "hands_played_available": false,
+      "failure_reason_available": false
+    },
+    "provider_naming": {
+      "canonicalization_exists": true,
+      "consistent_across_storage": "partial",
+      "canonical_values": [
+        "local_heuristic",
+        "server_heuristic",
+        "lightgbm_model",
+        "human_ui",
+        "system_local",
+        "unknown"
+      ]
+    }
+  },
+  "ml_export": {
+    "file": "ml/export_training_rows.py",
+    "streams_or_chunks": false,
+    "loads_all_rows_into_memory": true,
+    "candidate_action_rows": true,
+    "includes_all_legal_actions": true,
+    "candidate_was_chosen_column": false,
+    "imitation_label_column": true,
+    "actor_relative_features": "partial_yes",
+    "absolute_seat_leakage": true,
+    "heuristic_score_leakage": "no_explicit_score_column_but_feature_manifest_missing_and_heuristic_derived_features_not_separated",
+    "observed_outcome_columns": false,
+    "rollout_columns": false,
+    "schema_output": "feature_schema_only",
+    "manifest_output": false,
+    "quality_report_output": false,
+    "leakage_exclusion_manifest": false,
+    "artifact_snapshot": {
+      "action_rows_parquet_exists": true,
+      "action_rows_row_count": 2,
+      "action_rows_label_unique": [
+        0,
+        1
+      ],
+      "action_rows_phases": [
+        "trick_play"
+      ]
+    }
+  },
+  "training": {
+    "file": "ml/train_lightgbm.py",
+    "mode": "imitation_binary_only",
+    "target_column": "label",
+    "runtime_feature_source": "FEATURE_ORDER_intersection_with_frame_columns",
+    "manifest_driven_feature_selection": false,
+    "grouped_split": "decision_id_only",
+    "regression_available": false,
+    "ranking_available": false,
+    "metrics": [
+      "validation_auc"
+    ],
+    "checked_in_model_meta": {
+      "created_at": "2026-04-20T04:00:59.835356+00:00",
+      "feature_count": 41,
+      "row_count": 2,
+      "phase": "trick_play",
+      "validation_auc": null
+    }
+  },
+  "runtime": {
+    "lightgbm_model_scores_every_legal_action": true,
+    "chooses_from_legal_actions_only": true,
+    "fallback_on_exception": true,
+    "guards_score_count_mismatch": true,
+    "guards_nan_or_inf_scores": false,
+    "records_model_metadata": true,
+    "records_candidate_score_distribution_summary": false,
+    "records_selected_candidate_score": false
+  },
+  "evaluation": {
+    "file": "apps/sim-runner/src/evaluate.ts",
+    "provider_comparison_exists": true,
+    "writes_machine_readable_json": true,
+    "supports_ns_vs_ew": true,
+    "supports_per_seat_provider_overrides": true,
+    "mirrored_seating": false,
+    "improvement_gate": false,
+    "confidence_interval_or_bootstrap": false,
+    "current_metrics": [
+      "games_played",
+      "hands_played",
+      "win_counts",
+      "win_rate_by_team",
+      "average_score_margin",
+      "total_score_by_team",
+      "pass_rate",
+      "bomb_usage_rate",
+      "wish_satisfaction_rate",
+      "fallback_count",
+      "invalid_decision_count",
+      "average_latency_by_provider",
+      "provider_usage",
+      "decisions_by_phase",
+      "events_by_phase"
+    ]
+  },
+  "readiness": {
+    "telemetry": "partially_ml_ready",
+    "export": "imitation_ready_only",
+    "training": "imitation_only",
+    "rollouts": "missing",
+    "runtime_provider": "usable_but_metadata_limited",
+    "evaluation": "baseline_comparison_only",
+    "overall": "not_strategy_improvement_ready",
+    "truthful_label": "imitation_only_with_extendable_telemetry_foundations"
+  },
+  "evidence_paths": [
+    "infra/db/migrations/0001_foundation.sql",
+    "infra/db/migrations/0002_backend_foundation.sql",
+    "infra/db/migrations/0003_telemetry_alignment.sql",
+    "infra/db/migrations/0005_match_lifecycle.sql",
+    "apps/server/src/services/telemetry-repository.ts",
+    "packages/shared/src/backend.ts",
+    "packages/telemetry/src/builders.ts",
+    "packages/telemetry/src/source-adapters.ts",
+    "apps/server/src/providers/lightgbm-provider.ts",
+    "apps/server/src/ml/lightgbm-scorer.ts",
+    "apps/sim-runner/src/self-play-batch.ts",
+    "apps/sim-runner/src/evaluate.ts",
+    "ml/export_training_rows.py",
+    "ml/train_lightgbm.py",
+    "ml/infer.py",
+    "ml/data/action_rows.parquet",
+    "ml/model_registry/lightgbm_action_model.meta.json"
+  ]
+}

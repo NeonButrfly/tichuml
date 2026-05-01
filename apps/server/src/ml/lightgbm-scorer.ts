@@ -21,6 +21,7 @@ export type LightgbmScoreRequest = {
 export type LightgbmScoreResult = {
   scores: number[];
   modelMetadata: JsonObject;
+  runtimeMetadata: JsonObject;
 };
 
 export interface LightgbmScorer {
@@ -137,14 +138,27 @@ export class PythonLightgbmScorer implements LightgbmScorer {
         return;
       }
 
+      const parsedScores = payload.scores.map((value) =>
+        typeof value === "number" ? value : Number.NaN
+      );
+      if (parsedScores.some((value) => !Number.isFinite(value))) {
+        pending.reject(
+          new Error("LightGBM inference returned non-finite candidate scores.")
+        );
+        return;
+      }
+
       pending.resolve({
-        scores: payload.scores.map((value) =>
-          typeof value === "number" && Number.isFinite(value) ? value : 0
-        ),
+        scores: parsedScores,
         modelMetadata:
           typeof payload.model_metadata === "object" &&
           payload.model_metadata !== null
             ? (payload.model_metadata as JsonObject)
+            : {},
+        runtimeMetadata:
+          typeof payload.runtime_metadata === "object" &&
+          payload.runtime_metadata !== null
+            ? (payload.runtime_metadata as JsonObject)
             : {}
       });
     });

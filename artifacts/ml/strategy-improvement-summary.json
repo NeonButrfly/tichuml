@@ -1,0 +1,122 @@
+{
+  "generated_at": "2026-05-01T19:50:00Z",
+  "tracker_issue": 59,
+  "milestone": {
+    "number": 24,
+    "title": "6.5 - Local ML Integration & Reproducible Backend"
+  },
+  "snapshot_commit": {
+    "sha": "69e0b6d",
+    "message": "chore: snapshot before telemetry/controller changes"
+  },
+  "telemetry_readiness": {
+    "status": "ready_with_full_state_requirement",
+    "summary": "Decision, event, and match telemetry now support observed outcome enrichment and offline rollout reconstruction when full pre-action state_raw is present.",
+    "evidence": [
+      "infra/db/migrations/0006_strategy_improvement_readiness.sql",
+      "apps/server/src/services/telemetry-repository.ts",
+      "packages/telemetry/src/source-adapters.ts",
+      "apps/sim-runner/src/self-play-batch.ts"
+    ]
+  },
+  "export_readiness": {
+    "status": "validated",
+    "summary": "Chunked candidate-action export works with observed outcome columns by default, schema output, manifest output, and quality reporting.",
+    "validation": {
+      "command": "npm run ml:export -- --database-url postgres://tichu:tichu_dev_password@localhost:54329/tichu --limit 120 --chunk-size 40 --phase trick_play --provider local_heuristic --output artifacts/ml/validation-action-rows.parquet --schema-output artifacts/ml/validation-action-rows.schema.json --quality-output artifacts/ml/validation-action-rows.quality.json --manifest-output artifacts/ml/validation-export-manifest.json --feature-schema-output artifacts/ml/validation-feature-schema.json",
+      "candidate_rows_written": 1358,
+      "decisions_processed": 120,
+      "observed_outcome_available_rows": 878
+    }
+  },
+  "rollout_readiness": {
+    "status": "validated_on_bounded_samples",
+    "summary": "Offline forced-action rollout infrastructure exists, validates legality, writes resumable JSONL results, and produces quality artifacts. Large bounded samples can exceed the current command timeout window during interactive validation.",
+    "validation": {
+      "single_decision_output": "artifacts/ml/validation-rollouts.jsonl",
+      "multi_decision_output": "artifacts/ml/validation-rollouts-multi.jsonl",
+      "single_decision_quality": "artifacts/ml/rollout-quality.json",
+      "single_decision_jobs_succeeded": 1,
+      "multi_decision_rows_written": 19
+    }
+  },
+  "training_readiness": {
+    "status": "imitation_validated_non_imitation_modes_implemented",
+    "summary": "Backward-compatible imitation training was validated end to end. Observed-outcome and rollout objectives are implemented, but bounded interactive validation did not complete a rollout-target training run because the bounded export slice did not overlap the rollout sample.",
+    "validation": {
+      "imitation_report": "artifacts/ml/training-report.json",
+      "imitation_model_meta": "artifacts/ml/validation-lightgbm-model.meta.json",
+      "imitation_metrics": {
+        "auc": 0.8527552266685825,
+        "accuracy": 0.95,
+        "top1_chosen_action_recall": 0.6129032258064516
+      }
+    }
+  },
+  "runtime_provider_readiness": {
+    "status": "safe_and_instrumented",
+    "summary": "The LightGBM runtime path now records richer model metadata and score diagnostics and falls back safely on non-finite or mismatched scores.",
+    "evidence": [
+      "apps/server/src/ml/lightgbm-scorer.ts",
+      "apps/server/src/providers/lightgbm-provider.ts",
+      "ml/infer.py",
+      "tests/integration/backend-server.test.ts"
+    ]
+  },
+  "evaluation_readiness": {
+    "status": "validated_gate_present_current_model_fails",
+    "summary": "The evaluation harness writes machine-readable reports, supports heuristic sanity baselines, mirrored seating, and a pass/fail improvement gate. The current checked-in LightGBM model does not pass the new gate.",
+    "validation": {
+      "report": "artifacts/ml/evaluation-report.json",
+      "combined_comparison": {
+        "provider_a": "lightgbm_model",
+        "provider_b": "server_heuristic",
+        "provider_a_match_win_rate": 0.0,
+        "provider_b_match_win_rate": 1.0,
+        "average_score_delta_provider_a_minus_b": -300.0
+      },
+      "gate_passed": false,
+      "gate_fail_reasons": [
+        "does not beat heuristic baseline",
+        "fallback count increased from 2 to 52 in the bounded run",
+        "challenger latency unavailable because decisions fell back to local heuristic"
+      ]
+    }
+  },
+  "classification": {
+    "previous": "imitation_only",
+    "current": "rollout_counterfactual_strategy_ready_but_not_model_complete",
+    "truthful_label": "The repo is now rollout and counterfactual strategy-ready, but the currently checked-in model is not strategy-improvement validated."
+  },
+  "commands_added_or_changed": [
+    "npm run ml:export",
+    "npm run ml:rollouts",
+    "npm run ml:train",
+    "npm run ml:evaluate"
+  ],
+  "tests_added_or_updated": [
+    "tests/integration/backend-server.test.ts",
+    "tests/integration/ml-rollout.test.ts",
+    "tests/integration/ml-evaluate.test.ts"
+  ],
+  "migrations_added": [
+    "infra/db/migrations/0006_strategy_improvement_readiness.sql"
+  ],
+  "docs_added_or_updated": [
+    "docs/ml-strategy-improvement.md",
+    "docs/telemetry-ml-readiness.md",
+    "docs/prompts/backend.md",
+    "docs/prompts/ai.md",
+    "README.md"
+  ],
+  "risks": [
+    "The shipped LightGBM model still falls back heavily and fails the new evaluation gate.",
+    "Rollout training was implemented but not fully smoke-trained end to end on a matching export slice during this bounded interactive run.",
+    "Large rollout batches can exceed interactive command timeouts even when the output file is progressing."
+  ],
+  "remaining_gaps": [
+    "Run a matched export plus rollout-target training job on the same sampled decisions and store the resulting rollout-regression or ranker report.",
+    "Train a fresh candidate model that passes the evaluation gate before promoting it to the runtime model registry.",
+    "Consider adding explicit export filters for decision_id, game_id, or descending/recent ordering to make bounded rollout-validation loops cheaper."
+  ]
+}

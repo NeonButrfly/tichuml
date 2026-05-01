@@ -37,6 +37,28 @@ Use this file to preserve AI and bot-behavior prompt intent and link it to GitHu
 - Milestone: [6.5 – Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
 - Status Source: GitHub issue state only.
 
+### 2026-05-01 - Strategy-improvement labels beyond heuristic imitation
+
+- Prompt Signal: The current ML path already expands one decision into
+  candidate-action rows, but the original label is only `1` when the heuristic
+  chose that action. The repo must support honest observed outcomes and
+  counterfactual rollout labels instead of pretending unchosen actions have
+  observed values.
+- Interpreted Requirement: Issue
+  [#59](https://github.com/NeonButrfly/tichuml/issues/59) tracks a strategy
+  improvement path where `observed_*` columns stay clearly tied to the logged
+  continuation, rollout labels estimate candidate action value through forced
+  first actions plus offline continuation, LightGBM training supports non-
+  imitation objectives, and evaluation only credits a model when it beats the
+  heuristic under mirrored, gated validation.
+- Affected Systems: `ml/export_training_rows.py`, `ml/train_lightgbm.py`,
+  `apps/sim-runner/src/ml-rollouts.ts`, `apps/sim-runner/src/evaluate.ts`,
+  `apps/server/src/providers/lightgbm-provider.ts`, telemetry/ML docs,
+  validation artifacts.
+- Linked GitHub Issue: [#59](https://github.com/NeonButrfly/tichuml/issues/59)
+- Milestone: [6.5 – Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status Source: GitHub issue state only.
+
 ### 2026-04-29 - Strategic Mahjong wish selection for heuristic providers
 
 - Prompt Signal: Full-mode telemetry showed Mahjong plays with

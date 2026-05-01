@@ -40,8 +40,37 @@ The repository no longer reflects a Milestone 0-only scaffold. Historical milest
 - `npm run bootstrap:unix`
 - `npm run sim -- --games 100 --provider local`
 - `npm run ml:export -- --phase play`
+- `npm run ml:rollouts -- --phase trick_play --provider local_heuristic --continuation-provider local`
 - `npm run ml:train -- --phase play`
 - `npm run ml:bootstrap -- --games 1000 --provider server_heuristic`
+- `npm run ml:evaluate -- --games 100 --ns-provider lightgbm_model --ew-provider server_heuristic --mirror-seats true`
+
+## ML Strategy
+
+Issue [#59](https://github.com/NeonButrfly/tichuml/issues/59) tracks the
+strategy-improvement refactor. The current ML stack supports three distinct
+label families:
+
+- imitation labels for backward-compatible behavior cloning
+- `observed_*` outcome columns that describe the logged continuation only
+- rollout labels that estimate the counterfactual value of a candidate action
+
+Use the following docs as the source of truth for the ML workflow:
+
+- [docs/ml-strategy-improvement.md](docs/ml-strategy-improvement.md)
+- [docs/telemetry-ml-readiness.md](docs/telemetry-ml-readiness.md)
+
+Quick reference:
+
+- `npm run ml:export` now streams chunked candidate-action rows and includes
+  observed outcome columns by default while keeping the legacy binary imitation
+  `label`.
+- `npm run ml:rollouts` generates resumable counterfactual labels.
+- `npm run ml:train` supports `imitation_binary`,
+  `observed_outcome_regression`, `rollout_regression`, and
+  `rollout_ranker`.
+- `npm run ml:evaluate` compares providers, supports mirrored seating, and
+  writes an improvement gate report.
 
 ## Backend Foundation
 

@@ -21,6 +21,22 @@ function toLegalActionKey(
   return toActionSortKey(toConcreteActionForLegalAction(stateRaw, action));
 }
 
+function summarizeScoreDistribution(scores: number[]): JsonObject {
+  const min = Math.min(...scores);
+  const max = Math.max(...scores);
+  const mean = scores.reduce((sum, value) => sum + value, 0) / scores.length;
+  const variance =
+    scores.reduce((sum, value) => sum + (value - mean) ** 2, 0) /
+    scores.length;
+  return {
+    count: scores.length,
+    min,
+    max,
+    mean,
+    stddev: Math.sqrt(variance)
+  };
+}
+
 export async function routeLightgbmDecision(
   payload: DecisionRequestPayload,
   scorer: LightgbmScorer,
@@ -55,6 +71,7 @@ export async function routeLightgbmDecision(
         legalAction
       )
     );
+    const scoringStartedAt = Date.now();
     const scored = await scorer.score({
       stateRaw,
       actorSeat: canonicalActor,
@@ -63,11 +80,15 @@ export async function routeLightgbmDecision(
       stateFeatures,
       candidateFeatures
     });
+    const scoringLatencyMs = Date.now() - scoringStartedAt;
 
     if (scored.scores.length !== actorLegalActions.length) {
       throw new Error(
         `LightGBM returned ${scored.scores.length} scores for ${actorLegalActions.length} legal actions.`
       );
+    }
+    if (scored.scores.some((score) => !Number.isFinite(score))) {
+      throw new Error("LightGBM returned non-finite candidate scores.");
     }
 
     const ranked = actorLegalActions.map((legalAction, index) => ({
@@ -92,6 +113,17 @@ export async function routeLightgbmDecision(
     }
 
     const concreteAction = selected.concreteAction;
+    const topKCandidateScores = ranked.slice(0, 3).map((entry) => ({
+      action_key: entry.actionKey,
+      score: entry.score,
+      action: entry.concreteAction
+    }));
+    const scoreDistribution = summarizeScoreDistribution(scored.scores);
+    const modelMetadata = scored.modelMetadata;
+    const runtimeMetadata = {
+      ...scored.runtimeMetadata,
+      scoring_latency_ms: scoringLatencyMs
+    } as JsonObject;
     const providerReason = "Resolved by the LightGBM action model on the backend.";
     const explanation = {
       policy: "lightgbm-action-model",
@@ -132,7 +164,8 @@ export async function routeLightgbmDecision(
         chosenAction: concreteAction,
         metadata: {
           requested_provider: payload.requested_provider,
-          model_metadata: scored.modelMetadata,
+          model_metadata: modelMetadata,
+          runtime_metadata: runtimeMetadata,
           explanation,
           state_features: stateFeatures,
           candidate_features: ranked.map((entry) => ({
@@ -144,10 +177,49 @@ export async function routeLightgbmDecision(
             action_key: entry.actionKey,
             score: entry.score
           })),
+          model_id:
+            typeof modelMetadata.model_id === "string"
+              ? modelMetadata.model_id
+              : null,
+          model_version:
+            typeof modelMetadata.model_version === "string"
+              ? modelMetadata.model_version
+              : null,
+          objective:
+            typeof modelMetadata.objective === "string"
+              ? modelMetadata.objective
+              : null,
+          label_mode:
+            typeof modelMetadata.label_mode === "string"
+              ? modelMetadata.label_mode
+              : null,
+          target_column:
+            typeof modelMetadata.target_column === "string"
+              ? modelMetadata.target_column
+              : null,
+          feature_schema_version:
+            typeof modelMetadata.feature_schema_version === "number"
+              ? modelMetadata.feature_schema_version
+              : null,
+          selected_candidate_score: selected.score,
+          candidate_score_distribution: scoreDistribution,
+          top_k_candidate_scores: topKCandidateScores,
           provider_used: "lightgbm_model",
           fallback_used: false,
           canonical_actor_seat: canonicalActor,
           legal_action_count: actorLegalActions.length,
+          runtime_feature_count:
+            typeof runtimeMetadata.runtime_feature_count === "number"
+              ? runtimeMetadata.runtime_feature_count
+              : null,
+          missing_feature_count:
+            typeof runtimeMetadata.missing_feature_count === "number"
+              ? runtimeMetadata.missing_feature_count
+              : null,
+          model_feature_count:
+            typeof runtimeMetadata.model_feature_count === "number"
+              ? runtimeMetadata.model_feature_count
+              : null,
           request_validated: true,
           provider_path: "lightgbm_model"
         } as JsonObject
@@ -158,7 +230,8 @@ export async function routeLightgbmDecision(
           score: entry.score,
           action: entry.concreteAction
         })),
-        model_metadata: scored.modelMetadata,
+        model_metadata: modelMetadata,
+        runtime_metadata: runtimeMetadata,
         state_features: stateFeatures,
         candidate_features: ranked.map((entry) => ({
           action_key: entry.actionKey,
@@ -166,9 +239,48 @@ export async function routeLightgbmDecision(
           features: entry.features
         })),
         chosen_action: concreteAction,
+        selected_candidate_score: selected.score,
+        candidate_score_distribution: scoreDistribution,
+        top_k_candidate_scores: topKCandidateScores,
+        model_id:
+          typeof modelMetadata.model_id === "string"
+            ? modelMetadata.model_id
+            : null,
+        model_version:
+          typeof modelMetadata.model_version === "string"
+            ? modelMetadata.model_version
+            : null,
+        objective:
+          typeof modelMetadata.objective === "string"
+            ? modelMetadata.objective
+            : null,
+        label_mode:
+          typeof modelMetadata.label_mode === "string"
+            ? modelMetadata.label_mode
+            : null,
+        target_column:
+          typeof modelMetadata.target_column === "string"
+            ? modelMetadata.target_column
+            : null,
+        feature_schema_version:
+          typeof modelMetadata.feature_schema_version === "number"
+            ? modelMetadata.feature_schema_version
+            : null,
         requested_provider: "lightgbm_model",
         canonical_actor_seat: canonicalActor,
         legal_action_count: actorLegalActions.length,
+        runtime_feature_count:
+          typeof runtimeMetadata.runtime_feature_count === "number"
+            ? runtimeMetadata.runtime_feature_count
+            : null,
+        missing_feature_count:
+          typeof runtimeMetadata.missing_feature_count === "number"
+            ? runtimeMetadata.missing_feature_count
+            : null,
+        model_feature_count:
+          typeof runtimeMetadata.model_feature_count === "number"
+            ? runtimeMetadata.model_feature_count
+            : null,
         request_validated: true,
         provider_path: "lightgbm_model"
       } as JsonObject
@@ -193,7 +305,9 @@ export async function routeLightgbmDecision(
       responseMetadata: {
         requested_provider: "lightgbm_model",
         fallback_provider: "server_heuristic",
-        lightgbm_error: message
+        fallback_used: true,
+        lightgbm_error: message,
+        provider_path: "lightgbm_model"
       }
     };
   }

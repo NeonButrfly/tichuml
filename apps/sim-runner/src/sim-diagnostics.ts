@@ -353,6 +353,11 @@ function createEmptyBatchSummary(): SelfPlayBatchSummary {
       "team-1": 0,
       tie: 0
     },
+    handWinCountsByTeam: {
+      "team-0": 0,
+      "team-1": 0,
+      tie: 0
+    },
     totalScoreByTeam: {
       "team-0": 0,
       "team-1": 0
@@ -361,6 +366,15 @@ function createEmptyBatchSummary(): SelfPlayBatchSummary {
     passRate: 0,
     bombUsageRate: 0,
     wishSatisfactionRate: null,
+    tichuCallRate: null,
+    tichuSuccessRate: null,
+    grandTichuCallRate: null,
+    grandTichuSuccessRate: null,
+    doubleVictoryRate: null,
+    doubleVictoryCountsByTeam: {
+      "team-0": 0,
+      "team-1": 0
+    },
     lastCompletedGameId: null,
     lastCompletedHandId: null,
     lastCompletedMatchWinner: null,
