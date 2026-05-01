@@ -27,6 +27,59 @@ async function flushTelemetry(): Promise<void> {
 }
 
 describe("backend telemetry decision tracking", () => {
+  it("captures Grand Tichu declines as gameplay decisions", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 201,
+      async text() {
+        return JSON.stringify({ accepted: true, telemetry_id: 9 });
+      }
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await emitDecisionTelemetry({
+      settings: SETTINGS,
+      action: {
+        type: "decline_grand_tichu",
+        seat: "seat-1"
+      },
+      phase: "grand_tichu_window",
+      gameId: "game-gt",
+      handId: "hand-gt",
+      decisionIndex: 2,
+      stateRaw: {
+        ...BASE_STATE,
+        phase: "grand_tichu_window",
+        activeSeat: "seat-1",
+        grandTichuQueue: ["seat-1", "seat-2", "seat-3"]
+      } as EngineResult["nextState"],
+      stateNorm: {
+        ...BASE_DERIVED,
+        phase: "grand_tichu_window",
+        activeSeat: "seat-1"
+      } as EngineResult["derivedView"],
+      legalActions: {
+        "seat-1": [
+          {
+            type: "decline_grand_tichu",
+            seat: "seat-1"
+          }
+        ]
+      } as unknown as EngineResult["legalActions"],
+      policyName: "test-policy",
+      policySource: "human_ui"
+    });
+
+    await flushTelemetry();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const payload = JSON.parse(
+      String(fetchMock.mock.calls[0]?.[1]?.body)
+    ) as TelemetryDecisionPayload;
+    expect(payload.phase).toBe("grand_tichu_window");
+    expect(payload.chosen_action.type).toBe("decline_grand_tichu");
+  });
+
   it("captures pass selection and exchange pickup phase decisions", async () => {
     const fetchMock = vi.fn(async () => ({
       ok: true,

@@ -25,6 +25,7 @@ export function isTrackedGameplayDecisionAction(
 ): boolean {
   return (
     action.type === "call_grand_tichu" ||
+    action.type === "decline_grand_tichu" ||
     action.type === "call_tichu" ||
     action.type === "select_pass" ||
     action.type === "pass_turn" ||

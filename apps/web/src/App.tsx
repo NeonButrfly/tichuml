@@ -215,6 +215,94 @@ function buildTelemetryActionMetadata(
   };
 }
 
+type AutomationRequestStatus = "idle" | "scheduled" | "running";
+
+type SuccessfulTransitionSnapshot = {
+  phase: GameState["phase"];
+  actor: ActorId;
+  actionType: EngineAction["type"];
+  nextPhase: GameState["phase"];
+  nextActiveSeat: SeatId | null;
+  grandTichuQueue: SeatId[];
+};
+
+function buildAutomationActionSignature(action: LegalAction): string {
+  switch (action.type) {
+    case "play_cards":
+      return [
+        action.type,
+        action.seat,
+        action.cardIds.join(","),
+        String(action.phoenixAsRank ?? "none")
+      ].join("|");
+    case "select_pass":
+      return [action.type, action.seat, action.availableCardIds.join(",")].join(
+        "|"
+      );
+    case "assign_dragon_trick":
+      return [action.type, action.seat, action.recipient].join("|");
+    case "advance_phase":
+      return `${action.type}|${action.actor}`;
+    case "call_grand_tichu":
+    case "decline_grand_tichu":
+    case "call_tichu":
+    case "pass_turn":
+      return `${action.type}|${action.seat}`;
+    default:
+      return action.type;
+  }
+}
+
+function buildAutomationRequestKey(config: {
+  result: EngineResult;
+  primaryActor: ActorId;
+  autoplayLocal: boolean;
+  settings: BackendRuntimeSettings;
+}): string {
+  const state = config.result.nextState;
+  const actorActions =
+    config.autoplayLocal && config.primaryActor === LOCAL_SEAT
+      ? config.result.legalActions
+      : {
+          [config.primaryActor]:
+            config.result.legalActions[config.primaryActor] ?? []
+        };
+
+  return JSON.stringify({
+    phase: state.phase,
+    activeSeat: state.activeSeat,
+    primaryActor: config.primaryActor,
+    grandTichuQueue: state.grandTichuQueue,
+    passSelectionSeats: Object.keys(state.passSelections).sort(),
+    pendingDragonGift: state.pendingDragonGift
+      ? {
+          winner: state.pendingDragonGift.winner,
+          nextLeader: state.pendingDragonGift.nextLeader,
+          roundEndsAfterGift: state.pendingDragonGift.roundEndsAfterGift
+        }
+      : null,
+    currentTrick: state.currentTrick
+      ? {
+          leader: state.currentTrick.leader,
+          currentWinner: state.currentTrick.currentWinner,
+          combination: state.currentTrick.currentCombination.key,
+          entryCount: state.currentTrick.entries.length,
+          passingSeats: state.currentTrick.passingSeats
+        }
+      : null,
+    legalActions: Object.fromEntries(
+      Object.entries(actorActions).map(([actor, actions]) => [
+        actor,
+        (actions ?? []).map(buildAutomationActionSignature)
+      ])
+    ),
+    autoplayLocal: config.autoplayLocal,
+    decisionMode: config.settings.decisionMode,
+    serverFallbackEnabled: config.settings.serverFallbackEnabled,
+    backendBaseUrl: config.settings.backendBaseUrl
+  });
+}
+
 export function isMandatoryOpeningLead(
   state: EngineResult["nextState"],
   actor: ActorId | null
@@ -330,6 +418,8 @@ type DecisionDiagnosticsState = {
   lastResponseMetadata: JsonObject | null;
   lastChosenAction: EngineAction | null;
   lastLegalActions: EngineResult["legalActions"] | null;
+  lastEndpointError: string | null;
+  lastSuccessfulTransition: SuccessfulTransitionSnapshot | null;
 };
 
 type TelemetryDiagnosticsState = {
@@ -411,7 +501,9 @@ function createInitialDecisionDiagnostics(): DecisionDiagnosticsState {
     lastRequestPayload: null,
     lastResponseMetadata: null,
     lastChosenAction: null,
-    lastLegalActions: null
+    lastLegalActions: null,
+    lastEndpointError: null,
+    lastSuccessfulTransition: null
   };
 }
 
@@ -670,6 +762,21 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     cardId: string;
     completed: boolean;
   } | null>(null);
+  const automationRequestRef = useRef<{
+    key: string | null;
+    sequence: number;
+    actor: ActorId | null;
+    phase: GameState["phase"] | null;
+    status: AutomationRequestStatus;
+    requestedAt: string | null;
+  }>({
+    key: null,
+    sequence: 0,
+    actor: null,
+    phase: null,
+    status: "idle",
+    requestedAt: null
+  });
 
   const state = round.nextState;
   const derived = round.derivedView;
@@ -762,6 +869,14 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     primaryActor !== SYSTEM_ACTOR;
   const pickupPending =
     state.phase === "exchange_complete" && Boolean(systemAdvanceAction);
+  const automationRequestKey = primaryActor
+    ? buildAutomationRequestKey({
+        result: round,
+        primaryActor,
+        autoplayLocal,
+        settings: backendSettings
+      })
+    : null;
   const localExchangeValidation = validateExchangeDraft(
     passDraft,
     localPassSelection?.availableCardIds ?? [],
@@ -1109,6 +1224,16 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
       requestPayload?.actor_seat && requestPayload.actor_seat !== SYSTEM_ACTOR
         ? (requestPayload.actor_seat as SeatId)
         : activeInspectorSeat;
+    const pendingRequest =
+      automationRequestRef.current.key === null
+        ? null
+        : {
+            key: automationRequestRef.current.key,
+            actor: automationRequestRef.current.actor,
+            phase: automationRequestRef.current.phase,
+            status: automationRequestRef.current.status,
+            requestedAt: automationRequestRef.current.requestedAt
+          };
     const partnerSeat = getPartnerSeat(requestActorSeat);
     const partnerAdvantage = Number(
       (
@@ -1169,6 +1294,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
         fallbackUsed: decisionDiagnostics.fallbackUsed,
         fallbackReason: decisionDiagnostics.fallbackReason,
         latencyMs: decisionDiagnostics.latencyMs,
+        lastEndpointError: decisionDiagnostics.lastEndpointError,
         legalActionCount: requestPayload
           ? Array.isArray(requestPayload.legal_actions)
             ? requestPayload.legal_actions.length
@@ -1184,6 +1310,9 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
                 ).length
               : 0
           : 0,
+        pendingRequestState: pendingRequest?.status ?? "idle",
+        pendingRequestActor: pendingRequest?.actor ?? null,
+        pendingRequestPhase: pendingRequest?.phase ?? null,
         chosenAction: chosenActionDescriptor,
         topCandidates,
         urgencyMode: selectedFeatures
@@ -1229,6 +1358,21 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
           lastExplanation?.selectedTags ??
           ((responseMetadata?.explanation as { selectedTags?: PolicyTag[] } | undefined)
             ?.selectedTags ?? []),
+        lastSuccessfulTransition: decisionDiagnostics.lastSuccessfulTransition
+          ? {
+              phase: decisionDiagnostics.lastSuccessfulTransition.phase,
+              actor: decisionDiagnostics.lastSuccessfulTransition.actor,
+              actionType:
+                decisionDiagnostics.lastSuccessfulTransition.actionType,
+              nextPhase:
+                decisionDiagnostics.lastSuccessfulTransition.nextPhase,
+              nextActiveSeat:
+                decisionDiagnostics.lastSuccessfulTransition.nextActiveSeat,
+              grandTichuQueue: [
+                ...decisionDiagnostics.lastSuccessfulTransition.grandTichuQueue
+              ]
+            }
+          : null,
         requestedProviderLabel: buildProviderModeLabel(backendSettings.decisionMode)
       },
       telemetry: {
@@ -1279,7 +1423,19 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
           (telemetryDiagnostics.lastDecisionPayload as unknown as JsonObject | null) ??
           (telemetryDiagnostics.lastEventPayload as unknown as JsonObject | null) ??
           null,
-        backendResponse: responseMetadata
+        backendResponse:
+          responseMetadata ||
+          pendingRequest ||
+          decisionDiagnostics.lastSuccessfulTransition ||
+          decisionDiagnostics.lastEndpointError
+            ? ({
+                ...(responseMetadata ?? {}),
+                pendingRequest,
+                lastSuccessfulTransition:
+                  decisionDiagnostics.lastSuccessfulTransition,
+                lastEndpointError: decisionDiagnostics.lastEndpointError
+              } as JsonObject)
+            : null
       }
     };
   }, [
@@ -1449,11 +1605,34 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     }
   );
 
+  const resetAutomationRequest = useEffectEvent(() => {
+    if (
+      automationRequestRef.current.key === null &&
+      automationRequestRef.current.actor === null &&
+      automationRequestRef.current.phase === null &&
+      automationRequestRef.current.status === "idle" &&
+      automationRequestRef.current.requestedAt === null
+    ) {
+      return;
+    }
+
+    automationRequestRef.current = {
+      ...automationRequestRef.current,
+      key: null,
+      actor: null,
+      phase: null,
+      status: "idle",
+      requestedAt: null
+    };
+  });
+
   const handleBackendSettingsChange = useEffectEvent(
     (nextSettings: BackendRuntimeSettings) => {
       setBackendSettings(nextSettings);
       setBackendStatus(createUnknownBackendReachability());
       setFrozenSnapshot(null);
+      resetAutomationRequest();
+      setThinkingActor(null);
     }
   );
 
@@ -1463,7 +1642,8 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
       legalActions: EngineResult["legalActions"];
       resolution: Awaited<ReturnType<typeof resolveDecisionWithProvider>>;
     }) => {
-      setDecisionDiagnostics({
+      setDecisionDiagnostics((current) => ({
+        ...current,
         requestedProvider: config.resolution.requestedProvider,
         providerUsed: config.resolution.providerUsed,
         fallbackUsed: config.resolution.usedFallback,
@@ -1475,8 +1655,9 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
         lastRequestPayload: config.requestPayload,
         lastResponseMetadata: config.resolution.responseMetadata,
         lastChosenAction: config.resolution.chosen.action,
-        lastLegalActions: config.legalActions
-      });
+        lastLegalActions: config.legalActions,
+        lastEndpointError: config.resolution.endpointError
+      }));
 
       updateEndpointDiagnostics("decision", {
         reachable: config.resolution.endpointReachable,
@@ -1735,23 +1916,28 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
   ]);
 
   useEffect(() => {
-    if (roundGenerationPending) {
+    const clearAutomationState = () => {
+      resetAutomationRequest();
       setThinkingActor(null);
+    };
+
+    if (roundGenerationPending) {
+      clearAutomationState();
       return;
     }
 
     if (state.phase === "finished") {
-      setThinkingActor(null);
+      clearAutomationState();
       return;
     }
 
     if (!primaryActor) {
-      setThinkingActor(null);
+      clearAutomationState();
       return;
     }
 
     if (!autoplayLocal && localIsPrimaryActor) {
-      setThinkingActor(null);
+      clearAutomationState();
       return;
     }
 
@@ -1766,16 +1952,56 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
         pickupPending
       })
     ) {
-      setThinkingActor(null);
+      clearAutomationState();
+      return;
+    }
+
+    if (!automationRequestKey) {
+      clearAutomationState();
+      return;
+    }
+
+    if (
+      automationRequestRef.current.key === automationRequestKey &&
+      automationRequestRef.current.status !== "idle"
+    ) {
+      if (automationRequestRef.current.status === "running") {
+        setThinkingActor(primaryActor);
+      }
       return;
     }
 
     const delay =
       primaryActor === SYSTEM_ACTOR ? SYSTEM_STEP_DELAY_MS : AI_STEP_DELAY_MS;
-    setThinkingActor(primaryActor);
+    const sequence = automationRequestRef.current.sequence + 1;
+    const requestedAt = new Date().toISOString();
+    automationRequestRef.current = {
+      key: automationRequestKey,
+      sequence,
+      actor: primaryActor,
+      phase: state.phase,
+      status: "scheduled",
+      requestedAt
+    };
+    let cancelled = false;
+
+    const isCurrentAutomationRequest = () =>
+      !cancelled &&
+      automationRequestRef.current.key === automationRequestKey &&
+      automationRequestRef.current.sequence === sequence;
 
     const timeout = window.setTimeout(() => {
       void (async () => {
+        if (!isCurrentAutomationRequest()) {
+          return;
+        }
+
+        automationRequestRef.current = {
+          ...automationRequestRef.current,
+          status: "running"
+        };
+        setThinkingActor(primaryActor);
+
         const legalActions = autoplayLocal
           ? round.legalActions
           : createActorOnlyLegalActions(round, primaryActor);
@@ -1814,6 +2040,9 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
           settings: backendSettings,
           requestPayload
         });
+        if (!isCurrentAutomationRequest()) {
+          return;
+        }
         recordDecisionResolution({
           requestPayload,
           legalActions,
@@ -1854,8 +2083,12 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
               }
             })
             .catch((error) => {
-              recordTelemetryFailure(error);
-            });
+                recordTelemetryFailure(error);
+              });
+        }
+
+        if (!isCurrentAutomationRequest()) {
+          return;
         }
 
         let nextResult = applyEngineAction(
@@ -1897,6 +2130,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
           initialResolution.chosen.actor !== SYSTEM_ACTOR
             ? initialResolution.chosen
             : null;
+        let lastAppliedAction = initialResolution.chosen.action;
         const nextEvents = [...nextResult.events];
         let dogAnimation = getDogLeadAnimationView(
           initialResolution.chosen.action,
@@ -1932,8 +2166,11 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
               },
               actor: primaryActor,
               settings: backendSettings,
-              requestPayload: forcedRequestPayload
-            });
+                requestPayload: forcedRequestPayload
+              });
+            if (!isCurrentAutomationRequest()) {
+              return;
+            }
             recordDecisionResolution({
               requestPayload: forcedRequestPayload,
               legalActions: playOnlyLegalActions,
@@ -1966,6 +2203,10 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
                 .catch((error) => {
                   recordTelemetryFailure(error);
                 });
+            }
+
+            if (!isCurrentAutomationRequest()) {
+              return;
             }
 
             nextResult = applyEngineAction(
@@ -2004,6 +2245,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
               });
             nextEvents.push(...nextResult.events);
             decisionDelta += 1;
+            lastAppliedAction = forcedResolution.chosen.action;
             dogAnimation =
               getDogLeadAnimationView(forcedResolution.chosen.action, nextResult) ??
               dogAnimation;
@@ -2014,9 +2256,26 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
           }
         }
 
+        if (!isCurrentAutomationRequest()) {
+          return;
+        }
+
         startTransition(() => {
           setRound(nextResult);
           setDecisionCount((current) => current + decisionDelta);
+          setThinkingActor(null);
+          setDecisionDiagnostics((current) => ({
+            ...current,
+            lastSuccessfulTransition: {
+              phase: round.nextState.phase,
+              actor: primaryActor,
+              actionType: lastAppliedAction.type,
+              nextPhase: nextResult.nextState.phase,
+              nextActiveSeat: nextResult.nextState.activeSeat,
+              grandTichuQueue: [...nextResult.nextState.grandTichuQueue]
+            },
+            lastEndpointError: null
+          }));
           setRecentEvents((current) =>
             [...current, ...nextEvents.map(formatEvent)].slice(-14)
           );
@@ -2036,24 +2295,47 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
           }
         });
       })().catch((error) => {
+        if (!isCurrentAutomationRequest()) {
+          return;
+        }
+
         const reachable = isBackendRequestError(error) ? error.reachable : false;
+        const detail =
+          error instanceof Error ? error.message : "Decision provider failed.";
         console.error("[decision-provider] failed to resolve automated action", {
           error: error instanceof Error ? error.message : String(error),
           actor: primaryActor,
           phase: round.nextState.phase
         });
+        resetAutomationRequest();
+        setThinkingActor(null);
+        setDecisionDiagnostics((current) => ({
+          ...current,
+          lastEndpointError: detail
+        }));
         setBackendStatus({
           state: reachable === true ? "reachable" : "unreachable",
-          detail:
-            error instanceof Error ? error.message : "Decision provider failed.",
+          detail,
           checkedAt: new Date().toISOString()
         });
       });
     }, delay);
 
-    return () => window.clearTimeout(timeout);
+    return () => {
+      const sameRequestStillCurrent =
+        automationRequestRef.current.key === automationRequestKey &&
+        automationRequestRef.current.sequence === sequence &&
+        automationRequestRef.current.status !== "idle";
+      if (sameRequestStillCurrent) {
+        return;
+      }
+
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
   }, [
     autoplayLocal,
+    automationRequestKey,
     backendSettings,
     decisionCount,
     exchangePhaseActive,
@@ -2066,6 +2348,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     openingLeadPending,
     pickupPending,
     primaryActor,
+    resetAutomationRequest,
     recordDecisionResolution,
     recordTelemetryDecision,
     recordTelemetryEvent,
@@ -2250,6 +2533,8 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
       return;
     }
 
+    resetAutomationRequest();
+
     if (!options?.skipDecisionTelemetry) {
       void emitDecisionTelemetry({
         settings: backendSettings,
@@ -2309,25 +2594,36 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     startTransition(() => {
       setRound(nextResult);
       setDecisionCount((current) => current + 1);
+      setThinkingActor(null);
       setRecentEvents((current) =>
         [...current, ...nextResult.events.map(formatEvent)].slice(-14)
       );
       setDecisionDiagnostics((current) =>
-        chosen
-          ? {
-              ...current,
-              providerUsed: "local_heuristic",
-              requestedProvider: "local",
-              lastChosenAction: chosen.action,
-              lastResolutionAt: new Date().toISOString(),
-              lastLegalActions: round.legalActions
-            }
-          : {
-              ...current,
-              lastChosenAction: action,
-              lastResolutionAt: new Date().toISOString(),
-              lastLegalActions: round.legalActions
-            }
+        ({
+          ...current,
+          ...(chosen
+            ? {
+                providerUsed: "local_heuristic" as const,
+                requestedProvider: "local" as const,
+                lastChosenAction: chosen.action
+              }
+            : {
+                lastChosenAction: action
+              }),
+          lastResolutionAt: new Date().toISOString(),
+          lastLegalActions: round.legalActions,
+          lastEndpointError: null,
+          lastSuccessfulTransition: {
+            phase: round.nextState.phase,
+            actor:
+              chosen?.actor ??
+              ("seat" in action ? action.seat : "actor" in action ? action.actor : SYSTEM_ACTOR),
+            actionType: action.type,
+            nextPhase: nextResult.nextState.phase,
+            nextActiveSeat: nextResult.nextState.activeSeat,
+            grandTichuQueue: [...nextResult.nextState.grandTichuQueue]
+          }
+        })
       );
       if (chosen && chosen.actor !== SYSTEM_ACTOR) {
         setLastAiDecision(chosen);
@@ -2337,7 +2633,6 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
       }
       resetInteractionState();
     });
-
     pushTimeline(
       createTimelineEntry(
         "decision",
@@ -2386,6 +2681,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
           setStagedTrick(null);
           setDogLeadAnimation(null);
           resetInteractionState();
+          resetAutomationRequest();
         });
       } catch (error) {
         setRoundGenerationError(

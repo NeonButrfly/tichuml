@@ -2,6 +2,30 @@
 
 Prompt logs here capture backend/platform prompt intent only. GitHub issue state remains authoritative.
 
+## 2026-05-01 - Live gameplay backend routing and non-blocking telemetry
+
+- Prompt signal:
+  Normal live UI gameplay must respect persisted backend settings
+  (`backendBaseUrl`, `telemetryEnabled`, provider mode, fallback mode), route
+  gameplay decision and event telemetry to the configured backend using
+  `source="gameplay"`, and keep gameplay moving even when telemetry transport
+  fails because strict telemetry is effectively off for the live UI path.
+- Interpreted requirement:
+  Issue [#58](https://github.com/NeonButrfly/tichuml/issues/58) tracks the
+  cross-surface repair: live gameplay automation, provider routing, and
+  telemetry emission must stay aligned with backend settings, reject stale async
+  work, and degrade gracefully when backend or telemetry requests fail.
+- Affected systems:
+  `apps/web/src/backend/settings.ts`, `apps/web/src/backend/telemetry.ts`,
+  `apps/web/src/backend/decision-provider.ts`, `apps/web/src/App.tsx`,
+  `packages/telemetry`, backend gameplay telemetry validation.
+- Linked GitHub issue:
+  [#58](https://github.com/NeonButrfly/tichuml/issues/58)
+- Milestone:
+  [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status:
+  Lives in GitHub, not here.
+
 ## 2026-04-29 - Telemetry decision sanity signals from export
 
 - Prompt signal:

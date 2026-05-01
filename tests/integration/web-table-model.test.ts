@@ -99,6 +99,28 @@ describe("table model helpers", () => {
     expect(getPrimaryActor(state, getLegalActions(state))).toBe("seat-1");
   });
 
+  it("derives the Grand Tichu actor from the seat that actually has GT legal actions", () => {
+    const state = createScenarioState({
+      phase: "grand_tichu_window",
+      activeSeat: "seat-0",
+      grandTichuQueue: ["seat-1", "seat-2", "seat-3"],
+      hands: {
+        "seat-0": cardsFromIds(["jade-2"]),
+        "seat-1": cardsFromIds(["dragon", "phoenix", "star-14", "jade-14", "sword-13", "pagoda-13", "star-12", "jade-12"]),
+        "seat-2": cardsFromIds(["jade-3"]),
+        "seat-3": cardsFromIds(["jade-4"])
+      }
+    });
+
+    const legalActions = getLegalActions(state);
+
+    expect((legalActions["seat-0"] ?? []).length).toBe(0);
+    expect(
+      (legalActions["seat-1"] ?? []).map((action) => action.type)
+    ).toEqual(["call_grand_tichu", "decline_grand_tichu"]);
+    expect(getPrimaryActor(state, legalActions)).toBe("seat-1");
+  });
+
   it("matches selected play actions regardless of the selected card order", () => {
     const state = createScenarioState({
       phase: "trick_play",

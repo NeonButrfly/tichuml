@@ -134,6 +134,40 @@ describe("engine core", () => {
     ]);
   });
 
+  it("keeps activeSeat aligned with the Grand Tichu queue head until the round advances", () => {
+    let result = createInitialGameState("grand-window-alignment");
+
+    while (result.nextState.phase === "grand_tichu_window") {
+      expect(result.nextState.grandTichuQueue[0] ?? null).toBe(
+        result.nextState.activeSeat
+      );
+
+      const actor = result.nextState.activeSeat;
+      expect(actor).not.toBeNull();
+      if (!actor) {
+        throw new Error("Expected an active Grand Tichu actor.");
+      }
+
+      const legalActions = getLegalActions(result.nextState)[actor] ?? [];
+      expect(
+        legalActions.some(
+          (action) =>
+            action.type === "call_grand_tichu" ||
+            action.type === "decline_grand_tichu"
+        )
+      ).toBe(true);
+
+      result = applyEngineAction(result.nextState, {
+        type: "decline_grand_tichu",
+        seat: actor
+      });
+    }
+
+    expect(result.nextState.phase).toBe("pass_select");
+    expect(result.nextState.activeSeat).toBeNull();
+    expect(result.nextState.grandTichuQueue).toEqual([]);
+  });
+
   it("suppresses a small Tichu call when the partner already called Grand Tichu", () => {
     const state = scenario({
       phase: "pass_select",

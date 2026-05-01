@@ -462,12 +462,17 @@ export function getPrimaryActor(state: GameState, legalActions: LegalActionMap):
     return SYSTEM_ACTOR;
   }
 
-  if (
-    state.phase === "grand_tichu_window" &&
-    state.activeSeat &&
-    (legalActions[state.activeSeat] ?? []).length > 0
-  ) {
-    return state.activeSeat;
+  if (state.phase === "grand_tichu_window") {
+    const grandTichuActor = SEAT_IDS.find((seat) =>
+      (legalActions[seat] ?? []).some(
+        (action) =>
+          action.type === "call_grand_tichu" ||
+          action.type === "decline_grand_tichu"
+      )
+    );
+    if (grandTichuActor) {
+      return grandTichuActor;
+    }
   }
 
   if (state.phase === "pass_select") {

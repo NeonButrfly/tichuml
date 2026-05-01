@@ -136,7 +136,11 @@ export type DecisionDebugSnapshot = {
   fallbackUsed: boolean;
   fallbackReason: string | null;
   latencyMs: number | null;
+  lastEndpointError: string | null;
   legalActionCount: number;
+  pendingRequestState: string;
+  pendingRequestActor: string | null;
+  pendingRequestPhase: string | null;
   chosenAction: ActionDescriptor | null;
   topCandidates: CandidateDiagnostics[];
   urgencyMode: string;
@@ -147,6 +151,14 @@ export type DecisionDebugSnapshot = {
   partnerAdvantage: number | null;
   lookahead: HandMetricDelta;
   reasonTags: PolicyTag[];
+  lastSuccessfulTransition: {
+    phase: string;
+    actor: string;
+    actionType: string;
+    nextPhase: string;
+    nextActiveSeat: string | null;
+    grandTichuQueue: string[];
+  } | null;
   requestedProviderLabel: string;
 };
 
