@@ -254,6 +254,83 @@ describe("server heuristic fast path", () => {
     });
   });
 
+  it("adds fast-path Tichu aggression metadata only for valid calls", () => {
+    const state = scenario({
+      phase: "trick_play",
+      activeSeat: "seat-0",
+      hands: {
+        "seat-0": cardsFromIds([
+          "dragon",
+          "phoenix",
+          "star-14",
+          "jade-14",
+          "sword-13",
+          "pagoda-13",
+          "star-12",
+          "jade-12",
+          "sword-11",
+          "pagoda-10",
+          "star-9",
+          "jade-8",
+          "sword-7",
+          "pagoda-6"
+        ])
+      }
+    });
+    const chosen = chooseServerFastPathDecision({
+      state: buildServerFastPathState(state, "seat-0"),
+      actor: "seat-0",
+      legalActions: [
+        { type: "call_tichu", seat: "seat-0" },
+        { type: "pass_turn", seat: "seat-0" }
+      ]
+    });
+
+    expect(chosen.action).toEqual({ type: "call_tichu", seat: "seat-0" });
+    expect(chosen.candidates[0]?.tichu_aggression_v1).toMatchObject({
+      bonus: expect.any(Number),
+      confidence: expect.any(Number)
+    });
+    expect(chosen.candidates[0]?.aggression_context_v1).toMatchObject({
+      called_tichu: true,
+      aggressive_play: true
+    });
+  });
+
+  it("does not add fast-path Grand Tichu aggression metadata on medium hands", () => {
+    const state = scenario({
+      phase: "grand_tichu_window",
+      activeSeat: "seat-0",
+      grandTichuQueue: ["seat-0"],
+      hands: {
+        "seat-0": cardsFromIds([
+          "dragon",
+          "star-14",
+          "jade-12",
+          "sword-10",
+          "pagoda-9",
+          "star-7",
+          "jade-5",
+          "dog"
+        ])
+      }
+    });
+    const chosen = chooseServerFastPathDecision({
+      state: buildServerFastPathState(state, "seat-0"),
+      actor: "seat-0",
+      legalActions: getLegalActions(state)["seat-0"] ?? []
+    });
+    const callCandidate = chosen.candidates.find(
+      (candidate) => candidate.action.type === "call_grand_tichu"
+    );
+
+    expect(chosen.action).toEqual({
+      type: "decline_grand_tichu",
+      seat: "seat-0"
+    });
+    expect(callCandidate?.grand_tichu_aggression_v1).toBeUndefined();
+  });
+
   it("cannot select call_tichu when metadata declines below threshold", () => {
     const state = scenario({
       phase: "trick_play",
@@ -295,6 +372,46 @@ describe("server heuristic fast path", () => {
       tichu_call_threshold: 245,
       tichu_call_reason: "decline_below_threshold",
       tichu_call_selected: false
+    });
+  });
+
+  it("penalizes fast-path pass candidates when a winning play exists", () => {
+    const lead = combo(["jade-7"]);
+    const state = scenario({
+      phase: "trick_play",
+      activeSeat: "seat-0",
+      currentTrick: {
+        leader: "seat-1",
+        currentWinner: "seat-1",
+        currentCombination: lead,
+        entries: [{ type: "play", seat: "seat-1", combination: lead }],
+        passingSeats: []
+      },
+      hands: {
+        "seat-0": cardsFromIds(["jade-8", "sword-3"]),
+        "seat-1": cardsFromIds(["jade-2"]),
+        "seat-2": cardsFromIds(["sword-2"]),
+        "seat-3": cardsFromIds(["star-2"])
+      }
+    });
+    const chosen = chooseServerFastPathDecision({
+      state: buildServerFastPathState(state, "seat-0"),
+      actor: "seat-0",
+      legalActions: getLegalActions(state)["seat-0"] ?? []
+    });
+    const passCandidate = chosen.candidates.find(
+      (candidate) => candidate.action.type === "pass_turn"
+    );
+
+    expect(chosen.action).toEqual({
+      type: "play_cards",
+      seat: "seat-0",
+      cardIds: ["jade-8"]
+    });
+    expect(passCandidate?.pass_reduction_v1).toMatchObject({
+      penalty: expect.any(Number),
+      legal_play_count: 1,
+      best_play_score: expect.any(Number)
     });
   });
 

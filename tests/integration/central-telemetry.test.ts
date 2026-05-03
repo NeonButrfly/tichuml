@@ -1178,6 +1178,103 @@ describe("central telemetry subsystem", () => {
     });
   });
 
+  it("preserves outcome and aggression metadata on selfplay decision telemetry", () => {
+    const payloads = buildSelfPlayDecisionTelemetry({
+      mode: "minimal",
+      gameId: "game-outcome-metadata",
+      handId: "game-outcome-metadata-hand-1",
+      phase: "trick_play",
+      actorSeat: "seat-0",
+      decisionIndex: 11,
+      stateRaw: {
+        phase: "trick_play",
+        activeSeat: "seat-0",
+        currentTrick: {
+          currentWinner: "seat-1",
+          currentCombination: {
+            kind: "single",
+            primaryRank: 8,
+            cardCount: 1,
+            isBomb: false
+          }
+        }
+      } as JsonObject,
+      stateNorm: { phase: "trick_play" },
+      legalActions: {
+        "seat-0": [{ type: "pass_turn", seat: "seat-0" }]
+      } as unknown as LegalActionMap,
+      chosenAction: PASS_ACTION,
+      policyName: "test-policy",
+      requestedProvider: "local",
+      providerUsed: "local_heuristic",
+      fallbackUsed: false,
+      metadata: {
+        hand_index: 1,
+        game_index: 1,
+        trick_index: 3,
+        trick_id: "game-outcome-metadata-hand-1:trick:3",
+        aggression_context_v1: {
+          passed_with_legal_play: true,
+          called_tichu: false,
+          called_grand_tichu: false,
+          aggressive_play: false,
+          risk_level: "low"
+        }
+      }
+    });
+
+    expect(payloads.minimal.fallback_used).toBe(false);
+    expect(payloads.minimal.metadata).toMatchObject({
+      hand_index: 1,
+      game_index: 1,
+      trick_index: 3,
+      trick_id: "game-outcome-metadata-hand-1:trick:3",
+      aggression_context_v1: {
+        passed_with_legal_play: true,
+        called_tichu: false,
+        called_grand_tichu: false,
+        aggressive_play: false,
+        risk_level: "low"
+      }
+    });
+  });
+
+  it("preserves trick outcome metadata on selfplay event telemetry", () => {
+    const payloads = buildSelfPlayEventTelemetry({
+      mode: "minimal",
+      gameId: "game-event-outcome",
+      handId: "game-event-outcome-hand-1",
+      event: { type: "dragon_trick_assigned", seat: "seat-0" } as unknown as EngineEvent,
+      stateNorm: { phase: "trick_play" },
+      actorSeat: "seat-0",
+      eventIndex: 12,
+      requestedProvider: "system_local",
+      providerUsed: "system_local",
+      metadata: {
+        trick_id: "game-event-outcome-hand-1:trick:4",
+        trick_index: 4,
+        trick_winner_seat: "seat-0",
+        trick_winner_team: "NS",
+        trick_point_recipient_seat: "seat-1",
+        trick_point_recipient_team: "EW",
+        trick_points: 25,
+        attribution_quality: "exact"
+      }
+    });
+
+    expect(payloads.minimal.fallback_used).toBe(false);
+    expect(payloads.minimal.metadata).toMatchObject({
+      trick_id: "game-event-outcome-hand-1:trick:4",
+      trick_index: 4,
+      trick_winner_seat: "seat-0",
+      trick_winner_team: "NS",
+      trick_point_recipient_seat: "seat-1",
+      trick_point_recipient_team: "EW",
+      trick_points: 25,
+      attribution_quality: "exact"
+    });
+  });
+
   it("declares candidate score representation and chosen-action coverage", () => {
     const payloads = buildTelemetryDecisionPayloads({
       source: "selfplay",

@@ -8,6 +8,7 @@ Telemetry is now strong enough to support:
 
 - candidate-action imitation datasets
 - observed hand and match outcome enrichment
+- persisted reward attribution for outcome-based learning experiments
 - offline counterfactual rollout jobs when full pre-action state was captured
 - runtime LightGBM scoring diagnostics and fallback analysis
 
@@ -47,7 +48,14 @@ Telemetry lifecycle storage now records match outcome fields needed by export:
 
 Self-play completion events also carry the metadata needed to derive hand and
 match outcomes more directly, including final scores and winner team when
-available.
+available. Outcome telemetry v1 now also adds decision-level attribution fields
+for trick, hand, and game results plus:
+
+- `actor_team`, `trick_id`, `trick_index`, `hand_index`, `game_index`
+- `trick_winner_*`, `trick_points`, `actor_team_won_trick`
+- hand and game score deltas / winner flags
+- `hand_result`, `game_result`
+- `outcome_reward`, `outcome_components`, `outcome_version`
 
 ## Export semantics
 
@@ -81,6 +89,16 @@ Use the quality report first when checking a dataset. It shows:
 - fallback row counts
 - phase, provider, and actor-seat distributions
 
+For DB-backed result attribution and training-readiness checks, use:
+
+- `npm run telemetry:finalize-results`
+- `npm run telemetry:validate-training-data`
+
+The validator now reports coverage for `hand_result`, `game_result`, and
+`outcome_reward`, reward min/avg/max, action and phase distributions, provider
+mix, pass/Tichu/Grand Tichu rates, candidate-score stats by action, and
+aggression-component counts.
+
 ## Recommended capture mode
 
 For serious strategy-improvement data generation:
@@ -102,3 +120,21 @@ The current implementation was validated with:
 - mirrored evaluation report generation against the backend provider path
 
 The latest repo-local machine-readable evidence lives under `artifacts/ml/`.
+
+Additional 2026-05-02 repo-local validation for issue
+[#59](https://github.com/NeonButrfly/tichuml/issues/59) covered:
+
+- full workspace build success after outcome/aggression changes
+- focused telemetry and heuristic regression tests
+- 10-game local sim success with telemetry disabled
+- 10-game local sim success with telemetry enabled, `strict_telemetry=false`,
+  and an intentionally dead backend endpoint to confirm non-blocking fallback
+- a local Postgres migration plus `telemetry:finalize-results` /
+  `telemetry:validate-training-data` smoke pass on the existing local dataset
+
+Current caveat:
+
+- the local Postgres sample validated outcome-field persistence and reward
+  attribution, but it did not yet represent a rich candidate-score training
+  corpus; use a fresh full-telemetry sim dataset before claiming full
+  behavior-cloning or ranking readiness from that specific local DB snapshot

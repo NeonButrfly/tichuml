@@ -395,6 +395,13 @@ function readSelectedTichuCall(
   return readJsonObject(explanationObject?.selectedTichuCall);
 }
 
+function readSelectedAggressionContext(
+  explanation: SeedJsonValue | null | undefined
+): JsonObject | null {
+  const explanationObject = readJsonObject(explanation);
+  return readJsonObject(explanationObject?.selectedAggressionContextV1);
+}
+
 function buildTichuCallTelemetryMetadata(config: {
   chosenAction?: JsonObject | undefined;
   explanation?: SeedJsonValue | null | undefined;
@@ -652,6 +659,9 @@ export function buildDecisionContextMetadata(config: {
   explanation?: SeedJsonValue | null | undefined;
   latencyMs?: number | undefined;
 }): JsonObject {
+  const selectedAggressionContext = readSelectedAggressionContext(
+    config.explanation
+  );
   return {
     seed: config.stateRaw.seed ?? null,
     latency_ms: config.latencyMs ?? null,
@@ -672,7 +682,10 @@ export function buildDecisionContextMetadata(config: {
     ...buildTichuCallTelemetryMetadata({
       chosenAction: config.chosenAction,
       explanation: config.explanation
-    })
+    }),
+    ...(selectedAggressionContext
+      ? { aggression_context_v1: selectedAggressionContext }
+      : {})
   };
 }
 

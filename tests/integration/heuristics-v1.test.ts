@@ -134,6 +134,39 @@ describe("heuristics v1", () => {
     expect(chosen.action).toEqual({ type: "decline_grand_tichu", seat: "seat-0" });
   });
 
+  it("does not add Grand Tichu aggression bonus to medium first-eight hands", () => {
+    const state = scenario({
+      phase: "grand_tichu_window",
+      activeSeat: "seat-0",
+      grandTichuQueue: ["seat-0"],
+      hands: {
+        "seat-0": cardsFromIds([
+          "dragon",
+          "star-14",
+          "jade-12",
+          "sword-10",
+          "pagoda-9",
+          "star-7",
+          "jade-5",
+          "dog"
+        ])
+      }
+    });
+    const chosen = heuristicsV1Policy.chooseAction({
+      state,
+      legalActions: getLegalActions(state)
+    });
+    const callCandidate = chosen.explanation.candidateScores.find(
+      (candidate) => candidate.action.type === "call_grand_tichu"
+    );
+
+    expect(chosen.action).toEqual({
+      type: "decline_grand_tichu",
+      seat: "seat-0"
+    });
+    expect(callCandidate?.grand_tichu_aggression_v1).toBeUndefined();
+  });
+
   it("does not call Grand Tichu from junk first eight cards", () => {
     const state = scenario({
       phase: "grand_tichu_window",
@@ -543,6 +576,53 @@ describe("heuristics v1", () => {
     expect(chosen.explanation.selectedTichuCall?.hand_quality_score).toEqual(
       expect.any(Number)
     );
+  });
+
+  it("adds bounded Tichu aggression metadata only when the hand should call", () => {
+    const state = scenario({
+      phase: "trick_play",
+      activeSeat: "seat-0",
+      hands: {
+        "seat-0": cardsFromIds([
+          "dragon",
+          "phoenix",
+          "star-14",
+          "jade-14",
+          "sword-13",
+          "pagoda-13",
+          "star-12",
+          "jade-11",
+          "sword-10",
+          "pagoda-9",
+          "jade-8",
+          "sword-7",
+          "pagoda-6",
+          "star-5"
+        ])
+      }
+    });
+    const legalActions: LegalActionMap = {
+      "seat-0": [
+        { type: "call_tichu", seat: "seat-0" },
+        { type: "pass_turn", seat: "seat-0" }
+      ],
+      "seat-1": [],
+      "seat-2": [],
+      "seat-3": []
+    };
+
+    const chosen = heuristicsV1Policy.chooseAction({ state, legalActions });
+
+    expect(chosen.action).toEqual({ type: "call_tichu", seat: "seat-0" });
+    expect(chosen.explanation.selectedTichuAggressionV1).toMatchObject({
+      bonus: expect.any(Number),
+      confidence: expect.any(Number)
+    });
+    expect(chosen.explanation.selectedAggressionContextV1).toMatchObject({
+      called_tichu: true,
+      called_grand_tichu: false,
+      aggressive_play: true
+    });
   });
 
   it("refuses to call Tichu when the partner already called Grand Tichu", () => {
@@ -1367,6 +1447,45 @@ describe("heuristics v1", () => {
 
     const afterPass = applyEngineAction(state, chosen.action);
     expect(afterPass.nextState.activeSeat).toBe("seat-0");
+  });
+
+  it("penalizes pass candidates when a legal play exists", () => {
+    const lead = combo(["jade-8"]);
+    const state = scenario({
+      activeSeat: "seat-0",
+      currentTrick: {
+        leader: "seat-1",
+        currentWinner: "seat-1",
+        currentCombination: lead,
+        entries: [{ type: "play", seat: "seat-1", combination: lead }],
+        passingSeats: []
+      },
+      hands: {
+        "seat-0": cardsFromIds(["jade-9", "sword-4"]),
+        "seat-1": cardsFromIds(["jade-2"]),
+        "seat-2": cardsFromIds(["sword-2"]),
+        "seat-3": cardsFromIds(["star-2"])
+      }
+    });
+
+    const chosen = heuristicsV1Policy.chooseAction({
+      state,
+      legalActions: getLegalActions(state)
+    });
+    const passCandidate = chosen.explanation.candidateScores.find(
+      (candidate) => candidate.action.type === "pass_turn"
+    );
+
+    expect(chosen.action).toEqual({
+      type: "play_cards",
+      seat: "seat-0",
+      cardIds: ["jade-9"]
+    });
+    expect(passCandidate?.pass_reduction_v1).toMatchObject({
+      penalty: expect.any(Number),
+      legal_play_count: 1,
+      best_play_score: expect.any(Number)
+    });
   });
 
   it("plays a legal higher straight on an active straight response turn", () => {

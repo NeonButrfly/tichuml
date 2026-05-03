@@ -32,7 +32,22 @@ function createFastPathExplanation(config: {
       reasons: candidate.reasons,
       tags: [],
       ...(candidate.mahjongWish ? { mahjongWish: candidate.mahjongWish } : {}),
-      ...(candidate.tichuCall ? { tichuCall: candidate.tichuCall } : {})
+      ...(candidate.tichuCall ? { tichuCall: candidate.tichuCall } : {}),
+      ...(candidate.pass_reduction_v1
+        ? { pass_reduction_v1: candidate.pass_reduction_v1 }
+        : {}),
+      ...(candidate.tichu_aggression_v1
+        ? { tichu_aggression_v1: candidate.tichu_aggression_v1 }
+        : {}),
+      ...(candidate.grand_tichu_aggression_v1
+        ? {
+            grand_tichu_aggression_v1:
+              candidate.grand_tichu_aggression_v1
+          }
+        : {}),
+      ...(candidate.aggression_context_v1
+        ? { aggression_context_v1: candidate.aggression_context_v1 }
+        : {})
     })),
     selectedReasonSummary: config.candidates[0]?.reasons ?? [],
     selectedTags: [],
@@ -41,6 +56,27 @@ function createFastPathExplanation(config: {
       : {}),
     ...(config.candidates[0]?.tichuCall
       ? { selectedTichuCall: config.candidates[0].tichuCall }
+      : {}),
+    ...(config.candidates[0]?.pass_reduction_v1
+      ? { selectedPassReductionV1: config.candidates[0].pass_reduction_v1 }
+      : {}),
+    ...(config.candidates[0]?.tichu_aggression_v1
+      ? {
+          selectedTichuAggressionV1:
+            config.candidates[0].tichu_aggression_v1
+        }
+      : {}),
+    ...(config.candidates[0]?.grand_tichu_aggression_v1
+      ? {
+          selectedGrandTichuAggressionV1:
+            config.candidates[0].grand_tichu_aggression_v1
+        }
+      : {}),
+    ...(config.candidates[0]?.aggression_context_v1
+      ? {
+          selectedAggressionContextV1:
+            config.candidates[0].aggression_context_v1
+        }
       : {})
   };
 }

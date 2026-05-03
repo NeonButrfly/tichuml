@@ -9,6 +9,12 @@ import {
   type StandardRank,
   type TeamId
 } from "@tichuml/engine";
+import type {
+  AggressionContextV1,
+  GrandTichuAggressionV1,
+  PassReductionV1,
+  TichuAggressionV1
+} from "@tichuml/shared";
 
 export type PolicyTag =
   | "partner_called_tichu"
@@ -148,6 +154,10 @@ export type PolicyExplanation = {
     features?: CandidateActionFeatureSnapshot;
     mahjongWish?: MahjongWishMetadata;
     tichuCall?: TichuCallMetadata;
+    pass_reduction_v1?: PassReductionV1;
+    tichu_aggression_v1?: TichuAggressionV1;
+    grand_tichu_aggression_v1?: GrandTichuAggressionV1;
+    aggression_context_v1?: AggressionContextV1;
   }>;
   selectedReasonSummary: string[];
   selectedTags: PolicyTag[];
@@ -155,6 +165,10 @@ export type PolicyExplanation = {
   selectedFeatures?: CandidateActionFeatureSnapshot;
   selectedMahjongWish?: MahjongWishMetadata;
   selectedTichuCall?: TichuCallMetadata;
+  selectedPassReductionV1?: PassReductionV1;
+  selectedTichuAggressionV1?: TichuAggressionV1;
+  selectedGrandTichuAggressionV1?: GrandTichuAggressionV1;
+  selectedAggressionContextV1?: AggressionContextV1;
 };
 
 export type HeadlessDecisionContext = {
@@ -183,6 +197,10 @@ export type CandidateDecision = {
   features?: CandidateActionFeatureSnapshot;
   mahjongWish?: MahjongWishMetadata;
   tichuCall?: TichuCallMetadata;
+  pass_reduction_v1?: PassReductionV1;
+  tichu_aggression_v1?: TichuAggressionV1;
+  grand_tichu_aggression_v1?: GrandTichuAggressionV1;
+  aggression_context_v1?: AggressionContextV1;
 };
 
 export type TichuCallMetadata = {

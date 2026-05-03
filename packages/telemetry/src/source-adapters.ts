@@ -211,6 +211,7 @@ export function buildSelfPlayDecisionTelemetry(config: {
   fallbackReason?: string;
   latencyMs: number;
   explanation?: SeedJsonValue;
+  metadata?: JsonObject | undefined;
   strictTelemetry?: boolean | undefined;
   workerId?: string | undefined;
   controllerMode?: boolean | undefined;
@@ -243,6 +244,7 @@ export function buildSelfPlayDecisionTelemetry(config: {
     metadata: {
       simulation_mode: true,
       strict_telemetry: config.strictTelemetry === true,
+      ...(config.metadata ?? {}),
       ...(config.fallbackReason
         ? { fallback_reason: config.fallbackReason }
         : {})

@@ -14,6 +14,32 @@ Use this file to preserve AI and bot-behavior prompt intent and link it to GitHu
 
 ## Entries
 
+### 2026-05-02 - Outcome reward telemetry and controlled aggression tuning for LightGBM training
+
+- Prompt Signal: The latest combined ML and behavior-quality request required
+  two linked changes: add true outcome and reward telemetry so LightGBM can
+  learn what actions actually led to good results, and tune passing/Tichu/Grand
+  Tichu behavior to generate stronger training data without making bots
+  reckless.
+- Interpreted Requirement: Issue
+  [#59](https://github.com/NeonButrfly/tichuml/issues/59) now also tracks
+  outcome telemetry v1 for trick, hand, and game attribution; persisted reward
+  components and idempotent result finalization; validation reporting for
+  outcome-learning readiness; and a centralized balanced aggression profile that
+  mildly penalizes pass decisions when stronger legal plays exist while adding
+  bounded, explainable bonuses for justified Tichu and Grand Tichu calls.
+- Affected Systems: `infra/db/migrations/0007_outcome_reward_telemetry.sql`,
+  `apps/server/src/services/telemetry-outcome-finalizer.ts`,
+  `apps/server/src/services/telemetry-repository.ts`,
+  `apps/sim-runner/src/self-play-batch.ts`, `packages/shared/src/outcomes.ts`,
+  `packages/ai-heuristics/src/*`, `packages/telemetry/src/*`,
+  `scripts/telemetry-finalize-results.ts`,
+  `scripts/telemetry-validate-training-data.ts`, and telemetry/heuristic
+  integration tests.
+- Linked GitHub Issue: [#59](https://github.com/NeonButrfly/tichuml/issues/59)
+- Milestone: [6.5 – Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status Source: GitHub issue state only.
+
 ### 2026-05-01 - Predictive Tichu and Grand Tichu call evaluator
 
 - Prompt Signal: Follow-up telemetry after Tichu teacher tuning still showed

@@ -10,8 +10,10 @@ import {
   BACKEND_HEALTH_PATH,
   DECISION_REQUEST_PATH,
   getDecisionScoringPath,
+  getOutcomeActorTeamForSeat,
   inferTelemetryFallbackUsed,
   normalizeBackendBaseUrl,
+  normalizeOutcomeActorTeam,
   type DecisionScoringPath,
   type DecisionMode,
   type DecisionProviderUsed,
@@ -26,10 +28,13 @@ import {
   applyEngineAction,
   createInitialGameState,
   getActorScopedLegalActions,
+  getCardById,
   getCanonicalActiveSeatFromState,
+  getCardsPoints,
   SEAT_IDS,
   SYSTEM_ACTOR,
   validateLegalActionsForCanonicalActor,
+  type Card,
   type Combination,
   type EngineAction,
   type EngineEvent,
@@ -817,6 +822,10 @@ function buildHandId(gameId: string, handNumber: number): string {
   return `${gameId}-hand-${handNumber}`;
 }
 
+function buildTrickId(handId: string, trickIndex: number): string {
+  return `${handId}:trick:${trickIndex}`;
+}
+
 function buildHandSeed(
   baseSeed: string,
   index: number,
@@ -830,6 +839,240 @@ function buildHandSeed(
 
 function getCurrentHandNumber(state: Pick<GameState, "matchHistory">): number {
   return state.matchHistory.length + 1;
+}
+
+function buildDecisionTelemetryMetadata(config: {
+  handId: string;
+  handIndex: number;
+  gameIndex: number;
+  trickIndex: number | null;
+}): JsonObject {
+  return {
+    hand_index: config.handIndex,
+    hand_number: config.handIndex,
+    game_index: config.gameIndex,
+    ...(config.trickIndex !== null
+      ? {
+          trick_index: config.trickIndex,
+          trick_id: buildTrickId(config.handId, config.trickIndex)
+        }
+      : {})
+  };
+}
+
+function buildLifecycleMetadata(config: {
+  handIndex: number;
+  gameIndex: number;
+}): JsonObject {
+  return {
+    hand_index: config.handIndex,
+    hand_number: config.handIndex,
+    game_index: config.gameIndex
+  };
+}
+
+function getResolvedTrickCards(
+  state: Pick<GameState, "currentTrick" | "pendingDragonGift">
+): Card[] {
+  if (state.currentTrick) {
+    return state.currentTrick.entries.flatMap((entry) =>
+      entry.type === "play" ? entry.combination.cardIds.map((cardId) => getCardById(cardId)) : []
+    );
+  }
+  return state.pendingDragonGift?.trickCards ?? [];
+}
+
+function buildTrickOutcomeMetadata(config: {
+  handId: string;
+  handIndex: number;
+  gameIndex: number;
+  trickIndex: number;
+  trickWinnerSeat: SeatId | null;
+  trickPointRecipientSeat: SeatId | null;
+  trickPoints: number;
+  attributionQuality: "exact" | "range";
+}): JsonObject {
+  return {
+    ...buildDecisionTelemetryMetadata({
+      handId: config.handId,
+      handIndex: config.handIndex,
+      gameIndex: config.gameIndex,
+      trickIndex: config.trickIndex
+    }),
+    trick_winner_seat: config.trickWinnerSeat,
+    trick_winner_team:
+      config.trickWinnerSeat === null
+        ? null
+        : getOutcomeActorTeamForSeat(config.trickWinnerSeat),
+    trick_point_recipient_seat: config.trickPointRecipientSeat,
+    trick_point_recipient_team:
+      config.trickPointRecipientSeat === null
+        ? null
+        : getOutcomeActorTeamForSeat(config.trickPointRecipientSeat),
+    trick_points: config.trickPoints,
+    attribution_quality: config.attributionQuality
+  };
+}
+
+function buildResolvedTrickMetadata(config: {
+  event: EngineEvent;
+  chosenAction: EngineAction;
+  handId: string;
+  handIndex: number;
+  gameIndex: number;
+  trickIndex: number;
+  stateBefore: GameState;
+}): JsonObject | null {
+  const trickWinnerSeat =
+    config.stateBefore.currentTrick?.currentWinner ??
+    config.stateBefore.pendingDragonGift?.winner ??
+    null;
+  if (trickWinnerSeat === null) {
+    return null;
+  }
+  const trickPoints = getCardsPoints(getResolvedTrickCards(config.stateBefore));
+  if (config.event.type === "dragon_gift_pending") {
+    return buildTrickOutcomeMetadata({
+      handId: config.handId,
+      handIndex: config.handIndex,
+      gameIndex: config.gameIndex,
+      trickIndex: config.trickIndex,
+      trickWinnerSeat,
+      trickPointRecipientSeat: null,
+      trickPoints,
+      attributionQuality: "range"
+    });
+  }
+  if (
+    config.event.type === "dragon_trick_assigned" &&
+    config.chosenAction.type === "assign_dragon_trick"
+  ) {
+    return buildTrickOutcomeMetadata({
+      handId: config.handId,
+      handIndex: config.handIndex,
+      gameIndex: config.gameIndex,
+      trickIndex: config.trickIndex,
+      trickWinnerSeat,
+      trickPointRecipientSeat: config.chosenAction.recipient,
+      trickPoints,
+      attributionQuality: "exact"
+    });
+  }
+  if (config.event.type === "trick_resolved" || config.event.type === "phase_changed") {
+    return buildTrickOutcomeMetadata({
+      handId: config.handId,
+      handIndex: config.handIndex,
+      gameIndex: config.gameIndex,
+      trickIndex: config.trickIndex,
+      trickWinnerSeat,
+      trickPointRecipientSeat: trickWinnerSeat,
+      trickPoints,
+      attributionQuality: "exact"
+    });
+  }
+  return null;
+}
+
+function shouldAttachTrickOutcomeMetadata(config: {
+  event: EngineEvent;
+  stateBefore: GameState;
+  stateAfter: GameState;
+}): boolean {
+  if (config.event.type === "trick_resolved" || config.event.type === "dragon_gift_pending") {
+    return true;
+  }
+  if (config.event.type === "dragon_trick_assigned") {
+    return config.stateBefore.pendingDragonGift !== null;
+  }
+  return (
+    config.event.type === "phase_changed" &&
+    config.stateBefore.currentTrick !== null &&
+    config.stateAfter.phase !== "trick_play"
+  );
+}
+
+function buildHandOutcomeMetadata(config: {
+  state: GameState;
+  handId: string;
+  handIndex: number;
+  gameIndex: number;
+}): JsonObject {
+  const roundSummary = config.state.roundSummary;
+  const matchEntry = config.state.matchHistory.at(-1) ?? null;
+  const handNsScoreDelta = roundSummary?.teamScores["team-0"] ?? null;
+  const handEwScoreDelta = roundSummary?.teamScores["team-1"] ?? null;
+  const finalHandWinnerTeam =
+    handNsScoreDelta === null || handEwScoreDelta === null || handNsScoreDelta === handEwScoreDelta
+      ? null
+      : handNsScoreDelta > handEwScoreDelta
+        ? "NS"
+        : "EW";
+
+  return {
+    ...buildLifecycleMetadata({
+      handIndex: config.handIndex,
+      gameIndex: config.gameIndex
+    }),
+    hand_ns_score_delta: handNsScoreDelta,
+    hand_ew_score_delta: handEwScoreDelta,
+    final_hand_winner_team: finalHandWinnerTeam,
+    hand_result: {
+      version: "outcome_hand_v1",
+      hand_id: config.handId,
+      hand_index: config.handIndex,
+      out_order: roundSummary?.finishOrder ?? [],
+      finish_order: roundSummary?.finishOrder ?? [],
+      double_victory:
+        normalizeOutcomeActorTeam(roundSummary?.doubleVictory ?? null),
+      tichu_bonuses:
+        roundSummary?.tichuBonuses.map((bonus) => ({
+          seat: bonus.seat,
+          team: normalizeOutcomeActorTeam(bonus.team),
+          raw_team: bonus.team,
+          label: bonus.label,
+          amount: bonus.amount
+        })) ?? [],
+      scoring_breakdown: {
+        hand_team_scores: roundSummary?.teamScores ?? null,
+        cumulative_scores: matchEntry?.cumulativeScores ?? null
+      }
+    }
+  };
+}
+
+function buildGameOutcomeMetadata(config: {
+  state: GameState;
+  handIndex: number;
+  gameIndex: number;
+}): JsonObject {
+  const finalGameWinnerTeam =
+    config.state.matchScore["team-0"] === config.state.matchScore["team-1"]
+      ? null
+      : config.state.matchScore["team-0"] > config.state.matchScore["team-1"]
+        ? "NS"
+        : "EW";
+  return {
+    ...buildLifecycleMetadata({
+      handIndex: config.handIndex,
+      gameIndex: config.gameIndex
+    }),
+    game_ns_final_score: config.state.matchScore["team-0"],
+    game_ew_final_score: config.state.matchScore["team-1"],
+    final_game_winner_team: finalGameWinnerTeam,
+    game_result: {
+      version: "outcome_game_v1",
+      game_index: config.gameIndex,
+      hands_played: config.state.matchHistory.length,
+      margin: Math.abs(
+        config.state.matchScore["team-0"] - config.state.matchScore["team-1"]
+      ),
+      winner_team: finalGameWinnerTeam,
+      final_scores: {
+        NS: config.state.matchScore["team-0"],
+        EW: config.state.matchScore["team-1"]
+      }
+    }
+  };
 }
 
 function resolveRequestedProvider(
@@ -1121,6 +1364,7 @@ export function buildDecisionRequestPayload(config: {
   phase: string;
   requestedProvider: Exclude<DecisionMode, "local">;
   decisionIndex: number;
+  metadata?: JsonObject;
   workerId?: string;
   controllerMode?: boolean;
   fullStateDecisionRequests?: boolean;
@@ -1159,6 +1403,7 @@ export function buildDecisionRequestPayload(config: {
       decision_index: config.decisionIndex,
       simulation_mode: true,
       scoring_path: scoringPath,
+      ...(config.metadata ?? {}),
       ...(config.workerId ? { worker_id: config.workerId } : {}),
       ...(config.controllerMode ? { controller_mode: true } : {})
     } as JsonObject
@@ -1453,6 +1698,7 @@ async function resolveLocalHeuristicDecision(config: {
   startedAt: number;
   strategy?: LocalDecisionStrategy;
   telemetryManager?: AsyncTelemetryManager;
+  metadata?: JsonObject;
   workerId?: string;
   controllerMode?: boolean;
 }): Promise<SimulatedDecision> {
@@ -1567,6 +1813,7 @@ async function resolveLocalHeuristicDecision(config: {
         ? { fallbackReason: config.fallbackReason }
         : {}),
       latencyMs,
+      ...(config.metadata ? { metadata: config.metadata } : {}),
       mode: config.telemetryMode ?? "minimal",
       strictTelemetry: config.strictTelemetry === true,
       ...(config.workerId ? { workerId: config.workerId } : {}),
@@ -1751,6 +1998,7 @@ export async function resolveDecision(config: {
   telemetryBackoffMs?: number;
   telemetryManager?: AsyncTelemetryManager;
   quiet?: boolean;
+  metadata?: JsonObject;
   workerId?: string;
   controllerMode?: boolean;
   fullStateDecisionRequests?: boolean;
@@ -1926,6 +2174,7 @@ export async function resolveDecision(config: {
       phase: config.phase,
       requestedProvider,
       decisionIndex: config.decisionIndex,
+      ...(config.metadata ? { metadata: config.metadata } : {}),
       ...(config.workerId ? { workerId: config.workerId } : {}),
       ...(config.controllerMode ? { controllerMode: true } : {}),
       ...(config.fullStateDecisionRequests !== undefined
@@ -2084,7 +2333,9 @@ async function runSingleGame(
   const gameId = buildGameId(options.baseSeed, index);
   const firstHandId = buildHandId(gameId, 1);
   const startedAt = Date.now();
+  const gameIndex = 1;
   let currentHandNumber = 1;
+  let currentTrickIndex = 1;
   let result = createInitialGameState(
     buildHandSeed(options.baseSeed, index, currentHandNumber)
   );
@@ -2149,6 +2400,10 @@ async function runSingleGame(
         eventIndex: eventIndex++,
         providerUsed: "system_local",
         requestedProvider: "system_local",
+        metadata: buildLifecycleMetadata({
+          handIndex: currentHandNumber,
+          gameIndex
+        }),
         ...(options.workerId ? { workerId: options.workerId } : {}),
         ...(options.controllerMode ? { controllerMode: true } : {})
       }
@@ -2188,6 +2443,10 @@ async function runSingleGame(
             eventIndex: eventIndex++,
             providerUsed: "system_local",
             requestedProvider: "system_local",
+            metadata: buildLifecycleMetadata({
+              handIndex: currentHandNumber,
+              gameIndex
+            }),
             ...(options.workerId ? { workerId: options.workerId } : {}),
             ...(options.controllerMode ? { controllerMode: true } : {})
           }
@@ -2298,6 +2557,16 @@ async function runSingleGame(
           ...(telemetryManager ? { telemetryManager } : {}),
           ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
           ...telemetryTransportConfig(options),
+          metadata: buildDecisionTelemetryMetadata({
+            handId,
+            handIndex: currentHandNumber,
+            gameIndex,
+            trickIndex:
+              result.nextState.currentTrick !== null ||
+              result.nextState.pendingDragonGift !== null
+                ? currentTrickIndex
+                : null
+          }),
           ...(options.workerId ? { workerId: options.workerId } : {}),
           ...(options.controllerMode ? { controllerMode: true } : {}),
           ...(options.fullStateDecisionRequests !== undefined
@@ -2378,6 +2647,21 @@ async function runSingleGame(
         for (const event of nextResult.events) {
           countByKey(eventsByPhase, nextResult.nextState.phase);
           const currentEventIndex = eventIndex++;
+          const trickOutcomeMetadata = shouldAttachTrickOutcomeMetadata({
+            event,
+            stateBefore: result.nextState,
+            stateAfter: nextResult.nextState
+          })
+            ? buildResolvedTrickMetadata({
+                event,
+                chosenAction: resolved.chosenAction,
+                handId,
+                handIndex: currentHandNumber,
+                gameIndex,
+                trickIndex: currentTrickIndex,
+                stateBefore: result.nextState
+              })
+            : null;
           const telemetryResult = await persistEvent(
             event,
             nextResult.derivedView as unknown as JsonObject,
@@ -2405,6 +2689,13 @@ async function runSingleGame(
               eventIndex: currentEventIndex,
               providerUsed: resolved.providerUsed,
               requestedProvider: resolved.requestedProvider,
+              metadata: {
+                ...buildLifecycleMetadata({
+                  handIndex: currentHandNumber,
+                  gameIndex
+                }),
+                ...(trickOutcomeMetadata ?? {})
+              },
               ...(options.workerId ? { workerId: options.workerId } : {}),
               ...(options.controllerMode ? { controllerMode: true } : {})
             }
@@ -2426,6 +2717,14 @@ async function runSingleGame(
                 event_index: currentEventIndex
               }
             );
+          }
+          if (
+            trickOutcomeMetadata &&
+            (event.type === "trick_resolved" ||
+              event.type === "phase_changed" ||
+              event.type === "dragon_trick_assigned")
+          ) {
+            currentTrickIndex += 1;
           }
         }
 
@@ -2470,11 +2769,17 @@ async function runSingleGame(
           providerUsed: "system_local",
           requestedProvider: "system_local",
           metadata: {
+            ...buildHandOutcomeMetadata({
+              state: result.nextState,
+              handId,
+              handIndex: currentHandNumber,
+              gameIndex
+            }),
             hand_number: String(result.nextState.matchHistory.length),
             hands_played: String(result.nextState.matchHistory.length),
             winner_team: completedWinningTeam === "tie" ? null : completedWinningTeam,
             final_team_0_score: result.nextState.matchScore["team-0"],
-            final_team_1_score: result.nextState.matchScore["team-1"],
+            final_team_1_score: result.nextState.matchScore["team-1"]
           },
           ...(options.workerId ? { workerId: options.workerId } : {}),
           ...(options.controllerMode ? { controllerMode: true } : {})
@@ -2512,11 +2817,16 @@ async function runSingleGame(
           providerUsed: "system_local",
           requestedProvider: "system_local",
           metadata: {
+            ...buildGameOutcomeMetadata({
+              state: result.nextState,
+              handIndex: currentHandNumber,
+              gameIndex
+            }),
             hand_number: String(result.nextState.matchHistory.length),
             hands_played: String(result.nextState.matchHistory.length),
             winner_team: completedWinningTeam === "tie" ? null : completedWinningTeam,
             final_team_0_score: result.nextState.matchScore["team-0"],
-            final_team_1_score: result.nextState.matchScore["team-1"],
+            final_team_1_score: result.nextState.matchScore["team-1"]
           },
           ...(options.workerId ? { workerId: options.workerId } : {}),
           ...(options.controllerMode ? { controllerMode: true } : {})

@@ -13,6 +13,10 @@ import {
   type TelemetryHealthStats
 } from "@tichuml/shared";
 import type { DatabaseClient } from "../db/postgres.js";
+import {
+  applyOutcomeAttributionForDecisionEvent,
+  deriveDecisionOutcomeContext
+} from "./telemetry-outcome-finalizer.js";
 
 export interface TelemetryRepository {
   ping(): Promise<void>;
@@ -217,6 +221,7 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
       }
     };
     const derived = deriveTelemetryDecisionFields(payload);
+    const outcomeContext = deriveDecisionOutcomeContext(payload);
     const matchId = await this.ensureMatchForTelemetry(payload);
     const [row] = await this.sql<{ id: number }[]>`
       INSERT INTO decisions (
@@ -236,6 +241,11 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
         policy_name,
         policy_source,
         worker_id,
+        actor_team,
+        trick_id,
+        trick_index,
+        hand_index,
+        game_index,
         state_raw,
         state_norm,
         legal_actions,
@@ -276,6 +286,11 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
         ${payload.policy_name},
         ${payload.policy_source},
         ${typeof payload.metadata.worker_id === "string" ? payload.metadata.worker_id : null},
+        ${outcomeContext.actorTeam},
+        ${outcomeContext.trickId},
+        ${outcomeContext.trickIndex},
+        ${outcomeContext.handIndex},
+        ${outcomeContext.gameIndex},
         ${this.sql.json(payload.state_raw)},
         ${payload.state_norm === null ? null : this.sql.json(payload.state_norm)},
         ${this.sql.json(payload.legal_actions)},
@@ -370,6 +385,7 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
       RETURNING id
     `;
 
+    await applyOutcomeAttributionForDecisionEvent(this.sql, payload);
     return row?.id ?? 0;
   }
 
@@ -393,6 +409,11 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
         policy_name,
         policy_source,
         worker_id,
+        actor_team,
+        trick_id,
+        trick_index,
+        hand_index,
+        game_index,
         state_raw,
         state_norm,
         legal_actions,
@@ -402,6 +423,24 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
         state_features AS "stateFeatures",
         metadata,
         antipattern_tags,
+        trick_winner_seat,
+        trick_winner_team,
+        trick_points,
+        actor_team_won_trick,
+        hand_ns_score_delta,
+        hand_ew_score_delta,
+        actor_team_hand_score_delta,
+        actor_team_won_hand,
+        game_ns_final_score,
+        game_ew_final_score,
+        actor_team_won_game,
+        final_hand_winner_team,
+        final_game_winner_team,
+        hand_result,
+        game_result,
+        outcome_reward,
+        outcome_components,
+        outcome_version,
         chosen_action_type,
         legal_action_count,
         chosen_action_is_legal,

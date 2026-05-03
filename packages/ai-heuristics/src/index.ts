@@ -7,6 +7,12 @@ import {
   type StandardRank
 } from "@tichuml/engine";
 import { engineFoundation } from "@tichuml/engine";
+import {
+  buildAggressionContextV1,
+  computeGrandTichuAggressionV1,
+  computePassReductionV1,
+  computeTichuAggressionV1
+} from "./aggression-tuning.js";
 import { createHeuristicFeatureAnalyzer } from "./HeuristicFeatureAnalyzer.js";
 import { chooseMahjongWishRank } from "./HandAnalysis.js";
 import { createPassSelectionAction, scorePassSelection } from "./PassHeuristicEngine.js";
@@ -229,8 +235,12 @@ function collectCandidates(ctx: HeadlessDecisionContext): CandidateDecision[] {
   }
 
   const deepened = deepenTacticalCandidates(ctx, candidates, analyzer);
+  const tuned = applyControlledAggressionToCandidates(
+    deepened,
+    analyzer
+  );
 
-  return deepened.sort((left, right) => {
+  return tuned.sort((left, right) => {
     if (right.score !== left.score) {
       return right.score - left.score;
     }
@@ -238,6 +248,104 @@ function collectCandidates(ctx: HeadlessDecisionContext): CandidateDecision[] {
     return getConcreteActionSortKey(left.action).localeCompare(
       getConcreteActionSortKey(right.action)
     );
+  });
+}
+
+function applyControlledAggressionToCandidates(
+  candidates: CandidateDecision[],
+  analyzer: ReturnType<typeof createHeuristicFeatureAnalyzer>
+): CandidateDecision[] {
+  const grouped = new Map<
+    CandidateDecision["actor"],
+    CandidateDecision[]
+  >();
+  for (const candidate of candidates) {
+    const existing = grouped.get(candidate.actor) ?? [];
+    existing.push(candidate);
+    grouped.set(candidate.actor, existing);
+  }
+
+  return candidates.map((candidate) => {
+    if (candidate.actor === SYSTEM_ACTOR) {
+      return candidate;
+    }
+    const actorCandidates = grouped.get(candidate.actor) ?? [];
+    const playCandidates = actorCandidates.filter(
+      (entry) => entry.action.type === "play_cards"
+    );
+    const legalPlayCount = playCandidates.length;
+    const bestPlayScore =
+      playCandidates.reduce<number | null>(
+        (best, entry) =>
+          best === null || entry.score > best ? entry.score : best,
+        null
+      );
+    const stateFeatures = analyzer.getStateFeatures(candidate.actor);
+    const clearlyWeakHand =
+      stateFeatures.hand_quality_score < 95 &&
+      stateFeatures.control_value_score < 75 &&
+      stateFeatures.bombs_count === 0 &&
+      !stateFeatures.dragon_in_hand &&
+      !stateFeatures.phoenix_in_hand &&
+      stateFeatures.hand_size >= 8;
+    const passReduction =
+      candidate.action.type === "pass_turn"
+        ? computePassReductionV1({
+            legalPlayCount,
+            bestPlayScore,
+            passScore: candidate.score,
+            clearlyWeakHand,
+            forcedPass: legalPlayCount === 0
+          })
+        : null;
+    const tichuAggression =
+      candidate.action.type === "call_tichu" && candidate.tichuCall
+        ? computeTichuAggressionV1({
+            shouldCall: candidate.tichuCall.tichu_call_selected,
+            confidence: candidate.tichuCall.tichu_call_confidence,
+            riskFlags: candidate.tichuCall.tichu_call_risk_flags
+          })
+        : null;
+    const grandTichuAggression =
+      candidate.action.type === "call_grand_tichu" && candidate.tichuCall
+        ? computeGrandTichuAggressionV1({
+            shouldCall: candidate.tichuCall.tichu_call_selected,
+            confidence: candidate.tichuCall.tichu_call_confidence,
+            riskFlags:
+              candidate.tichuCall.grand_tichu_risk_flags.length > 0
+                ? candidate.tichuCall.grand_tichu_risk_flags
+                : candidate.tichuCall.tichu_call_risk_flags
+          })
+        : null;
+    const aggressionContext =
+      passReduction || tichuAggression || grandTichuAggression
+        ? buildAggressionContextV1({
+            action: candidate.action,
+            legalPlayCount,
+            passReduction,
+            tichuAggression,
+            grandTichuAggression
+          })
+        : undefined;
+
+    return {
+      ...candidate,
+      score:
+        candidate.score +
+        (passReduction?.penalty ?? 0) +
+        (tichuAggression?.bonus ?? 0) +
+        (grandTichuAggression?.bonus ?? 0),
+      ...(passReduction ? { pass_reduction_v1: passReduction } : {}),
+      ...(tichuAggression
+        ? { tichu_aggression_v1: tichuAggression }
+        : {}),
+      ...(grandTichuAggression
+        ? { grand_tichu_aggression_v1: grandTichuAggression }
+        : {}),
+      ...(aggressionContext
+        ? { aggression_context_v1: aggressionContext }
+        : {})
+    };
   });
 }
 
@@ -374,14 +482,44 @@ function toChosenDecision(
         ...(candidate.teamplay ? { teamplay: candidate.teamplay } : {}),
         ...(candidate.features ? { features: candidate.features } : {}),
         ...(candidate.mahjongWish ? { mahjongWish: candidate.mahjongWish } : {}),
-        ...(candidate.tichuCall ? { tichuCall: candidate.tichuCall } : {})
+        ...(candidate.tichuCall ? { tichuCall: candidate.tichuCall } : {}),
+        ...(candidate.pass_reduction_v1
+          ? { pass_reduction_v1: candidate.pass_reduction_v1 }
+          : {}),
+        ...(candidate.tichu_aggression_v1
+          ? { tichu_aggression_v1: candidate.tichu_aggression_v1 }
+          : {}),
+        ...(candidate.grand_tichu_aggression_v1
+          ? {
+              grand_tichu_aggression_v1:
+                candidate.grand_tichu_aggression_v1
+            }
+          : {}),
+        ...(candidate.aggression_context_v1
+          ? { aggression_context_v1: candidate.aggression_context_v1 }
+          : {})
       })),
       selectedReasonSummary: selected.reasons,
       selectedTags: selected.tags,
       ...(selected.teamplay ? { selectedTeamplay: selected.teamplay } : {}),
       ...(selected.features ? { selectedFeatures: selected.features } : {}),
       ...(selected.mahjongWish ? { selectedMahjongWish: selected.mahjongWish } : {}),
-      ...(selected.tichuCall ? { selectedTichuCall: selected.tichuCall } : {})
+      ...(selected.tichuCall ? { selectedTichuCall: selected.tichuCall } : {}),
+      ...(selected.pass_reduction_v1
+        ? { selectedPassReductionV1: selected.pass_reduction_v1 }
+        : {}),
+      ...(selected.tichu_aggression_v1
+        ? { selectedTichuAggressionV1: selected.tichu_aggression_v1 }
+        : {}),
+      ...(selected.grand_tichu_aggression_v1
+        ? {
+            selectedGrandTichuAggressionV1:
+              selected.grand_tichu_aggression_v1
+          }
+        : {}),
+      ...(selected.aggression_context_v1
+        ? { selectedAggressionContextV1: selected.aggression_context_v1 }
+        : {})
     }
   };
 }

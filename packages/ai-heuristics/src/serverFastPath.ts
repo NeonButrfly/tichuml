@@ -16,6 +16,12 @@ import {
   type TrickState
 } from "@tichuml/engine";
 import {
+  buildAggressionContextV1,
+  computeGrandTichuAggressionV1,
+  computePassReductionV1,
+  computeTichuAggressionV1
+} from "./aggression-tuning.js";
+import {
   cardStrength,
   getConcreteActionSortKey,
   isPassLegalAction,
@@ -24,7 +30,11 @@ import {
   isStandardCard
 } from "./utils.js";
 import { chooseMahjongWishRank } from "./HandAnalysis.js";
-import type { MahjongWishMetadata, TichuCallMetadata } from "./types.js";
+import type {
+  CandidateDecision,
+  MahjongWishMetadata,
+  TichuCallMetadata
+} from "./types.js";
 
 export const SERVER_HEURISTIC_FAST_PATH_LIMITS = {
   pass_select_candidate_cap: 20,
@@ -84,6 +94,10 @@ export type ServerFastPathCandidate = {
   reasons: string[];
   mahjongWish?: MahjongWishMetadata;
   tichuCall?: TichuCallMetadata;
+  pass_reduction_v1?: CandidateDecision["pass_reduction_v1"];
+  tichu_aggression_v1?: CandidateDecision["tichu_aggression_v1"];
+  grand_tichu_aggression_v1?: CandidateDecision["grand_tichu_aggression_v1"];
+  aggression_context_v1?: CandidateDecision["aggression_context_v1"];
 };
 
 export type ServerFastPathDecision = {
@@ -92,6 +106,90 @@ export type ServerFastPathDecision = {
   candidateCount: number;
   candidates: ServerFastPathCandidate[];
 };
+
+function applyControlledAggressionToFastCandidates(config: {
+  state: ServerFastPathState;
+  handContext: HandContext;
+  candidates: ServerFastPathCandidate[];
+}): ServerFastPathCandidate[] {
+  const playCandidates = config.candidates.filter(
+    (candidate) => candidate.action.type === "play_cards"
+  );
+  const legalPlayCount = playCandidates.length;
+  const bestPlayScore =
+    playCandidates.reduce<number | null>(
+      (best, candidate) =>
+        best === null || candidate.score > best ? candidate.score : best,
+      null
+    );
+  const clearlyWeakHand =
+    config.handContext.handStrength < 155 &&
+    config.handContext.controlCardIds.size < 2 &&
+    config.handContext.bombCardIds.size === 0 &&
+    !config.handContext.byId.has("dragon") &&
+    !config.handContext.byId.has("phoenix") &&
+    config.state.actorHand.length >= 8;
+
+  return config.candidates.map((candidate) => {
+    const passReduction =
+      candidate.action.type === "pass_turn"
+        ? computePassReductionV1({
+            legalPlayCount,
+            bestPlayScore,
+            passScore: candidate.score,
+            clearlyWeakHand,
+            forcedPass: legalPlayCount === 0
+          })
+        : null;
+    const tichuAggression =
+      candidate.action.type === "call_tichu" && candidate.tichuCall
+        ? computeTichuAggressionV1({
+            shouldCall: candidate.tichuCall.tichu_call_selected,
+            confidence: candidate.tichuCall.tichu_call_confidence,
+            riskFlags: candidate.tichuCall.tichu_call_risk_flags
+          })
+        : null;
+    const grandTichuAggression =
+      candidate.action.type === "call_grand_tichu" && candidate.tichuCall
+        ? computeGrandTichuAggressionV1({
+            shouldCall: candidate.tichuCall.tichu_call_selected,
+            confidence: candidate.tichuCall.tichu_call_confidence,
+            riskFlags:
+              candidate.tichuCall.grand_tichu_risk_flags.length > 0
+                ? candidate.tichuCall.grand_tichu_risk_flags
+                : candidate.tichuCall.tichu_call_risk_flags
+          })
+        : null;
+    const aggressionContext =
+      passReduction || tichuAggression || grandTichuAggression
+        ? buildAggressionContextV1({
+            action: candidate.action,
+            legalPlayCount,
+            passReduction,
+            tichuAggression,
+            grandTichuAggression
+          })
+        : undefined;
+    return {
+      ...candidate,
+      score:
+        candidate.score +
+        (passReduction?.penalty ?? 0) +
+        (tichuAggression?.bonus ?? 0) +
+        (grandTichuAggression?.bonus ?? 0),
+      ...(passReduction ? { pass_reduction_v1: passReduction } : {}),
+      ...(tichuAggression
+        ? { tichu_aggression_v1: tichuAggression }
+        : {}),
+      ...(grandTichuAggression
+        ? { grand_tichu_aggression_v1: grandTichuAggression }
+        : {}),
+      ...(aggressionContext
+        ? { aggression_context_v1: aggressionContext }
+        : {})
+    };
+  });
+}
 
 type HandContext = {
   byId: Map<string, Card>;
@@ -1486,7 +1584,11 @@ export function chooseServerFastPathDecision(config: {
     );
   }
 
-  const ordered = [...candidates].sort((left, right) =>
+  const ordered = [...applyControlledAggressionToFastCandidates({
+    state: config.state,
+    handContext,
+    candidates
+  })].sort((left, right) =>
     right.score !== left.score
       ? right.score - left.score
       : getConcreteActionSortKey(left.action).localeCompare(
