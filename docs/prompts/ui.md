@@ -36,6 +36,28 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 - Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
 - Status Source: GitHub issue state only.
 
+### 2026-05-03 - Fast-path decision requests must stay actor-scoped during GT auto-advance
+
+- Prompt Signal: Live Grand Tichu automation surfaced the backend contract
+  error `Fast-path decision requests require an actor-scoped legal action
+  list`, which meant the UI was sending stale or map-shaped `legal_actions`
+  into the fast-path decision route.
+- Interpreted Requirement: Issue
+  [#58](https://github.com/NeonButrfly/tichuml/issues/58) also tracks a
+  stricter request-building invariant for live automation: before any backend
+  decision request, legal actions must be re-scoped to the current actor,
+  ownership must be validated, fast-path may only run when the actor/state
+  request context is current and safe, and unsafe fast-path attempts must
+  demote to the normal rich server heuristic path instead of stalling the
+  table.
+- Affected Systems: `apps/web/src/App.tsx`,
+  `apps/server/src/providers/heuristic-provider.ts`,
+  `tests/integration/live-gameplay-executor.test.ts`,
+  `tests/integration/server-heuristic-contract.test.ts`.
+- Linked GitHub Issue: [#58](https://github.com/NeonButrfly/tichuml/issues/58)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.
+
 ### 2026-04-10 - Passing lanes layout
 
 - Prompt Signal: The forward stabilization request explicitly called out passing lanes layout.

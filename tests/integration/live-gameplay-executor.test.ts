@@ -315,6 +315,19 @@ describe("live gameplay executor", () => {
           decisionRequests.push(payload);
           expect(payload.phase).toBe("grand_tichu_window");
           expect(["seat-1", "seat-2", "seat-3"]).toContain(payload.actor_seat);
+          expect(payload.metadata.scoring_path).toBe("fast_path");
+          expect(Array.isArray(payload.legal_actions)).toBe(true);
+          for (const action of payload.legal_actions as Array<Record<string, unknown>>) {
+            const owner =
+              typeof action.seat === "string"
+                ? action.seat
+                : typeof action.actor === "string"
+                  ? action.actor
+                  : null;
+            if (owner !== null) {
+              expect(owner).toBe(payload.actor_seat);
+            }
+          }
           return {
             ok: true,
             status: 200,
@@ -395,6 +408,24 @@ describe("live gameplay executor", () => {
       expect(
         Array.from(new Set(decisionRequests.map((request) => request.actor_seat)))
       ).toEqual(["seat-1", "seat-2", "seat-3"]);
+      const requestLogs = infoSpy.mock.calls.filter(
+        (call) =>
+          call[0] === "[decision-request]" &&
+          typeof call[1] === "object" &&
+          call[1] !== null &&
+          ["seat-1", "seat-2", "seat-3"].includes(
+            String((call[1] as { actor_seat?: string }).actor_seat ?? "")
+          )
+      );
+      expect(requestLogs.length).toBeGreaterThanOrEqual(3);
+      expect(
+        requestLogs.every(
+          (call) =>
+            (call[1] as { fast_path_used?: boolean }).fast_path_used === true &&
+            (call[1] as { validation_result?: string }).validation_result ===
+              "scoped"
+        )
+      ).toBe(true);
 
       const appliedActorOrder = infoSpy.mock.calls
         .filter(

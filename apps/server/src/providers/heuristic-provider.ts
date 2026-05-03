@@ -95,11 +95,45 @@ export function routeHeuristicDecision(
   } = {}
 ): RoutedDecision {
   const startedAt = Date.now();
-  const scoringPath = getDecisionScoringPath(payload);
+  const requestedScoringPath = getDecisionScoringPath(payload);
   const validationStartedAt = Date.now();
   const canonicalActor = validateDecisionRequestActorContract(payload);
   const validateMs = Date.now() - validationStartedAt;
+  const actorLegalActions = extractActorLegalActions(payload);
   const legalActionCount = getLegalActionCount(payload);
+  const legalActionPreview = actorLegalActions.slice(0, 4).map((action) => ({
+    type: action.type,
+    owner: "seat" in action ? action.seat : "actor" in action ? action.actor : null
+  }));
+  let scoringPath = requestedScoringPath;
+  let fastPathValidation: "scoped" | "fallback_legal_actions_shape" | "fallback_state_norm" =
+    "scoped";
+  let fastPathFallbackReason: string | null = null;
+  const richPathLegalActions = Array.isArray(payload.legal_actions)
+    ? ({ [payload.actor_seat]: actorLegalActions } as unknown as Record<
+        string,
+        LegalAction[]
+      >)
+    : (payload.legal_actions as Record<string, LegalAction[]>);
+
+  if (requestedScoringPath === "fast_path") {
+    if (!Array.isArray(payload.legal_actions)) {
+      scoringPath = "rich_path";
+      fastPathValidation = "fallback_legal_actions_shape";
+      fastPathFallbackReason =
+        "Fast path requires an actor-scoped legal action array; using rich path.";
+    } else if (
+      typeof payload.state_norm !== "object" ||
+      payload.state_norm === null ||
+      Array.isArray(payload.state_norm)
+    ) {
+      scoringPath = "rich_path";
+      fastPathValidation = "fallback_state_norm";
+      fastPathFallbackReason =
+        "Fast path requires a compact state_norm payload; using rich path.";
+    }
+  }
+
   if (options.traceDecisionRequests) {
     console.info(
       JSON.stringify({
@@ -112,31 +146,26 @@ export function routeHeuristicDecision(
         requested_provider: payload.requested_provider,
         canonical_actor_seat: canonicalActor,
         legal_action_count: legalActionCount,
+        legal_action_preview: legalActionPreview,
         provider_path: "server_heuristic",
-        scoring_path: scoringPath
+        requested_scoring_path: requestedScoringPath,
+        scoring_path: scoringPath,
+        fast_path_used: scoringPath === "fast_path",
+        fast_path_validation: fastPathValidation,
+        fast_path_fallback_reason: fastPathFallbackReason
       })
     );
   }
 
   if (scoringPath === "fast_path") {
     const normalizeStartedAt = Date.now();
-    if (!Array.isArray(payload.legal_actions)) {
-      throw new Error("Fast-path decision requests require an actor-scoped legal action list.");
-    }
-    if (
-      typeof payload.state_norm !== "object" ||
-      payload.state_norm === null ||
-      Array.isArray(payload.state_norm)
-    ) {
-      throw new Error("Fast-path decision requests require a compact state_norm payload.");
-    }
     const fastState = payload.state_norm as unknown as ServerFastPathState;
     const normalizeMs = Date.now() - normalizeStartedAt;
     const evaluateStartedAt = Date.now();
     const fastDecision = chooseServerFastPathDecision({
       state: fastState,
       actor: payload.actor_seat as SeatId,
-      legalActions: payload.legal_actions as unknown as LegalAction[]
+      legalActions: actorLegalActions
     });
     const evaluateMs = Date.now() - evaluateStartedAt;
     if (fastDecision.actor !== payload.actor_seat) {
@@ -175,7 +204,12 @@ export function routeHeuristicDecision(
         legal_action_count: legalActionCount,
         request_validated: true,
         provider_path: "server_heuristic",
+        requested_scoring_path: requestedScoringPath,
         scoring_path: scoringPath,
+        fast_path_validation: fastPathValidation,
+        ...(fastPathFallbackReason
+          ? { fast_path_fallback_reason: fastPathFallbackReason }
+          : {}),
         timing: {
           validate_ms: validateMs,
           normalize_ms: normalizeMs,
@@ -189,7 +223,7 @@ export function routeHeuristicDecision(
     };
   }
 
-  if (!isUsableState(payload.state_raw) || !isUsableLegalActionMap(payload.legal_actions)) {
+  if (!isUsableState(payload.state_raw) || !isUsableLegalActionMap(richPathLegalActions)) {
     throw new Error(
       "Rich-path decision requests for the server heuristic require full state_raw and legal_actions."
     );
@@ -201,7 +235,7 @@ export function routeHeuristicDecision(
   const evaluateStartedAt = Date.now();
   const chosen = heuristicsV1Policy.chooseAction({
     state: payload.state_raw,
-    legalActions: payload.legal_actions
+    legalActions: richPathLegalActions
   });
   const evaluateMs = Date.now() - evaluateStartedAt;
 
@@ -240,7 +274,12 @@ export function routeHeuristicDecision(
         legal_action_count: legalActionCount,
         request_validated: true,
         provider_path: "server_heuristic",
+        requested_scoring_path: requestedScoringPath,
         scoring_path: scoringPath,
+        fast_path_validation: fastPathValidation,
+        ...(fastPathFallbackReason
+          ? { fast_path_fallback_reason: fastPathFallbackReason }
+          : {}),
         explanation: chosen.explanation,
         timing: {
           validate_ms: validateMs,
@@ -262,7 +301,12 @@ export function routeHeuristicDecision(
       legal_action_count: legalActionCount,
       request_validated: true,
       provider_path: "server_heuristic",
+      requested_scoring_path: requestedScoringPath,
       scoring_path: scoringPath,
+      fast_path_validation: fastPathValidation,
+      ...(fastPathFallbackReason
+        ? { fast_path_fallback_reason: fastPathFallbackReason }
+        : {}),
       timing: {
         validate_ms: validateMs,
         normalize_ms: 0,

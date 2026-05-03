@@ -611,6 +611,28 @@ describe("server_heuristic actor contract", () => {
     );
   });
 
+  it("demotes malformed fast-path requests to rich-path instead of throwing", () => {
+    const baseRequest = createServerHeuristicPayload(advanceToGrandTichuWindow(), {
+      fullStateDecisionRequests: true
+    });
+    const request: DecisionRequestPayload = {
+      ...baseRequest,
+      metadata: {
+        ...baseRequest.metadata,
+        scoring_path: "fast_path"
+      }
+    };
+
+    const routed = routeBackendHeuristicDecision(request);
+
+    expect(routed.providerUsed).toBe("server_heuristic");
+    expect(routed.responseMetadata).toMatchObject({
+      scoring_path: "rich_path",
+      requested_scoring_path: "fast_path",
+      fast_path_validation: "fallback_legal_actions_shape"
+    });
+  });
+
   it("keeps numeric, string, and compass seat identities stable without rotation", () => {
     for (let index = 0; index < 4; index += 1) {
       const seat = seatIdFromIndex(index);

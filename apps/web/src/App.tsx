@@ -19,6 +19,8 @@ import {
   applyEngineAction,
   SEAT_IDS,
   createInitialGameState,
+  getCanonicalActiveSeatFromState,
+  getLegalActionOwner,
   getPartnerSeat,
   SYSTEM_ACTOR,
   type ActorId,
@@ -82,6 +84,7 @@ import {
 import { generateSeedWithEntropy } from "./seed/orchestrator";
 import {
   type BackendRuntimeSettings,
+  type DecisionScoringPath,
   type DecisionRequestPayload,
   type JsonObject,
   type RequestedDecisionProvider,
@@ -150,14 +153,20 @@ const SEAT_LAYOUT: Array<{
   { seat: "seat-0", position: "bottom", title: "SOUTH", relation: "You" }
 ];
 
-function createActorOnlyLegalActions(result: EngineResult, actor: ActorId) {
-  const actorOnly = {} as EngineResult["legalActions"];
-  actorOnly[actor] = result.legalActions[actor] ?? [];
+function createActorOnlyLegalActions(
+  legalActions: LegalActionMap,
+  actor: ActorId
+) {
+  const actorOnly = {} as LegalActionMap;
+  actorOnly[actor] = legalActions[actor] ?? [];
   return actorOnly;
 }
 
-function createActorPlayOnlyLegalActions(result: EngineResult, actor: SeatId) {
-  const actorOnly = createActorOnlyLegalActions(result, actor);
+function createActorPlayOnlyLegalActions(
+  legalActions: LegalActionMap,
+  actor: SeatId
+) {
+  const actorOnly = createActorOnlyLegalActions(legalActions, actor);
   actorOnly[actor] = (actorOnly[actor] ?? []).filter(
     (action): action is PlayLegalAction => action.type === "play_cards"
   );
@@ -174,9 +183,84 @@ function buildDecisionRequestPayload(config: {
   derived: EngineResult["derivedView"];
   legalActions: LegalActionMap;
   actorSeat: SeatId;
+  actor: ActorId;
   decisionIndex: number;
   requestedProvider: RequestedDecisionProvider;
 }): DecisionRequestPayload {
+  const actorScopedLegalActions = createActorOnlyLegalActions(
+    config.legalActions,
+    config.actor
+  );
+  const actorActions = Array.isArray(actorScopedLegalActions[config.actor])
+    ? actorScopedLegalActions[config.actor]
+    : [];
+  const legalActionPreview = actorActions
+    .slice(0, 4)
+    .map((action) => buildAutomationActionSignature(action));
+  const scopeIssues: string[] = [];
+  let scoringPath: DecisionScoringPath = "rich_path";
+  let fastPathUsed = false;
+  let validationResult:
+    | "scoped"
+    | "rich_path_provider"
+    | "system_actor"
+    | "canonical_actor_mismatch"
+    | "invalid_action_owner"
+    | "missing_actor_actions"
+    | "canonical_actor_unavailable" = "rich_path_provider";
+
+  if (config.requestedProvider === "server_heuristic") {
+    if (config.actor === SYSTEM_ACTOR) {
+      validationResult = "system_actor";
+    } else if (actorActions.length === 0) {
+      validationResult = "missing_actor_actions";
+      scopeIssues.push(`No legal actions found for ${config.actorSeat}.`);
+    } else {
+      let canonicalActorSeat: SeatId | null = null;
+      try {
+        canonicalActorSeat = getCanonicalActiveSeatFromState(config.state);
+      } catch (error) {
+        validationResult = "canonical_actor_unavailable";
+        scopeIssues.push(error instanceof Error ? error.message : String(error));
+      }
+
+      if (canonicalActorSeat !== null && canonicalActorSeat !== config.actorSeat) {
+        validationResult = "canonical_actor_mismatch";
+        scopeIssues.push(
+          `Canonical actor ${canonicalActorSeat} does not match request actor ${config.actorSeat}.`
+        );
+      }
+
+      for (const action of actorActions) {
+        const owner = getLegalActionOwner(action);
+        if (owner !== null && owner !== config.actorSeat) {
+          validationResult = "invalid_action_owner";
+          scopeIssues.push(
+            `Action ${action.type} belongs to ${owner}; expected ${config.actorSeat}.`
+          );
+        }
+      }
+
+      if (scopeIssues.length === 0) {
+        scoringPath = "fast_path";
+        fastPathUsed = true;
+        validationResult = "scoped";
+      }
+    }
+  }
+
+  console.info("[decision-request]", {
+    phase: config.state.phase,
+    actor_seat: config.actorSeat,
+    decision_actor: config.actor,
+    legal_action_count: actorActions.length,
+    legal_action_preview: legalActionPreview,
+    fast_path_used: fastPathUsed,
+    scoring_path: scoringPath,
+    validation_result: validationResult,
+    validation_issues: scopeIssues
+  });
+
   return {
     game_id: config.matchId,
     hand_id: getCurrentHandId(config.state),
@@ -187,10 +271,19 @@ function buildDecisionRequestPayload(config: {
     sim_version: TELEMETRY_SIM_VERSION,
     state_raw: config.state as unknown as Record<string, unknown>,
     state_norm: config.derived as unknown as Record<string, unknown>,
-    legal_actions: config.legalActions as unknown as Record<string, unknown>,
+    legal_actions: (fastPathUsed
+      ? actorActions
+      : actorScopedLegalActions) as unknown as Record<string, unknown>,
     requested_provider: config.requestedProvider,
     metadata: {
-      decision_index: config.decisionIndex
+      decision_index: config.decisionIndex,
+      scoring_path: scoringPath,
+      fast_path_validation: validationResult,
+      ...(scopeIssues.length > 0
+        ? {
+            fast_path_fallback_reason: scopeIssues.join(" | ")
+          }
+        : {})
     }
   };
 }
@@ -2058,7 +2151,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
 
         const legalActions = autoplayLocal
           ? round.legalActions
-          : createActorOnlyLegalActions(round, primaryActor);
+          : createActorOnlyLegalActions(round.legalActions, primaryActor);
         const requestPayload =
           primaryActor === SYSTEM_ACTOR
             ? buildDecisionRequestPayload({
@@ -2067,6 +2160,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
                 derived: round.derivedView,
                 legalActions,
                 actorSeat: LOCAL_SEAT,
+                actor: primaryActor,
                 decisionIndex: decisionCount,
                 requestedProvider:
                   backendSettings.decisionMode === "lightgbm_model"
@@ -2079,6 +2173,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
                 derived: round.derivedView,
                 legalActions,
                 actorSeat: primaryActor,
+                actor: primaryActor,
                 decisionIndex: decisionCount,
                 requestedProvider:
                   backendSettings.decisionMode === "lightgbm_model"
@@ -2271,20 +2366,21 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
           isMandatoryOpeningLead(nextResult.nextState, primaryActor)
         ) {
           const playOnlyLegalActions = createActorPlayOnlyLegalActions(
-            nextResult,
+            nextResult.legalActions,
             primaryActor
           );
 
           if ((playOnlyLegalActions[primaryActor] ?? []).length > 0) {
             const forcedRequestPayload = buildDecisionRequestPayload({
               matchId,
-              state: nextResult.nextState,
-              derived: nextResult.derivedView,
-              legalActions: playOnlyLegalActions,
-              actorSeat: primaryActor,
-              decisionIndex: decisionCount + 1,
-              requestedProvider:
-                backendSettings.decisionMode === "lightgbm_model"
+                state: nextResult.nextState,
+                derived: nextResult.derivedView,
+                legalActions: playOnlyLegalActions,
+                actorSeat: primaryActor,
+                actor: primaryActor,
+                decisionIndex: decisionCount + 1,
+                requestedProvider:
+                  backendSettings.decisionMode === "lightgbm_model"
                   ? "lightgbm_model"
                   : "server_heuristic"
             });
@@ -2998,30 +3094,35 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     resetAutomationRequest();
     setThinkingActor(primaryActor);
 
-    const legalActions = createActorOnlyLegalActions(round, primaryActor);
+    const legalActions = createActorOnlyLegalActions(
+      round.legalActions,
+      primaryActor
+    );
     const requestPayload =
       primaryActor === SYSTEM_ACTOR
         ? buildDecisionRequestPayload({
             matchId,
-            state,
-            derived,
-            legalActions,
-            actorSeat: LOCAL_SEAT,
-            decisionIndex: decisionCount,
-            requestedProvider:
-              backendSettings.decisionMode === "lightgbm_model"
+              state,
+              derived,
+              legalActions,
+              actorSeat: LOCAL_SEAT,
+              actor: primaryActor,
+              decisionIndex: decisionCount,
+              requestedProvider:
+                backendSettings.decisionMode === "lightgbm_model"
                 ? "lightgbm_model"
                 : "server_heuristic"
           })
         : buildDecisionRequestPayload({
             matchId,
-            state,
-            derived,
-            legalActions,
-            actorSeat: primaryActor,
-            decisionIndex: decisionCount,
-            requestedProvider:
-              backendSettings.decisionMode === "lightgbm_model"
+              state,
+              derived,
+              legalActions,
+              actorSeat: primaryActor,
+              actor: primaryActor,
+              decisionIndex: decisionCount,
+              requestedProvider:
+                backendSettings.decisionMode === "lightgbm_model"
                 ? "lightgbm_model"
                 : "server_heuristic"
           });
@@ -3417,16 +3518,20 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     }
 
     const actorSeat = state.activeSeat;
-    const legalActions = createActorOnlyLegalActions(round, actorSeat);
+    const legalActions = createActorOnlyLegalActions(
+      round.legalActions,
+      actorSeat
+    );
     const requestPayload = buildDecisionRequestPayload({
       matchId,
-      state,
-      derived,
-      legalActions,
-      actorSeat,
-      decisionIndex: decisionCount,
-      requestedProvider: "lightgbm_model"
-    });
+        state,
+        derived,
+        legalActions,
+        actorSeat,
+        actor: actorSeat,
+        decisionIndex: decisionCount,
+        requestedProvider: "lightgbm_model"
+      });
     const startedAt = performance.now();
 
     try {
