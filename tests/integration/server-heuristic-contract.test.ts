@@ -633,6 +633,37 @@ describe("server_heuristic actor contract", () => {
     });
   });
 
+  it("demotes malformed fast-path state payloads to rich-path instead of throwing", () => {
+    const baseRequest = createServerHeuristicPayload(advanceToGrandTichuWindow(), {
+      fullStateDecisionRequests: true
+    });
+    const actorActions = (
+      (baseRequest.legal_actions as Record<string, unknown>)[baseRequest.actor_seat] ??
+      []
+    ) as unknown as LegalAction[];
+    const request: DecisionRequestPayload = {
+      ...baseRequest,
+      state_norm: {
+        phase: baseRequest.phase,
+        activeSeat: baseRequest.actor_seat
+      },
+      legal_actions: actorActions as unknown as JsonObject,
+      metadata: {
+        ...baseRequest.metadata,
+        scoring_path: "fast_path"
+      }
+    };
+
+    const routed = routeBackendHeuristicDecision(request);
+
+    expect(routed.providerUsed).toBe("server_heuristic");
+    expect(routed.responseMetadata).toMatchObject({
+      scoring_path: "rich_path",
+      requested_scoring_path: "fast_path",
+      fast_path_validation: "fallback_state_norm"
+    });
+  });
+
   it("keeps numeric, string, and compass seat identities stable without rotation", () => {
     for (let index = 0; index < 4; index += 1) {
       const seat = seatIdFromIndex(index);

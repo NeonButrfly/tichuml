@@ -78,6 +78,27 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 - Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
 - Status Source: GitHub issue state only.
 
+### 2026-05-03 - Grand Tichu fast-path requests must carry actor-scoped compact state
+
+- Prompt Signal: The live GT window still failed after the actor-scoped action
+  repair, now with `Cannot read properties of undefined (reading 'map')`,
+  which pointed to the backend fast-path receiving an incomplete `state_norm`
+  payload during non-local GT auto-advance.
+- Interpreted Requirement: Issue
+  [#58](https://github.com/NeonButrfly/tichuml/issues/58) also tracks a fast
+  path payload invariant for live UI automation: when the frontend requests
+  `server_heuristic` fast-path decisions, `state_norm` must be the compact
+  actor-scoped fast state with `actorHand` and core turn data, not the public
+  derived view. If a caller still sends incomplete fast-path state, the backend
+  must demote to rich-path instead of crashing the live GT loop.
+- Affected Systems: `apps/web/src/App.tsx`,
+  `apps/server/src/providers/heuristic-provider.ts`,
+  `tests/integration/live-gameplay-executor.test.ts`,
+  `tests/integration/server-heuristic-contract.test.ts`.
+- Linked GitHub Issue: [#58](https://github.com/NeonButrfly/tichuml/issues/58)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.
+
 ### 2026-04-10 - Passing lanes layout
 
 - Prompt Signal: The forward stabilization request explicitly called out passing lanes layout.

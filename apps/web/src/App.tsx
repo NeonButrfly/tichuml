@@ -7,6 +7,7 @@ import {
   useState
 } from "react";
 import {
+  buildServerFastPathState,
   buildHandEvaluation,
   buildHandEvaluationAfterRemovingCards,
   buildUrgencyProfile,
@@ -226,6 +227,20 @@ function getCurrentHandId(state: GameState): string {
   return `hand-${state.matchHistory.length + 1}`;
 }
 
+function buildDecisionRequestStateNorm(config: {
+  state: GameState;
+  derived: EngineResult["derivedView"];
+  actorSeat: SeatId;
+  scoringPath: DecisionScoringPath;
+}): Record<string, unknown> {
+  return config.scoringPath === "fast_path"
+    ? (buildServerFastPathState(
+        config.state,
+        config.actorSeat
+      ) as unknown as Record<string, unknown>)
+    : (config.derived as unknown as Record<string, unknown>);
+}
+
 function buildDecisionRequestPayload(config: {
   matchId: string;
   state: EngineResult["nextState"];
@@ -340,7 +355,12 @@ function buildDecisionRequestPayload(config: {
     engine_version: TELEMETRY_ENGINE_VERSION,
     sim_version: TELEMETRY_SIM_VERSION,
     state_raw: config.state as unknown as Record<string, unknown>,
-    state_norm: config.derived as unknown as Record<string, unknown>,
+    state_norm: buildDecisionRequestStateNorm({
+      state: config.state,
+      derived: config.derived,
+      actorSeat: config.actorSeat,
+      scoringPath
+    }),
     legal_actions: (fastPathUsed
       ? actorActions
       : actorScopedLegalActions) as unknown as Record<string, unknown>,

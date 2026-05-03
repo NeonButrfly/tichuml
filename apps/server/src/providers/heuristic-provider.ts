@@ -23,10 +23,11 @@ function createFastPathExplanation(config: {
   actor: SeatId;
   candidates: ReturnType<typeof chooseServerFastPathDecision>["candidates"];
 }) {
+  const candidates = Array.isArray(config.candidates) ? config.candidates : [];
   return {
     policy: "server-fast-path",
     actor: config.actor,
-    candidateScores: config.candidates.map((candidate) => ({
+    candidateScores: candidates.map((candidate) => ({
       action: candidate.action,
       score: candidate.score,
       reasons: candidate.reasons,
@@ -49,36 +50,59 @@ function createFastPathExplanation(config: {
         ? { aggression_context_v1: candidate.aggression_context_v1 }
         : {})
     })),
-    selectedReasonSummary: config.candidates[0]?.reasons ?? [],
+    selectedReasonSummary: candidates[0]?.reasons ?? [],
     selectedTags: [],
-    ...(config.candidates[0]?.mahjongWish
-      ? { selectedMahjongWish: config.candidates[0].mahjongWish }
+    ...(candidates[0]?.mahjongWish
+      ? { selectedMahjongWish: candidates[0].mahjongWish }
       : {}),
-    ...(config.candidates[0]?.tichuCall
-      ? { selectedTichuCall: config.candidates[0].tichuCall }
+    ...(candidates[0]?.tichuCall
+      ? { selectedTichuCall: candidates[0].tichuCall }
       : {}),
-    ...(config.candidates[0]?.pass_reduction_v1
-      ? { selectedPassReductionV1: config.candidates[0].pass_reduction_v1 }
+    ...(candidates[0]?.pass_reduction_v1
+      ? { selectedPassReductionV1: candidates[0].pass_reduction_v1 }
       : {}),
-    ...(config.candidates[0]?.tichu_aggression_v1
+    ...(candidates[0]?.tichu_aggression_v1
       ? {
           selectedTichuAggressionV1:
-            config.candidates[0].tichu_aggression_v1
+            candidates[0].tichu_aggression_v1
         }
       : {}),
-    ...(config.candidates[0]?.grand_tichu_aggression_v1
+    ...(candidates[0]?.grand_tichu_aggression_v1
       ? {
           selectedGrandTichuAggressionV1:
-            config.candidates[0].grand_tichu_aggression_v1
+            candidates[0].grand_tichu_aggression_v1
         }
       : {}),
-    ...(config.candidates[0]?.aggression_context_v1
+    ...(candidates[0]?.aggression_context_v1
       ? {
           selectedAggressionContextV1:
-            config.candidates[0].aggression_context_v1
+            candidates[0].aggression_context_v1
         }
       : {})
   };
+}
+
+function isUsableFastPathState(value: unknown): value is ServerFastPathState {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  const candidate = value as Partial<ServerFastPathState>;
+  return (
+    typeof candidate.phase === "string" &&
+    Array.isArray(candidate.actorHand) &&
+    typeof candidate.handCounts === "object" &&
+    candidate.handCounts !== null &&
+    typeof candidate.calls === "object" &&
+    candidate.calls !== null &&
+    Array.isArray(candidate.finishedOrder) &&
+    typeof candidate.passSelections === "object" &&
+    candidate.passSelections !== null &&
+    typeof candidate.revealedPasses === "object" &&
+    candidate.revealedPasses !== null &&
+    typeof candidate.collectedCards === "object" &&
+    candidate.collectedCards !== null
+  );
 }
 
 function getLegalActionCount(payload: DecisionRequestPayload): number {
@@ -122,15 +146,11 @@ export function routeHeuristicDecision(
       fastPathValidation = "fallback_legal_actions_shape";
       fastPathFallbackReason =
         "Fast path requires an actor-scoped legal action array; using rich path.";
-    } else if (
-      typeof payload.state_norm !== "object" ||
-      payload.state_norm === null ||
-      Array.isArray(payload.state_norm)
-    ) {
+    } else if (!isUsableFastPathState(payload.state_norm)) {
       scoringPath = "rich_path";
       fastPathValidation = "fallback_state_norm";
       fastPathFallbackReason =
-        "Fast path requires a compact state_norm payload; using rich path.";
+        "Fast path requires an actor-scoped compact state_norm payload with actorHand and core turn state; using rich path.";
     }
   }
 

@@ -317,6 +317,15 @@ describe("live gameplay executor", () => {
           expect(["seat-1", "seat-2", "seat-3"]).toContain(payload.actor_seat);
           expect(payload.metadata.scoring_path).toBe("fast_path");
           expect(Array.isArray(payload.legal_actions)).toBe(true);
+          expect(payload.state_norm).toMatchObject({
+            phase: "grand_tichu_window",
+            activeSeat: payload.actor_seat
+          });
+          expect(
+            Array.isArray(
+              (payload.state_norm as Record<string, unknown>).actorHand
+            )
+          ).toBe(true);
           const actionTypes = (
             payload.legal_actions as Array<Record<string, unknown>>
           ).map((action) => String(action.type));
