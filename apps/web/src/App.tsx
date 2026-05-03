@@ -226,7 +226,7 @@ type SuccessfulTransitionSnapshot = {
   grandTichuQueue: SeatId[];
 };
 
-function buildAutomationActionSignature(action: LegalAction): string {
+function buildAutomationActionSignature(action: EngineAction | LegalAction): string {
   switch (action.type) {
     case "play_cards":
       return [
@@ -251,6 +251,45 @@ function buildAutomationActionSignature(action: LegalAction): string {
     default:
       return action.type;
   }
+}
+
+function getActionActor(action: EngineAction | LegalAction): ActorId {
+  if ("seat" in action) {
+    return action.seat;
+  }
+
+  if ("actor" in action) {
+    return action.actor;
+  }
+
+  return SYSTEM_ACTOR;
+}
+
+function buildAutomationExecutionKey(config: {
+  requestKey: string | null;
+  state: GameState;
+  action: EngineAction | LegalAction;
+}): string {
+  return JSON.stringify({
+    requestKey: config.requestKey,
+    seed: config.state.seed,
+    hand: getCurrentHandId(config.state),
+    phase: config.state.phase,
+    activeSeat: config.state.activeSeat,
+    grandTichuQueue: config.state.grandTichuQueue,
+    action: buildAutomationActionSignature(config.action)
+  });
+}
+
+function logPhaseTransition(
+  event: string,
+  payload: Record<string, unknown>
+): void {
+  console.info("[phase-transition]", {
+    ts: new Date().toISOString(),
+    event,
+    ...payload
+  });
 }
 
 function buildAutomationRequestKey(config: {
@@ -777,6 +816,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     status: "idle",
     requestedAt: null
   });
+  const lastAppliedAutomationExecutionKeyRef = useRef<string | null>(null);
 
   const state = round.nextState;
   const derived = round.derivedView;
@@ -894,6 +934,12 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     localActionSummary.length > 0
       ? localActionSummary.join(" • ")
       : "No local actions.";
+  const manualNextRetryEnabled =
+    !roundGenerationPending &&
+    state.phase === "grand_tichu_window" &&
+    decisionDiagnostics.lastEndpointError !== null &&
+    primaryActor !== null &&
+    primaryActor !== LOCAL_SEAT;
   const displayedTrick = exchangePhaseActive
     ? null
     : (derived.currentTrick ?? stagedTrick);
@@ -930,6 +976,11 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
               ? "Your turn"
               : localHasOptionalAction && !forceAiEndgameContinuation
                 ? "Interrupt available"
+                : decisionDiagnostics.lastEndpointError &&
+                    primaryActor !== LOCAL_SEAT
+                  ? state.phase === "grand_tichu_window"
+                    ? `Auto-advance failed: ${decisionDiagnostics.lastEndpointError}. Click Next to retry.`
+                    : `Auto-advance failed: ${decisionDiagnostics.lastEndpointError}`
               : thinkingActor
                   ? `${formatActorLabel(thinkingActor)} thinking`
                   : "Auto-advancing";
@@ -1058,7 +1109,9 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
   }));
   const normalActionRail = createNormalActionRail({
     phase: state.phase,
-    nextEnabled: !roundGenerationPending && Boolean(localDeclineGrandTichuAction),
+    nextEnabled:
+      !roundGenerationPending &&
+      (Boolean(localDeclineGrandTichuAction) || manualNextRetryEnabled),
     nextDealEnabled:
       !roundGenerationPending &&
       state.phase === "finished" &&
@@ -1631,6 +1684,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
       setBackendSettings(nextSettings);
       setBackendStatus(createUnknownBackendReachability());
       setFrozenSnapshot(null);
+      lastAppliedAutomationExecutionKeyRef.current = null;
       resetAutomationRequest();
       setThinkingActor(null);
     }
@@ -2048,6 +2102,23 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
           legalActions,
           resolution: initialResolution
         });
+        logPhaseTransition("backend_decision_resolved", {
+          currentPhase: round.nextState.phase,
+          requestedNextPhase:
+            typeof initialResolution.responseMetadata?.predicted_next_phase ===
+            "string"
+              ? initialResolution.responseMetadata.predicted_next_phase
+              : null,
+          actor: primaryActor,
+          actionType: initialResolution.chosen.action.type,
+          backendResponsePhase:
+            typeof initialResolution.responseMetadata?.response_phase ===
+            "string"
+              ? initialResolution.responseMetadata.response_phase
+              : requestPayload.phase,
+          frontendAppliedPhase: null,
+          providerUsed: initialResolution.providerUsed
+        });
 
         setBackendStatus((current) => ({
           state:
@@ -2091,10 +2162,68 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
           return;
         }
 
-        let nextResult = applyEngineAction(
-          round.nextState,
-          initialResolution.chosen.action
-        );
+        const initialExecutionKey = buildAutomationExecutionKey({
+          requestKey: automationRequestKey,
+          state: round.nextState,
+          action: initialResolution.chosen.action
+        });
+        if (
+          lastAppliedAutomationExecutionKeyRef.current === initialExecutionKey
+        ) {
+          logPhaseTransition("duplicate_automation_suppressed", {
+            currentPhase: round.nextState.phase,
+            requestedNextPhase: null,
+            actor: primaryActor,
+            actionType: initialResolution.chosen.action.type,
+            backendResponsePhase:
+              typeof initialResolution.responseMetadata?.response_phase ===
+              "string"
+                ? initialResolution.responseMetadata.response_phase
+                : requestPayload.phase,
+            frontendAppliedPhase: null
+          });
+          resetAutomationRequest();
+          setThinkingActor(null);
+          return;
+        }
+
+        let nextResult: EngineResult;
+        try {
+          nextResult = applyEngineAction(
+            round.nextState,
+            initialResolution.chosen.action
+          );
+        } catch (error) {
+          logPhaseTransition("frontend_apply_failed", {
+            currentPhase: round.nextState.phase,
+            requestedNextPhase: null,
+            actor: primaryActor,
+            actionType: initialResolution.chosen.action.type,
+            backendResponsePhase:
+              typeof initialResolution.responseMetadata?.response_phase ===
+              "string"
+                ? initialResolution.responseMetadata.response_phase
+                : requestPayload.phase,
+            frontendAppliedPhase: null,
+            error: error instanceof Error ? error.message : String(error)
+          });
+          throw error;
+        }
+        lastAppliedAutomationExecutionKeyRef.current = initialExecutionKey;
+        logPhaseTransition("frontend_transition_applied", {
+          currentPhase: round.nextState.phase,
+          requestedNextPhase: nextResult.nextState.phase,
+          actor: primaryActor,
+          actionType: initialResolution.chosen.action.type,
+          backendResponsePhase:
+            typeof initialResolution.responseMetadata?.response_phase ===
+            "string"
+              ? initialResolution.responseMetadata.response_phase
+              : requestPayload.phase,
+          frontendAppliedPhase: nextResult.nextState.phase,
+          nextActiveSeat: nextResult.nextState.activeSeat,
+          grandTichuQueue: [...nextResult.nextState.grandTichuQueue]
+        });
         await emitEventTelemetry({
           settings: backendSettings,
           events: nextResult.events,
@@ -2318,6 +2447,16 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
           detail,
           checkedAt: new Date().toISOString()
         });
+        logPhaseTransition("frontend_apply_failed", {
+          currentPhase: round.nextState.phase,
+          requestedNextPhase: null,
+          actor: primaryActor,
+          actionType: null,
+          backendResponsePhase:
+            decisionDiagnostics.lastRequestPayload?.phase ?? round.nextState.phase,
+          frontendAppliedPhase: null,
+          error: detail
+        });
       });
     }, delay);
 
@@ -2404,6 +2543,20 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     }
 
     if (previousPhase !== state.phase) {
+      logPhaseTransition("frontend_phase_changed", {
+        currentPhase: previousPhase,
+        requestedNextPhase: state.phase,
+        actor: primaryActor,
+        actionType:
+          decisionDiagnostics.lastSuccessfulTransition?.actionType ?? null,
+        backendResponsePhase:
+          decisionDiagnostics.lastRequestPayload?.phase ??
+          decisionDiagnostics.lastSuccessfulTransition?.phase ??
+          previousPhase,
+        frontendAppliedPhase: state.phase,
+        activeSeat: state.activeSeat,
+        grandTichuQueue: [...state.grandTichuQueue]
+      });
       pushTimeline(
         createTimelineEntry(
           "phase",
@@ -2415,7 +2568,17 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     }
 
     previousPhaseRef.current = state.phase;
-  }, [exchangePhaseActive, pushTimeline, state.phase]);
+  }, [
+    decisionDiagnostics.lastRequestPayload?.phase,
+    decisionDiagnostics.lastSuccessfulTransition?.actionType,
+    decisionDiagnostics.lastSuccessfulTransition?.phase,
+    exchangePhaseActive,
+    primaryActor,
+    pushTimeline,
+    state.activeSeat,
+    state.grandTichuQueue,
+    state.phase
+  ]);
 
   useEffect(() => {
     const previousSelections = previousPassSelectionsRef.current;
@@ -2527,7 +2690,10 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
   function applyClientAction(
     action: EngineAction,
     chosen?: ChosenDecision,
-    options?: { skipDecisionTelemetry?: boolean }
+    options?: {
+      skipDecisionTelemetry?: boolean;
+      trigger?: "ui" | "manual_fallback";
+    }
   ) {
     if (roundGenerationPending) {
       return;
@@ -2568,6 +2734,20 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     }
 
     const nextResult = applyEngineAction(state, action);
+    logPhaseTransition("frontend_transition_applied", {
+      currentPhase: state.phase,
+      requestedNextPhase: nextResult.nextState.phase,
+      actor: chosen?.actor ?? getActionActor(action),
+      actionType: action.type,
+      backendResponsePhase:
+        options?.trigger === "manual_fallback"
+          ? decisionDiagnostics.lastRequestPayload?.phase ?? state.phase
+          : null,
+      frontendAppliedPhase: nextResult.nextState.phase,
+      nextActiveSeat: nextResult.nextState.activeSeat,
+      grandTichuQueue: [...nextResult.nextState.grandTichuQueue],
+      trigger: options?.trigger ?? "ui"
+    });
     const dogAnimation = getDogLeadAnimationView(action, nextResult);
     void emitEventTelemetry({
       settings: backendSettings,
@@ -2680,6 +2860,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
           setSortMode("rank");
           setStagedTrick(null);
           setDogLeadAnimation(null);
+          lastAppliedAutomationExecutionKeyRef.current = null;
           resetInteractionState();
           resetAutomationRequest();
         });
@@ -2797,6 +2978,26 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
       return;
     }
 
+    if (
+      automationRequestKey &&
+      automationRequestRef.current.key === automationRequestKey &&
+      automationRequestRef.current.status !== "idle"
+    ) {
+      logPhaseTransition("manual_retry_suppressed", {
+        currentPhase: state.phase,
+        requestedNextPhase: null,
+        actor: primaryActor,
+        actionType: null,
+        backendResponsePhase:
+          decisionDiagnostics.lastRequestPayload?.phase ?? state.phase,
+        frontendAppliedPhase: null
+      });
+      return;
+    }
+
+    resetAutomationRequest();
+    setThinkingActor(primaryActor);
+
     const legalActions = createActorOnlyLegalActions(round, primaryActor);
     const requestPayload =
       primaryActor === SYSTEM_ACTOR
@@ -2839,6 +3040,23 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
           legalActions,
           resolution
         });
+        logPhaseTransition("backend_decision_resolved", {
+          currentPhase: state.phase,
+          requestedNextPhase:
+            typeof resolution.responseMetadata?.predicted_next_phase ===
+            "string"
+              ? resolution.responseMetadata.predicted_next_phase
+              : null,
+          actor: primaryActor,
+          actionType: resolution.chosen.action.type,
+          backendResponsePhase:
+            typeof resolution.responseMetadata?.response_phase === "string"
+              ? resolution.responseMetadata.response_phase
+              : requestPayload.phase,
+          frontendAppliedPhase: null,
+          providerUsed: resolution.providerUsed,
+          trigger: "manual_fallback"
+        });
         setBackendStatus({
           state:
             resolution.endpointReachable === true
@@ -2877,17 +3095,57 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
             });
         }
 
+        const executionKey = buildAutomationExecutionKey({
+          requestKey: automationRequestKey,
+          state,
+          action: resolution.chosen.action
+        });
+        if (lastAppliedAutomationExecutionKeyRef.current === executionKey) {
+          logPhaseTransition("duplicate_automation_suppressed", {
+            currentPhase: state.phase,
+            requestedNextPhase: null,
+            actor: primaryActor,
+            actionType: resolution.chosen.action.type,
+            backendResponsePhase:
+              typeof resolution.responseMetadata?.response_phase === "string"
+                ? resolution.responseMetadata.response_phase
+                : requestPayload.phase,
+            frontendAppliedPhase: null,
+            trigger: "manual_fallback"
+          });
+          setThinkingActor(null);
+          return;
+        }
+        lastAppliedAutomationExecutionKeyRef.current = executionKey;
         applyClientAction(resolution.chosen.action, resolution.chosen, {
-          skipDecisionTelemetry: true
+          skipDecisionTelemetry: true,
+          trigger: "manual_fallback"
         });
       })
       .catch((error) => {
         const reachable = isBackendRequestError(error) ? error.reachable : false;
+        const detail =
+          error instanceof Error ? error.message : "Decision provider failed.";
         setBackendStatus({
           state: reachable === true ? "reachable" : "unreachable",
-          detail:
-            error instanceof Error ? error.message : "Decision provider failed.",
+          detail,
           checkedAt: new Date().toISOString()
+        });
+        setThinkingActor(null);
+        setDecisionDiagnostics((current) => ({
+          ...current,
+          lastEndpointError: detail
+        }));
+        logPhaseTransition("frontend_apply_failed", {
+          currentPhase: state.phase,
+          requestedNextPhase: null,
+          actor: primaryActor,
+          actionType: null,
+          backendResponsePhase:
+            decisionDiagnostics.lastRequestPayload?.phase ?? state.phase,
+          frontendAppliedPhase: null,
+          error: detail,
+          trigger: "manual_fallback"
         });
       });
   }
@@ -3016,6 +3274,8 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
       case "next":
         if (localDeclineGrandTichuAction) {
           applyClientAction(localDeclineGrandTichuAction);
+        } else if (manualNextRetryEnabled) {
+          continueWithAi();
         }
         break;
       case "grand_tichu":

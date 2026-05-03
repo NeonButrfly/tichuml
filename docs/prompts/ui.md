@@ -14,6 +14,28 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 
 ## Entries
 
+### 2026-05-03 - Grand Tichu auto-advance must stay in sync with the real game state
+
+- Prompt Signal: The live table could get stuck showing `grand_tichu_window`
+  with `Auto-advancing` even though the next phase never arrived cleanly, so
+  the request explicitly required a real state-transition and sync repair
+  rather than a visual-only workaround.
+- Interpreted Requirement: Issue
+  [#58](https://github.com/NeonButrfly/tichuml/issues/58) now also tracks a
+  hard invariant for live GT automation: auto-advance requests must apply
+  exactly once, frontend phase and backend-decided action context must stay
+  logged and aligned, `Auto-advancing` must clear on success or surface a real
+  error on failure, and the `Next` control must work as a legal retry path when
+  non-local GT automation fails.
+- Affected Systems: `apps/web/src/App.tsx`,
+  `apps/server/src/services/decision-service.ts`,
+  `tests/integration/live-gameplay-executor.test.ts`,
+  `tests/integration/web-table-model.test.ts`, and related server-heuristic /
+  telemetry regression coverage.
+- Linked GitHub Issue: [#58](https://github.com/NeonButrfly/tichuml/issues/58)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.
+
 ### 2026-04-10 - Passing lanes layout
 
 - Prompt Signal: The forward stabilization request explicitly called out passing lanes layout.

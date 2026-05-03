@@ -98,6 +98,13 @@ export async function handleDecisionRequest(
     actor_seat: payload.actor_seat,
     requested_provider: payload.requested_provider,
     provider_used: routed.providerUsed,
+    chosen_action_type: routed.chosen.action.type,
+    chosen_action_actor:
+      "seat" in routed.chosen.action
+        ? routed.chosen.action.seat
+        : "actor" in routed.chosen.action
+          ? routed.chosen.action.actor
+          : routed.chosen.actor,
     telemetry_id: telemetryId,
     latency_ms: latencyMs,
     canonical_actor_seat: routed.responseMetadata?.canonical_actor_seat,
@@ -112,6 +119,9 @@ export async function handleDecisionRequest(
     provider_reason: routed.providerReason,
     metadata: {
       ...(routed.responseMetadata ?? {}),
+      response_phase: payload.phase,
+      response_actor_seat: payload.actor_seat,
+      chosen_action_type: routed.chosen.action.type,
       latency_ms: latencyMs,
       timing: {
         ...((existingTiming ?? {}) as JsonObject),

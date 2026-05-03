@@ -4,6 +4,7 @@ import { act, createElement, type ReactElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../../apps/web/src/App";
+import type { DecisionRequestPayload } from "@tichuml/shared";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
@@ -276,6 +277,294 @@ describe("live gameplay executor", () => {
       );
       expect(decisionRequests).toHaveLength(1);
       expect(bodyText()).not.toContain("East thinking");
+    } finally {
+      view.unmount();
+    }
+  });
+
+  it("applies successful server GT auto-advance in seat order and leaves the phase synced with the frontend", async () => {
+    setStoredBackendSettings({
+      decisionMode: "server_heuristic",
+      backendBaseUrl: "http://192.168.50.36:4310",
+      telemetryEnabled: true,
+      serverFallbackEnabled: false
+    });
+
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    const decisionRequests: DecisionRequestPayload[] = [];
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+
+        if (url.includes("/api/entropy/generate")) {
+          const payload = createEntropyPayload();
+          return {
+            ok: true,
+            status: 200,
+            json: async () => payload,
+            text: async () => JSON.stringify(payload)
+          } as Response;
+        }
+
+        if (url.endsWith("/api/decision/request")) {
+          const payload = JSON.parse(
+            String(init?.body ?? "{}")
+          ) as DecisionRequestPayload;
+          decisionRequests.push(payload);
+          expect(payload.phase).toBe("grand_tichu_window");
+          expect(["seat-1", "seat-2", "seat-3"]).toContain(payload.actor_seat);
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              accepted: true,
+              chosen_action: {
+                type: "decline_grand_tichu",
+                seat: payload.actor_seat
+              },
+              provider_used: "server_heuristic",
+              provider_reason: "Resolved by server GT auto-advance test.",
+              metadata: {
+                response_phase: payload.phase,
+                chosen_action_type: "decline_grand_tichu"
+              },
+              telemetry_id: 321
+            }),
+            text: async () =>
+              JSON.stringify({
+                accepted: true,
+                chosen_action: {
+                  type: "decline_grand_tichu",
+                  seat: payload.actor_seat
+                },
+                provider_used: "server_heuristic",
+                provider_reason: "Resolved by server GT auto-advance test.",
+                metadata: {
+                  response_phase: payload.phase,
+                  chosen_action_type: "decline_grand_tichu"
+                },
+                telemetry_id: 321
+              })
+          } as Response;
+        }
+
+        if (url.includes("/api/telemetry/")) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ accepted: true, telemetry_id: 123 }),
+            text: async () =>
+              JSON.stringify({ accepted: true, telemetry_id: 123 })
+          } as Response;
+        }
+
+        if (url.includes("/health")) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ ok: true, database: "postgres" }),
+            text: async () => JSON.stringify({ ok: true, database: "postgres" })
+          } as Response;
+        }
+
+        throw new Error(`Unexpected fetch ${init?.method ?? "GET"} ${url}`);
+      })
+    );
+
+    const view = render(createElement(App));
+    try {
+      const nextButton = await waitForActionButton("Next");
+      expect(nextButton).toBeTruthy();
+
+      await act(async () => {
+        nextButton?.click();
+        await wait(20);
+      });
+
+      const reachedExchange = await waitForCondition(
+        () =>
+          bodyText().includes("Exchange cards") &&
+          !bodyText().includes("Auto-advancing"),
+        120,
+        50
+      );
+
+      expect(reachedExchange).toBe(true);
+      expect(
+        Array.from(new Set(decisionRequests.map((request) => request.actor_seat)))
+      ).toEqual(["seat-1", "seat-2", "seat-3"]);
+
+      const appliedActorOrder = infoSpy.mock.calls
+        .filter(
+          (call) =>
+            call[0] === "[phase-transition]" &&
+            typeof call[1] === "object" &&
+            call[1] !== null &&
+            (call[1] as { event?: string }).event ===
+              "frontend_transition_applied"
+        )
+        .map((call) => (call[1] as { actor?: string }).actor)
+        .filter(Boolean);
+      const collapsedActorOrder = appliedActorOrder.filter(
+        (actor, index) => index === 0 || actor !== appliedActorOrder[index - 1]
+      );
+      expect(collapsedActorOrder.slice(0, 4)).toEqual([
+        "seat-0",
+        "seat-1",
+        "seat-2",
+        "seat-3"
+      ]);
+      expect(
+        infoSpy.mock.calls.some(
+          (call) =>
+            call[0] === "[phase-transition]" &&
+            typeof call[1] === "object" &&
+            call[1] !== null &&
+            (call[1] as { event?: string; frontendAppliedPhase?: string }).event ===
+              "frontend_phase_changed" &&
+            (call[1] as { frontendAppliedPhase?: string }).frontendAppliedPhase ===
+              "pass_select"
+        )
+      ).toBe(true);
+    } finally {
+      view.unmount();
+    }
+  });
+
+  it("shows a real GT auto-advance error and lets Next retry the failed backend step", async () => {
+    setStoredBackendSettings({
+      decisionMode: "server_heuristic",
+      backendBaseUrl: "http://192.168.50.36:4310",
+      telemetryEnabled: true,
+      serverFallbackEnabled: false
+    });
+
+    let decisionRequestCount = 0;
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+
+        if (url.includes("/api/entropy/generate")) {
+          const payload = createEntropyPayload();
+          return {
+            ok: true,
+            status: 200,
+            json: async () => payload,
+            text: async () => JSON.stringify(payload)
+          } as Response;
+        }
+
+        if (url.endsWith("/api/decision/request")) {
+          decisionRequestCount += 1;
+          const payload = JSON.parse(
+            String(init?.body ?? "{}")
+          ) as DecisionRequestPayload;
+          if (decisionRequestCount === 1) {
+            return {
+              ok: false,
+              status: 503,
+              text: async () => JSON.stringify({ error: "backend unavailable" })
+            } as Response;
+          }
+
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              accepted: true,
+              chosen_action: {
+                type: "decline_grand_tichu",
+                seat: payload.actor_seat
+              },
+              provider_used: "server_heuristic",
+              provider_reason: "Resolved by retry test.",
+              metadata: {
+                response_phase: payload.phase,
+                chosen_action_type: "decline_grand_tichu"
+              },
+              telemetry_id: 555
+            }),
+            text: async () =>
+              JSON.stringify({
+                accepted: true,
+                chosen_action: {
+                  type: "decline_grand_tichu",
+                  seat: payload.actor_seat
+                },
+                provider_used: "server_heuristic",
+                provider_reason: "Resolved by retry test.",
+                metadata: {
+                  response_phase: payload.phase,
+                  chosen_action_type: "decline_grand_tichu"
+                },
+                telemetry_id: 555
+              })
+          } as Response;
+        }
+
+        if (url.includes("/api/telemetry/")) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ accepted: true, telemetry_id: 123 }),
+            text: async () =>
+              JSON.stringify({ accepted: true, telemetry_id: 123 })
+          } as Response;
+        }
+
+        if (url.includes("/health")) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ ok: true, database: "postgres" }),
+            text: async () => JSON.stringify({ ok: true, database: "postgres" })
+          } as Response;
+        }
+
+        throw new Error(`Unexpected fetch ${init?.method ?? "GET"} ${url}`);
+      })
+    );
+
+    const view = render(createElement(App));
+    try {
+      const nextButton = await waitForActionButton("Next");
+      expect(nextButton).toBeTruthy();
+
+      await act(async () => {
+        nextButton?.click();
+        await wait(20);
+      });
+
+      const surfacedError = await waitForCondition(
+        () => bodyText().includes("Auto-advance failed: backend unavailable"),
+        120,
+        50
+      );
+      expect(surfacedError).toBe(true);
+      expect(actionButtonLabels()[0]).toEqual({
+        text: "Next",
+        disabled: false
+      });
+
+      await act(async () => {
+        findActionButton("Next")?.click();
+        await wait(20);
+      });
+
+      const reachedExchange = await waitForCondition(
+        () =>
+          bodyText().includes("Exchange cards") &&
+          !bodyText().includes("Auto-advance failed:"),
+        120,
+        50
+      );
+      expect(reachedExchange).toBe(true);
+      expect(decisionRequestCount).toBeGreaterThanOrEqual(4);
     } finally {
       view.unmount();
     }
