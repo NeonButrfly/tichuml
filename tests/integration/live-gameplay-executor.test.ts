@@ -317,6 +317,20 @@ describe("live gameplay executor", () => {
           expect(["seat-1", "seat-2", "seat-3"]).toContain(payload.actor_seat);
           expect(payload.metadata.scoring_path).toBe("fast_path");
           expect(Array.isArray(payload.legal_actions)).toBe(true);
+          const actionTypes = (
+            payload.legal_actions as Array<Record<string, unknown>>
+          ).map((action) => String(action.type));
+          expect(actionTypes.length).toBeGreaterThan(0);
+          expect(
+            actionTypes.every(
+              (actionType) =>
+                actionType === "call_grand_tichu" ||
+                actionType === "decline_grand_tichu"
+            )
+          ).toBe(true);
+          expect(actionTypes).not.toContain("play_cards");
+          expect(actionTypes).not.toContain("pass_turn");
+          expect(actionTypes).not.toContain("advance_phase");
           for (const action of payload.legal_actions as Array<Record<string, unknown>>) {
             const owner =
               typeof action.seat === "string"
@@ -423,8 +437,23 @@ describe("live gameplay executor", () => {
           (call) =>
             (call[1] as { fast_path_used?: boolean }).fast_path_used === true &&
             (call[1] as { validation_result?: string }).validation_result ===
-              "scoped"
+              "grand_tichu_only"
         )
+      ).toBe(true);
+      expect(
+        requestLogs.every((call) => {
+          const legalActions = (call[1] as { legal_actions?: Array<{ type: string }> })
+            .legal_actions;
+          return (
+            Array.isArray(legalActions) &&
+            legalActions.length > 0 &&
+            legalActions.every(
+              (action) =>
+                action.type === "call_grand_tichu" ||
+                action.type === "decline_grand_tichu"
+            )
+          );
+        })
       ).toBe(true);
 
       const appliedActorOrder = infoSpy.mock.calls
@@ -459,6 +488,22 @@ describe("live gameplay executor", () => {
               "pass_select"
         )
       ).toBe(true);
+      expect(
+        infoSpy.mock.calls.some(
+          (call) =>
+            call[0] === "[phase-transition]" &&
+            typeof call[1] === "object" &&
+            call[1] !== null &&
+            (call[1] as { event?: string; chosenGrandTichuAction?: string }).event ===
+              "frontend_transition_applied" &&
+            (call[1] as { chosenGrandTichuAction?: string }).chosenGrandTichuAction ===
+              "decline_grand_tichu" &&
+            ((call[1] as { nextGrandTichuActor?: string | null }).nextGrandTichuActor ===
+              "seat-1" ||
+              (call[1] as { requestedNextPhase?: string }).requestedNextPhase ===
+                "pass_select")
+        )
+      ).toBe(true);
     } finally {
       view.unmount();
     }
@@ -473,7 +518,7 @@ describe("live gameplay executor", () => {
     });
 
     let decisionRequestCount = 0;
-    vi.spyOn(console, "info").mockImplementation(() => {});
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.stubGlobal(
       "fetch",
@@ -581,6 +626,21 @@ describe("live gameplay executor", () => {
         text: "Next",
         disabled: false
       });
+      expect(
+        infoSpy.mock.calls.some(
+          (call) =>
+            call[0] === "[phase-transition]" &&
+            typeof call[1] === "object" &&
+            call[1] !== null &&
+            (call[1] as { event?: string; actor?: string; actionType?: string }).event ===
+              "frontend_transition_applied" &&
+            (call[1] as { actor?: string }).actor === "seat-0" &&
+            (call[1] as { actionType?: string }).actionType ===
+              "decline_grand_tichu" &&
+            (call[1] as { nextGrandTichuActor?: string | null }).nextGrandTichuActor ===
+              "seat-1"
+        )
+      ).toBe(true);
 
       await act(async () => {
         findActionButton("Next")?.click();

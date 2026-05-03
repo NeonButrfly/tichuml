@@ -58,6 +58,26 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 - Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
 - Status Source: GitHub issue state only.
 
+### 2026-05-03 - Grand Tichu window decisions must stay GT-only
+
+- Prompt Signal: The deeper GT bug report clarified that the Grand Tichu window
+  must not be treated like a generic phase-advance or play/pass decision. In
+  that window, the actor should only choose between `call_grand_tichu` and
+  `decline_grand_tichu`.
+- Interpreted Requirement: Issue
+  [#58](https://github.com/NeonButrfly/tichuml/issues/58) also tracks a GT
+  decision contract for live UI flow: GT auto-advance requests must send only
+  actor-scoped GT actions, the `Grand Tichu` button must submit
+  `call_grand_tichu`, the `Next` button must submit `decline_grand_tichu`, and
+  the phase must progress seat-by-seat through the GT queue before exiting to
+  `pass_select`.
+- Affected Systems: `apps/web/src/App.tsx`,
+  `tests/integration/live-gameplay-executor.test.ts`, and live GT executor
+  logging/validation.
+- Linked GitHub Issue: [#58](https://github.com/NeonButrfly/tichuml/issues/58)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.
+
 ### 2026-04-10 - Passing lanes layout
 
 - Prompt Signal: The forward stabilization request explicitly called out passing lanes layout.

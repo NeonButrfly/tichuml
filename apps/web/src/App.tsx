@@ -162,6 +162,55 @@ function createActorOnlyLegalActions(
   return actorOnly;
 }
 
+function isGrandTichuDecisionAction(
+  action: LegalAction
+): action is Extract<
+  LegalAction,
+  { type: "call_grand_tichu" | "decline_grand_tichu" }
+> {
+  return (
+    action.type === "call_grand_tichu" || action.type === "decline_grand_tichu"
+  );
+}
+
+function createGrandTichuDecisionLegalActions(
+  legalActions: LegalActionMap,
+  actorSeat: SeatId
+) {
+  const actorActions = legalActions[actorSeat] ?? [];
+  const canCallGrandTichu = actorActions.some(
+    (action) => action.type === "call_grand_tichu"
+  );
+  const gtActions: LegalAction[] = canCallGrandTichu
+    ? [
+        { type: "call_grand_tichu", seat: actorSeat },
+        { type: "decline_grand_tichu", seat: actorSeat }
+      ]
+    : [{ type: "decline_grand_tichu", seat: actorSeat }];
+
+  return {
+    [actorSeat]: gtActions
+  } as LegalActionMap;
+}
+
+function createDecisionRequestLegalActions(config: {
+  state: GameState;
+  legalActions: LegalActionMap;
+  actor: ActorId;
+}) {
+  if (
+    config.state.phase === "grand_tichu_window" &&
+    config.actor !== SYSTEM_ACTOR
+  ) {
+    return createGrandTichuDecisionLegalActions(
+      config.legalActions,
+      config.actor
+    );
+  }
+
+  return createActorOnlyLegalActions(config.legalActions, config.actor);
+}
+
 function createActorPlayOnlyLegalActions(
   legalActions: LegalActionMap,
   actor: SeatId
@@ -187,21 +236,26 @@ function buildDecisionRequestPayload(config: {
   decisionIndex: number;
   requestedProvider: RequestedDecisionProvider;
 }): DecisionRequestPayload {
-  const actorScopedLegalActions = createActorOnlyLegalActions(
-    config.legalActions,
-    config.actor
-  );
+  const actorScopedLegalActions = createDecisionRequestLegalActions({
+    state: config.state,
+    legalActions: config.legalActions,
+    actor: config.actor
+  });
   const actorActions = Array.isArray(actorScopedLegalActions[config.actor])
     ? actorScopedLegalActions[config.actor]
     : [];
   const legalActionPreview = actorActions
     .slice(0, 4)
     .map((action) => buildAutomationActionSignature(action));
+  const isGrandTichuWindow =
+    config.state.phase === "grand_tichu_window" && config.actor !== SYSTEM_ACTOR;
   const scopeIssues: string[] = [];
   let scoringPath: DecisionScoringPath = "rich_path";
   let fastPathUsed = false;
   let validationResult:
     | "scoped"
+    | "grand_tichu_only"
+    | "grand_tichu_invalid_actions"
     | "rich_path_provider"
     | "system_actor"
     | "canonical_actor_mismatch"
@@ -241,10 +295,25 @@ function buildDecisionRequestPayload(config: {
         }
       }
 
+      if (isGrandTichuWindow) {
+        const invalidGrandTichuActions = actorActions.filter(
+          (action) => !isGrandTichuDecisionAction(action)
+        );
+        const hasDeclineAction = actorActions.some(
+          (action) => action.type === "decline_grand_tichu"
+        );
+        if (invalidGrandTichuActions.length > 0 || !hasDeclineAction) {
+          validationResult = "grand_tichu_invalid_actions";
+          scopeIssues.push(
+            `Grand Tichu requests must contain only call_grand_tichu/decline_grand_tichu for ${config.actorSeat}.`
+          );
+        }
+      }
+
       if (scopeIssues.length === 0) {
         scoringPath = "fast_path";
         fastPathUsed = true;
-        validationResult = "scoped";
+        validationResult = isGrandTichuWindow ? "grand_tichu_only" : "scoped";
       }
     }
   }
@@ -258,7 +327,8 @@ function buildDecisionRequestPayload(config: {
     fast_path_used: fastPathUsed,
     scoring_path: scoringPath,
     validation_result: validationResult,
-    validation_issues: scopeIssues
+    validation_issues: scopeIssues,
+    ...(isGrandTichuWindow ? { legal_actions: actorActions } : {})
   });
 
   return {
@@ -2151,7 +2221,11 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
 
         const legalActions = autoplayLocal
           ? round.legalActions
-          : createActorOnlyLegalActions(round.legalActions, primaryActor);
+          : createDecisionRequestLegalActions({
+              state: round.nextState,
+              legalActions: round.legalActions,
+              actor: primaryActor
+            });
         const requestPayload =
           primaryActor === SYSTEM_ACTOR
             ? buildDecisionRequestPayload({
@@ -2206,6 +2280,10 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
               : null,
           actor: primaryActor,
           actionType: initialResolution.chosen.action.type,
+          chosenGrandTichuAction:
+            round.nextState.phase === "grand_tichu_window"
+              ? initialResolution.chosen.action.type
+              : null,
           backendResponsePhase:
             typeof initialResolution.responseMetadata?.response_phase ===
             "string"
@@ -2310,6 +2388,10 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
           requestedNextPhase: nextResult.nextState.phase,
           actor: primaryActor,
           actionType: initialResolution.chosen.action.type,
+          chosenGrandTichuAction:
+            round.nextState.phase === "grand_tichu_window"
+              ? initialResolution.chosen.action.type
+              : null,
           backendResponsePhase:
             typeof initialResolution.responseMetadata?.response_phase ===
             "string"
@@ -2317,7 +2399,8 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
               : requestPayload.phase,
           frontendAppliedPhase: nextResult.nextState.phase,
           nextActiveSeat: nextResult.nextState.activeSeat,
-          grandTichuQueue: [...nextResult.nextState.grandTichuQueue]
+          grandTichuQueue: [...nextResult.nextState.grandTichuQueue],
+          nextGrandTichuActor: nextResult.nextState.grandTichuQueue[0] ?? null
         });
         await emitEventTelemetry({
           settings: backendSettings,
@@ -2835,6 +2918,8 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
       requestedNextPhase: nextResult.nextState.phase,
       actor: chosen?.actor ?? getActionActor(action),
       actionType: action.type,
+      chosenGrandTichuAction:
+        state.phase === "grand_tichu_window" ? action.type : null,
       backendResponsePhase:
         options?.trigger === "manual_fallback"
           ? decisionDiagnostics.lastRequestPayload?.phase ?? state.phase
@@ -2842,6 +2927,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
       frontendAppliedPhase: nextResult.nextState.phase,
       nextActiveSeat: nextResult.nextState.activeSeat,
       grandTichuQueue: [...nextResult.nextState.grandTichuQueue],
+      nextGrandTichuActor: nextResult.nextState.grandTichuQueue[0] ?? null,
       trigger: options?.trigger ?? "ui"
     });
     const dogAnimation = getDogLeadAnimationView(action, nextResult);
@@ -3094,10 +3180,11 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     resetAutomationRequest();
     setThinkingActor(primaryActor);
 
-    const legalActions = createActorOnlyLegalActions(
-      round.legalActions,
-      primaryActor
-    );
+    const legalActions = createDecisionRequestLegalActions({
+      state,
+      legalActions: round.legalActions,
+      actor: primaryActor
+    });
     const requestPayload =
       primaryActor === SYSTEM_ACTOR
         ? buildDecisionRequestPayload({
@@ -3150,6 +3237,10 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
               : null,
           actor: primaryActor,
           actionType: resolution.chosen.action.type,
+          chosenGrandTichuAction:
+            state.phase === "grand_tichu_window"
+              ? resolution.chosen.action.type
+              : null,
           backendResponsePhase:
             typeof resolution.responseMetadata?.response_phase === "string"
               ? resolution.responseMetadata.response_phase
@@ -3518,10 +3609,11 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     }
 
     const actorSeat = state.activeSeat;
-    const legalActions = createActorOnlyLegalActions(
-      round.legalActions,
-      actorSeat
-    );
+    const legalActions = createDecisionRequestLegalActions({
+      state,
+      legalActions: round.legalActions,
+      actor: actorSeat
+    });
     const requestPayload = buildDecisionRequestPayload({
       matchId,
         state,
