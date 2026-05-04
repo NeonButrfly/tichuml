@@ -3,8 +3,16 @@
 import { act, createElement, type ReactElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  applyEngineAction,
+  createInitialGameState,
+  getCanonicalActiveSeatFromState,
+  type EngineResult,
+  type SeatId
+} from "@tichuml/engine";
 import { App } from "../../apps/web/src/App";
-import type { DecisionRequestPayload } from "@tichuml/shared";
+import type { DecisionRequestPayload, JsonObject } from "@tichuml/shared";
+import { resolveDecisionWithProvider } from "../../apps/web/src/backend/decision-provider";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
@@ -125,6 +133,86 @@ function buildSelectPassDecisionResponse(
     },
     telemetry_id: telemetryId
   };
+}
+
+function buildAutomatedDecisionResponse(
+  payload: DecisionRequestPayload,
+  telemetryId: number,
+  providerReason: string
+) {
+  if (payload.phase === "pass_select") {
+    return buildSelectPassDecisionResponse(payload, telemetryId, providerReason);
+  }
+
+  const actorActions = Array.isArray(payload.legal_actions)
+    ? (payload.legal_actions as Array<Record<string, unknown>>)
+    : [];
+  const chosenAction =
+    payload.phase === "grand_tichu_window"
+      ? actorActions.find((action) => action.type === "decline_grand_tichu") ??
+        actorActions[0]
+      : actorActions[0];
+
+  if (!chosenAction || typeof chosenAction.type !== "string") {
+    throw new Error(
+      `Expected an automated action for ${payload.phase}; received ${actorActions.length}.`
+    );
+  }
+
+  return {
+    accepted: true,
+    chosen_action: chosenAction,
+    provider_used: "server_heuristic",
+    provider_reason: providerReason,
+    metadata: {
+      response_phase: payload.phase,
+      chosen_action_type: chosenAction.type
+    },
+    telemetry_id: telemetryId
+  };
+}
+
+function advanceToTrickPlay(seed = "browser-trick-play-decision-provider"): EngineResult {
+  let result = createInitialGameState({ seed });
+  while (result.nextState.phase === "grand_tichu_window") {
+    const activeSeat = getCanonicalActiveSeatFromState(result.nextState);
+    result = applyEngineAction(result.nextState, {
+      type: "decline_grand_tichu",
+      seat: activeSeat
+    });
+  }
+
+  while (result.nextState.phase === "pass_select") {
+    const actorSeat = getCanonicalActiveSeatFromState(result.nextState);
+    const actorActions = result.legalActions[actorSeat];
+    const selectPassAction = actorActions.find(
+      (action) => action.type === "select_pass"
+    );
+    if (
+      !selectPassAction ||
+      !("availableCardIds" in selectPassAction) ||
+      selectPassAction.availableCardIds.length < 3
+    ) {
+      throw new Error(`Expected selectable pass cards for ${actorSeat}.`);
+    }
+
+    result = applyEngineAction(result.nextState, {
+      type: "select_pass",
+      seat: actorSeat,
+      left: selectPassAction.availableCardIds[0]!,
+      partner: selectPassAction.availableCardIds[1]!,
+      right: selectPassAction.availableCardIds[2]!
+    });
+  }
+
+  while (result.nextState.phase !== "trick_play") {
+    result = applyEngineAction(result.nextState, {
+      type: "advance_phase",
+      actor: "system"
+    });
+  }
+
+  return result;
 }
 
 async function waitForActionButton(label: string) {
@@ -776,6 +864,66 @@ describe("live gameplay executor", () => {
     } finally {
       view.unmount();
     }
+  });
+
+  it("resolves trick_play actions through the browser decision-provider path without frontend crashes", async () => {
+    const trickPlay = advanceToTrickPlay();
+    const actorSeat = getCanonicalActiveSeatFromState(trickPlay.nextState);
+    expect(actorSeat).not.toBeNull();
+
+    const payload: DecisionRequestPayload = {
+      game_id: "browser-trick-play-game",
+      hand_id: "browser-trick-play-hand",
+      phase: trickPlay.nextState.phase,
+      actor_seat: actorSeat,
+      schema_version: 1,
+      engine_version: "test",
+      sim_version: "test",
+      state_raw: null,
+      state_norm: trickPlay.derivedView as unknown as JsonObject,
+      legal_actions: trickPlay.legalActions[actorSeat as SeatId] as unknown as JsonObject[],
+      requested_provider: "server_heuristic",
+      metadata: {
+        scoring_path: "fast_path"
+      }
+    };
+    const responseBody = buildAutomatedDecisionResponse(
+      payload,
+      777,
+      "Resolved by browser trick-play automation test."
+    );
+    const fetchImpl = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => responseBody,
+      text: async () => JSON.stringify(responseBody)
+    })) as unknown as typeof fetch;
+
+    const resolution = await resolveDecisionWithProvider({
+      context: {
+        state: trickPlay.nextState,
+        legalActions: trickPlay.legalActions
+      },
+      actor: actorSeat as SeatId,
+      settings: {
+        decisionMode: "server_heuristic",
+        backendBaseUrl: "http://127.0.0.1:4310",
+        telemetryEnabled: true,
+        serverFallbackEnabled: false
+      },
+      requestPayload: payload,
+      fetchImpl
+    });
+
+    expect(resolution.providerUsed).toBe("server_heuristic");
+    expect(resolution.usedFallback).toBe(false);
+    expect(resolution.chosen.actor).toBe(actorSeat);
+    expect(resolution.chosen.action.type).toBe(
+      (responseBody.chosen_action as { type: string }).type
+    );
+    expect(() =>
+      applyEngineAction(trickPlay.nextState, resolution.chosen.action)
+    ).not.toThrow();
   });
 
   it("records a real GT auto-advance failure for manual recovery", async () => {

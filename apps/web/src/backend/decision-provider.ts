@@ -17,6 +17,17 @@ import {
   postDecisionRequest
 } from "./client";
 
+function assertBrowserDecisionProviderRuntime(): void {
+  if (typeof window === "undefined" || import.meta.env.TEST) {
+    return;
+  }
+
+  console.assert(
+    typeof process === "undefined",
+    "[decision-provider] browser runtime unexpectedly exposed Node process"
+  );
+}
+
 export type DecisionResolution = {
   chosen: ChosenDecision;
   requestedProvider: RequestedDecisionProvider | "local";
@@ -82,6 +93,7 @@ export async function resolveDecisionWithProvider(config: {
   requestPayload: DecisionRequestPayload;
   fetchImpl?: typeof fetch;
 }): Promise<DecisionResolution> {
+  assertBrowserDecisionProviderRuntime();
   const { context, actor, settings, requestPayload, fetchImpl } = config;
 
   if (actor === SYSTEM_ACTOR || settings.decisionMode === "local") {

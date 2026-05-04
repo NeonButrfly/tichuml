@@ -22,6 +22,7 @@ import {
   type TeamId,
   type TrickState
 } from "./types.js";
+import { readRuntimeEnv } from "@tichuml/shared";
 import {
   cardsFromIds,
   getCanonicalCardIdsKey,
@@ -71,7 +72,9 @@ type PlayActionGenerationResult = {
 };
 
 function traceStraightResponsesEnabled(): boolean {
-  const rawValue = process.env.TICHU_TRACE_STRAIGHT_RESPONSES?.trim().toLowerCase();
+  const rawValue = readRuntimeEnv("TICHU_TRACE_STRAIGHT_RESPONSES")
+    ?.trim()
+    .toLowerCase();
   return rawValue === "1" || rawValue === "true" || rawValue === "yes";
 }
 

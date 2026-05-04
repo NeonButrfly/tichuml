@@ -7,6 +7,7 @@ import {
   type StandardRank
 } from "@tichuml/engine";
 import { engineFoundation } from "@tichuml/engine";
+import { readRuntimeEnv } from "@tichuml/shared";
 import {
   buildAggressionContextV1,
   computeGrandTichuAggressionV1,
@@ -69,7 +70,9 @@ export {
 } from "./serverFastPath.js";
 
 function traceStraightResponsesEnabled(): boolean {
-  const rawValue = process.env.TICHU_TRACE_STRAIGHT_RESPONSES?.trim().toLowerCase();
+  const rawValue = readRuntimeEnv("TICHU_TRACE_STRAIGHT_RESPONSES")
+    ?.trim()
+    .toLowerCase();
   return rawValue === "1" || rawValue === "true" || rawValue === "yes";
 }
 

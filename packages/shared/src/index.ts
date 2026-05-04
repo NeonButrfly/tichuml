@@ -1,6 +1,9 @@
+import { readRuntimeEnv } from "./runtime-env.js";
+
 export const FOUNDATION_MILESTONE = "milestone-0";
 export * from "./backend.js";
 export * from "./outcomes.js";
+export * from "./runtime-env.js";
 export * from "./seed.js";
 
 export type WorkspacePackage =
@@ -44,9 +47,6 @@ export const workspaceManifests: WorkspaceManifest[] = [
   }
 ];
 
-const runtimeEnv =
-  typeof process !== "undefined" ? process.env : undefined;
-
 export const defaultDatabaseUrl =
-  runtimeEnv?.DATABASE_URL ??
+  readRuntimeEnv("DATABASE_URL") ??
   "postgres://tichu:tichu_dev_password@localhost:54329/tichu";

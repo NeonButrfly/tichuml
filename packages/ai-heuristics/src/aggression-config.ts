@@ -1,5 +1,6 @@
 import {
   clampOutcomeNumber,
+  readRuntimeEnv,
   type AggressionRiskLevel
 } from "@tichuml/shared";
 
@@ -60,11 +61,7 @@ export function resolveAggressionProfile(
 }
 
 export function getControlledAggressionConfig(): ControlledAggressionConfig {
-  const profile = resolveAggressionProfile(
-    typeof process !== "undefined"
-      ? process.env.TICHU_AGGRESSION_PROFILE
-      : undefined
-  );
+  const profile = resolveAggressionProfile(readRuntimeEnv("TICHU_AGGRESSION_PROFILE"));
   return PROFILE_CONFIG[profile];
 }
 

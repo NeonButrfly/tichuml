@@ -14,6 +14,29 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 
 ## Entries
 
+### 2026-05-03 - Browser decision-provider code must not depend on Node globals during trick play
+
+- Prompt Signal: Live trick-play automation was failing in the browser with
+  repeated `frontend_apply_failed` retries and the concrete runtime error
+  `process is not defined`, which confirmed that the browser decision-provider
+  path was still evaluating Node-oriented environment access.
+- Interpreted Requirement: Issue
+  [#58](https://github.com/NeonButrfly/tichuml/issues/58) also tracks a hard
+  browser-runtime contract for live automation: frontend decision-provider,
+  executor, and browser-imported heuristic/engine helpers must not rely on
+  `process`, `process.env`, or `process.nextTick`; browser env reads must use
+  Vite/browser-safe access, trick-play decision resolution must return a valid
+  action without throwing, and successful backend trick-play responses must
+  remain applyable by the frontend without entering an infinite retry loop.
+- Affected Systems: `apps/web/src/backend/decision-provider.ts`,
+  `packages/shared/src/runtime-env.ts`, `packages/ai-heuristics/src/index.ts`,
+  `packages/ai-heuristics/src/aggression-config.ts`,
+  `packages/engine/src/engine.ts`, `packages/telemetry/src/client.ts`,
+  `tests/integration/live-gameplay-executor.test.ts`.
+- Linked GitHub Issue: [#58](https://github.com/NeonButrfly/tichuml/issues/58)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.
+
 ### 2026-05-03 - Grand Tichu auto-advance must stay in sync with the real game state
 
 - Prompt Signal: The live table could get stuck showing `grand_tichu_window`

@@ -1,6 +1,7 @@
 import {
   TELEMETRY_DECISION_PATH,
   TELEMETRY_EVENT_PATH,
+  readRuntimeEnv,
   validateTelemetryDecisionPayload,
   validateTelemetryEventPayload,
   type TelemetryDecisionPayload,
@@ -50,10 +51,7 @@ const mismatchDiagnosticState = new Map<
 >();
 
 function diagnosticsEnabled(): boolean {
-  const value =
-    typeof process !== "undefined"
-      ? process.env.SIM_DIAGNOSTICS?.trim().toLowerCase()
-      : undefined;
+  const value = readRuntimeEnv("SIM_DIAGNOSTICS")?.trim().toLowerCase();
   return value === "1" || value === "true" || value === "yes";
 }
 
