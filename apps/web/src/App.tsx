@@ -194,11 +194,46 @@ function createGrandTichuDecisionLegalActions(
   } as LegalActionMap;
 }
 
+function createRequiredPassSelectDecisionLegalActions(
+  state: GameState,
+  legalActions: LegalActionMap,
+  actorSeat: SeatId
+) {
+  if (state.passSelections[actorSeat]) {
+    return {
+      [actorSeat]: []
+    } as LegalActionMap;
+  }
+
+  const selectPassTemplate =
+    (legalActions[actorSeat] ?? []).find(
+      (
+        action
+      ): action is Extract<LegalAction, { type: "select_pass" }> =>
+        action.type === "select_pass"
+    ) ?? null;
+
+  return {
+    [actorSeat]: selectPassTemplate ? [selectPassTemplate] : []
+  } as LegalActionMap;
+}
+
 function createDecisionRequestLegalActions(config: {
   state: GameState;
   legalActions: LegalActionMap;
   actor: ActorId;
 }) {
+  if (
+    config.state.phase === "pass_select" &&
+    config.actor !== SYSTEM_ACTOR
+  ) {
+    return createRequiredPassSelectDecisionLegalActions(
+      config.state,
+      config.legalActions,
+      config.actor
+    );
+  }
+
   if (
     config.state.phase === "grand_tichu_window" &&
     config.actor !== SYSTEM_ACTOR
@@ -210,6 +245,19 @@ function createDecisionRequestLegalActions(config: {
   }
 
   return createActorOnlyLegalActions(config.legalActions, config.actor);
+}
+
+function isActorScopedRequiredPassSelection(config: {
+  state: GameState;
+  actorSeat: SeatId;
+  actorActions: LegalAction[];
+}) {
+  return (
+    config.state.phase === "pass_select" &&
+    !config.state.passSelections[config.actorSeat] &&
+    config.actorActions.length > 0 &&
+    config.actorActions.every((action) => action.type === "select_pass")
+  );
 }
 
 function createActorPlayOnlyLegalActions(
@@ -264,11 +312,15 @@ function buildDecisionRequestPayload(config: {
     .map((action) => buildAutomationActionSignature(action));
   const isGrandTichuWindow =
     config.state.phase === "grand_tichu_window" && config.actor !== SYSTEM_ACTOR;
+  const isPassSelectDecision =
+    config.state.phase === "pass_select" && config.actor !== SYSTEM_ACTOR;
   const scopeIssues: string[] = [];
   let scoringPath: DecisionScoringPath = "rich_path";
   let fastPathUsed = false;
   let validationResult:
     | "scoped"
+    | "pass_select_required_only"
+    | "pass_select_invalid_actions"
     | "grand_tichu_only"
     | "grand_tichu_invalid_actions"
     | "rich_path_provider"
@@ -286,14 +338,33 @@ function buildDecisionRequestPayload(config: {
       scopeIssues.push(`No legal actions found for ${config.actorSeat}.`);
     } else {
       let canonicalActorSeat: SeatId | null = null;
-      try {
-        canonicalActorSeat = getCanonicalActiveSeatFromState(config.state);
-      } catch (error) {
-        validationResult = "canonical_actor_unavailable";
-        scopeIssues.push(error instanceof Error ? error.message : String(error));
+      if (isPassSelectDecision) {
+        if (
+          !isActorScopedRequiredPassSelection({
+            state: config.state,
+            actorSeat: config.actorSeat,
+            actorActions
+          })
+        ) {
+          validationResult = "pass_select_invalid_actions";
+          scopeIssues.push(
+            `Pass selection requests must contain only unresolved select_pass actions for ${config.actorSeat}.`
+          );
+        }
+      } else {
+        try {
+          canonicalActorSeat = getCanonicalActiveSeatFromState(config.state);
+        } catch (error) {
+          validationResult = "canonical_actor_unavailable";
+          scopeIssues.push(error instanceof Error ? error.message : String(error));
+        }
       }
 
-      if (canonicalActorSeat !== null && canonicalActorSeat !== config.actorSeat) {
+      if (
+        !isPassSelectDecision &&
+        canonicalActorSeat !== null &&
+        canonicalActorSeat !== config.actorSeat
+      ) {
         validationResult = "canonical_actor_mismatch";
         scopeIssues.push(
           `Canonical actor ${canonicalActorSeat} does not match request actor ${config.actorSeat}.`
@@ -328,7 +399,11 @@ function buildDecisionRequestPayload(config: {
       if (scopeIssues.length === 0) {
         scoringPath = "fast_path";
         fastPathUsed = true;
-        validationResult = isGrandTichuWindow ? "grand_tichu_only" : "scoped";
+        validationResult = isGrandTichuWindow
+          ? "grand_tichu_only"
+          : isPassSelectDecision
+            ? "pass_select_required_only"
+            : "scoped";
       }
     }
   }
@@ -343,7 +418,9 @@ function buildDecisionRequestPayload(config: {
     scoring_path: scoringPath,
     validation_result: validationResult,
     validation_issues: scopeIssues,
-    ...(isGrandTichuWindow ? { legal_actions: actorActions } : {})
+    ...((isGrandTichuWindow || isPassSelectDecision)
+      ? { legal_actions: actorActions }
+      : {})
   });
 
   return {
@@ -419,9 +496,13 @@ function buildAutomationActionSignature(action: EngineAction | LegalAction): str
         String(action.phoenixAsRank ?? "none")
       ].join("|");
     case "select_pass":
-      return [action.type, action.seat, action.availableCardIds.join(",")].join(
-        "|"
-      );
+      return [
+        action.type,
+        action.seat,
+        "availableCardIds" in action
+          ? action.availableCardIds.join(",")
+          : [action.left, action.partner, action.right].join(",")
+      ].join("|");
     case "assign_dragon_trick":
       return [action.type, action.seat, action.recipient].join("|");
     case "advance_phase":
@@ -483,12 +564,22 @@ function buildAutomationRequestKey(config: {
 }): string {
   const state = config.result.nextState;
   const actorActions =
-    config.autoplayLocal && config.primaryActor === LOCAL_SEAT
-      ? config.result.legalActions
-      : {
+    config.primaryActor === SYSTEM_ACTOR
+      ? {
+          [SYSTEM_ACTOR]: config.result.legalActions[SYSTEM_ACTOR] ?? []
+        }
+      : state.phase === "pass_select"
+        ? createDecisionRequestLegalActions({
+            state,
+            legalActions: config.result.legalActions,
+            actor: config.primaryActor
+          })
+        : config.autoplayLocal && config.primaryActor === LOCAL_SEAT
+          ? config.result.legalActions
+          : {
           [config.primaryActor]:
             config.result.legalActions[config.primaryActor] ?? []
-        };
+          };
 
   return JSON.stringify({
     phase: state.phase,
@@ -1120,9 +1211,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
   const manualNextRetryEnabled =
     !roundGenerationPending &&
     state.phase === "grand_tichu_window" &&
-    decisionDiagnostics.lastEndpointError !== null &&
-    primaryActor !== null &&
-    primaryActor !== LOCAL_SEAT;
+    decisionDiagnostics.lastEndpointError !== null;
   const displayedTrick = exchangePhaseActive
     ? null
     : (derived.currentTrick ?? stagedTrick);
@@ -1157,16 +1246,16 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
             ? "Choose who gets the Dragon"
             : localIsPrimaryActor
               ? "Your turn"
-              : localHasOptionalAction && !forceAiEndgameContinuation
-                ? "Interrupt available"
-                : decisionDiagnostics.lastEndpointError &&
-                    primaryActor !== LOCAL_SEAT
-                  ? state.phase === "grand_tichu_window"
-                    ? `Auto-advance failed: ${decisionDiagnostics.lastEndpointError}. Click Next to retry.`
-                    : `Auto-advance failed: ${decisionDiagnostics.lastEndpointError}`
-              : thinkingActor
-                  ? `${formatActorLabel(thinkingActor)} thinking`
-                  : "Auto-advancing";
+              : decisionDiagnostics.lastEndpointError
+                ? state.phase === "grand_tichu_window" &&
+                    manualNextRetryEnabled
+                  ? `Auto-advance failed: ${decisionDiagnostics.lastEndpointError}. Click Next to retry.`
+                  : `Auto-advance failed: ${decisionDiagnostics.lastEndpointError}`
+                : localHasOptionalAction && !forceAiEndgameContinuation
+                  ? "Interrupt available"
+                  : thinkingActor
+                    ? `${formatActorLabel(thinkingActor)} thinking`
+                    : "Auto-advancing";
 
   const cardLookup = new Map(state.shuffledDeck.map((card) => [card.id, card]));
   const seatEvaluations = useMemo(
@@ -2239,13 +2328,14 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
         };
         setThinkingActor(primaryActor);
 
-        const legalActions = autoplayLocal
-          ? round.legalActions
-          : createDecisionRequestLegalActions({
-              state: round.nextState,
-              legalActions: round.legalActions,
-              actor: primaryActor
-            });
+        const legalActions =
+          primaryActor === SYSTEM_ACTOR
+            ? round.legalActions
+            : createDecisionRequestLegalActions({
+                state: round.nextState,
+                legalActions: round.legalActions,
+                actor: primaryActor
+              });
         const requestPayload =
           primaryActor === SYSTEM_ACTOR
             ? buildDecisionRequestPayload({
@@ -2586,6 +2676,10 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
 
         if (!isCurrentAutomationRequest()) {
           return;
+        }
+
+        if (initialResolution.chosen.action.type === "select_pass") {
+          resetAutomationRequest();
         }
 
         startTransition(() => {

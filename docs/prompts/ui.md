@@ -99,6 +99,28 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 - Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
 - Status Source: GitHub issue state only.
 
+### 2026-05-03 - Exchange automation must prioritize required pass selections over optional Tichu
+
+- Prompt Signal: Live exchange flow could stall after the local player
+  submitted a pass selection, leaving the UI stuck on `Waiting for exchanges`
+  because automation was not consistently selecting the seats that still owed a
+  required `select_pass`.
+- Interpreted Requirement: Issue
+  [#58](https://github.com/NeonButrfly/tichuml/issues/58) also tracks a
+  pass-select actor contract that mirrors the GT fix pattern: live automation
+  must derive the exchange actor from seats that still lack
+  `state.passSelections[seat]` and currently own a `select_pass` legal action,
+  prefer those required exchange actors over optional `call_tichu` actions, and
+  send actor-scoped `select_pass` fast-path requests until the engine naturally
+  advances through `pass_reveal` and `exchange_complete`.
+- Affected Systems: `apps/web/src/table-model.ts`,
+  `apps/web/src/App.tsx`,
+  `tests/integration/web-table-model.test.ts`,
+  `tests/integration/live-gameplay-executor.test.ts`.
+- Linked GitHub Issue: [#58](https://github.com/NeonButrfly/tichuml/issues/58)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.
+
 ### 2026-04-10 - Passing lanes layout
 
 - Prompt Signal: The forward stabilization request explicitly called out passing lanes layout.

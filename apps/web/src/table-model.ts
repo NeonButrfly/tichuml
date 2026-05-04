@@ -476,7 +476,27 @@ export function getPrimaryActor(state: GameState, legalActions: LegalActionMap):
   }
 
   if (state.phase === "pass_select") {
-    return SEAT_IDS.find((seat) => (legalActions[seat] ?? []).some((action) => action.type === "select_pass")) ?? null;
+    const unresolvedNonLocalSeat =
+      SEAT_IDS.filter((seat) => seat !== LOCAL_SEAT).find(
+        (seat) =>
+          !state.passSelections[seat] &&
+          (legalActions[seat] ?? []).some(
+            (action) => action.type === "select_pass"
+          )
+      ) ?? null;
+    if (unresolvedNonLocalSeat) {
+      return unresolvedNonLocalSeat;
+    }
+
+    return (
+      SEAT_IDS.find(
+        (seat) =>
+          !state.passSelections[seat] &&
+          (legalActions[seat] ?? []).some(
+            (action) => action.type === "select_pass"
+          )
+      ) ?? null
+    );
   }
 
   if (

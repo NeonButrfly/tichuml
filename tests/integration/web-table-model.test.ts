@@ -99,6 +99,57 @@ describe("table model helpers", () => {
     expect(getPrimaryActor(state, getLegalActions(state))).toBe("seat-1");
   });
 
+  it("prefers a non-local required pass actor over local optional Tichu during exchange", () => {
+    const state = createScenarioState({
+      phase: "pass_select",
+      activeSeat: null,
+      hands: {
+        "seat-0": cardsFromIds(["jade-2", "jade-3", "jade-4", "mahjong"]),
+        "seat-1": cardsFromIds(["sword-2", "sword-3", "sword-4", "dragon"]),
+        "seat-2": cardsFromIds(["pagoda-2", "pagoda-3", "pagoda-4", "phoenix"]),
+        "seat-3": cardsFromIds(["star-2", "star-3", "star-4", "jade-14"])
+      },
+      passSelections: {
+        "seat-0": {
+          left: "jade-2",
+          partner: "jade-3",
+          right: "jade-4"
+        }
+      }
+    });
+
+    const legalActions = getLegalActions(state);
+
+    expect((legalActions["seat-0"] ?? []).map((action) => action.type)).toEqual([
+      "call_tichu"
+    ]);
+    expect((legalActions["seat-1"] ?? []).some((action) => action.type === "select_pass")).toBe(
+      true
+    );
+    expect(getPrimaryActor(state, legalActions)).toBe("seat-1");
+  });
+
+  it("keeps non-local required pass actors ahead of the local seat while local exchange is still pending", () => {
+    const state = createScenarioState({
+      phase: "pass_select",
+      activeSeat: null,
+      hands: {
+        "seat-0": cardsFromIds(["jade-2", "jade-3", "jade-4", "mahjong"]),
+        "seat-1": cardsFromIds(["sword-2", "sword-3", "sword-4", "dragon"]),
+        "seat-2": cardsFromIds(["pagoda-2", "pagoda-3", "pagoda-4", "phoenix"]),
+        "seat-3": cardsFromIds(["star-2", "star-3", "star-4", "jade-14"])
+      }
+    });
+
+    const legalActions = getLegalActions(state);
+
+    expect((legalActions["seat-0"] ?? []).map((action) => action.type)).toEqual([
+      "call_tichu",
+      "select_pass"
+    ]);
+    expect(getPrimaryActor(state, legalActions)).toBe("seat-1");
+  });
+
   it("derives the Grand Tichu actor from the seat that actually has GT legal actions", () => {
     const state = createScenarioState({
       phase: "grand_tichu_window",
