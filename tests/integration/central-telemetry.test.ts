@@ -3,6 +3,7 @@ import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
   buildGameplayDecisionTelemetry,
+  buildGameplayEventTelemetry,
   buildSelfPlayDecisionTelemetry,
   buildSelfPlayEventTelemetry,
   buildTelemetryDecisionPayloads,
@@ -12,6 +13,7 @@ import {
 import {
   inferTelemetryFallbackUsed,
   validateTelemetryDecisionPayload,
+  validateTelemetryEventPayload,
   type JsonObject,
   type TelemetryDecisionPayload
 } from "@tichuml/shared";
@@ -795,19 +797,67 @@ describe("central telemetry subsystem", () => {
       latencyMs: 1
     });
 
-    const gameplayActions = (gameplay.full.legal_actions as JsonObject)[
-      "seat-0"
-    ] as JsonObject[];
+    const gameplayActions = gameplay.full.legal_actions as JsonObject[];
+    const selfplayActions = selfplay.full.legal_actions as JsonObject[];
 
     expect(gameplay.full.chosen_action).toEqual(gameplayActions[0]);
+    expect(gameplay.full.legal_actions).toEqual(selfplay.full.legal_actions);
     expect(selfplay.minimal.chosen_action).toEqual(
       (selfplay.minimal.legal_actions as JsonObject[])[0]
     );
     expect(gameplay.full.chosen_action).toEqual(selfplay.minimal.chosen_action);
+    expect(selfplay.full.chosen_action).toEqual(selfplayActions[0]);
     expect(validateTelemetryDecisionPayload(gameplay.full)).toMatchObject({
       ok: true
     });
     expect(validateTelemetryDecisionPayload(selfplay.minimal)).toMatchObject({
+      ok: true
+    });
+  });
+
+  it("keeps gameplay and selfplay event payload schemas identical", () => {
+    const engineEvent = {
+      type: "turn_passed",
+      seat: "seat-0"
+    } as unknown as EngineEvent;
+    const gameplay = buildGameplayEventTelemetry({
+      events: [engineEvent],
+      phase: "trick_play",
+      actorSeat: "seat-0",
+      gameId: "game-event-shape",
+      handId: "hand-event-shape",
+      telemetryMode: "full",
+      metadata: {
+        requested_provider: "local",
+        provider_used: "local_heuristic",
+        state_norm: {
+          phase: "trick_play",
+          activeSeat: "seat-0"
+        }
+      }
+    })[0]!;
+    const selfplay = buildSelfPlayEventTelemetry({
+      mode: "full",
+      gameId: "game-event-shape",
+      handId: "hand-event-shape",
+      event: engineEvent,
+      stateNorm: {
+        phase: "trick_play",
+        activeSeat: "seat-0"
+      },
+      actorSeat: "seat-0",
+      eventIndex: 0,
+      requestedProvider: "local",
+      providerUsed: "local_heuristic"
+    });
+
+    expect(gameplay.minimal.payload).toEqual(selfplay.minimal.payload);
+    expect(gameplay.full.payload).toEqual(selfplay.full.payload);
+    expect(gameplay.full.state_norm).toEqual(selfplay.full.state_norm);
+    expect(validateTelemetryEventPayload(gameplay.full)).toMatchObject({
+      ok: true
+    });
+    expect(validateTelemetryEventPayload(selfplay.full)).toMatchObject({
       ok: true
     });
   });

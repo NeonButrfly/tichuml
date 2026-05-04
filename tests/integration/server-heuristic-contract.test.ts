@@ -526,6 +526,28 @@ describe("server_heuristic actor contract", () => {
     expect(getCanonicalActiveSeatFromState(passSelect.nextState)).toBe(
       "seat-0"
     );
+
+    const recoverableDragonGiftState = {
+      ...scenario({
+        phase: "trick_play",
+        hands: {
+          "seat-0": cardsFromIds(["dragon"]),
+          "seat-1": cardsFromIds(["jade-7"]),
+          "seat-2": cardsFromIds(["jade-6"]),
+          "seat-3": cardsFromIds(["jade-5"])
+        },
+        pendingDragonGift: {
+          winner: "seat-0",
+          trickCards: cardsFromIds(["dragon"]),
+          nextLeader: "seat-1",
+          roundEndsAfterGift: false
+        }
+      }),
+      activeSeat: null
+    } as GameState;
+    expect(getCanonicalActiveSeatFromState(recoverableDragonGiftState)).toBe(
+      "seat-0"
+    );
   });
 
   it("builds server requests with actor_seat matching the canonical actor", () => {
@@ -629,7 +651,7 @@ describe("server_heuristic actor contract", () => {
     expect(routed.responseMetadata).toMatchObject({
       scoring_path: "rich_path",
       requested_scoring_path: "fast_path",
-      fast_path_validation: "fallback_legal_actions_shape"
+      fast_path_validation: "fallback_state_norm"
     });
   });
 
@@ -637,10 +659,7 @@ describe("server_heuristic actor contract", () => {
     const baseRequest = createServerHeuristicPayload(advanceToGrandTichuWindow(), {
       fullStateDecisionRequests: true
     });
-    const actorActions = (
-      (baseRequest.legal_actions as Record<string, unknown>)[baseRequest.actor_seat] ??
-      []
-    ) as unknown as LegalAction[];
+    const actorActions = baseRequest.legal_actions as unknown as LegalAction[];
     const request: DecisionRequestPayload = {
       ...baseRequest,
       state_norm: {
@@ -1043,19 +1062,24 @@ describe("server_heuristic actor contract", () => {
     });
   });
 
-  it("rejects trick_play requests with activeSeat=null before the backend boundary", () => {
+  it("recovers a trick_play actor when activeSeat=null but dragon gift ownership is authoritative", () => {
     const validation = validateBackendDecisionRequestInput({
       gameId: "trick-play-null-active-seat",
       handId: "trick-play-null-active-seat-hand",
       stateRaw: {
         ...scenario({
           phase: "trick_play",
-          activeSeat: null,
           hands: {
-            "seat-0": cardsFromIds(["jade-8"]),
+            "seat-0": cardsFromIds(["dragon"]),
             "seat-1": cardsFromIds(["jade-7"]),
             "seat-2": cardsFromIds(["jade-6"]),
             "seat-3": cardsFromIds(["jade-5"])
+          },
+          pendingDragonGift: {
+            winner: "seat-0",
+            trickCards: cardsFromIds(["dragon"]),
+            nextLeader: "seat-1",
+            roundEndsAfterGift: false
           }
         }),
         phase: "trick_play",
@@ -1063,11 +1087,17 @@ describe("server_heuristic actor contract", () => {
       } as unknown as JsonObject,
       stateNorm: {
         phase: "trick_play",
-        activeSeat: null
+        activeSeat: "seat-0"
       },
       legalActions: {
         system: [],
-        "seat-0": [{ type: "pass_turn", seat: "seat-0" }],
+        "seat-0": [
+          {
+            type: "assign_dragon_trick",
+            seat: "seat-0",
+            recipient: "seat-1"
+          }
+        ],
         "seat-1": [],
         "seat-2": [],
         "seat-3": []
@@ -1078,15 +1108,10 @@ describe("server_heuristic actor contract", () => {
       decisionIndex: 0
     });
 
-    expect(validation.ok).toBe(false);
-    if (!validation.ok) {
-      expect(validation.issues).toContain(
-        "trick_play requests must not be built with activeSeat=null."
-      );
-    }
+    expect(validation.ok).toBe(true);
   });
 
-  it("resolves activeSeat=null trick boundaries locally instead of attempting server_heuristic", async () => {
+  it("sends recoverable dragon gift trick_play states through the shared backend contract", async () => {
     const state = {
       ...scenario({
         phase: "trick_play",
@@ -1106,25 +1131,30 @@ describe("server_heuristic actor contract", () => {
       activeSeat: null
     } as GameState;
     const legalActions = getLegalActions(state);
-    const decision = await resolveDecision({
-      backendBaseUrl: "http://127.0.0.1:1",
-      telemetryEnabled: false,
-      gameId: "trick-play-null-active-seat",
-      handId: "trick-play-null-active-seat-hand",
-      actor: "seat-0",
-      decisionIndex: 0,
-      stateRaw: state as unknown as JsonObject,
-      stateNorm: state as unknown as JsonObject,
-      legalActions,
-      phase: "trick_play",
-      defaultProvider: "server_heuristic",
-      seatProviders: {},
-      serverFallbackEnabled: true
-    });
+    await withServer(async ({ baseUrl }) => {
+      const decision = await resolveDecision({
+        backendBaseUrl: baseUrl,
+        telemetryEnabled: false,
+        gameId: "trick-play-null-active-seat",
+        handId: "trick-play-null-active-seat-hand",
+        actor: "seat-0",
+        decisionIndex: 0,
+        stateRaw: state as unknown as JsonObject,
+        stateNorm: {
+          phase: "trick_play",
+          activeSeat: "seat-0"
+        },
+        legalActions,
+        phase: "trick_play",
+        defaultProvider: "server_heuristic",
+        seatProviders: {},
+        serverFallbackEnabled: false
+      });
 
-    expect(decision.providerUsed).toBe("local_heuristic");
-    expect(decision.fallbackUsed).toBe(false);
-    expect(decision.chosenAction.type).toBe("assign_dragon_trick");
+      expect(decision.providerUsed).toBe("server_heuristic");
+      expect(decision.fallbackUsed).toBe(false);
+      expect(decision.chosenAction.type).toBe("assign_dragon_trick");
+    });
   });
 
   it("falls back quickly when the backend decision route exceeds the fast-path timeout", async () => {

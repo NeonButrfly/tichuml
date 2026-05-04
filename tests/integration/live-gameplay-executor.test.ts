@@ -779,6 +779,11 @@ describe("live gameplay executor", () => {
       expect(
         Array.from(new Set(decisionRequests.map((request) => request.actor_seat)))
       ).toEqual(["seat-1", "seat-2", "seat-3"]);
+      expect(
+        decisionRequests
+          .filter((request) => request.phase === "grand_tichu_window")
+          .every((request) => request.state_raw === null)
+      ).toBe(true);
       const requestLogs = infoSpy.mock.calls.filter(
         (call) =>
           call[0] === "[decision-request]" &&
@@ -930,7 +935,7 @@ describe("live gameplay executor", () => {
     ).not.toThrow();
   });
 
-  it("skips the backend and resolves locally when a malformed trick_play state has activeSeat=null", async () => {
+  it("uses the backend when trick_play activeSeat=null is recoverable through dragon gift ownership", async () => {
     const state = {
       ...createScenarioState({
         phase: "trick_play",
@@ -950,7 +955,32 @@ describe("live gameplay executor", () => {
       activeSeat: null
     } as GameState;
     const legalActions = getLegalActions(state);
-    const fetchImpl = vi.fn();
+    const fetchImpl = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        accepted: true,
+        chosen_action: {
+          type: "assign_dragon_trick",
+          seat: "seat-0",
+          recipient: "seat-1"
+        },
+        provider_used: "server_heuristic",
+        provider_reason: "Recovered dragon gift actor from shared continuation contract."
+      }),
+      text: async () =>
+        JSON.stringify({
+          accepted: true,
+          chosen_action: {
+            type: "assign_dragon_trick",
+            seat: "seat-0",
+            recipient: "seat-1"
+          },
+          provider_used: "server_heuristic",
+          provider_reason:
+            "Recovered dragon gift actor from shared continuation contract."
+        })
+    })) as unknown as typeof fetch;
 
     const resolution = await resolveDecisionWithProvider({
       context: {
@@ -980,16 +1010,69 @@ describe("live gameplay executor", () => {
           scoring_path: "rich_path"
         }
       },
+      fetchImpl
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(resolution.providerUsed).toBe("server_heuristic");
+    expect(resolution.endpointStatus).toBe("ok");
+    expect(resolution.chosen.action).toMatchObject({
+      type: "assign_dragon_trick",
+      seat: "seat-0"
+    });
+  });
+
+  it("still skips the backend for unrecoverable trick_play activeSeat=null states", async () => {
+    const state = {
+      ...createScenarioState({
+        phase: "trick_play",
+        hands: {
+          "seat-0": cardsFromIds(["jade-8"]),
+          "seat-1": cardsFromIds(["jade-7"]),
+          "seat-2": cardsFromIds(["jade-6"]),
+          "seat-3": cardsFromIds(["jade-5"])
+        }
+      }),
+      activeSeat: null,
+      pendingDragonGift: null
+    } as GameState;
+    const legalActions = getLegalActions(state);
+    const fetchImpl = vi.fn();
+
+    const resolution = await resolveDecisionWithProvider({
+      context: {
+        state,
+        legalActions
+      },
+      actor: "seat-0",
+      settings: {
+        decisionMode: "server_heuristic",
+        backendBaseUrl: "http://127.0.0.1:4310",
+        telemetryEnabled: true,
+        serverFallbackEnabled: false
+      },
+      requestPayload: {
+        game_id: "unrecoverable-trick-play-game",
+        hand_id: "unrecoverable-trick-play-hand",
+        phase: "trick_play",
+        actor_seat: "seat-0",
+        schema_version: 1,
+        engine_version: "test",
+        sim_version: "test",
+        state_raw: state as unknown as JsonObject,
+        state_norm: state as unknown as JsonObject,
+        legal_actions: legalActions["seat-0"] as unknown as JsonObject[],
+        requested_provider: "server_heuristic",
+        metadata: {
+          scoring_path: "rich_path"
+        }
+      },
       fetchImpl: fetchImpl as unknown as typeof fetch
     });
 
     expect(fetchImpl).not.toHaveBeenCalled();
     expect(resolution.providerUsed).toBe("local_heuristic");
     expect(resolution.endpointStatus).toBe("client_validation_error");
-    expect(resolution.chosen.action).toMatchObject({
-      type: "assign_dragon_trick",
-      seat: "seat-0"
-    });
   });
 
   it("records a real GT auto-advance failure for manual recovery", async () => {

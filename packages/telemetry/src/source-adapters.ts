@@ -2,6 +2,7 @@ import type {
   EngineAction,
   EngineEvent,
   EngineResult,
+  LegalAction,
   LegalActionMap
 } from "@tichuml/engine";
 import { SYSTEM_ACTOR, type SeatId } from "@tichuml/engine";
@@ -83,6 +84,35 @@ function serializeLegalActionMap(
   ) as JsonObject;
 }
 
+function serializeActorLegalActions(
+  legalActions: EngineResult["legalActions"] | LegalActionMap,
+  actorSeat: string
+): JsonObject[] {
+  const actorActions =
+    typeof legalActions === "object" && legalActions !== null
+      ? (legalActions as Record<string, LegalAction[]>)[actorSeat] ?? []
+      : [];
+  return actorActions.map((action) => serializeLegalAction(action));
+}
+
+function buildCanonicalEventPayload(config: {
+  event: EngineEvent;
+  actorSeat: SeatId | null;
+  phase: string;
+}): JsonObject {
+  return {
+    event_type: config.event.type,
+    actor_seat: config.actorSeat,
+    phase: config.phase
+  };
+}
+
+function buildCanonicalFullEventPayload(event: EngineEvent): JsonObject {
+  return {
+    engine_event: event as unknown as JsonObject
+  };
+}
+
 export function buildGameplayDecisionTelemetry(config: {
   action: EngineAction;
   phase: string;
@@ -122,7 +152,7 @@ export function buildGameplayDecisionTelemetry(config: {
     decisionIndex: config.decisionIndex,
     stateRaw: config.stateRaw as unknown as JsonObject,
     stateNorm: config.stateNorm as unknown as JsonObject,
-    legalActions: serializeLegalActionMap(config.legalActions),
+    legalActions: serializeActorLegalActions(config.legalActions, actorSeat),
     chosenAction: config.action as unknown as JsonObject,
     policyName: config.policyName,
     policySource: config.policySource,
@@ -186,7 +216,12 @@ export function buildGameplayEventTelemetry(config: {
         !Array.isArray(config.metadata.state_norm)
           ? (config.metadata.state_norm as JsonObject)
           : null,
-      payload: event as unknown as JsonObject,
+      payload: buildCanonicalEventPayload({
+        event,
+        actorSeat: extractActorSeatFromEvent(event, config.actorSeat),
+        phase: config.phase
+      }),
+      fullPayload: buildCanonicalFullEventPayload(event),
       metadata: (config.metadata ?? {}) as JsonObject
     })
   );
@@ -216,11 +251,6 @@ export function buildSelfPlayDecisionTelemetry(config: {
   workerId?: string | undefined;
   controllerMode?: boolean | undefined;
 }): TelemetryDecisionBuildResult {
-  const actorScopedLegalActions = {
-    [config.actorSeat]: (config.legalActions[config.actorSeat] ?? []).map(
-      (action) => serializeLegalAction(action)
-    )
-  } as JsonObject;
   return buildTelemetryDecisionPayloads({
     source:
       config.source ?? (config.controllerMode ? "controller" : "selfplay"),
@@ -232,7 +262,7 @@ export function buildSelfPlayDecisionTelemetry(config: {
     decisionIndex: config.decisionIndex,
     stateRaw: config.stateRaw,
     stateNorm: config.stateNorm,
-    legalActions: actorScopedLegalActions,
+    legalActions: serializeActorLegalActions(config.legalActions, String(config.actorSeat)),
     chosenAction: config.chosenAction as unknown as JsonObject,
     policyName: config.policyName,
     policySource: config.providerUsed,
@@ -288,15 +318,12 @@ export function buildSelfPlayEventTelemetry(config: {
       providerUsed: config.providerUsed
     }),
     stateNorm: config.stateNorm,
-    payload: {
-      event_type: config.event.type,
-      actor_seat: actorSeat,
+    payload: buildCanonicalEventPayload({
+      event: config.event,
+      actorSeat,
       phase: config.stateNorm.phase as string
-    },
-    fullPayload: {
-      engine_event: config.event as unknown as JsonObject,
-      state_norm: config.stateNorm
-    },
+    }),
+    fullPayload: buildCanonicalFullEventPayload(config.event),
     metadata: {
       simulation_mode: true,
       strict_telemetry: config.strictTelemetry === true,

@@ -58,9 +58,12 @@ export async function routeLightgbmDecision(
   }
 
   try {
+    const analyzerLegalActions = Array.isArray(payload.legal_actions)
+      ? ({ [payload.actor_seat]: actorLegalActions } as Record<string, LegalAction[]>)
+      : (payload.legal_actions as Record<string, LegalAction[]>);
     const analyzer = createHeuristicFeatureAnalyzer({
       state: stateRaw,
-      legalActions: payload.legal_actions as never
+      legalActions: analyzerLegalActions as never
     });
     const actorSeat = canonicalActor;
     const stateFeatures = analyzer.getStateFeatures(actorSeat);

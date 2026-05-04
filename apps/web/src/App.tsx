@@ -7,10 +7,11 @@ import {
   useState
 } from "react";
 import {
-  buildServerFastPathState,
+  buildCanonicalDecisionRequest,
   buildHandEvaluation,
   buildHandEvaluationAfterRemovingCards,
   buildUrgencyProfile,
+  createCanonicalDecisionLegalActions,
   type CandidateActionFeatureSnapshot,
   type ChosenDecision,
   type HandEvaluation,
@@ -20,6 +21,7 @@ import {
   applyEngineAction,
   SEAT_IDS,
   createInitialGameState,
+  createNextDealCarryState as createEngineNextDealCarryState,
   getCanonicalActiveSeatFromState,
   getLegalActionOwner,
   getPartnerSeat,
@@ -154,117 +156,25 @@ const SEAT_LAYOUT: Array<{
   { seat: "seat-0", position: "bottom", title: "SOUTH", relation: "You" }
 ];
 
-function createActorOnlyLegalActions(
-  legalActions: LegalActionMap,
-  actor: ActorId
-) {
-  const actorOnly = {} as LegalActionMap;
-  actorOnly[actor] = legalActions[actor] ?? [];
-  return actorOnly;
-}
-
-function isGrandTichuDecisionAction(
-  action: LegalAction
-): action is Extract<
-  LegalAction,
-  { type: "call_grand_tichu" | "decline_grand_tichu" }
-> {
-  return (
-    action.type === "call_grand_tichu" || action.type === "decline_grand_tichu"
-  );
-}
-
-function createGrandTichuDecisionLegalActions(
-  legalActions: LegalActionMap,
-  actorSeat: SeatId
-) {
-  const actorActions = legalActions[actorSeat] ?? [];
-  const canCallGrandTichu = actorActions.some(
-    (action) => action.type === "call_grand_tichu"
-  );
-  const gtActions: LegalAction[] = canCallGrandTichu
-    ? [
-        { type: "call_grand_tichu", seat: actorSeat },
-        { type: "decline_grand_tichu", seat: actorSeat }
-      ]
-    : [{ type: "decline_grand_tichu", seat: actorSeat }];
-
-  return {
-    [actorSeat]: gtActions
-  } as LegalActionMap;
-}
-
-function createRequiredPassSelectDecisionLegalActions(
-  state: GameState,
-  legalActions: LegalActionMap,
-  actorSeat: SeatId
-) {
-  if (state.passSelections[actorSeat]) {
-    return {
-      [actorSeat]: []
-    } as LegalActionMap;
-  }
-
-  const selectPassTemplate =
-    (legalActions[actorSeat] ?? []).find(
-      (
-        action
-      ): action is Extract<LegalAction, { type: "select_pass" }> =>
-        action.type === "select_pass"
-    ) ?? null;
-
-  return {
-    [actorSeat]: selectPassTemplate ? [selectPassTemplate] : []
-  } as LegalActionMap;
-}
-
 function createDecisionRequestLegalActions(config: {
   state: GameState;
   legalActions: LegalActionMap;
   actor: ActorId;
 }) {
-  if (
-    config.state.phase === "pass_select" &&
-    config.actor !== SYSTEM_ACTOR
-  ) {
-    return createRequiredPassSelectDecisionLegalActions(
-      config.state,
-      config.legalActions,
-      config.actor
-    );
-  }
-
-  if (
-    config.state.phase === "grand_tichu_window" &&
-    config.actor !== SYSTEM_ACTOR
-  ) {
-    return createGrandTichuDecisionLegalActions(
-      config.legalActions,
-      config.actor
-    );
-  }
-
-  return createActorOnlyLegalActions(config.legalActions, config.actor);
-}
-
-function isActorScopedRequiredPassSelection(config: {
-  state: GameState;
-  actorSeat: SeatId;
-  actorActions: LegalAction[];
-}) {
-  return (
-    config.state.phase === "pass_select" &&
-    !config.state.passSelections[config.actorSeat] &&
-    config.actorActions.length > 0 &&
-    config.actorActions.every((action) => action.type === "select_pass")
-  );
+  return createCanonicalDecisionLegalActions({
+    state: config.state,
+    legalActions: config.legalActions,
+    actor: config.actor
+  });
 }
 
 function createActorPlayOnlyLegalActions(
   legalActions: LegalActionMap,
   actor: SeatId
 ) {
-  const actorOnly = createActorOnlyLegalActions(legalActions, actor);
+  const actorOnly = {
+    [actor]: legalActions[actor] ?? []
+  } as LegalActionMap;
   actorOnly[actor] = (actorOnly[actor] ?? []).filter(
     (action): action is PlayLegalAction => action.type === "play_cards"
   );
@@ -273,20 +183,6 @@ function createActorPlayOnlyLegalActions(
 
 function getCurrentHandId(state: GameState): string {
   return `hand-${state.matchHistory.length + 1}`;
-}
-
-function buildDecisionRequestStateNorm(config: {
-  state: GameState;
-  derived: EngineResult["derivedView"];
-  actorSeat: SeatId;
-  scoringPath: DecisionScoringPath;
-}): Record<string, unknown> {
-  return config.scoringPath === "fast_path"
-    ? (buildServerFastPathState(
-        config.state,
-        config.actorSeat
-      ) as unknown as Record<string, unknown>)
-    : (config.derived as unknown as Record<string, unknown>);
 }
 
 function buildDecisionRequestPayload(config: {
@@ -299,160 +195,37 @@ function buildDecisionRequestPayload(config: {
   decisionIndex: number;
   requestedProvider: RequestedDecisionProvider;
 }): DecisionRequestPayload {
-  const actorScopedLegalActions = createDecisionRequestLegalActions({
+  const built = buildCanonicalDecisionRequest({
+    gameId: config.matchId,
+    handId: getCurrentHandId(config.state),
     state: config.state,
+    derived: config.derived,
     legalActions: config.legalActions,
-    actor: config.actor
+    requestedProvider: config.requestedProvider,
+    decisionIndex: config.decisionIndex,
+    actorSeat: config.actorSeat
   });
-  const actorActions = Array.isArray(actorScopedLegalActions[config.actor])
-    ? actorScopedLegalActions[config.actor]
-    : [];
-  const legalActionPreview = actorActions
+  const legalActionPreview = built.actorActions
     .slice(0, 4)
     .map((action) => buildAutomationActionSignature(action));
-  const isGrandTichuWindow =
-    config.state.phase === "grand_tichu_window" && config.actor !== SYSTEM_ACTOR;
-  const isPassSelectDecision =
-    config.state.phase === "pass_select" && config.actor !== SYSTEM_ACTOR;
-  const scopeIssues: string[] = [];
-  let scoringPath: DecisionScoringPath = "rich_path";
-  let fastPathUsed = false;
-  let validationResult:
-    | "scoped"
-    | "pass_select_required_only"
-    | "pass_select_invalid_actions"
-    | "grand_tichu_only"
-    | "grand_tichu_invalid_actions"
-    | "rich_path_provider"
-    | "system_actor"
-    | "canonical_actor_mismatch"
-    | "invalid_action_owner"
-    | "missing_actor_actions"
-    | "canonical_actor_unavailable" = "rich_path_provider";
-
-  if (config.requestedProvider === "server_heuristic") {
-    if (config.actor === SYSTEM_ACTOR) {
-      validationResult = "system_actor";
-    } else if (actorActions.length === 0) {
-      validationResult = "missing_actor_actions";
-      scopeIssues.push(`No legal actions found for ${config.actorSeat}.`);
-    } else {
-      let canonicalActorSeat: SeatId | null = null;
-      if (isPassSelectDecision) {
-        if (
-          !isActorScopedRequiredPassSelection({
-            state: config.state,
-            actorSeat: config.actorSeat,
-            actorActions
-          })
-        ) {
-          validationResult = "pass_select_invalid_actions";
-          scopeIssues.push(
-            `Pass selection requests must contain only unresolved select_pass actions for ${config.actorSeat}.`
-          );
-        }
-      } else {
-        try {
-          canonicalActorSeat = getCanonicalActiveSeatFromState(config.state);
-        } catch (error) {
-          validationResult = "canonical_actor_unavailable";
-          scopeIssues.push(error instanceof Error ? error.message : String(error));
-        }
-      }
-
-      if (
-        !isPassSelectDecision &&
-        canonicalActorSeat !== null &&
-        canonicalActorSeat !== config.actorSeat
-      ) {
-        validationResult = "canonical_actor_mismatch";
-        scopeIssues.push(
-          `Canonical actor ${canonicalActorSeat} does not match request actor ${config.actorSeat}.`
-        );
-      }
-
-      for (const action of actorActions) {
-        const owner = getLegalActionOwner(action);
-        if (owner !== null && owner !== config.actorSeat) {
-          validationResult = "invalid_action_owner";
-          scopeIssues.push(
-            `Action ${action.type} belongs to ${owner}; expected ${config.actorSeat}.`
-          );
-        }
-      }
-
-      if (isGrandTichuWindow) {
-        const invalidGrandTichuActions = actorActions.filter(
-          (action) => !isGrandTichuDecisionAction(action)
-        );
-        const hasDeclineAction = actorActions.some(
-          (action) => action.type === "decline_grand_tichu"
-        );
-        if (invalidGrandTichuActions.length > 0 || !hasDeclineAction) {
-          validationResult = "grand_tichu_invalid_actions";
-          scopeIssues.push(
-            `Grand Tichu requests must contain only call_grand_tichu/decline_grand_tichu for ${config.actorSeat}.`
-          );
-        }
-      }
-
-      if (scopeIssues.length === 0) {
-        scoringPath = "fast_path";
-        fastPathUsed = true;
-        validationResult = isGrandTichuWindow
-          ? "grand_tichu_only"
-          : isPassSelectDecision
-            ? "pass_select_required_only"
-            : "scoped";
-      }
-    }
-  }
 
   console.info("[decision-request]", {
     phase: config.state.phase,
     actor_seat: config.actorSeat,
     decision_actor: config.actor,
-    legal_action_count: actorActions.length,
+    legal_action_count: built.actorActions.length,
     legal_action_preview: legalActionPreview,
-    fast_path_used: fastPathUsed,
-    scoring_path: scoringPath,
-    validation_result: validationResult,
-    validation_issues: scopeIssues,
-    ...((isGrandTichuWindow || isPassSelectDecision)
-      ? { legal_actions: actorActions }
+    fast_path_used: built.fastPathUsed,
+    scoring_path: built.scoringPath,
+    validation_result: built.validationResult,
+    validation_issues: built.validationIssues,
+    ...((config.state.phase === "grand_tichu_window" ||
+      config.state.phase === "pass_select")
+      ? { legal_actions: built.actorActions }
       : {})
   });
 
-  return {
-    game_id: config.matchId,
-    hand_id: getCurrentHandId(config.state),
-    phase: config.state.phase,
-    actor_seat: config.actorSeat,
-    schema_version: TELEMETRY_SCHEMA_VERSION,
-    engine_version: TELEMETRY_ENGINE_VERSION,
-    sim_version: TELEMETRY_SIM_VERSION,
-    state_raw: config.state as unknown as Record<string, unknown>,
-    state_norm: buildDecisionRequestStateNorm({
-      state: config.state,
-      derived: config.derived,
-      actorSeat: config.actorSeat,
-      scoringPath
-    }),
-    legal_actions: (fastPathUsed
-      ? actorActions
-      : actorScopedLegalActions) as unknown as Record<string, unknown>,
-    requested_provider: config.requestedProvider,
-    metadata: {
-      decision_index: config.decisionIndex,
-      scoring_path: scoringPath,
-      fast_path_validation: validationResult,
-      ...(scopeIssues.length > 0
-        ? {
-            fast_path_fallback_reason: scopeIssues.join(" | ")
-          }
-        : {})
-    }
-  };
+  return built.payload;
 }
 
 function buildTelemetryActionMetadata(
@@ -654,22 +427,7 @@ type RoundCarryState = Pick<InitialGameSeedConfig, "matchHistory" | "matchScore"
 export function createNextDealCarryState(
   state: Pick<GameState, "matchComplete" | "matchHistory" | "matchScore">
 ): RoundCarryState {
-  if (state.matchComplete) {
-    throw new Error("Cannot create another deal after the match is complete.");
-  }
-
-  return {
-    matchScore: { ...state.matchScore },
-    matchHistory: state.matchHistory.map((entry) => ({
-      handNumber: entry.handNumber,
-      roundSeed: entry.roundSeed,
-      teamScores: { ...entry.teamScores },
-      cumulativeScores: { ...entry.cumulativeScores },
-      finishOrder: [...entry.finishOrder],
-      doubleVictory: entry.doubleVictory,
-      tichuBonuses: entry.tichuBonuses.map((bonus) => ({ ...bonus }))
-    }))
-  };
+  return createEngineNextDealCarryState(state);
 }
 
 function findNextEmptyPassTarget(

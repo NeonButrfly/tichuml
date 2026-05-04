@@ -14,6 +14,15 @@ Use this file to preserve gameplay-facing prompt intent and link it to GitHub wo
 
 ## Entries
 
+### 2026-05-03 - Shared continuation and decision contract across UI, selfplay, rollout, backend, and telemetry
+
+- Prompt Signal: The repo had split-brain behavior around the shared engine: selfplay, UI, rollout, backend validation, decision request serialization, and telemetry adapters were each carrying partially duplicated actor/continuation contracts and next-hand carry behavior.
+- Interpreted Requirement: Keep `packages/engine/src/engine.ts` authoritative for in-hand rules, extract one shared continuation contract from the selfplay-grade flow for actor selection, stop reasons, Dragon gift handling, null `activeSeat` recovery, and next-hand carry, then make UI, selfplay, rollout, backend validation, and telemetry normalize through that single contract without changing scoring semantics.
+- Affected Systems: `packages/engine/src/continuation.ts`, `packages/engine/src/seat-identity.ts`, `packages/ai-heuristics/src/decision-contract.ts`, `apps/sim-runner/src/self-play-batch.ts`, `apps/web/src/App.tsx`, `apps/web/src/table-model.ts`, `apps/web/src/backend/decision-provider.ts`, `apps/server/src/providers/lightgbm-provider.ts`, `packages/telemetry/src/source-adapters.ts`, and continuation/contract integration tests.
+- Linked GitHub Issue: [#58](https://github.com/NeonButrfly/tichuml/issues/58)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.
+
 ### 2026-05-03 - Selfplay continuation across every non-terminal phase transition
 
 - Prompt Signal: Short and low-count selfplay exports proved that games were silently stopping after valid non-terminal actions in `grand_tichu_window`, `pass_select`, `trick_play`, Dragon gift resolution, and round scoring or next-hand transitions.

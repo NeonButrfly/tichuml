@@ -68,6 +68,11 @@ export {
   type ServerFastPathDecision,
   type ServerFastPathState
 } from "./serverFastPath.js";
+export {
+  buildCanonicalDecisionRequest,
+  createCanonicalDecisionLegalActions,
+  type CanonicalDecisionRequestBuildResult
+} from "./decision-contract.js";
 
 function traceStraightResponsesEnabled(): boolean {
   const rawValue = readRuntimeEnv("TICHU_TRACE_STRAIGHT_RESPONSES")

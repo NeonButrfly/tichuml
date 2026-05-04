@@ -1,5 +1,6 @@
 import {
   buildServerFastPathState,
+  buildCanonicalDecisionRequest,
   heuristicsV1Policy,
   chooseServerFastPathDecision,
   generateFastTrickPlayCandidates,
@@ -26,10 +27,13 @@ import {
 } from "@tichuml/shared";
 import {
   applyEngineAction,
+  createNextDealCarryState,
   createInitialGameState,
   getActorScopedLegalActions,
   getCardById,
   getCanonicalActiveSeatFromState,
+  planMatchContinuation,
+  resolveContinuationActor,
   getCardsPoints,
   SEAT_IDS,
   SYSTEM_ACTOR,
@@ -497,36 +501,6 @@ function summarizeMatchHistory(
     tichuSuccesses,
     grandTichuCalls,
     grandTichuSuccesses
-  };
-}
-
-function cloneMatchHistory(
-  source: GameState["matchHistory"]
-): GameState["matchHistory"] {
-  return source.map((entry) => ({
-    handNumber: entry.handNumber,
-    roundSeed: entry.roundSeed,
-    teamScores: { ...entry.teamScores },
-    cumulativeScores: { ...entry.cumulativeScores },
-    finishOrder: [...entry.finishOrder],
-    doubleVictory: entry.doubleVictory,
-    tichuBonuses: entry.tichuBonuses.map((bonus) => ({ ...bonus }))
-  }));
-}
-
-function createNextDealCarryState(
-  state: Pick<GameState, "matchComplete" | "matchHistory" | "matchScore">
-): {
-  matchScore: Record<TeamId, number>;
-  matchHistory: GameState["matchHistory"];
-} {
-  if (state.matchComplete) {
-    throw new Error("Cannot create another deal after the match is complete.");
-  }
-
-  return {
-    matchScore: { ...state.matchScore },
-    matchHistory: cloneMatchHistory(state.matchHistory)
   };
 }
 
@@ -1117,53 +1091,28 @@ function planSelfPlayContinuation(config: {
   currentHandNumber: number;
 }): SelfPlayContinuationPlan {
   const { result } = config;
-  const state = result.nextState;
-
-  if (state.phase === "finished") {
-    if (state.matchComplete) {
-      return {
-        kind: "stop",
-        stopReason: "terminal_game_finished",
-        details: {
-          phase: state.phase,
-          handNumber: config.currentHandNumber,
-          matchComplete: true,
-          matchWinner: state.matchWinner,
-          matchScore: cloneTeamScores(state.matchScore) as unknown as JsonObject
-        }
-      };
-    }
-
-    const nextHandNumber = getCurrentHandNumber(state);
-    const carryState = createNextDealCarryState(state);
+  const continuation = planMatchContinuation({
+    state: result.nextState,
+    legalActions: result.legalActions
+  });
+  if (continuation.kind === "next_hand") {
     return {
       kind: "next_hand",
-      nextHandNumber,
+      nextHandNumber: continuation.nextHandNumber,
       nextResult: createInitialGameState({
-        seed: buildHandSeed(config.baseSeed, config.gameIndex, nextHandNumber),
-        ...carryState
+        seed: buildHandSeed(
+          config.baseSeed,
+          config.gameIndex,
+          continuation.nextHandNumber
+        ),
+        ...continuation.carryState
       })
     };
   }
-
-  const actorResolution = resolveAutomatedContinuationActor({
-    legalActions: result.legalActions,
-    state
-  });
-  if (actorResolution.ok) {
-    return {
-      kind: "continue",
-      actor: actorResolution.actor,
-      derivation: actorResolution.derivation,
-      derivedFromLegalActions: actorResolution.derivedFromLegalActions
-    };
+  if (continuation.kind === "continue") {
+    return continuation;
   }
-
-  return {
-    kind: "stop",
-    stopReason: actorResolution.stopReason,
-    details: actorResolution.details
-  };
+  return continuation;
 }
 
 function resolveRequestedProvider(
@@ -1241,224 +1190,7 @@ export function resolveAutomatedContinuationActor(config: {
   legalActions: LegalActionMap;
   state: GameState;
 }): ContinuationActorResolution {
-  const { legalActions, state } = config;
-  const systemHasActions = hasActorLegalActions(legalActions, SYSTEM_ACTOR);
-  const seatActionCount = SEAT_IDS.reduce(
-    (count, seat) => count + getActorLegalActions(legalActions, seat).length,
-    0
-  );
-
-  if (!systemHasActions && seatActionCount === 0) {
-    return {
-      ok: false,
-      stopReason: "no_legal_actions",
-      details: {
-        phase: state.phase,
-        activeSeat: state.activeSeat,
-        ...summarizeLegalActors(legalActions)
-      }
-    };
-  }
-
-  switch (state.phase) {
-    case "grand_tichu_window": {
-      const queueSeat = state.grandTichuQueue[0] ?? null;
-      if (
-        queueSeat &&
-        actorHasLegalActionTypes(legalActions, queueSeat, [
-          "decline_grand_tichu",
-          "call_grand_tichu"
-        ])
-      ) {
-        return {
-          ok: true,
-          actor: queueSeat,
-          derivation: "grand_tichu_queue",
-          derivedFromLegalActions: false
-        };
-      }
-      return {
-        ok: false,
-        stopReason: "invalid_state",
-        details: {
-          phase: state.phase,
-          activeSeat: state.activeSeat,
-          grandTichuQueue: [...state.grandTichuQueue],
-          ...summarizeLegalActors(legalActions)
-        }
-      };
-    }
-    case "pass_select": {
-      const pendingSeat =
-        SEAT_IDS.find((seat) => !state.passSelections[seat]) ?? null;
-      if (
-        pendingSeat &&
-        actorHasLegalActionTypes(legalActions, pendingSeat, ["select_pass"])
-      ) {
-        return {
-          ok: true,
-          actor: pendingSeat,
-          derivation: "next_pending_pass_selection",
-          derivedFromLegalActions: false
-        };
-      }
-      return {
-        ok: false,
-        stopReason: "invalid_state",
-        details: {
-          phase: state.phase,
-          activeSeat: state.activeSeat,
-          passSelections: state.passSelections as unknown as JsonObject,
-          selectPassActors: listSeatActorsWithLegalActionTypes(legalActions, [
-            "select_pass"
-          ]),
-          ...summarizeLegalActors(legalActions)
-        }
-      };
-    }
-    case "pass_reveal":
-    case "exchange_complete":
-    case "round_scoring": {
-      if (systemHasActions) {
-        return {
-          ok: true,
-          actor: SYSTEM_ACTOR,
-          derivation: `${state.phase}_system_actor`,
-          derivedFromLegalActions: false
-        };
-      }
-      return {
-        ok: false,
-        stopReason: "invalid_state",
-        details: {
-          phase: state.phase,
-          activeSeat: state.activeSeat,
-          ...summarizeLegalActors(legalActions)
-        }
-      };
-    }
-    case "trick_play": {
-      if (state.pendingDragonGift) {
-        const dragonWinner = state.pendingDragonGift.winner;
-        if (
-          actorHasLegalActionTypes(legalActions, dragonWinner, [
-            "assign_dragon_trick"
-          ])
-        ) {
-          return {
-            ok: true,
-            actor: dragonWinner,
-            derivation: "pending_dragon_gift_winner",
-            derivedFromLegalActions: false
-          };
-        }
-        const dragonActors = listSeatActorsWithLegalActionTypes(legalActions, [
-          "assign_dragon_trick"
-        ]);
-        if (dragonActors.length === 1) {
-          return {
-            ok: true,
-            actor: dragonActors[0]!,
-            derivation: "derived_dragon_gift_actor",
-            derivedFromLegalActions: true
-          };
-        }
-        return {
-          ok: false,
-          stopReason: "invalid_state",
-          details: {
-            phase: state.phase,
-            activeSeat: state.activeSeat,
-            pendingDragonGift: {
-              winner: dragonWinner,
-              nextLeader: state.pendingDragonGift.nextLeader,
-              roundEndsAfterGift: state.pendingDragonGift.roundEndsAfterGift
-            } as unknown as JsonObject,
-            dragonActors,
-            ...summarizeLegalActors(legalActions)
-          }
-        };
-      }
-
-      if (
-        typeof state.activeSeat === "string" &&
-        SEAT_IDS.includes(state.activeSeat as SeatId)
-      ) {
-        const activeSeat = state.activeSeat as SeatId;
-        if (hasActorLegalActions(legalActions, activeSeat)) {
-          return {
-            ok: true,
-            actor: activeSeat,
-            derivation: "active_seat",
-            derivedFromLegalActions: false
-          };
-        }
-        return {
-          ok: false,
-          stopReason: "invalid_state",
-          details: {
-            phase: state.phase,
-            activeSeat: state.activeSeat,
-            ...summarizeLegalActors(legalActions)
-          }
-        };
-      }
-
-      const trickActors = listSeatActorsWithLegalActionTypes(legalActions, [
-        "play_cards",
-        "pass_turn",
-        "assign_dragon_trick"
-      ]);
-      if (trickActors.length === 1) {
-        return {
-          ok: true,
-          actor: trickActors[0]!,
-          derivation: "derived_trick_actor_from_legal_actions",
-          derivedFromLegalActions: true
-        };
-      }
-      return {
-        ok: false,
-        stopReason: "invalid_state",
-        details: {
-          phase: state.phase,
-          activeSeat: state.activeSeat,
-          trickActors,
-          ...summarizeLegalActors(legalActions)
-        }
-      };
-    }
-    default: {
-      if (systemHasActions) {
-        return {
-          ok: true,
-          actor: SYSTEM_ACTOR,
-          derivation: "system_actor_fallback",
-          derivedFromLegalActions: false
-        };
-      }
-      const seatActors = SEAT_IDS.filter((seat) =>
-        hasActorLegalActions(legalActions, seat)
-      );
-      if (seatActors.length === 1) {
-        return {
-          ok: true,
-          actor: seatActors[0]!,
-          derivation: "single_legal_actor_fallback",
-          derivedFromLegalActions: true
-        };
-      }
-      return {
-        ok: false,
-        stopReason: "invalid_state",
-        details: {
-          phase: state.phase,
-          activeSeat: state.activeSeat,
-          ...summarizeLegalActors(legalActions)
-        }
-      };
-    }
-  }
+  return resolveContinuationActor(config) as ContinuationActorResolution;
 }
 
 function resolveNextActor(
@@ -1685,7 +1417,11 @@ export function validateBackendDecisionRequestInput(config: {
     );
   }
   if (config.phase === "trick_play" && config.stateRaw.activeSeat === null) {
-    issues.push("trick_play requests must not be built with activeSeat=null.");
+    try {
+      getCanonicalActiveSeatFromState(config.stateRaw);
+    } catch (error) {
+      issues.push(error instanceof Error ? error.message : String(error));
+    }
   }
   if (config.stateRaw.phase !== config.phase) {
     issues.push(
@@ -1732,45 +1468,25 @@ export function buildDecisionRequestPayload(config: {
   controllerMode?: boolean;
   fullStateDecisionRequests?: boolean;
 }): DecisionRequestPayload {
-  const actorSeat = getCanonicalActiveSeatFromState(config.stateRaw);
-  const scoringPath = resolveDecisionScoringPath(config);
-  const actorActions = extractActorLegalActionList(
-    config.legalActions,
-    actorSeat
-  );
-  const fastPathActions = buildFastPathLegalActionPayload(
-    config.stateRaw as unknown as GameState,
-    actorSeat,
-    config.phase,
-    actorActions
-  );
-  const payload: DecisionRequestPayload = {
-    game_id: config.gameId,
-    hand_id: config.handId,
-    phase: config.phase,
-    actor_seat: actorSeat,
-    schema_version: TELEMETRY_SCHEMA_VERSION,
-    engine_version: TELEMETRY_ENGINE_VERSION,
-    sim_version: TELEMETRY_SIM_VERSION,
-    state_raw: scoringPath === "rich_path" ? config.stateRaw : null,
-    state_norm:
-      scoringPath === "rich_path"
-        ? config.stateNorm
-        : buildFastDecisionStatePayload(config.stateRaw, actorSeat),
-    legal_actions:
-      scoringPath === "rich_path"
-        ? (config.legalActions as unknown as JsonObject)
-        : (fastPathActions as unknown as JsonObject),
-    requested_provider: config.requestedProvider,
+  const built = buildCanonicalDecisionRequest({
+    gameId: config.gameId,
+    handId: config.handId,
+    state: config.stateRaw as unknown as GameState,
+    derived: config.stateNorm,
+    legalActions: config.legalActions,
+    requestedProvider: config.requestedProvider,
+    decisionIndex: config.decisionIndex,
+    ...(config.fullStateDecisionRequests !== undefined
+      ? { fullStateDecisionRequests: config.fullStateDecisionRequests }
+      : {}),
     metadata: {
-      decision_index: config.decisionIndex,
       simulation_mode: true,
-      scoring_path: scoringPath,
       ...(config.metadata ?? {}),
       ...(config.workerId ? { worker_id: config.workerId } : {}),
       ...(config.controllerMode ? { controller_mode: true } : {})
     } as JsonObject
-  };
+  });
+  const payload = built.payload;
 
   validateServerHeuristicDecisionRequestContract(payload);
 
@@ -2401,14 +2117,20 @@ export async function resolveDecision(config: {
     config.stateRaw !== null &&
     config.stateRaw.activeSeat === null
   ) {
-    return resolveLocalHeuristicDecision({
-      ...config,
-      requestedProvider,
-      providerReason:
-        "Resolved locally because this trick_play boundary has no canonical active seat yet.",
-      fallbackUsed: false,
-      startedAt
+    const recovery = resolveContinuationActor({
+      state: config.stateRaw as unknown as GameState,
+      legalActions: config.legalActions
     });
+    if (!recovery.ok || recovery.actor !== config.actor) {
+      return resolveLocalHeuristicDecision({
+        ...config,
+        requestedProvider,
+        providerReason:
+          "Resolved locally because this trick_play boundary has no canonical active seat yet.",
+        fallbackUsed: false,
+        startedAt
+      });
+    }
   }
 
   const fallbackAllowed = config.serverFallbackEnabled !== false;

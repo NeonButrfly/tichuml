@@ -67,7 +67,7 @@ function extractLastJsonObject(stream: string): Record<string, unknown> {
 
 describe("sim CLI", () => {
   it(
-    "uses the fileURLToPath main-module guard and completes one local game through tsx",
+    "uses the fileURLToPath main-module guard and completes one full local match through tsx",
     async () => {
     const cliSource = fs.readFileSync(
       path.join(process.cwd(), "apps", "sim-runner", "src", "cli.ts"),
@@ -91,17 +91,21 @@ describe("sim CLI", () => {
         "--full-state",
         "false",
         "--max-decisions-per-game",
-        "300"
+        "3000"
       ],
       60_000
     );
 
     expect(result.exitCode).toBe(0);
-    expect(extractLastJsonObject(result.stdout)).toMatchObject({
+    const summary = extractLastJsonObject(result.stdout);
+    expect(summary).toMatchObject({
       gamesPlayed: 1,
       errors: 0,
       maxDecisionLimitHit: 0
     });
+    expect(summary.handsPlayed).toBeGreaterThan(1);
+    expect(summary.lastCompletedGameId).toBeTruthy();
+    expect(summary.lastCompletedMatchWinner).toBeTruthy();
     },
     60_000
   );
@@ -130,7 +134,7 @@ describe("sim CLI", () => {
 
     expect(result.exitCode).toBe(1);
     expect(extractLastJsonObject(result.stdout)).toMatchObject({
-      gamesPlayed: 0,
+      gamesPlayed: 1,
       errors: 1,
       maxDecisionLimitHit: 1,
       decisionsEvaluated: 1

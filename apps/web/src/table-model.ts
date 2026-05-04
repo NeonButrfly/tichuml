@@ -3,6 +3,7 @@ import {
   SYSTEM_ACTOR,
   compareCardsForHand,
   getCanonicalCardIdsKey,
+  resolveContinuationActor,
   type ActorId,
   type Card,
   type EngineResult,
@@ -458,60 +459,20 @@ export function getExchangeFlowState(
 }
 
 export function getPrimaryActor(state: GameState, legalActions: LegalActionMap): ActorId | null {
-  if ((legalActions[SYSTEM_ACTOR] ?? []).length > 0) {
-    return SYSTEM_ACTOR;
-  }
-
-  if (state.phase === "grand_tichu_window") {
-    const grandTichuActor = SEAT_IDS.find((seat) =>
-      (legalActions[seat] ?? []).some(
-        (action) =>
-          action.type === "call_grand_tichu" ||
-          action.type === "decline_grand_tichu"
-      )
-    );
-    if (grandTichuActor) {
-      return grandTichuActor;
-    }
-  }
-
   if (state.phase === "pass_select") {
     const unresolvedNonLocalSeat =
       SEAT_IDS.filter((seat) => seat !== LOCAL_SEAT).find(
         (seat) =>
           !state.passSelections[seat] &&
-          (legalActions[seat] ?? []).some(
-            (action) => action.type === "select_pass"
-          )
+          (legalActions[seat] ?? []).some((action) => action.type === "select_pass")
       ) ?? null;
     if (unresolvedNonLocalSeat) {
       return unresolvedNonLocalSeat;
     }
-
-    return (
-      SEAT_IDS.find(
-        (seat) =>
-          !state.passSelections[seat] &&
-          (legalActions[seat] ?? []).some(
-            (action) => action.type === "select_pass"
-          )
-      ) ?? null
-    );
   }
 
-  if (
-    state.phase === "trick_play" &&
-    state.pendingDragonGift &&
-    (legalActions[state.pendingDragonGift.winner] ?? []).length > 0
-  ) {
-    return state.pendingDragonGift.winner;
-  }
-
-  if (state.phase === "trick_play" && state.activeSeat && (legalActions[state.activeSeat] ?? []).length > 0) {
-    return state.activeSeat;
-  }
-
-  return [SYSTEM_ACTOR, ...SEAT_IDS].find((actor) => (legalActions[actor] ?? []).length > 0) ?? null;
+  const resolution = resolveContinuationActor({ state, legalActions });
+  return resolution.ok ? resolution.actor : null;
 }
 
 export function getPrimaryActorFromResult(result: EngineResult): ActorId | null {

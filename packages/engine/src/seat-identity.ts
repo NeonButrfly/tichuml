@@ -50,7 +50,12 @@ export function compassToSeatId(compass: CompassSeat): SeatId {
   return COMPASS_TO_SEAT[compass];
 }
 
-function isStateLike(value: unknown): value is Pick<GameState, "phase" | "activeSeat" | "passSelections"> {
+function isStateLike(
+  value: unknown
+): value is Pick<
+  GameState,
+  "phase" | "activeSeat" | "passSelections" | "grandTichuQueue" | "pendingDragonGift"
+> {
   return typeof value === "object" && value !== null && "phase" in value;
 }
 
@@ -63,6 +68,23 @@ function getNextPendingPassSelectionSeat(
 export function getCanonicalActiveSeatFromState(state: unknown): SeatId {
   if (!isStateLike(state)) {
     throw new Error("[turn] Cannot derive canonical actor from a non-state payload.");
+  }
+
+  if (state.phase === "grand_tichu_window") {
+    const grandTichuActor = Array.isArray(state.grandTichuQueue)
+      ? state.grandTichuQueue[0]
+      : undefined;
+    if (isSeatId(grandTichuActor)) {
+      return grandTichuActor;
+    }
+  }
+
+  if (
+    state.phase === "trick_play" &&
+    state.pendingDragonGift &&
+    isSeatId(state.pendingDragonGift.winner)
+  ) {
+    return state.pendingDragonGift.winner;
   }
 
   if (isSeatId(state.activeSeat)) {
