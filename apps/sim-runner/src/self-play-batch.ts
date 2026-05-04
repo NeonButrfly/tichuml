@@ -95,6 +95,7 @@ export type SelfPlayBatchOptions = {
   telemetryMode?: TelemetryMode;
   telemetryMaxBytes?: number;
   telemetryTimeoutMs?: number;
+  decisionTimeoutMs?: number;
   telemetryRetryAttempts?: number;
   telemetryRetryDelayMs?: number;
   telemetryBackoffMs?: number;
@@ -269,6 +270,7 @@ type PersistedEventConfig = {
   telemetryMode?: TelemetryMode;
   telemetryMaxBytes?: number;
   telemetryTimeoutMs?: number;
+  decisionTimeoutMs?: number;
   telemetryRetryAttempts?: number;
   telemetryRetryDelayMs?: number;
   telemetryBackoffMs?: number;
@@ -1779,6 +1781,7 @@ async function resolveLocalHeuristicDecision(config: {
   telemetryMode?: TelemetryMode;
   telemetryMaxBytes?: number;
   telemetryTimeoutMs?: number;
+  decisionTimeoutMs?: number;
   telemetryRetryAttempts?: number;
   telemetryRetryDelayMs?: number;
   telemetryBackoffMs?: number;
@@ -2093,6 +2096,7 @@ export async function resolveDecision(config: {
   telemetryMode?: TelemetryMode;
   telemetryMaxBytes?: number;
   telemetryTimeoutMs?: number;
+  decisionTimeoutMs?: number;
   telemetryRetryAttempts?: number;
   telemetryRetryDelayMs?: number;
   telemetryBackoffMs?: number;
@@ -2326,7 +2330,7 @@ export async function resolveDecision(config: {
         actor_seat: String(config.actor),
         decision_index: config.decisionIndex,
         requested_provider: requestedProvider,
-        timeout_ms: 500,
+        timeout_ms: config.decisionTimeoutMs ?? 500,
         ...(config.traceBackend ? { trace_backend: true } : {}),
         ...(config.quiet ? { quiet: true } : {}),
         ...(config.workerId ? { worker_id: config.workerId } : {}),
@@ -2829,6 +2833,9 @@ async function runSingleGame(
               : {}),
             ...(options.telemetryMaxBytes !== undefined
               ? { telemetryMaxBytes: options.telemetryMaxBytes }
+              : {}),
+            ...(options.decisionTimeoutMs !== undefined
+              ? { decisionTimeoutMs: options.decisionTimeoutMs }
               : {}),
             ...(telemetryManager ? { telemetryManager } : {}),
             ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),

@@ -335,16 +335,35 @@ async function withSlowDecisionServer<T>(
       return;
     }
     if (request.url === DECISION_REQUEST_PATH && request.method === "POST") {
-      setTimeout(() => {
-        response.writeHead(200);
-        response.end(
-          JSON.stringify({
-            accepted: true,
-            chosen_action: { type: "pass_turn", seat: "seat-0" },
-            provider_used: "server_heuristic"
-          })
-        );
-      }, 2_000);
+      let raw = "";
+      request.setEncoding("utf8");
+      request.on("data", (chunk) => {
+        raw += chunk;
+      });
+      request.on("end", () => {
+        const parsed = JSON.parse(raw) as {
+          actor_seat?: string;
+          legal_actions?: Record<string, unknown[]> | unknown[];
+        };
+        const actorSeat = parsed.actor_seat ?? "seat-0";
+        const actorLegalActions = Array.isArray(parsed.legal_actions)
+          ? parsed.legal_actions
+          : parsed.legal_actions?.[actorSeat];
+        const chosenAction =
+          Array.isArray(actorLegalActions) && actorLegalActions.length > 0
+            ? actorLegalActions[0]
+            : { type: "pass_turn", seat: actorSeat };
+        setTimeout(() => {
+          response.writeHead(200);
+          response.end(
+            JSON.stringify({
+              accepted: true,
+              chosen_action: chosenAction,
+              provider_used: "server_heuristic"
+            })
+          );
+        }, 2_000);
+      });
       return;
     }
     response.writeHead(404);
@@ -1181,6 +1200,31 @@ describe("server_heuristic actor contract", () => {
       expect(decision.providerUsed).toBe("local_heuristic");
       expect(decision.fallbackUsed).toBe(true);
       expect(elapsedMs).toBeLessThan(1_500);
+    });
+  }, 10_000);
+
+  it("honors an explicit decision timeout override for slower server_heuristic runs", async () => {
+    await withSlowDecisionServer(async ({ baseUrl }) => {
+      const result = advanceToGrandTichuWindow();
+      const actor = getCanonicalActiveSeatFromState(result.nextState);
+      const decision = await resolveDecision({
+        backendBaseUrl: baseUrl,
+        telemetryEnabled: false,
+        gameId: "decision-timeout-override-game",
+        handId: "decision-timeout-override-hand",
+        actor,
+        decisionIndex: 0,
+        stateRaw: result.nextState as unknown as JsonObject,
+        stateNorm: result.derivedView as unknown as JsonObject,
+        legalActions: result.legalActions,
+        phase: result.nextState.phase,
+        defaultProvider: "server_heuristic",
+        serverFallbackEnabled: true,
+        decisionTimeoutMs: 2_500
+      });
+
+      expect(decision.providerUsed).toBe("server_heuristic");
+      expect(decision.fallbackUsed).toBe(false);
     });
   }, 10_000);
 

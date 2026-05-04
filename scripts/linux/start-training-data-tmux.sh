@@ -42,6 +42,8 @@ Simulation:
       Backend base URL. Default: http://127.0.0.1:4310
   --strict-telemetry <true|false>
       Whether telemetry failures should be strict. Default: false
+  --decision-timeout-ms <milliseconds>
+      Backend decision timeout for server_heuristic requests. Default: 500
   --interval-seconds <seconds>
       Seconds between scoped verification snapshots. Default: 15
 
@@ -142,6 +144,7 @@ GAMES=1000
 PROVIDER="server_heuristic"
 BACKEND_URL="http://127.0.0.1:4310"
 STRICT_TELEMETRY="false"
+DECISION_TIMEOUT_MS="500"
 PG_HOST="127.0.0.1"
 PG_PORT="54329"
 PG_USER="tichu"
@@ -183,6 +186,10 @@ while (($#)); do
       ;;
     --strict-telemetry)
       STRICT_TELEMETRY="${2:?missing value for --strict-telemetry}"
+      shift 2
+      ;;
+    --decision-timeout-ms)
+      DECISION_TIMEOUT_MS="${2:?missing value for --decision-timeout-ms}"
       shift 2
       ;;
     --pg-host)
@@ -285,6 +292,7 @@ prepare_args=(
   --backend-url "$BACKEND_URL"
   --strict-telemetry "$STRICT_TELEMETRY"
   --telemetry-mode "full"
+  --decision-timeout-ms "$DECISION_TIMEOUT_MS"
   --pg-host "$PG_HOST"
   --pg-port "$PG_PORT"
   --pg-user "$PG_USER"
@@ -335,6 +343,7 @@ if [[ "$DRY_RUN" == "true" ]]; then
   echo "Game ID prefix: $GAME_ID_PREFIX"
   echo "Run directory: $RUN_DIR"
   echo "Archive path: $ARCHIVE_PATH"
+  echo "Decision timeout ms: $DECISION_TIMEOUT_MS"
   echo "Clear SQL: $TRAINING_CLEAR_SQL"
   echo "Scoped export filter: game_id LIKE '${GAME_ID_PREFIX}%'"
   echo "ML export validation command: npm run ml:export -- --validate-only --run-id $RUN_ID --game-id-prefix $GAME_ID_PREFIX --output-dir training-runs/$RUN_ID/ml"

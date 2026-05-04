@@ -229,6 +229,9 @@ Key operator rules:
 - Run `scripts/linux/start-training-data-tmux.sh --help` or
   `scripts/windows/start-training-data.ps1 -Help` to see the full parameter
   list, defaults, session behavior, and artifact locations.
+- Use `--decision-timeout-ms` or `-DecisionTimeoutMs` when a
+  `server_heuristic` training run needs more than the default 500ms per backend
+  decision before falling back locally.
 - Default mode is `CLEAR DATABASE MODE`; pass `-noclear` or `-NoClear` for
   `NO-CLEAR APPEND MODE`.
 - Every run gets a unique `run_id`, a unique session or job name, a dedicated

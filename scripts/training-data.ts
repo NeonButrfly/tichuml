@@ -14,10 +14,24 @@ import {
   sanitizeSessionName,
 } from "@tichuml/shared";
 import { generateEntropySeed } from "../apps/server/src/entropy/index.js";
+import {
+  computeRemainingRequestedGames,
+  runStreamingProcess,
+} from "./lib/training-runner.js";
 
 type CliOptions = Record<string, string | boolean>;
 type TrainingMetadata = Record<string, unknown>;
 type TableCounts = Record<"matches" | "decisions" | "events", number>;
+type VerificationSnapshot = {
+  run_id: string;
+  game_id_prefix: string;
+  requested_games: number;
+  global_counts: TableCounts;
+  scoped_counts: TableCounts;
+  global_delta_from_baseline: TableCounts;
+  scoped_delta_from_baseline: TableCounts;
+  telemetry_flowing: boolean;
+};
 
 const TRAINING_CLEAR_SQL =
   "TRUNCATE TABLE events, decisions, matches RESTART IDENTITY CASCADE;";
@@ -163,6 +177,14 @@ function metadataNumber(metadata: TrainingMetadata, key: string): number {
   return value;
 }
 
+function metadataOptionalNumber(
+  metadata: TrainingMetadata,
+  key: string
+): number | null {
+  const value = metadata[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 function gitOutput(repoRoot: string, args: string[]): string {
   const result = spawnSync("git", ["-C", repoRoot, ...args], {
     encoding: "utf8",
@@ -176,6 +198,17 @@ function gitOutput(repoRoot: string, args: string[]): string {
 
 function escapeSqlLiteral(value: string): string {
   return value.replace(/'/g, "''");
+}
+
+function quoteShellArg(value: string): string {
+  if (/^[A-Za-z0-9_./:=+-]+$/u.test(value)) {
+    return value;
+  }
+  return JSON.stringify(value);
+}
+
+function formatCommandForLog(command: string, args: string[]): string {
+  return [command, ...args].map((part) => quoteShellArg(part)).join(" ");
 }
 
 function toForwardSlashes(filePath: string): string {
@@ -261,6 +294,39 @@ async function collectScopedCounts(
     matches: Number(matches?.row_count ?? 0),
     decisions: Number(decisions?.row_count ?? 0),
     events: Number(events?.row_count ?? 0),
+  };
+}
+
+async function buildVerificationSnapshot(
+  metadata: TrainingMetadata,
+  sql: ReturnType<typeof createDatabaseClient>
+): Promise<VerificationSnapshot> {
+  const prefix = scopePrefix(metadata);
+  const globalCounts = await collectTableCounts(sql);
+  const scopedCounts = await collectScopedCounts(sql, prefix);
+  const baseline =
+    (metadata.post_clear_counts as TableCounts | null) ??
+    (metadata.pre_clear_counts as TableCounts | null) ?? {
+      matches: 0,
+      decisions: 0,
+      events: 0,
+    };
+  const requestedGames =
+    metadataOptionalNumber(metadata, "requested_games") ??
+    metadataNumber(metadata, "games_per_batch");
+  return {
+    run_id: metadataString(metadata, "run_id"),
+    game_id_prefix: prefix,
+    requested_games: requestedGames,
+    global_counts: globalCounts,
+    scoped_counts: scopedCounts,
+    global_delta_from_baseline: {
+      matches: globalCounts.matches - baseline.matches,
+      decisions: globalCounts.decisions - baseline.decisions,
+      events: globalCounts.events - baseline.events,
+    },
+    scoped_delta_from_baseline: scopedCounts,
+    telemetry_flowing: scopedCounts.decisions > 0 && scopedCounts.events > 0,
   };
 }
 
@@ -611,6 +677,8 @@ async function prepareRun(options: CliOptions): Promise<void> {
       path.join(archiveRoot, `tichuml-training-export-${runId}.tar.gz`)
   );
   const controlDirectory = path.join(runDirectory, "control");
+  const requestedGames = optionNumber(options, "games-per-batch", 1000);
+  const decisionTimeoutMs = optionNumber(options, "decision-timeout-ms", 500);
   const metadata: TrainingMetadata = {
     run_id: runId,
     session_name: sessionName,
@@ -637,10 +705,12 @@ async function prepareRun(options: CliOptions): Promise<void> {
       .split(/\r?\n/u)
       .filter((line) => line.length > 0),
     provider: optionString(options, "provider"),
-    games_per_batch: optionNumber(options, "games-per-batch", 1000),
+    games_per_batch: requestedGames,
+    requested_games: requestedGames,
     backend_url: optionString(options, "backend-url"),
     strict_telemetry: optionBoolean(options, "strict-telemetry", false),
     telemetry_mode: optionString(options, "telemetry-mode", "full"),
+    decision_timeout_ms: decisionTimeoutMs,
     pg_host: optionString(options, "pg-host"),
     pg_port: optionString(options, "pg-port"),
     pg_user: optionString(options, "pg-user"),
@@ -682,6 +752,13 @@ async function prepareRun(options: CliOptions): Promise<void> {
     ml_export_supports_scoped_run: null,
     ml_export_supports_lightgbm_output: null,
     ml_export_check_status: "pending",
+    completed_scoped_matches: 0,
+    completed_scoped_decisions: 0,
+    completed_scoped_events: 0,
+    run_complete: false,
+    failure_reason: null,
+    sim_exit_code: null,
+    enobufs_detected: false,
     run_seed_info: runSeedInfo,
   };
   process.stdout.write(`${JSON.stringify(metadata, null, 2)}\n`);
@@ -736,7 +813,6 @@ async function prepareDatabase(options: CliOptions): Promise<void> {
 async function verifyRunOnce(options: CliOptions): Promise<void> {
   const metadataFile = path.resolve(optionString(options, "metadata-file"));
   const metadata = loadMetadata(metadataFile);
-  const prefix = scopePrefix(metadata);
   const verificationLog = metadataString(metadata, "verification_log");
   const countsFile = metadataString(metadata, "database_counts_file");
   const sql = createDatabaseClient({
@@ -747,29 +823,7 @@ async function verifyRunOnce(options: CliOptions): Promise<void> {
     database: metadataString(metadata, "pg_db"),
   });
   try {
-    const globalCounts = await collectTableCounts(sql);
-    const scopedCounts = await collectScopedCounts(sql, prefix);
-    const baseline =
-      (metadata.post_clear_counts as TableCounts | null) ??
-      (metadata.pre_clear_counts as TableCounts | null) ?? {
-        matches: 0,
-        decisions: 0,
-        events: 0,
-      };
-    const snapshot = {
-      run_id: metadataString(metadata, "run_id"),
-      game_id_prefix: prefix,
-      global_counts: globalCounts,
-      scoped_counts: scopedCounts,
-      global_delta_from_baseline: {
-        matches: globalCounts.matches - baseline.matches,
-        decisions: globalCounts.decisions - baseline.decisions,
-        events: globalCounts.events - baseline.events,
-      },
-      scoped_delta_from_baseline: scopedCounts,
-      telemetry_flowing:
-        scopedCounts.decisions > 0 && scopedCounts.events > 0,
-    };
+    const snapshot = await buildVerificationSnapshot(metadata, sql);
     logVerification(verificationLog, {
       event: "verification_snapshot",
       ...snapshot,
@@ -798,11 +852,28 @@ async function finalizeRun(metadata: TrainingMetadata, pgPassword: string): Prom
   try {
     const globalCounts = await collectTableCounts(sql);
     const scopedCounts = await collectScopedCounts(sql, prefix);
+    const requestedGames =
+      metadataOptionalNumber(metadata, "requested_games") ??
+      metadataNumber(metadata, "games_per_batch");
+    metadata.completed_scoped_matches = scopedCounts.matches;
+    metadata.completed_scoped_decisions = scopedCounts.decisions;
+    metadata.completed_scoped_events = scopedCounts.events;
+    if (metadata.run_complete !== true) {
+      metadata.run_complete =
+        scopedCounts.matches >= requestedGames &&
+        (metadata.failure_reason === null ||
+          metadata.failure_reason === undefined);
+    }
     writeJson(countsFile, {
       run_id: metadataString(metadata, "run_id"),
       game_id_prefix: prefix,
+      requested_games: requestedGames,
       global_counts: globalCounts,
       scoped_counts: scopedCounts,
+      run_complete: metadata.run_complete === true,
+      failure_reason: metadata.failure_reason ?? null,
+      sim_exit_code: metadata.sim_exit_code ?? null,
+      enobufs_detected: metadata.enobufs_detected === true,
     });
     const lastTen = await renderLastTenGames(sql, prefix);
     fs.mkdirSync(exportDirectory, { recursive: true });
@@ -889,13 +960,21 @@ async function runLoop(options: CliOptions): Promise<void> {
   const metadataFile = path.resolve(optionString(options, "metadata-file"));
   const metadata = loadMetadata(metadataFile);
   const runLog = metadataString(metadata, "run_log");
+  const verificationLog = metadataString(metadata, "verification_log");
+  const countsFile = metadataString(metadata, "database_counts_file");
   const stopFile = metadataString(metadata, "stop_file");
   const pidFile = metadataString(metadata, "pid_file");
   const repoRoot = metadataString(metadata, "repo_root");
   const pgPassword = resolvePassword(options);
+  const requestedGames =
+    metadataOptionalNumber(metadata, "requested_games") ??
+    metadataNumber(metadata, "games_per_batch");
+  const decisionTimeoutMs =
+    metadataOptionalNumber(metadata, "decision_timeout_ms") ?? 500;
   ensureParent(pidFile);
   fs.writeFileSync(pidFile, String(process.pid), "utf8");
   let stopping = false;
+  let fatalError: Error | null = null;
   const requestStop = () => {
     stopping = true;
     ensureParent(stopFile);
@@ -904,9 +983,49 @@ async function runLoop(options: CliOptions): Promise<void> {
   process.on("SIGINT", requestStop);
   process.on("SIGTERM", requestStop);
 
+  const collectSnapshot = async (): Promise<VerificationSnapshot> => {
+    const sql = createDatabaseClient({
+      host: metadataString(metadata, "pg_host"),
+      port: Number(metadataString(metadata, "pg_port")),
+      user: metadataString(metadata, "pg_user"),
+      password: pgPassword,
+      database: metadataString(metadata, "pg_db"),
+    });
+    try {
+      return await buildVerificationSnapshot(metadata, sql);
+    } finally {
+      await sql.end({ timeout: 5 });
+    }
+  };
+
+  const persistSnapshot = (snapshot: VerificationSnapshot): void => {
+    metadata.completed_scoped_matches = snapshot.scoped_counts.matches;
+    metadata.completed_scoped_decisions = snapshot.scoped_counts.decisions;
+    metadata.completed_scoped_events = snapshot.scoped_counts.events;
+    metadata.run_complete = snapshot.scoped_counts.matches >= requestedGames;
+    logVerification(verificationLog, {
+      event: "verification_snapshot",
+      ...snapshot,
+    });
+    writeJson(countsFile, snapshot);
+    saveMetadata(metadataFile, metadata);
+  };
+
   let batchNumber = 1;
   try {
     while (!stopping && !fs.existsSync(stopFile)) {
+      const beforeSnapshot = await collectSnapshot();
+      persistSnapshot(beforeSnapshot);
+      if (beforeSnapshot.scoped_counts.matches >= requestedGames) {
+        metadata.failure_reason = null;
+        metadata.sim_exit_code = 0;
+        break;
+      }
+
+      const remainingGames = computeRemainingRequestedGames({
+        requestedGames,
+        scopedMatches: beforeSnapshot.scoped_counts.matches,
+      });
       const batchId = buildTrainingBatchId(batchNumber);
       const batchSeed = deriveTrainingBatchSeed({
         resolvedRunSeed: metadataString(metadata, "seed"),
@@ -922,7 +1041,7 @@ async function runLoop(options: CliOptions): Promise<void> {
         "sim",
         "--",
         "--games",
-        String(metadataNumber(metadata, "games_per_batch")),
+        String(remainingGames),
         "--provider",
         metadataString(metadata, "provider"),
         "--backend-url",
@@ -948,6 +1067,10 @@ async function runLoop(options: CliOptions): Promise<void> {
         "--seed-hash",
         metadataString(metadata, "seed_hash"),
       ];
+      if (decisionTimeoutMs > 0) {
+        args.push("--decision-timeout-ms", String(decisionTimeoutMs));
+      }
+      const command = formatCommandForLog("npm", args);
       appendLine(
         runLog,
         JSON.stringify({
@@ -956,26 +1079,37 @@ async function runLoop(options: CliOptions): Promise<void> {
           batch_id: batchId,
           batch_seed: batchSeed,
           game_id_prefix: batchGameIdPrefix,
+          requested_games: requestedGames,
+          remaining_games_before_batch: remainingGames,
+          completed_scoped_matches_before_batch:
+            beforeSnapshot.scoped_counts.matches,
+          command,
           args,
         })
       );
-      const result = spawnNpm(args, { cwd: repoRoot });
-      if (result.error) {
+      const result = await runStreamingProcess({
+        command: "npm",
+        args,
+        cwd: repoRoot,
+        logFile: runLog,
+        shell: process.platform === "win32",
+        mirrorToParent: true,
+      });
+      metadata.sim_exit_code = result.exitCode;
+      metadata.enobufs_detected =
+        metadata.enobufs_detected === true || result.enobufsDetected;
+      if (result.errorMessage) {
         appendLine(
           runLog,
           JSON.stringify({
             ts: nowIso(),
             event: "batch_process_error",
             batch_id: batchId,
-            error: result.error.message,
+            exit_code: result.exitCode,
+            error: result.errorMessage,
+            enobufs_detected: result.enobufsDetected,
           })
         );
-      }
-      if ((result.stdout ?? "").trim().length > 0) {
-        appendLine(runLog, (result.stdout ?? "").trimEnd());
-      }
-      if ((result.stderr ?? "").trim().length > 0) {
-        appendLine(runLog, (result.stderr ?? "").trimEnd());
       }
       appendLine(
         runLog,
@@ -983,19 +1117,91 @@ async function runLoop(options: CliOptions): Promise<void> {
           ts: nowIso(),
           event: "batch_end",
           batch_id: batchId,
-          exit_code: result.status ?? 1,
+          exit_code: result.exitCode,
+          signal: result.signal,
         })
       );
-      await verifyRunOnce({
-        "metadata-file": metadataFile,
-        "pg-password": pgPassword,
-      });
-      if (result.status !== 0) {
+      const afterSnapshot = await collectSnapshot();
+      persistSnapshot(afterSnapshot);
+      appendLine(
+        runLog,
+        JSON.stringify({
+          ts: nowIso(),
+          event: "batch_progress",
+          run_id: metadataString(metadata, "run_id"),
+          batch_id: batchId,
+          requested_games: requestedGames,
+          scoped_matches: afterSnapshot.scoped_counts.matches,
+          scoped_decisions: afterSnapshot.scoped_counts.decisions,
+          scoped_events: afterSnapshot.scoped_counts.events,
+          global_matches: afterSnapshot.global_counts.matches,
+          global_decisions: afterSnapshot.global_counts.decisions,
+          global_events: afterSnapshot.global_counts.events,
+        })
+      );
+
+      const madeScopedProgress =
+        afterSnapshot.scoped_counts.matches >
+          beforeSnapshot.scoped_counts.matches ||
+        afterSnapshot.scoped_counts.decisions >
+          beforeSnapshot.scoped_counts.decisions ||
+        afterSnapshot.scoped_counts.events >
+          beforeSnapshot.scoped_counts.events;
+
+      if (afterSnapshot.scoped_counts.matches >= requestedGames) {
+        metadata.run_complete = true;
+        metadata.failure_reason = null;
+        saveMetadata(metadataFile, metadata);
         break;
       }
+
+      if (result.exitCode !== 0) {
+        metadata.failure_reason = result.errorMessage
+          ? `sim exited with code ${result.exitCode}: ${result.errorMessage}`
+          : `sim exited with code ${result.exitCode}`;
+        saveMetadata(metadataFile, metadata);
+        appendLine(
+          runLog,
+          JSON.stringify({
+            ts: nowIso(),
+            event: "batch_failure_tail",
+            batch_id: batchId,
+            output_tail: result.outputTail,
+          })
+        );
+        fatalError = new Error(
+          `${metadata.failure_reason}\n${result.outputTail.join("\n")}`.trim()
+        );
+        break;
+      }
+
+      if (!madeScopedProgress) {
+        metadata.failure_reason =
+          "sim exited without increasing scoped matches, decisions, or events";
+        saveMetadata(metadataFile, metadata);
+        appendLine(
+          runLog,
+          JSON.stringify({
+            ts: nowIso(),
+            event: "batch_progress_stalled",
+            batch_id: batchId,
+            output_tail: result.outputTail,
+          })
+        );
+        fatalError = new Error(
+          `Training run stalled after ${batchId}: ${metadata.failure_reason}\n${result.outputTail.join("\n")}`.trim()
+        );
+        break;
+      }
+
       batchNumber += 1;
     }
   } finally {
+    if (!metadata.run_complete && !metadata.failure_reason) {
+      metadata.failure_reason =
+        stopping || fs.existsSync(stopFile) ? "operator_stop" : null;
+    }
+    saveMetadata(metadataFile, metadata);
     try {
       await finalizeRun(metadata, pgPassword);
     } catch (error) {
@@ -1009,6 +1215,9 @@ async function runLoop(options: CliOptions): Promise<void> {
       );
       throw error;
     }
+  }
+  if (fatalError) {
+    throw fatalError;
   }
 }
 

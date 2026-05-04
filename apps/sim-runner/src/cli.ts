@@ -41,6 +41,7 @@ type ParsedArgs = {
   telemetryMode: "minimal" | "full";
   telemetryMaxBytes: number;
   telemetryTimeoutMs: number;
+  decisionTimeoutMs: number;
   telemetryRetryAttempts: number;
   telemetryRetryDelayMs: number;
   telemetryBackoffMs: number;
@@ -184,6 +185,7 @@ function parseArgs(argv: string[]): ParsedArgs {
       process.env.TELEMETRY_POST_TIMEOUT_MS,
       DEFAULT_TELEMETRY_POST_TIMEOUT_MS
     ),
+    decisionTimeoutMs: 500,
     telemetryRetryAttempts: parsePositiveInteger(
       process.env.TELEMETRY_RETRY_ATTEMPTS,
       DEFAULT_TELEMETRY_RETRY_ATTEMPTS
@@ -280,6 +282,10 @@ function parseArgs(argv: string[]): ParsedArgs {
         break;
       case "--telemetry-timeout-ms":
         parsed.telemetryTimeoutMs = parsePositiveInteger(next, parsed.telemetryTimeoutMs);
+        index += 1;
+        break;
+      case "--decision-timeout-ms":
+        parsed.decisionTimeoutMs = parsePositiveInteger(next, parsed.decisionTimeoutMs);
         index += 1;
         break;
       case "--telemetry-retry-attempts":
@@ -849,6 +855,7 @@ async function runWorker(args: ParsedArgs, worker: SimWorkerRuntimeState): Promi
         telemetryMode: args.telemetryMode,
         telemetryMaxBytes: args.telemetryMaxBytes,
         telemetryTimeoutMs: args.telemetryTimeoutMs,
+        decisionTimeoutMs: args.decisionTimeoutMs,
         telemetryRetryAttempts: args.telemetryRetryAttempts,
         telemetryRetryDelayMs: args.telemetryRetryDelayMs,
         telemetryBackoffMs: args.telemetryBackoffMs,
@@ -1034,6 +1041,7 @@ async function main(): Promise<void> {
       telemetryMode: args.telemetryMode,
       telemetryMaxBytes: args.telemetryMaxBytes,
       telemetryTimeoutMs: args.telemetryTimeoutMs,
+      decisionTimeoutMs: args.decisionTimeoutMs,
       telemetryRetryAttempts: args.telemetryRetryAttempts,
       telemetryRetryDelayMs: args.telemetryRetryDelayMs,
       telemetryBackoffMs: args.telemetryBackoffMs,

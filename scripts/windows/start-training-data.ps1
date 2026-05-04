@@ -5,6 +5,7 @@ param(
   [string]$Provider = "server_heuristic",
   [string]$BackendUrl = "http://127.0.0.1:4310",
   [bool]$StrictTelemetry = $false,
+  [int]$DecisionTimeoutMs = 500,
   [string]$PgHost = "127.0.0.1",
   [string]$PgPort = "54329",
   [string]$PgUser = "tichu",
@@ -67,6 +68,8 @@ Simulation:
       Backend base URL. Default: http://127.0.0.1:4310
   -StrictTelemetry <true|false>
       Whether telemetry failures should be strict. Default: false
+  -DecisionTimeoutMs <milliseconds>
+      Backend decision timeout for server_heuristic requests. Default: 500
   -IntervalSeconds <seconds>
       Seconds between scoped verification snapshots. Default: 15
 
@@ -214,6 +217,7 @@ try {
     "--backend-url", $BackendUrl,
     "--strict-telemetry", "$StrictTelemetry",
     "--telemetry-mode", "full",
+    "--decision-timeout-ms", "$DecisionTimeoutMs",
     "--pg-host", $PgHost,
     "--pg-port", $PgPort,
     "--pg-user", $PgUser,
@@ -257,6 +261,7 @@ try {
     Write-Host "Game ID prefix: $gameIdPrefix"
     Write-Host "Run directory: $runDir"
     Write-Host "Archive path: $archivePath"
+    Write-Host "Decision timeout ms: $DecisionTimeoutMs"
     Write-Host "Clear SQL: TRUNCATE TABLE events, decisions, matches RESTART IDENTITY CASCADE;"
     Write-Host "Scoped export filter: game_id LIKE '$gameIdPrefix%'"
     Write-Host "ML export validation command: npm run ml:export -- --validate-only --run-id $runId --game-id-prefix $gameIdPrefix --output-dir training-runs\$runId\ml"
