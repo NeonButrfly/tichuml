@@ -1,3 +1,21 @@
+param(
+  [Alias("?")]
+  [switch]$Help
+)
+
+if ($Help) {
+@"
+Usage:
+  scripts\windows\update-backend.ps1 [options]
+
+Force-refreshes the Windows backend repo checkout from the live remote.
+
+Options:
+  -Help, -?
+"@ | Write-Host
+  exit 0
+}
+
 . "$PSScriptRoot\backend-common.ps1"
 Write-Step "Updating Windows backend repository"
 Ensure-RuntimeDirs

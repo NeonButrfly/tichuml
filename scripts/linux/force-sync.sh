@@ -7,6 +7,25 @@ BRANCH="${BRANCH:-${GIT_BRANCH:-main}}"
 REMOTE="${REMOTE:-origin}"
 REPO_URL="${REPO_URL:-https://github.com/NeonButrfly/tichuml.git}"
 
+usage() {
+  cat <<'EOF'
+Usage: scripts/linux/force-sync.sh [--help|-h]
+
+Force-syncs the repository to the live remote branch and removes local changes.
+
+Environment overrides:
+  REPO_DIR   Target repo path. Default: repo root
+  BRANCH     Remote branch. Default: main
+  REMOTE     Git remote name. Default: origin
+  REPO_URL   Remote URL used for live SHA verification
+EOF
+}
+
+if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+  usage
+  exit 0
+fi
+
 live_remote_commit_from_url() {
   local remote_url="$1"
   local branch="$2"

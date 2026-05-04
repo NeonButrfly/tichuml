@@ -4,8 +4,29 @@ param(
   [string]$PostgresUser = "tichu",
   [string]$PostgresPassword = "tichu_dev_password",
   [string]$PostgresDb = "tichu",
-  [string]$PostgresPort = "54329"
+  [string]$PostgresPort = "54329",
+  [Alias("?")]
+  [switch]$Help
 )
+
+if ($Help) {
+@"
+Usage:
+  scripts\windows\reset-db.ps1 [options]
+
+Stops the backend, recreates the Postgres data volume, and reruns migrations.
+
+Options:
+  -RepoRoot <path>
+  -PostgresContainer <name>
+  -PostgresUser <user>
+  -PostgresPassword <password>
+  -PostgresDb <database>
+  -PostgresPort <port>
+  -Help, -?
+"@ | Write-Host
+  exit 0
+}
 
 $env:BACKEND_REPO_ROOT = $RepoRoot
 . "$PSScriptRoot\backend-common.ps1"

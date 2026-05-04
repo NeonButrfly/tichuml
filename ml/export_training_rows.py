@@ -329,6 +329,10 @@ def opponent_team_for_seat(seat: str) -> str:
     return "team-1" if team_for_seat(seat) == "team-0" else "team-0"
 
 
+def is_player_actor_seat(seat: str) -> bool:
+    return seat in {"seat-0", "seat-1", "seat-2", "seat-3"}
+
+
 def stable_json(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
 
@@ -709,6 +713,8 @@ def expected_training_row_count(
     game_id_prefix: str | None,
 ) -> int:
     clauses, params = build_scope_where(run_id, game_id_prefix)
+    clauses.insert(0, "actor_seat LIKE %s")
+    params.insert(0, "seat-%")
     where_clause = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     query = f"""
         SELECT
@@ -919,6 +925,7 @@ class ExportStats:
     missing_state_raw_count: int = 0
     missing_state_norm_count: int = 0
     missing_legal_actions_count: int = 0
+    non_player_actor_decisions_skipped: int = 0
     chosen_action_match_count: int = 0
     fallback_rows: int = 0
     observed_outcome_available_rows: int = 0
@@ -960,6 +967,7 @@ class ExportStats:
             "missing_state_raw_count": self.missing_state_raw_count,
             "missing_state_norm_count": self.missing_state_norm_count,
             "missing_legal_actions_count": self.missing_legal_actions_count,
+            "non_player_actor_decisions_skipped": self.non_player_actor_decisions_skipped,
             "chosen_action_match_count": self.chosen_action_match_count,
             "chosen_action_match_rate": round(chosen_action_match_rate, 6),
             "observed_outcome_available_rows": self.observed_outcome_available_rows,
@@ -1055,6 +1063,9 @@ def build_rows_for_chunk(
     for decision in decisions:
         stats.decisions_read += 1
         actor_seat = str(decision.get("actor_seat", ""))
+        if not is_player_actor_seat(actor_seat):
+            stats.non_player_actor_decisions_skipped += 1
+            continue
         phase = str(decision.get("phase", ""))
         legal_actions = extract_actor_legal_actions(decision.get("legal_actions"), actor_seat)
         if not legal_actions:

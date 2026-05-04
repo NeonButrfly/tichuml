@@ -3,6 +3,20 @@ set -euo pipefail
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 . "$SCRIPT_DIR/backend-common.sh"
+
+usage() {
+  cat <<'EOF'
+Usage: scripts/linux/sim-doctor.sh [sim:doctor options]
+
+Runs simulator diagnostics and then validates backend telemetry truth.
+EOF
+}
+
+if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+  usage
+  exit 0
+fi
+
 ensure_repo_root
 ensure_runtime_dirs
 assert_postgres_identity

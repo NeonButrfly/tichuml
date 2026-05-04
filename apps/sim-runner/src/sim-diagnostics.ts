@@ -342,6 +342,8 @@ function createEmptyBatchSummary(): SelfPlayBatchSummary {
     eventsByPhase: {},
     providerUsage: {},
     fallbackCount: 0,
+    decisionProviderFailures: 0,
+    decisionTimeoutCount: 0,
     errors: 0,
     maxDecisionLimitHit: 0,
     averageGameDurationMs: 0,
@@ -413,6 +415,8 @@ function mergeBatchSummary(
   target.eventsRecorded += source.eventsRecorded;
   target.decisionsEvaluated += source.decisionsEvaluated;
   target.fallbackCount += source.fallbackCount;
+  target.decisionProviderFailures += source.decisionProviderFailures;
+  target.decisionTimeoutCount += source.decisionTimeoutCount;
   target.errors += source.errors;
   target.maxDecisionLimitHit += source.maxDecisionLimitHit;
   target.invalidDecisionCount += source.invalidDecisionCount;

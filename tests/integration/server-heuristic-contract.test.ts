@@ -741,7 +741,8 @@ describe("server_heuristic actor contract", () => {
           quiet: true,
           maxDecisionsPerGame: 1
         });
-        expect(repository.decisions).toHaveLength(0);
+        expect(repository.decisions).toHaveLength(1);
+        expect(repository.decisions[0]?.policy_source).toBe("server_heuristic");
       } finally {
         debugSpy.mockRestore();
         logSpy.mockRestore();
@@ -1032,8 +1033,21 @@ describe("server_heuristic actor contract", () => {
 
       expect(response.status).toBe(200);
       expect(payload.provider_used).toBe("server_heuristic");
-      expect(payload.telemetry_id).toBeUndefined();
-      expect(repository.decisions.length).toBe(0);
+      expect(payload.telemetry_id).toBeGreaterThan(0);
+      expect(repository.decisions.length).toBe(1);
+      expect(repository.decisions[0]?.policy_source).toBe("server_heuristic");
+      expect(repository.decisions[0]?.state_raw).toMatchObject({
+        phase: request.phase
+      });
+      expect(
+        ((repository.decisions[0]?.state_raw as JsonObject).hands as JsonObject)?.[
+          request.actor_seat
+        ]
+      ).toBeTruthy();
+      expect(repository.decisions[0]?.state_norm).not.toBeNull();
+      expect(repository.decisions[0]?.metadata.telemetry_state_raw_source).toBe(
+        "synthesized_fast_path"
+      );
       expect(payload.metadata).toMatchObject({
         canonical_actor_seat: request.actor_seat,
         request_validated: true,

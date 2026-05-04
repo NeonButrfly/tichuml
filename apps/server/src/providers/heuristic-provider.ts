@@ -215,7 +215,40 @@ export function routeHeuristicDecision(
         action: fastDecision.action,
         explanation
       },
-      telemetryPayload: null,
+      telemetryPayload: createTelemetryPayload({
+        payload,
+        providerUsed: "server_heuristic",
+        providerReason,
+        policyName: heuristicsV1Policy.name,
+        chosenAction: fastDecision.action,
+        antipatternTags: [],
+        metadata: {
+          requested_provider: payload.requested_provider,
+          provider_used: "server_heuristic",
+          fallback_used: options.providerReason !== undefined,
+          canonical_actor_seat: canonicalActor,
+          legal_action_count: legalActionCount,
+          request_validated: true,
+          provider_path: "server_heuristic",
+          requested_scoring_path: requestedScoringPath,
+          scoring_path: scoringPath,
+          fast_path_validation: fastPathValidation,
+          ...(fastPathFallbackReason
+            ? { fast_path_fallback_reason: fastPathFallbackReason }
+            : {}),
+          explanation,
+          timing: {
+            validate_ms: validateMs,
+            normalize_ms: normalizeMs,
+            evaluate_ms: evaluateMs,
+            response_ms: 0,
+            total_latency_ms: Date.now() - startedAt,
+            candidate_count: fastDecision.candidateCount,
+            scoring_path: scoringPath
+          },
+          ...(options.metadata ?? {})
+        } as JsonObject
+      }),
       responseMetadata: {
         explanation,
         chosen_action: fastDecision.action,

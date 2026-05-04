@@ -6,8 +6,32 @@ param(
   [string]$PostgresUser = "tichu",
   [string]$PostgresPassword = "tichu_dev_password",
   [string]$PostgresDb = "tichu",
-  [string]$PostgresPort = "54329"
+  [string]$PostgresPort = "54329",
+  [Alias("?")]
+  [switch]$Help
 )
+
+if ($Help) {
+@"
+Usage:
+  scripts\windows\install-backend.ps1 [options]
+
+Installs and bootstraps the canonical Windows backend host flow.
+This workflow force-refreshes the repo before rebuilding runtime artifacts.
+
+Options:
+  -RepoRoot <path>
+  -DatabaseUrl <url>
+  -BootstrapUrl <url>
+  -PostgresContainer <name>
+  -PostgresUser <user>
+  -PostgresPassword <password>
+  -PostgresDb <database>
+  -PostgresPort <port>
+  -Help, -?
+"@ | Write-Host
+  exit 0
+}
 
 $env:BACKEND_REPO_ROOT = $RepoRoot
 . "$PSScriptRoot\backend-common.ps1"

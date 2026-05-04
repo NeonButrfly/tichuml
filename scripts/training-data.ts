@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { randomBytes as cryptoRandomBytes } from "node:crypto";
+import { fileURLToPath } from "node:url";
 import postgres from "postgres";
 import {
   buildTrainingBatchId,
@@ -31,6 +32,16 @@ type VerificationSnapshot = {
   global_delta_from_baseline: TableCounts;
   scoped_delta_from_baseline: TableCounts;
   telemetry_flowing: boolean;
+};
+
+type ParsedSimBatchSummary = {
+  gamesPlayed: number;
+  errors: number;
+  fallbackCount: number;
+  decisionProviderFailures: number;
+  decisionTimeoutCount: number;
+  providerUsage: Record<string, number>;
+  averageLatencyByProvider: Record<string, number>;
 };
 
 const TRAINING_CLEAR_SQL =
@@ -146,6 +157,70 @@ function appendLine(filePath: string, line: string): void {
 function writeJson(filePath: string, payload: unknown): void {
   ensureParent(filePath);
   fs.writeFileSync(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+}
+
+function isNumberRecord(value: unknown): value is Record<string, number> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  return Object.values(value).every(
+    (entry) => typeof entry === "number" && Number.isFinite(entry)
+  );
+}
+
+function mergeNumberCounts(
+  current: unknown,
+  next: Record<string, number>
+): Record<string, number> {
+  const merged = isNumberRecord(current) ? { ...current } : {};
+  for (const [key, value] of Object.entries(next)) {
+    merged[key] = (merged[key] ?? 0) + value;
+  }
+  return merged;
+}
+
+export function parseSimBatchSummaryFromLines(
+  lines: string[]
+): ParsedSimBatchSummary | null {
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const line = lines[index]?.trim();
+    if (!line || !line.startsWith("{") || !line.endsWith("}")) {
+      continue;
+    }
+    try {
+      const parsed = JSON.parse(line) as Record<string, unknown>;
+      if (
+        typeof parsed.gamesPlayed === "number" &&
+        typeof parsed.errors === "number" &&
+        typeof parsed.fallbackCount === "number"
+      ) {
+        return {
+          gamesPlayed: parsed.gamesPlayed,
+          errors: parsed.errors,
+          fallbackCount: parsed.fallbackCount,
+          decisionProviderFailures:
+            typeof parsed.decisionProviderFailures === "number"
+              ? parsed.decisionProviderFailures
+              : 0,
+          decisionTimeoutCount:
+            typeof parsed.decisionTimeoutCount === "number"
+              ? parsed.decisionTimeoutCount
+              : 0,
+          providerUsage: isNumberRecord(parsed.providerUsage)
+            ? parsed.providerUsage
+            : {},
+          averageLatencyByProvider: isNumberRecord(
+            parsed.averageLatencyByProvider
+          )
+            ? parsed.averageLatencyByProvider
+            : {}
+        };
+      }
+    } catch {
+      continue;
+    }
+  }
+  return null;
 }
 
 function loadMetadata(metadataFile: string): TrainingMetadata {
@@ -520,12 +595,12 @@ function spawnNpm(
     env?: NodeJS.ProcessEnv;
   }
 ) {
-  return spawnSync("npm", args, {
+  const command = process.platform === "win32" ? "npm.cmd" : "npm";
+  return spawnSync(command, args, {
     cwd: options.cwd,
     env: options.env ?? process.env,
     encoding: "utf8",
     windowsHide: true,
-    shell: process.platform === "win32",
   });
 }
 
@@ -711,6 +786,7 @@ async function prepareRun(options: CliOptions): Promise<void> {
     strict_telemetry: optionBoolean(options, "strict-telemetry", false),
     telemetry_mode: optionString(options, "telemetry-mode", "full"),
     decision_timeout_ms: decisionTimeoutMs,
+    decision_request_mode: "fast_path_default",
     pg_host: optionString(options, "pg-host"),
     pg_port: optionString(options, "pg-port"),
     pg_user: optionString(options, "pg-user"),
@@ -755,6 +831,11 @@ async function prepareRun(options: CliOptions): Promise<void> {
     completed_scoped_matches: 0,
     completed_scoped_decisions: 0,
     completed_scoped_events: 0,
+    provider_used_distribution: {},
+    fallback_count: 0,
+    decision_provider_failures: 0,
+    decision_timeout_count: 0,
+    average_latency_by_provider: {},
     run_complete: false,
     failure_reason: null,
     sim_exit_code: null,
@@ -956,6 +1037,51 @@ async function finalizeRun(metadata: TrainingMetadata, pgPassword: string): Prom
   console.log(`Export ready:\n${archivePath}`);
 }
 
+export function buildTrainingSimArgs(config: {
+  metadata: TrainingMetadata;
+  remainingGames: number;
+  batchId: string;
+  batchSeed: string;
+  batchGameIdPrefix: string;
+}): string[] {
+  const decisionTimeoutMs =
+    metadataOptionalNumber(config.metadata, "decision_timeout_ms") ?? 500;
+  const args = [
+    "run",
+    "sim",
+    "--",
+    "--games",
+    String(config.remainingGames),
+    "--provider",
+    metadataString(config.metadata, "provider"),
+    "--backend-url",
+    metadataString(config.metadata, "backend_url"),
+    "--telemetry",
+    "true",
+    "--strict-telemetry",
+    metadataBoolean(config.metadata, "strict_telemetry") ? "true" : "false",
+    "--telemetry-mode",
+    metadataString(config.metadata, "telemetry_mode"),
+    "--quiet",
+    "--seed",
+    config.batchSeed,
+    "--seed-prefix",
+    "training-data",
+    "--run-id",
+    metadataString(config.metadata, "run_id"),
+    "--batch-id",
+    config.batchId,
+    "--game-id-prefix",
+    config.batchGameIdPrefix,
+    "--seed-hash",
+    metadataString(config.metadata, "seed_hash")
+  ];
+  if (decisionTimeoutMs > 0) {
+    args.push("--decision-timeout-ms", String(decisionTimeoutMs));
+  }
+  return args;
+}
+
 async function runLoop(options: CliOptions): Promise<void> {
   const metadataFile = path.resolve(optionString(options, "metadata-file"));
   const metadata = loadMetadata(metadataFile);
@@ -969,8 +1095,6 @@ async function runLoop(options: CliOptions): Promise<void> {
   const requestedGames =
     metadataOptionalNumber(metadata, "requested_games") ??
     metadataNumber(metadata, "games_per_batch");
-  const decisionTimeoutMs =
-    metadataOptionalNumber(metadata, "decision_timeout_ms") ?? 500;
   ensureParent(pidFile);
   fs.writeFileSync(pidFile, String(process.pid), "utf8");
   let stopping = false;
@@ -1036,40 +1160,13 @@ async function runLoop(options: CliOptions): Promise<void> {
         runId: metadataString(metadata, "run_id"),
         batchId,
       });
-      const args = [
-        "run",
-        "sim",
-        "--",
-        "--games",
-        String(remainingGames),
-        "--provider",
-        metadataString(metadata, "provider"),
-        "--backend-url",
-        metadataString(metadata, "backend_url"),
-        "--telemetry",
-        "true",
-        "--strict-telemetry",
-        metadataBoolean(metadata, "strict_telemetry") ? "true" : "false",
-        "--telemetry-mode",
-        metadataString(metadata, "telemetry_mode"),
-        "--full-state",
-        "true",
-        "--seed",
-        batchSeed,
-        "--seed-prefix",
-        "training-data",
-        "--run-id",
-        metadataString(metadata, "run_id"),
-        "--batch-id",
+      const args = buildTrainingSimArgs({
+        metadata,
+        remainingGames,
         batchId,
-        "--game-id-prefix",
-        batchGameIdPrefix,
-        "--seed-hash",
-        metadataString(metadata, "seed_hash"),
-      ];
-      if (decisionTimeoutMs > 0) {
-        args.push("--decision-timeout-ms", String(decisionTimeoutMs));
-      }
+        batchSeed,
+        batchGameIdPrefix
+      });
       const command = formatCommandForLog("npm", args);
       appendLine(
         runLog,
@@ -1088,11 +1185,10 @@ async function runLoop(options: CliOptions): Promise<void> {
         })
       );
       const result = await runStreamingProcess({
-        command: "npm",
+        command: process.platform === "win32" ? "npm.cmd" : "npm",
         args,
         cwd: repoRoot,
         logFile: runLog,
-        shell: process.platform === "win32",
         mirrorToParent: true,
       });
       metadata.sim_exit_code = result.exitCode;
@@ -1121,6 +1217,45 @@ async function runLoop(options: CliOptions): Promise<void> {
           signal: result.signal,
         })
       );
+      const parsedSummary = parseSimBatchSummaryFromLines(result.outputTail);
+      if (parsedSummary) {
+        metadata.provider_used_distribution = mergeNumberCounts(
+          metadata.provider_used_distribution,
+          parsedSummary.providerUsage
+        );
+        metadata.fallback_count =
+          metadataOptionalNumber(metadata, "fallback_count") ??
+          Number(metadata["fallback_count"] ?? 0);
+        metadata.fallback_count =
+          Number(metadata.fallback_count ?? 0) + parsedSummary.fallbackCount;
+        metadata.decision_provider_failures =
+          Number(metadata["decision_provider_failures"] ?? 0) +
+          parsedSummary.decisionProviderFailures;
+        metadata.decision_timeout_count =
+          Number(metadata["decision_timeout_count"] ?? 0) +
+          parsedSummary.decisionTimeoutCount;
+        metadata.average_latency_by_provider = {
+          ...(isNumberRecord(metadata.average_latency_by_provider)
+            ? metadata.average_latency_by_provider
+            : {}),
+          ...parsedSummary.averageLatencyByProvider
+        };
+        appendLine(
+          runLog,
+          JSON.stringify({
+            ts: nowIso(),
+            event: "batch_provider_summary",
+            batch_id: batchId,
+            requested_provider: metadataString(metadata, "provider"),
+            provider_used_counts: parsedSummary.providerUsage,
+            fallback_count: parsedSummary.fallbackCount,
+            decision_provider_failures: parsedSummary.decisionProviderFailures,
+            decision_timeout_count: parsedSummary.decisionTimeoutCount,
+            average_latency_by_provider:
+              parsedSummary.averageLatencyByProvider
+          })
+        );
+      }
       const afterSnapshot = await collectSnapshot();
       persistSnapshot(afterSnapshot);
       appendLine(
@@ -1247,7 +1382,13 @@ async function main(): Promise<void> {
   throw new Error(`Unknown training-data command: ${command}`);
 }
 
-void main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exitCode = 1;
-});
+const isMainModule = process.argv[1]
+  ? path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+  : false;
+
+if (isMainModule) {
+  void main().catch((error) => {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+  });
+}

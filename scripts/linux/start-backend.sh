@@ -5,6 +5,21 @@ set -euo pipefail
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 START_REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)"
 
+usage() {
+  cat <<'EOF'
+Usage: scripts/linux/start-backend.sh [--help|-h]
+
+Starts the canonical Linux backend host flow.
+If the host is Linux, this workflow force-syncs the repo to the live remote
+before startup and can overwrite local source changes.
+EOF
+}
+
+if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+  usage
+  exit 0
+fi
+
 if [ -f "$START_REPO_ROOT/.env" ] && command -v node >/dev/null 2>&1; then
   eval "$(node "$START_REPO_ROOT/scripts/runtime-config.mjs" export-shell "$START_REPO_ROOT/.env")"
 fi

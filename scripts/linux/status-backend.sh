@@ -6,6 +6,20 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 # shellcheck disable=SC1091
 . "$SCRIPT_DIR/backend-common.sh"
 
+usage() {
+  cat <<'EOF'
+Usage: scripts/linux/status-backend.sh [--help|-h]
+
+Prints runtime, dependency, Git, and HTTP health status for the canonical Linux
+backend host flow.
+EOF
+}
+
+if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+  usage
+  exit 0
+fi
+
 status_line() {
   printf '%-6s %s\n' "$1" "$2"
 }

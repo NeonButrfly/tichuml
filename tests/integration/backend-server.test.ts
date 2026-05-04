@@ -1105,12 +1105,27 @@ describe("backend foundation server routes", () => {
       expect(payload.accepted).toBe(true);
       expect(payload.provider_used).toBe("server_heuristic");
       expect(payload.chosen_action.type).toBeDefined();
-      expect(payload.telemetry_id).toBeUndefined();
+      expect(payload.telemetry_id).toBeGreaterThan(0);
       expect(payload.metadata?.scoring_path).toBe("fast_path");
       expect(payload.metadata?.timing).toMatchObject({
         scoring_path: "fast_path"
       });
-      expect(repository.decisions).toHaveLength(0);
+      expect(repository.decisions).toHaveLength(1);
+      expect(repository.decisions[0]?.policy_source).toBe("server_heuristic");
+      expect(repository.decisions[0]?.state_raw).toMatchObject({
+        phase: repository.decisions[0]?.phase
+      });
+      expect(
+        ((repository.decisions[0]?.state_raw as JsonObject).hands as JsonObject)?.[
+          repository.decisions[0]?.actor_seat ?? ""
+        ]
+      ).toBeTruthy();
+      expect(repository.decisions[0]?.state_norm).not.toBeNull();
+      expect(repository.decisions[0]?.legal_action_count).toBeGreaterThan(0);
+      expect(repository.decisions[0]?.has_candidate_scores).toBe(true);
+      expect(repository.decisions[0]?.metadata.telemetry_state_raw_source).toBe(
+        "synthesized_fast_path"
+      );
     });
   });
 

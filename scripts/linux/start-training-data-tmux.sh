@@ -19,7 +19,7 @@ Modes:
   -noclear, --no-clear: NO-CLEAR APPEND MODE
 
 Help:
-  --help, -help
+  --help, -h, -help
       Show this help text and exit.
 
 Session control:
@@ -43,7 +43,7 @@ Simulation:
   --strict-telemetry <true|false>
       Whether telemetry failures should be strict. Default: false
   --decision-timeout-ms <milliseconds>
-      Backend decision timeout for server_heuristic requests. Default: 500
+      Diagnostic escape hatch for backend decision timeouts. Default: 500
   --interval-seconds <seconds>
       Seconds between scoped verification snapshots. Default: 15
 
@@ -164,7 +164,7 @@ SESSION_NAME=""
 
 while (($#)); do
   case "$1" in
-    --help|-help)
+    --help|-h|-help)
       print_help
       exit 0
       ;;
@@ -344,6 +344,7 @@ if [[ "$DRY_RUN" == "true" ]]; then
   echo "Run directory: $RUN_DIR"
   echo "Archive path: $ARCHIVE_PATH"
   echo "Decision timeout ms: $DECISION_TIMEOUT_MS"
+  echo "Decision request mode: fast_path_default"
   echo "Clear SQL: $TRAINING_CLEAR_SQL"
   echo "Scoped export filter: game_id LIKE '${GAME_ID_PREFIX}%'"
   echo "ML export validation command: npm run ml:export -- --validate-only --run-id $RUN_ID --game-id-prefix $GAME_ID_PREFIX --output-dir training-runs/$RUN_ID/ml"

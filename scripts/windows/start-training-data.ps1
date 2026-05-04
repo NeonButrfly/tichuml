@@ -21,6 +21,7 @@ param(
   [switch]$DetachOnly,
   [switch]$SkipMlExportCheck,
   [string]$MlExportCommand = "npm run ml:export",
+  [Alias("?")]
   [switch]$Help,
   [switch]$InternalRunner,
   [string]$MetadataFile,
@@ -44,8 +45,8 @@ Modes:
   -NoClear: NO-CLEAR APPEND MODE
 
 Help:
-  -Help
-  --help
+  -Help, -?
+  --help, -help
       Show this help text and exit.
 
 Session control:
@@ -69,7 +70,7 @@ Simulation:
   -StrictTelemetry <true|false>
       Whether telemetry failures should be strict. Default: false
   -DecisionTimeoutMs <milliseconds>
-      Backend decision timeout for server_heuristic requests. Default: 500
+      Diagnostic escape hatch for backend decision timeouts. Default: 500
   -IntervalSeconds <seconds>
       Seconds between scoped verification snapshots. Default: 15
 
@@ -185,7 +186,7 @@ Get-ChildItem "`$env:TEMP\tichuml-training-export-$RunId.tar.gz"
 
 $repoRoot = Get-RepoRoot
 
-if ($Help -or ($RemainingArgs -contains "--help")) {
+if ($Help -or ($RemainingArgs -contains "--help") -or ($RemainingArgs -contains "-help")) {
   Show-HelpText
   exit 0
 }
@@ -262,6 +263,7 @@ try {
     Write-Host "Run directory: $runDir"
     Write-Host "Archive path: $archivePath"
     Write-Host "Decision timeout ms: $DecisionTimeoutMs"
+    Write-Host "Decision request mode: fast_path_default"
     Write-Host "Clear SQL: TRUNCATE TABLE events, decisions, matches RESTART IDENTITY CASCADE;"
     Write-Host "Scoped export filter: game_id LIKE '$gameIdPrefix%'"
     Write-Host "ML export validation command: npm run ml:export -- --validate-only --run-id $runId --game-id-prefix $gameIdPrefix --output-dir training-runs\$runId\ml"

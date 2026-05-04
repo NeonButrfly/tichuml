@@ -16,6 +16,30 @@ WORKER_COUNT="1"
 QUIET="true"
 PROGRESS="false"
 
+usage() {
+  cat <<'EOF'
+Usage:
+  scripts/linux/sim-controller.sh <start|pause|continue|stop|status|run-once> [options]
+
+Controls the backend-hosted simulator controller.
+
+Options:
+  --api-url <url>
+  --confirm-token <token>
+  --provider <local|server_heuristic|lightgbm_model>
+  --games-per-batch <count>
+  --telemetry <true|false>
+  --backend-url <url>
+  --seed <value>
+  --seed-prefix <namespace>
+  --sleep-seconds <seconds>
+  --worker-count <count>
+  --quiet
+  --progress
+  --help, -h
+EOF
+}
+
 prompt() {
   label="$1"
   default="$2"
@@ -30,6 +54,10 @@ prompt() {
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
+    --help|-h)
+      usage
+      exit 0
+      ;;
     start|pause|continue|stop|status|run-once)
       ACTION="$1"
       shift
@@ -86,6 +114,7 @@ while [ "$#" -gt 0 ]; do
       ;;
     *)
       echo "Unknown argument: $1" >&2
+      usage >&2
       exit 2
       ;;
   esac

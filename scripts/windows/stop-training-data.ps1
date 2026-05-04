@@ -1,13 +1,35 @@
 [CmdletBinding()]
 param(
-  [Parameter(Mandatory = $true)]
   [string]$SessionName,
   [int]$TimeoutSeconds = 60,
-  [switch]$Force
+  [switch]$Force,
+  [Alias("?")]
+  [switch]$Help
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+if ($Help) {
+@"
+Usage:
+  scripts\windows\stop-training-data.ps1 -SessionName <name> [options]
+
+Requests a clean shutdown for a Windows training-data session and waits for the
+runner to finalize scoped exports.
+
+Options:
+  -SessionName <name>
+  -TimeoutSeconds <seconds>
+  -Force
+  -Help, -?
+"@ | Write-Host
+  exit 0
+}
+
+if ([string]::IsNullOrWhiteSpace($SessionName)) {
+  throw "SessionName is required unless -Help or -? is used."
+}
 
 function Get-RepoRoot {
   return (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path

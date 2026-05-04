@@ -149,6 +149,8 @@ export type SelfPlayGameResult = {
   telemetryFailureByKind: Record<string, number>;
   telemetryBackoffUntil: string | null;
   telemetryRuntime: TelemetryRuntimeState | null;
+  decisionProviderFailures: number;
+  decisionTimeoutCount: number;
   stopReason: SelfPlayStopReason;
   stopDetails: JsonObject;
   lastPhase: string;
@@ -175,6 +177,8 @@ export type SelfPlayBatchSummary = {
   eventsByPhase: Record<string, number>;
   providerUsage: Record<string, number>;
   fallbackCount: number;
+  decisionProviderFailures: number;
+  decisionTimeoutCount: number;
   errors: number;
   maxDecisionLimitHit: number;
   averageGameDurationMs: number;
@@ -240,6 +244,8 @@ type SimulatedDecision = {
   providerReason: string;
   explanation?: ChosenDecision["explanation"];
   fallbackUsed: boolean;
+  providerFailureKind: DecisionFailureKind | null;
+  providerFailureTimedOut: boolean;
   latencyMs: number;
   telemetryFailureStats: TelemetryFailureStats;
   telemetryFailure?: TelemetryWriteResult;
@@ -427,6 +433,10 @@ class BackendRequestFailure extends Error {
     super(message);
     this.name = "BackendRequestFailure";
   }
+}
+
+function didDecisionFailureTimeOut(failure: DecisionRequestFailure): boolean {
+  return /timed out after \d+ms/i.test(failure.message);
 }
 
 function countByKey(bucket: Record<string, number>, key: string): void {
@@ -1988,6 +1998,8 @@ async function resolveLocalHeuristicDecision(config: {
     providerReason: config.providerReason,
     explanation: chosen.explanation,
     fallbackUsed: config.fallbackUsed,
+    providerFailureKind: null,
+    providerFailureTimedOut: false,
     latencyMs,
     telemetryFailureStats,
     ...(telemetryFailure ? { telemetryFailure } : {})
@@ -2216,6 +2228,8 @@ export async function resolveDecision(config: {
       fallback_used: true,
       context: failure.context
     });
+    fallback.providerFailureKind = failure.kind;
+    fallback.providerFailureTimedOut = didDecisionFailureTimeOut(failure);
     return fallback;
   };
 
@@ -2430,6 +2444,8 @@ export async function resolveDecision(config: {
       ? { explanation: metadata.explanation as ChosenDecision["explanation"] }
       : {}),
     fallbackUsed,
+    providerFailureKind: null,
+    providerFailureTimedOut: false,
     latencyMs: Date.now() - startedAt,
     telemetryFailureStats: createTelemetryFailureStats()
   };
@@ -2478,6 +2494,8 @@ async function runSingleGame(
     : undefined;
   let telemetryBackoffUntil: string | null = null;
   let fallbackCount = 0;
+  let decisionProviderFailures = 0;
+  let decisionTimeoutCount = 0;
   let passActions = 0;
   let playActions = 0;
   let bombPlays = 0;
@@ -2904,6 +2922,12 @@ async function runSingleGame(
         if (resolved.fallbackUsed) {
           fallbackCount += 1;
         }
+        if (resolved.providerFailureKind !== null) {
+          decisionProviderFailures += 1;
+        }
+        if (resolved.providerFailureTimedOut) {
+          decisionTimeoutCount += 1;
+        }
 
         lastActionType = resolved.chosenAction.type;
         const matchedLegalAction = findMatchingLegalAction(
@@ -3131,6 +3155,8 @@ async function runSingleGame(
     ...telemetryFailureStats,
     telemetryBackoffUntil,
     telemetryRuntime: telemetryRuntimeState,
+    decisionProviderFailures,
+    decisionTimeoutCount,
     stopReason,
     stopDetails,
     lastPhase,
@@ -3199,6 +3225,8 @@ export async function runSelfPlayBatchDetailed(
     eventsByPhase: {},
     providerUsage: {},
     fallbackCount: 0,
+    decisionProviderFailures: 0,
+    decisionTimeoutCount: 0,
     errors: 0,
     maxDecisionLimitHit: 0,
     averageGameDurationMs: 0,
@@ -3265,6 +3293,8 @@ export async function runSelfPlayBatchDetailed(
       summary.eventsRecorded += game.events;
       summary.decisionsEvaluated += game.decisions;
       summary.fallbackCount += game.fallbackCount;
+      summary.decisionProviderFailures += game.decisionProviderFailures;
+      summary.decisionTimeoutCount += game.decisionTimeoutCount;
       if (game.stopReason === "terminal_game_finished") {
         summary.lastCompletedGameId = game.gameId;
         summary.lastCompletedHandId = game.lastHandId;

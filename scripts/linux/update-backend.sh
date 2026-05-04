@@ -6,6 +6,21 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 # shellcheck disable=SC1091
 . "$SCRIPT_DIR/backend-common.sh"
 
+usage() {
+  cat <<'EOF'
+Usage: scripts/linux/update-backend.sh [--help|-h]
+
+Force-refreshes the Linux backend repo checkout from the live remote and
+refreshes runtime artifacts. If the backend is already running, it will be
+restarted after the update completes.
+EOF
+}
+
+if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+  usage
+  exit 0
+fi
+
 main() {
   log_step "Checking Linux backend repository updates"
   load_repo_env

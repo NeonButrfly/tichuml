@@ -1,5 +1,28 @@
-param([int]$GamesPerBatch = 100, [int]$WorkerCount = 1, [string]$Provider = "server_heuristic", [string]$BackendUrl = "http://127.0.0.1:4310")
+param(
+  [int]$GamesPerBatch = 100,
+  [int]$WorkerCount = 1,
+  [string]$Provider = "server_heuristic",
+  [string]$BackendUrl = "http://127.0.0.1:4310",
+  [Alias("?")]
+  [switch]$Help
+)
 $ErrorActionPreference = "Stop"
+if ($Help) {
+@"
+Usage:
+  scripts\windows\start-sim-controller.ps1 [options]
+
+Starts the long-running simulator controller against the configured backend.
+
+Options:
+  -GamesPerBatch <count>
+  -WorkerCount <count>
+  -Provider <local|server_heuristic|lightgbm_model>
+  -BackendUrl <url>
+  -Help, -?
+"@ | Write-Host
+  exit 0
+}
 $repo = if ($env:BACKEND_REPO_ROOT) { $env:BACKEND_REPO_ROOT } else { "C:\tichu\tichuml" }
 $runtime = Join-Path $repo ".runtime\sim-controller"
 New-Item -ItemType Directory -Force -Path $runtime | Out-Null

@@ -18,6 +18,7 @@ import type {
   DecisionRequestPayload,
   JsonObject,
   RequestedDecisionProvider,
+  SeedJsonValue,
   TelemetryDecisionPayload
 } from "@tichuml/shared";
 import { inferTelemetryFallbackUsed } from "@tichuml/shared";
@@ -31,6 +32,20 @@ export type RoutedDecision = {
   responseMetadata?: JsonObject;
 };
 
+type FastPathTelemetryState = {
+  phase: string;
+  activeSeat: string | null;
+  actorHand: SeedJsonValue[];
+  handCounts: Record<string, number>;
+  currentWish?: unknown;
+  currentTrick?: unknown;
+  calls?: Record<string, unknown>;
+  passSelections?: Record<string, unknown>;
+  revealedPasses?: Record<string, unknown>;
+  collectedCards?: Record<string, unknown>;
+  finishedOrder?: unknown[];
+};
+
 export function isUsableState(value: unknown): value is GameState {
   return (
     typeof value === "object" &&
@@ -38,6 +53,22 @@ export function isUsableState(value: unknown): value is GameState {
     "phase" in value &&
     "hands" in value &&
     "activeSeat" in value
+  );
+}
+
+function isFastPathTelemetryState(
+  value: unknown
+): value is FastPathTelemetryState {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  const candidate = value as Partial<FastPathTelemetryState>;
+  return (
+    typeof candidate.phase === "string" &&
+    Array.isArray(candidate.actorHand) &&
+    typeof candidate.handCounts === "object" &&
+    candidate.handCounts !== null
   );
 }
 
@@ -238,6 +269,78 @@ export function extractActorLegalActions(
   );
 }
 
+function buildUnknownHand(cardCount: number, seat: string): string[] {
+  const safeCount =
+    typeof cardCount === "number" && Number.isFinite(cardCount) && cardCount > 0
+      ? Math.floor(cardCount)
+      : 0;
+  return Array.from(
+    { length: safeCount },
+    (_, index) => `unknown-${seat}-${index + 1}`
+  );
+}
+
+function deriveTelemetryStateRaw(
+  payload: DecisionRequestPayload
+): JsonObject | null {
+  if (isUsableState(payload.state_raw)) {
+    return payload.state_raw;
+  }
+
+  if (!isFastPathTelemetryState(payload.state_norm)) {
+    return null;
+  }
+
+  const fastState = payload.state_norm;
+  const handCounts = fastState.handCounts ?? {};
+  const hands = Object.fromEntries(
+    ["seat-0", "seat-1", "seat-2", "seat-3"].map((seat) => [
+      seat,
+      seat === payload.actor_seat
+        ? fastState.actorHand
+        : buildUnknownHand(
+            typeof handCounts[seat] === "number" ? handCounts[seat] : 0,
+            seat
+          )
+    ])
+  ) as JsonObject;
+
+  return {
+    phase: fastState.phase,
+    activeSeat:
+      typeof fastState.activeSeat === "string" ? fastState.activeSeat : null,
+    hands,
+    currentWish:
+      typeof fastState.currentWish === "number" ? fastState.currentWish : null,
+    currentTrick:
+      typeof fastState.currentTrick === "object" && fastState.currentTrick !== null
+        ? (fastState.currentTrick as JsonObject)
+        : null,
+    calls:
+      typeof fastState.calls === "object" && fastState.calls !== null
+        ? (fastState.calls as JsonObject)
+        : {},
+    passSelections:
+      typeof fastState.passSelections === "object" &&
+      fastState.passSelections !== null
+        ? (fastState.passSelections as JsonObject)
+        : {},
+    revealedPasses:
+      typeof fastState.revealedPasses === "object" &&
+      fastState.revealedPasses !== null
+        ? (fastState.revealedPasses as JsonObject)
+        : {},
+    collectedCards:
+      typeof fastState.collectedCards === "object" &&
+      fastState.collectedCards !== null
+        ? (fastState.collectedCards as JsonObject)
+        : {},
+    finishedOrder: Array.isArray(fastState.finishedOrder)
+      ? (fastState.finishedOrder as SeedJsonValue[])
+      : []
+  };
+}
+
 export function toActionSortKey(action: EngineAction): string {
   switch (action.type) {
     case "play_cards":
@@ -347,10 +450,9 @@ export function createTelemetryPayload(config: {
   antipatternTags?: string[];
   metadata?: JsonObject;
 }): TelemetryDecisionPayload {
-  const stateRaw = config.payload.state_raw;
-  const actorLegalActions = isUsableState(stateRaw)
-    ? extractActorLegalActions(config.payload)
-    : [];
+  const stateRaw =
+    deriveTelemetryStateRaw(config.payload) ?? config.payload.state_raw ?? {};
+  const actorLegalActions = extractActorLegalActions(config.payload);
   const explanation =
     config.metadata?.explanation &&
     typeof config.metadata.explanation === "object"
@@ -388,7 +490,7 @@ export function createTelemetryPayload(config: {
     phase: config.payload.phase,
     actorSeat: config.payload.actor_seat,
     decisionIndex: getDecisionIndex(config.payload),
-    stateRaw: config.payload.state_raw ?? {},
+    stateRaw: stateRaw,
     stateNorm: config.payload.state_norm,
     legalActions: config.payload.legal_actions,
     chosenAction: config.chosenAction as unknown as JsonObject,
@@ -413,6 +515,10 @@ export function createTelemetryPayload(config: {
       provider_used: config.providerUsed,
       provider_reason: config.providerReason,
       fallback_used: fallbackUsed,
+      ...(config.payload.state_raw === null &&
+      isFastPathTelemetryState(config.payload.state_norm)
+        ? { telemetry_state_raw_source: "synthesized_fast_path" }
+        : {}),
       ...(config.metadata ?? {})
     } as JsonObject
   }).full;

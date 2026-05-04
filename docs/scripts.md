@@ -14,6 +14,29 @@ Flat scripts under `scripts/` are compatibility wrappers only. They exist so
 older operator commands keep working, but they should not grow independent
 behavior.
 
+All human-runnable operator entrypoints now support built-in usage help:
+
+- Linux shell scripts: `--help` or `-h`
+- Windows PowerShell scripts: `-Help` or `-?`
+
+Compatibility wrappers forward help requests to their canonical OS-specific
+targets so older commands remain discoverable instead of failing silently.
+
+Operator-friendly entrypoints now include:
+
+- `scripts/start-frontend.sh`
+- `scripts/start-backend.sh`
+- `scripts/stop-backend.sh`
+- `scripts/restart-backend.sh`
+- `scripts/backend-health.sh`
+- `scripts/backend-logs.sh`
+- `scripts/windows/start-frontend.ps1`
+- `scripts/windows/start-backend.ps1`
+- `scripts/windows/stop-backend.ps1`
+- `scripts/windows/restart-backend.ps1`
+- `scripts/windows/backend-health.ps1`
+- `scripts/windows/backend-logs.ps1`
+
 ## Canonical Layout
 
 ```text
@@ -229,9 +252,15 @@ Key operator rules:
 - Run `scripts/linux/start-training-data-tmux.sh --help` or
   `scripts/windows/start-training-data.ps1 -Help` to see the full parameter
   list, defaults, session behavior, and artifact locations.
-- Use `--decision-timeout-ms` or `-DecisionTimeoutMs` when a
-  `server_heuristic` training run needs more than the default 500ms per backend
-  decision before falling back locally.
+- `server_heuristic` training now stays on the normal fast-path request shape
+  even when telemetry is full. The workflow no longer forces `--full-state`
+  rich decision requests as the default server path.
+- The `server_heuristic` training fix is the request-path correction above, not
+  a larger timeout. The default `500ms` timeout remains intact; the timeout
+  flag is only a diagnostic escape hatch.
+- Use `--decision-timeout-ms` or `-DecisionTimeoutMs` only as a diagnostic
+  escape hatch. It is not the primary fix for `server_heuristic` training
+  behavior.
 - Default mode is `CLEAR DATABASE MODE`; pass `-noclear` or `-NoClear` for
   `NO-CLEAR APPEND MODE`.
 - Every run gets a unique `run_id`, a unique session or job name, a dedicated
@@ -242,6 +271,9 @@ Key operator rules:
   they do not rely on database clearing alone.
 - `ml:export` is checked in validation-only mode during the training workflow.
   The scripts do not run a full export dataset automatically.
+- Server-backed fast-path training runs now persist enough scoped decision
+  telemetry for `ml:export --validate-only` to confirm current-run
+  LightGBM-compatible output readiness.
 - Manual scoped export after a run is:
   `npm run ml:export -- --run-id <run_id> --game-id-prefix <game_id_prefix> --output-dir training-runs/<run_id>/ml`
 - Manual ML output is written under `training-runs/<run_id>/ml` and includes

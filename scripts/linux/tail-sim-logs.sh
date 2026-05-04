@@ -3,6 +3,16 @@ set -euo pipefail
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 . "$SCRIPT_DIR/backend-common.sh"
+
+if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+  cat <<'EOF'
+Usage: scripts/linux/tail-sim-logs.sh [--help|-h]
+
+Follows the most recent simulator log file from the Linux backend workflow.
+EOF
+  exit 0
+fi
+
 ensure_runtime_dirs
 latest="$(find "$SIM_LOG_DIR" -type f -name '*.log' -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -1 | cut -d' ' -f2-)"
 if [ -z "${latest:-}" ]; then
