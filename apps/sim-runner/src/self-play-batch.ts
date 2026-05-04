@@ -10,6 +10,7 @@ import {
 import {
   BACKEND_HEALTH_PATH,
   DECISION_REQUEST_PATH,
+  buildTrainingGameId,
   getDecisionScoringPath,
   getOutcomeActorTeamForSeat,
   inferTelemetryFallbackUsed,
@@ -84,6 +85,8 @@ export type SelfPlayBatchOptions = {
   games: number;
   baseSeed: string;
   defaultProvider: DecisionMode;
+  gameIdPrefix?: string | undefined;
+  runMetadata?: JsonObject | undefined;
   seatProviders?: SeatProviderOverrides;
   telemetryEnabled: boolean;
   serverFallbackEnabled?: boolean;
@@ -805,8 +808,18 @@ function serializeError(error: unknown): JsonObject {
   return { message: String(error) };
 }
 
-function buildGameId(baseSeed: string, index: number): string {
-  return `selfplay-${baseSeed}-game-${String(index + 1).padStart(6, "0")}`;
+function buildGameId(config: {
+  baseSeed: string;
+  index: number;
+  gameIdPrefix?: string | undefined;
+}): string {
+  if (config.gameIdPrefix) {
+    return buildTrainingGameId({
+      gameIdPrefix: config.gameIdPrefix,
+      gameNumber: config.index + 1
+    });
+  }
+  return `selfplay-${config.baseSeed}-game-${String(config.index + 1).padStart(6, "0")}`;
 }
 
 function buildHandId(gameId: string, handNumber: number): string {
@@ -837,8 +850,10 @@ function buildDecisionTelemetryMetadata(config: {
   handIndex: number;
   gameIndex: number;
   trickIndex: number | null;
+  metadata?: JsonObject | undefined;
 }): JsonObject {
   return {
+    ...(config.metadata ?? {}),
     hand_index: config.handIndex,
     hand_number: config.handIndex,
     game_index: config.gameIndex,
@@ -854,8 +869,10 @@ function buildDecisionTelemetryMetadata(config: {
 function buildLifecycleMetadata(config: {
   handIndex: number;
   gameIndex: number;
+  metadata?: JsonObject | undefined;
 }): JsonObject {
   return {
+    ...(config.metadata ?? {}),
     hand_index: config.handIndex,
     hand_number: config.handIndex,
     game_index: config.gameIndex
@@ -987,6 +1004,7 @@ function buildHandOutcomeMetadata(config: {
   handId: string;
   handIndex: number;
   gameIndex: number;
+  metadata?: JsonObject | undefined;
 }): JsonObject {
   const roundSummary = config.state.roundSummary;
   const matchEntry = config.state.matchHistory.at(-1) ?? null;
@@ -1002,7 +1020,8 @@ function buildHandOutcomeMetadata(config: {
   return {
     ...buildLifecycleMetadata({
       handIndex: config.handIndex,
-      gameIndex: config.gameIndex
+      gameIndex: config.gameIndex,
+      metadata: config.metadata
     }),
     hand_ns_score_delta: handNsScoreDelta,
     hand_ew_score_delta: handEwScoreDelta,
@@ -1035,6 +1054,7 @@ function buildGameOutcomeMetadata(config: {
   state: GameState;
   handIndex: number;
   gameIndex: number;
+  metadata?: JsonObject | undefined;
 }): JsonObject {
   const finalGameWinnerTeam =
     config.state.matchScore["team-0"] === config.state.matchScore["team-1"]
@@ -1045,7 +1065,8 @@ function buildGameOutcomeMetadata(config: {
   return {
     ...buildLifecycleMetadata({
       handIndex: config.handIndex,
-      gameIndex: config.gameIndex
+      gameIndex: config.gameIndex,
+      metadata: config.metadata
     }),
     game_ns_final_score: config.state.matchScore["team-0"],
     game_ew_final_score: config.state.matchScore["team-1"],
@@ -2415,7 +2436,11 @@ async function runSingleGame(
   options: SelfPlayBatchOptions,
   backendBaseUrl: string
 ): Promise<SelfPlayGameResult> {
-  const gameId = buildGameId(options.baseSeed, index);
+  const gameId = buildGameId({
+    baseSeed: options.baseSeed,
+    index,
+    gameIdPrefix: options.gameIdPrefix
+  });
   const firstHandId = buildHandId(gameId, 1);
   const startedAt = Date.now();
   const gameIndex = index + 1;
@@ -2504,7 +2529,8 @@ async function runSingleGame(
             state: result.nextState,
             handId,
             handIndex: currentHandNumber,
-            gameIndex
+            gameIndex,
+            metadata: options.runMetadata
           }),
           hand_number: String(result.nextState.matchHistory.length),
           hands_played: String(result.nextState.matchHistory.length),
@@ -2561,7 +2587,8 @@ async function runSingleGame(
           ...buildGameOutcomeMetadata({
             state: result.nextState,
             handIndex: currentHandNumber,
-            gameIndex
+            gameIndex,
+            metadata: options.runMetadata
           }),
           hand_number: String(result.nextState.matchHistory.length),
           hands_played: String(result.nextState.matchHistory.length),
@@ -2608,7 +2635,8 @@ async function runSingleGame(
         requestedProvider: "system_local",
         metadata: buildLifecycleMetadata({
           handIndex: currentHandNumber,
-          gameIndex
+          gameIndex,
+          metadata: options.runMetadata
         }),
         ...(options.workerId ? { workerId: options.workerId } : {}),
         ...(options.controllerMode ? { controllerMode: true } : {})
@@ -2652,7 +2680,8 @@ async function runSingleGame(
             requestedProvider: "system_local",
             metadata: buildLifecycleMetadata({
               handIndex: currentHandNumber,
-              gameIndex
+              gameIndex,
+              metadata: options.runMetadata
             }),
             ...(options.workerId ? { workerId: options.workerId } : {}),
             ...(options.controllerMode ? { controllerMode: true } : {})
@@ -2693,6 +2722,11 @@ async function runSingleGame(
             eventIndex: currentEventIndex,
             providerUsed: "system_local",
             requestedProvider: "system_local",
+            metadata: buildLifecycleMetadata({
+              handIndex: currentHandNumber,
+              gameIndex,
+              metadata: options.runMetadata
+            }),
             ...(options.workerId ? { workerId: options.workerId } : {}),
             ...(options.controllerMode ? { controllerMode: true } : {})
           }
@@ -2803,6 +2837,7 @@ async function runSingleGame(
               handId,
               handIndex: currentHandNumber,
               gameIndex,
+              metadata: options.runMetadata,
               trickIndex:
                 result.nextState.currentTrick !== null ||
                 result.nextState.pendingDragonGift !== null
@@ -2964,7 +2999,8 @@ async function runSingleGame(
               metadata: {
                 ...buildLifecycleMetadata({
                   handIndex: currentHandNumber,
-                  gameIndex
+                  gameIndex,
+                  metadata: options.runMetadata
                 }),
                 ...(trickOutcomeMetadata ?? {})
               },
@@ -3306,7 +3342,11 @@ export async function runSelfPlayBatchDetailed(
         summary.handsPlayed += error.handsPlayed;
       }
       if (shouldEmitDiagnostic(options)) {
-        const gameId = buildGameId(options.baseSeed, index);
+        const gameId = buildGameId({
+          baseSeed: options.baseSeed,
+          index,
+          gameIdPrefix: options.gameIdPrefix
+        });
         console.error(
           JSON.stringify({
             ts: new Date().toISOString(),

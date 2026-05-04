@@ -50,6 +50,18 @@ Export candidate-action rows with observed outcomes:
 npm run ml:export -- --database-url "$env:DATABASE_URL" --phase trick_play
 ```
 
+Validate scoped current-run export compatibility without writing a full dataset:
+
+```powershell
+npm run ml:export -- --validate-only --run-id <run_id> --game-id-prefix <game_id_prefix> --output-dir training-runs/<run_id>/ml
+```
+
+Write a scoped LightGBM-ready export bundle after a training run:
+
+```powershell
+npm run ml:export -- --run-id <run_id> --game-id-prefix <game_id_prefix> --output-dir training-runs/<run_id>/ml
+```
+
 Generate rollout labels:
 
 ```powershell
@@ -90,6 +102,19 @@ npm run ml:evaluate -- --games 100 --ns-provider lightgbm_model --ew-provider se
 - `ml/data/action_rows.quality.md`
 - `ml/feature_schema.json`
 - `artifacts/ml/export-manifest.json`
+
+When `--output-dir training-runs/<run_id>/ml` is supplied, `ml:export` also
+scopes the source rows to the requested run and writes a self-contained export
+bundle such as:
+
+- `training-runs/<run_id>/ml/train.parquet` or `train.csv.gz`
+- `training-runs/<run_id>/ml/dataset_metadata.json`
+- `training-runs/<run_id>/ml/feature_schema.json`
+- `training-runs/<run_id>/ml/feature_columns.json`
+- `training-runs/<run_id>/ml/label_columns.json`
+
+`--validate-only` uses the same scoped filters and LightGBM shape checks, but
+it does not emit the full dataset.
 
 `ml:rollouts` writes:
 

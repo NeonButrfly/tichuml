@@ -17,3 +17,4 @@ eval/results/*
 !eval/results/.gitkeep
 diagnostics/verify-one-game-*/
 verify-one-game-*.zip
+training-runs/

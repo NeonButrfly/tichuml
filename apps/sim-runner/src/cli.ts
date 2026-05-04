@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { SEAT_IDS, type SeatId } from "@tichuml/engine";
 import { runSelfPlayBatch, type SeatProviderOverrides } from "./self-play-batch.js";
 import type {
+  JsonObject,
   DecisionMode,
   SimControllerConfig,
   SimControllerRuntimeState,
@@ -13,6 +14,7 @@ import type {
   SimWorkerRuntimeState,
   TelemetryRuntimeState
 } from "@tichuml/shared";
+import { buildTrainingGameIdPrefix, buildTrainingSeedHash } from "@tichuml/shared";
 
 const DEFAULT_TELEMETRY_MAX_POST_BYTES = 24 * 1024 * 1024;
 const DEFAULT_TELEMETRY_POST_TIMEOUT_MS = 10_000;
@@ -60,6 +62,10 @@ type ParsedArgs = {
   logFile: string;
   controllerSessionId: string | null;
   runSeedInfo: SimRunSeedInfo | null;
+  runId: string | null;
+  batchId: string | null;
+  gameIdPrefix: string | null;
+  seedHash: string | null;
 };
 
 function isSeatId(value: string): value is SeatId {
@@ -208,7 +214,11 @@ function parseArgs(argv: string[]): ParsedArgs {
     logFile: path.join(".runtime", "sim-controller", "controller.ndjson"),
     controllerSessionId:
       process.env.SIM_CONTROLLER_SESSION_ID?.trim() || null,
-    runSeedInfo: parseRunSeedInfo(process.env.SIM_RUN_SEED_INFO_JSON)
+    runSeedInfo: parseRunSeedInfo(process.env.SIM_RUN_SEED_INFO_JSON),
+    runId: null,
+    batchId: null,
+    gameIdPrefix: null,
+    seedHash: null
   };
 
   if (parsed.runSeedInfo) {
@@ -291,6 +301,22 @@ function parseArgs(argv: string[]): ParsedArgs {
         break;
       case "--seed-prefix":
         parsed.seedNamespace = next ?? parsed.seedNamespace;
+        index += 1;
+        break;
+      case "--run-id":
+        parsed.runId = next?.trim() || null;
+        index += 1;
+        break;
+      case "--batch-id":
+        parsed.batchId = next?.trim() || null;
+        index += 1;
+        break;
+      case "--game-id-prefix":
+        parsed.gameIdPrefix = next?.trim() || null;
+        index += 1;
+        break;
+      case "--seed-hash":
+        parsed.seedHash = next?.trim() || null;
         index += 1;
         break;
       case "--forever":
@@ -426,6 +452,56 @@ function resolveRunSeedInfo(args: ParsedArgs): SimRunSeedInfo {
     local_fallback_used: null,
     source_summary: null
   };
+}
+
+function resolveGameIdPrefix(args: ParsedArgs): string | null {
+  if (args.gameIdPrefix) {
+    return args.gameIdPrefix;
+  }
+  if (args.runId && args.batchId) {
+    return buildTrainingGameIdPrefix({
+      runId: args.runId,
+      batchId: args.batchId
+    });
+  }
+  return null;
+}
+
+function buildRunMetadata(args: ParsedArgs): JsonObject | undefined {
+  const runSeedInfo = resolveRunSeedInfo(args);
+  const gameIdPrefix = resolveGameIdPrefix(args);
+  const metadata: JsonObject = {
+    seed: runSeedInfo.resolved_run_seed,
+    seed_hash:
+      args.seedHash ??
+      buildTrainingSeedHash(runSeedInfo.resolved_run_seed),
+    seed_namespace: runSeedInfo.derivation_namespace,
+    seed_mode: runSeedInfo.mode,
+    seed_provider_name: "generateEntropySeed",
+    seed_provider_source_module: "apps/server/src/entropy/index.ts",
+    seed_provider_version: 2,
+    seed_provider_primary_provider: runSeedInfo.primary_provider,
+    seed_provider_fallback: runSeedInfo.local_fallback_used === true,
+    seed_provider_fallback_reason:
+      runSeedInfo.local_fallback_used === true
+        ? "Entropy pipeline fell back to a local provider while remaining authoritative."
+        : null,
+    seed_provider_generated_at: runSeedInfo.generated_at,
+    seed_provider_entropy_game_id: runSeedInfo.entropy_game_id,
+    seed_provider_audit_hash: runSeedInfo.audit_hash_hex,
+    source_summary:
+      (runSeedInfo.source_summary as unknown as JsonObject | null) ?? null
+  };
+  if (args.runId) {
+    metadata.run_id = args.runId;
+  }
+  if (args.batchId) {
+    metadata.batch_id = args.batchId;
+  }
+  if (gameIdPrefix) {
+    metadata.game_id_prefix = gameIdPrefix;
+  }
+  return metadata;
 }
 
 function buildControllerConfig(args: ParsedArgs): SimControllerConfig {
@@ -759,7 +835,11 @@ async function runWorker(args: ParsedArgs, worker: SimWorkerRuntimeState): Promi
           workerId: worker.worker_id,
           batchIndex
         }),
+        ...(resolveGameIdPrefix(args)
+          ? { gameIdPrefix: resolveGameIdPrefix(args) as string }
+          : {}),
         defaultProvider: args.provider,
+        runMetadata: buildRunMetadata(args),
         seatProviders: args.seatProviders,
         telemetryEnabled: args.telemetryEnabled,
         serverFallbackEnabled: args.serverFallbackEnabled,
@@ -940,7 +1020,11 @@ async function main(): Promise<void> {
     summary = await runSelfPlayBatch({
       games: args.games,
       baseSeed: args.seed,
+      ...(resolveGameIdPrefix(args)
+        ? { gameIdPrefix: resolveGameIdPrefix(args) as string }
+        : {}),
       defaultProvider: args.provider,
+      runMetadata: buildRunMetadata(args),
       seatProviders: args.seatProviders,
       telemetryEnabled: args.telemetryEnabled,
       serverFallbackEnabled: args.serverFallbackEnabled,

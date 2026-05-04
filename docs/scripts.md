@@ -52,6 +52,7 @@ scripts/
     restart-backend.sh
     reset-db.sh
     run-training-sim.sh
+    start-training-data-tmux.sh
     runtime-action.sh
     sim-controller.sh
     sim-doctor.sh
@@ -70,12 +71,14 @@ scripts/
     reset-db.ps1
     restart-backend.ps1
     run-training-sim.ps1
+    start-training-data.ps1
     sim-doctor.ps1
     start-backend.ps1
     start-sim-controller.ps1
     start-sim.ps1
     status-backend.ps1
     status-sim-controller.ps1
+    stop-training-data.ps1
     stop-backend.ps1
     stop-sim-controller.ps1
     unblock-scripts.ps1
@@ -193,3 +196,48 @@ powershell -ExecutionPolicy Bypass -File scripts\windows\status-backend.ps1
 
 Do not lower `LocalMachine` or `CurrentUser` execution policy automatically.
 Use `-ExecutionPolicy Bypass` on individual commands instead.
+
+## Training Data Workflow
+
+Issue [#61](https://github.com/NeonButrfly/tichuml/issues/61) tracks the
+scoped Linux and Windows training-data session workflow.
+
+Default behavior now creates a unique run-specific session or job name instead
+of reusing a fixed `tichuml-training` label.
+
+Linux examples:
+
+```bash
+chmod +x scripts/linux/start-training-data-tmux.sh
+scripts/linux/start-training-data-tmux.sh --games 1000 --provider server_heuristic --backend-url http://127.0.0.1:4310
+scripts/linux/start-training-data-tmux.sh --games 1000 --provider server_heuristic --backend-url http://127.0.0.1:4310 -noclear
+scripts/linux/start-training-data-tmux.sh --session tichuml-training-test --games 1000 --provider server_heuristic --backend-url http://127.0.0.1:4310
+scripts/linux/start-training-data-tmux.sh --games 1000 --skip-ml-export-check
+```
+
+Windows examples:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\windows\start-training-data.ps1 -Games 1000 -Provider server_heuristic -BackendUrl http://127.0.0.1:4310
+powershell -ExecutionPolicy Bypass -File scripts\windows\start-training-data.ps1 -Games 1000 -Provider server_heuristic -BackendUrl http://127.0.0.1:4310 -NoClear
+powershell -ExecutionPolicy Bypass -File scripts\windows\start-training-data.ps1 -SessionName tichuml-training-test -Games 1000 -Provider server_heuristic -BackendUrl http://127.0.0.1:4310
+powershell -ExecutionPolicy Bypass -File scripts\windows\start-training-data.ps1 -Games 1000 -SkipMlExportCheck
+```
+
+Key operator rules:
+
+- Default mode is `CLEAR DATABASE MODE`; pass `-noclear` or `-NoClear` for
+  `NO-CLEAR APPEND MODE`.
+- Every run gets a unique `run_id`, a unique session or job name, a dedicated
+  `training-runs/<run_id>/` directory, and a scoped export archive under
+  `/tmp` on Linux or `$env:TEMP` on Windows.
+- Current-run exports are isolated by the shared `game_id_prefix`
+  `selfplay-<run_id>` and per-batch `selfplay-<run_id>-batch-XXXXXX` game IDs;
+  they do not rely on database clearing alone.
+- `ml:export` is checked in validation-only mode during the training workflow.
+  The scripts do not run a full export dataset automatically.
+- Manual scoped export after a run is:
+  `npm run ml:export -- --run-id <run_id> --game-id-prefix <game_id_prefix> --output-dir training-runs/<run_id>/ml`
+- Manual ML output is written under `training-runs/<run_id>/ml` and includes
+  LightGBM-ready metadata such as `dataset_metadata.json`,
+  `feature_columns.json`, and `label_columns.json`.

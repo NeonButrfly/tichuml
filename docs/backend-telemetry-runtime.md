@@ -311,14 +311,24 @@ Canonical local environment shared by Windows and Linux:
 | Reset DB              | `powershell -ExecutionPolicy Bypass -File scripts\windows\reset-db.ps1`                                                                                                                    | `./scripts/linux/reset-db.sh --yes`                                                                                                                                                                |
 | One-game verification | `powershell -ExecutionPolicy Bypass -File scripts\windows\verify-sim-one-game-fixed.ps1 -ClearDatabase -TimeoutSeconds 90`                                                                 | `./scripts/linux/verify-sim-one-game-fixed.sh --clear-database --timeout-seconds 90`                                                                                                               |
 | Sim doctor            | `powershell -ExecutionPolicy Bypass -File scripts\windows\sim-doctor.ps1 --backend-url http://127.0.0.1:4310 --timeout-ms 30000`                                                           | `./scripts/linux/sim-doctor.sh --backend-url http://127.0.0.1:4310 --timeout-ms 30000`                                                                                                             |
-| Training simulator    | `powershell -ExecutionPolicy Bypass -File scripts\windows\run-training-sim.ps1 -Provider local -Telemetry true -StrictTelemetry false -BackendUrl http://127.0.0.1:4310 -GamesPerLoop 100` | `./scripts/linux/run-training-sim.sh --provider local --telemetry true --strict-telemetry false --backend-url http://127.0.0.1:4310 --games-per-loop 100 --log-dir /opt/tichuml/logs/sim-training` |
+| Training simulator    | `powershell -ExecutionPolicy Bypass -File scripts\windows\start-training-data.ps1 -Games 1000 -Provider server_heuristic -BackendUrl http://127.0.0.1:4310` | `./scripts/linux/start-training-data-tmux.sh --games 1000 --provider server_heuristic --backend-url http://127.0.0.1:4310` |
 
 Logs:
 
 - Windows backend: `.runtime\backend.log`
-- Windows training simulator: `logs\sim-training\*.log`
+- Windows training simulator: `training-runs\<run_id>\*.log`
 - Linux backend: `.runtime/backend.log`
-- Linux training simulator: `/opt/tichuml/logs/sim-training/*.log` by default
+- Linux training simulator: `training-runs/<run_id>/*.log`
+
+Training-data workflow notes:
+
+- Default training runs clear only `events`, `decisions`, and `matches`; use
+  `-NoClear` on Windows or `-noclear` on Linux to append instead.
+- Each run writes scoped database exports, verification logs, and last-10 game
+  summaries under `training-runs/<run_id>/` and packages a current-run-only
+  archive under `/tmp` on Linux or `$env:TEMP` on Windows.
+- `ml:export` is validated with `--validate-only` during the workflow, but the
+  scripts do not run a full export dataset automatically.
 
 To prove Windows and Linux are using the same backend URL, DB, and telemetry
 mode, compare `/health`, `/api/telemetry/health`, and

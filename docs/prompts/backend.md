@@ -2,6 +2,35 @@
 
 Prompt logs here capture backend/platform prompt intent only. GitHub issue state remains authoritative.
 
+## 2026-05-03 - Isolated Linux and Windows training-data session workflow
+
+- Prompt signal:
+  Build a cross-platform training-data workflow that uses the authoritative
+  TichuML seed provider, generates unique run and session identities, verifies
+  current-run telemetry growth in Postgres, exports current-run-only
+  matches/decisions/events, validates `ml:export` compatibility without running
+  a full export automatically, and leaves manual scoped LightGBM-ready export
+  available after the run.
+- Interpreted requirement:
+  Issue [#61](https://github.com/NeonButrfly/tichuml/issues/61) tracks the
+  additive ops contract: Linux tmux and Windows job launchers must preserve
+  existing gameplay and telemetry behavior while adding run isolation,
+  seed/batch traceability, scoped database export, current-run last-10
+  reporting, and validation-only `ml:export` checks against the latest
+  telemetry shape.
+- Affected systems:
+  `scripts/linux/start-training-data-tmux.sh`,
+  `scripts/windows/start-training-data.ps1`,
+  `scripts/windows/stop-training-data.ps1`, `scripts/training-data.ts`,
+  `apps/sim-runner`, `packages/shared`, `ml/export_training_rows.py`,
+  training/telemetry docs.
+- Linked GitHub issue:
+  [#61](https://github.com/NeonButrfly/tichuml/issues/61)
+- Milestone:
+  [6.5 - Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status:
+  Lives in GitHub, not here.
+
 ## 2026-05-01 - Live gameplay backend routing and non-blocking telemetry
 
 - Prompt signal:

@@ -5,6 +5,7 @@ export * from "./backend.js";
 export * from "./outcomes.js";
 export * from "./runtime-env.js";
 export * from "./seed.js";
+export * from "./training-run.js";
 
 export type WorkspacePackage =
   | "@tichuml/shared"

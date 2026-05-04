@@ -1627,6 +1627,79 @@ describe("central telemetry subsystem", () => {
     expect(minimalDecision.legal_actions).toBeDefined();
   });
 
+  it("tags selfplay telemetry with scoped training run metadata and game id prefixes", async () => {
+    const postedDecisions: JsonObject[] = [];
+    const postedEvents: JsonObject[] = [];
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith("/api/telemetry/decision")) {
+          postedDecisions.push(
+            JSON.parse(String(init?.body ?? "{}")) as JsonObject
+          );
+        }
+        if (url.endsWith("/api/telemetry/event")) {
+          postedEvents.push(
+            JSON.parse(String(init?.body ?? "{}")) as JsonObject
+          );
+        }
+        return new Response(
+          JSON.stringify(
+            url.endsWith("/health")
+              ? { ok: true }
+              : { accepted: true, telemetry_id: postedDecisions.length + postedEvents.length + 1 }
+          ),
+          {
+            status: url.endsWith("/health") ? 200 : 202,
+            headers: { "Content-Type": "application/json" }
+          }
+        );
+      }
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await runSelfPlayBatch({
+      games: 1,
+      baseSeed: "training-tagged-selfplay",
+      defaultProvider: "local",
+      telemetryEnabled: true,
+      strictTelemetry: true,
+      telemetryMode: "minimal",
+      backendBaseUrl: "http://127.0.0.1:4310",
+      quiet: true,
+      progress: false,
+      gameIdPrefix:
+        "selfplay-training-20260503-184455-a1b2c3d4-batch-000001",
+      runMetadata: {
+        run_id: "training-20260503-184455-a1b2c3d4",
+        batch_id: "batch-000001",
+        seed: "feedfacecafebeef",
+        seed_hash: "1234abcd",
+        game_id_prefix:
+          "selfplay-training-20260503-184455-a1b2c3d4-batch-000001"
+      },
+      maxDecisionsPerGame: 1
+    });
+
+    expect(postedDecisions.length).toBeGreaterThan(0);
+    expect(postedEvents.length).toBeGreaterThan(0);
+    const decision = postedDecisions[0] as TelemetryDecisionPayload;
+    const event = postedEvents[0] as JsonObject;
+    expect(decision.game_id).toMatch(
+      /^selfplay-training-20260503-184455-a1b2c3d4-batch-000001-game-000001$/
+    );
+    expect(decision.metadata.run_id).toBe(
+      "training-20260503-184455-a1b2c3d4"
+    );
+    expect(decision.metadata.batch_id).toBe("batch-000001");
+    expect(decision.metadata.seed).toBe("feedfacecafebeef");
+    expect(decision.metadata.seed_hash).toBe("1234abcd");
+    expect(event.game_id).toBe(decision.game_id);
+    expect(
+      (event.metadata as Record<string, unknown>).run_id
+    ).toBe("training-20260503-184455-a1b2c3d4");
+  });
+
   it("does not let async telemetry failures stall local selfplay throughput", async () => {
     const fetchMock = vi.fn(
       async () =>

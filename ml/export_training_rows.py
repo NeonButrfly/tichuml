@@ -41,6 +41,11 @@ DEFAULT_SCHEMA_OUTPUT = Path("ml/data/action_rows.schema.json")
 DEFAULT_QUALITY_OUTPUT = Path("ml/data/action_rows.quality.json")
 DEFAULT_MANIFEST_OUTPUT = Path("artifacts/ml/export-manifest.json")
 DEFAULT_FEATURE_SCHEMA_OUTPUT = Path("ml/feature_schema.json")
+DEFAULT_FEATURE_COLUMNS_OUTPUT = Path("artifacts/ml/feature-columns.json")
+DEFAULT_LABEL_COLUMNS_OUTPUT = Path("artifacts/ml/label-columns.json")
+DEFAULT_LOCAL_TRAINING_DATABASE_URL = (
+    "postgres://tichu:tichu_dev_password@127.0.0.1:54329/tichu"
+)
 ROLLOUT_COLUMNS = [
     "rollout_available",
     "rollout_samples",
@@ -237,16 +242,83 @@ STRING_COLUMNS = {
 
 
 def default_database_url() -> str:
-    return os.environ.get(
-        "DATABASE_URL",
-        "postgres://tichu:tichu_dev_password@localhost:54329/tichu",
+    return (
+        os.environ.get("TRAINING_DATABASE_URL")
+        or os.environ.get("TICHU_TRAINING_DATABASE_URL")
+        or os.environ.get("DATABASE_URL")
+        or DEFAULT_LOCAL_TRAINING_DATABASE_URL
     )
+
+
+def resolve_database_url_candidates(explicit_url: str | None) -> list[tuple[str, str]]:
+    candidates: list[tuple[str, str]] = []
+    seen: set[str] = set()
+
+    def add_candidate(url: str | None, source: str) -> None:
+        normalized = (url or "").strip()
+        if not normalized or normalized in seen:
+            return
+        seen.add(normalized)
+        candidates.append((normalized, source))
+
+    add_candidate(explicit_url, "explicit")
+    add_candidate(os.environ.get("TRAINING_DATABASE_URL"), "env:TRAINING_DATABASE_URL")
+    add_candidate(
+        os.environ.get("TICHU_TRAINING_DATABASE_URL"),
+        "env:TICHU_TRAINING_DATABASE_URL",
+    )
+    add_candidate(os.environ.get("DATABASE_URL"), "env:DATABASE_URL")
+    add_candidate(DEFAULT_LOCAL_TRAINING_DATABASE_URL, "default_local_training_db")
+    return candidates
+
+
+def connect_with_fallback(
+    explicit_url: str | None,
+) -> tuple[psycopg.Connection[Any], str, str, bool]:
+    attempts: list[str] = []
+    candidates = resolve_database_url_candidates(explicit_url)
+    last_error: Exception | None = None
+
+    for index, (candidate, source) in enumerate(candidates):
+        try:
+            connection = psycopg.connect(candidate, row_factory=dict_row)
+            fallback_used = index > 0
+            if fallback_used:
+                print(
+                    json.dumps(
+                        {
+                            "accepted": True,
+                            "warning": "database_url_fallback_used",
+                            "database_url_source": source,
+                        }
+                    ),
+                    file=sys.stderr,
+                )
+            return connection, candidate, source, fallback_used
+        except psycopg.OperationalError as error:
+            last_error = error
+            attempts.append(f"{source}: {error}")
+
+    if last_error is not None:
+        raise psycopg.OperationalError(
+            "Unable to connect to Postgres for ml:export. Attempts: "
+            + " | ".join(attempts)
+        ) from last_error
+    raise psycopg.OperationalError("No Postgres connection candidates were available.")
 
 
 def resolve_phase_filter(phase: str | None) -> str | None:
     if phase is None or phase.strip() == "":
         return None
     return phase_alias(phase.strip())
+
+
+def truthy(value: str | None) -> bool:
+    return value is not None and value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def escape_like_prefix(prefix: str) -> str:
+    return prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 def team_for_seat(seat: str) -> str:
@@ -471,11 +543,30 @@ def observed_outcomes_for_actor(
     }
 
 
-def build_query(
-    phase: str | None, provider: str | None, limit: int | None
-) -> tuple[str, list[Any]]:
+def build_scope_where(
+    run_id: str | None, game_id_prefix: str | None
+) -> tuple[list[str], list[Any]]:
     clauses: list[str] = []
     params: list[Any] = []
+
+    if game_id_prefix and game_id_prefix.strip():
+        clauses.append("game_id LIKE %s ESCAPE '\\'")
+        params.append(f"{escape_like_prefix(game_id_prefix.strip())}%")
+    elif run_id and run_id.strip():
+        clauses.append("metadata->>'run_id' = %s")
+        params.append(run_id.strip())
+
+    return clauses, params
+
+
+def build_query(
+    phase: str | None,
+    provider: str | None,
+    limit: int | None,
+    run_id: str | None = None,
+    game_id_prefix: str | None = None,
+) -> tuple[str, list[Any]]:
+    clauses, params = build_scope_where(run_id, game_id_prefix)
 
     if phase:
         clauses.append("phase = %s")
@@ -578,6 +669,60 @@ def load_matches_for_games(
         for row in rows
         if row.get("game_id") is not None
     }
+
+
+def count_rows_for_scope(
+    connection: psycopg.Connection[Any],
+    table: str,
+    run_id: str | None,
+    game_id_prefix: str | None,
+) -> int:
+    clauses, params = build_scope_where(run_id, game_id_prefix)
+    where_clause = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    query = f"SELECT count(*) AS row_count FROM {table} {where_clause}"
+    with connection.cursor(row_factory=dict_row) as cursor:
+        cursor.execute(query, params)
+        row = cursor.fetchone() or {}
+    return int(row.get("row_count") or 0)
+
+
+def count_matches_for_scope(
+    connection: psycopg.Connection[Any], game_id_prefix: str | None
+) -> int:
+    if not game_id_prefix or not game_id_prefix.strip():
+        with connection.cursor(row_factory=dict_row) as cursor:
+            cursor.execute("SELECT count(*) AS row_count FROM matches")
+            row = cursor.fetchone() or {}
+        return int(row.get("row_count") or 0)
+    with connection.cursor(row_factory=dict_row) as cursor:
+        cursor.execute(
+            "SELECT count(*) AS row_count FROM matches WHERE game_id LIKE %s ESCAPE '\\'",
+            (f"{escape_like_prefix(game_id_prefix.strip())}%",),
+        )
+        row = cursor.fetchone() or {}
+    return int(row.get("row_count") or 0)
+
+
+def expected_training_row_count(
+    connection: psycopg.Connection[Any],
+    run_id: str | None,
+    game_id_prefix: str | None,
+) -> int:
+    clauses, params = build_scope_where(run_id, game_id_prefix)
+    where_clause = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    query = f"""
+        SELECT
+            COALESCE(SUM(CASE
+              WHEN legal_action_count IS NOT NULL AND legal_action_count > 0 THEN legal_action_count
+              ELSE 0
+            END), 0) AS row_count
+        FROM decisions
+        {where_clause}
+    """
+    with connection.cursor(row_factory=dict_row) as cursor:
+        cursor.execute(query, params)
+        row = cursor.fetchone() or {}
+    return int(row.get("row_count") or 0)
 
 
 def build_outcome_maps(
@@ -1030,8 +1175,24 @@ def write_markdown(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
-def build_manifest(frame_columns: list[str], created_at: str, label_mode: str) -> dict[str, Any]:
+def build_manifest(
+    frame_columns: list[str],
+    created_at: str,
+    label_mode: str,
+    *,
+    run_id: str | None = None,
+    game_id_prefix: str | None = None,
+    source_row_counts: dict[str, int] | None = None,
+    exported_training_row_count: int | None = None,
+    validation_status: str | None = None,
+    filtering_strategy: str | None = None,
+    ml_export_command: str | None = None,
+) -> dict[str, Any]:
     feature_columns = [column for column in FEATURE_ORDER if column in frame_columns]
+    label_columns = [
+        column for column in ["label", *OBSERVED_OUTCOME_COLUMNS, *ROLLOUT_COLUMNS]
+        if column in frame_columns
+    ]
     diagnostic_columns = [
         column
         for column in (
@@ -1074,6 +1235,21 @@ def build_manifest(frame_columns: list[str], created_at: str, label_mode: str) -
             ]
             if column in frame_columns
         ],
+        "label_columns": label_columns,
+        "feature_count": len(feature_columns),
+        "supported_output_formats": ["parquet", "csv.gz", "jsonl"],
+        "supports_lightgbm_output": True,
+        "scope": {
+            "run_id": run_id,
+            "game_id_prefix": game_id_prefix,
+            "scoped_to_current_run": bool(run_id or game_id_prefix),
+            "filtering_strategy": filtering_strategy or "phase_provider_scope",
+        },
+        "source_tables": ["decisions", "events", "matches"],
+        "source_row_counts": source_row_counts or {},
+        "exported_training_row_count": exported_training_row_count,
+        "validation_status": validation_status or "accepted",
+        "ml_export_command": ml_export_command,
     }
     return manifest
 
@@ -1138,11 +1314,172 @@ def infer_output_format(explicit: str | None, output: Path) -> str:
     return "parquet"
 
 
+def default_output_name_for_format(output_format: str) -> str:
+    if output_format == "csv.gz":
+        return "train.csv.gz"
+    if output_format == "jsonl":
+        return "train.jsonl"
+    return "train.parquet"
+
+
+def resolve_output_paths(args: argparse.Namespace) -> dict[str, Path | None]:
+    output_dir = Path(args.output_dir) if args.output_dir else None
+    explicit_output = args.output != str(DEFAULT_OUTPUT)
+    explicit_schema = args.schema_output != str(DEFAULT_SCHEMA_OUTPUT)
+    explicit_quality = args.quality_output != str(DEFAULT_QUALITY_OUTPUT)
+    explicit_manifest = args.manifest_output != str(DEFAULT_MANIFEST_OUTPUT)
+    explicit_feature_schema = (
+        args.feature_schema_output != str(DEFAULT_FEATURE_SCHEMA_OUTPUT)
+    )
+    explicit_feature_columns = (
+        args.feature_columns_output != str(DEFAULT_FEATURE_COLUMNS_OUTPUT)
+    )
+    explicit_label_columns = (
+        args.label_columns_output != str(DEFAULT_LABEL_COLUMNS_OUTPUT)
+    )
+    inferred_output = Path(args.output)
+    output_format = infer_output_format(args.format, inferred_output)
+
+    if output_dir:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_path = (
+            inferred_output
+            if explicit_output
+            else output_dir / default_output_name_for_format(output_format)
+        )
+        schema_output = (
+            Path(args.schema_output)
+            if explicit_schema
+            else output_dir / "train.schema.json"
+        )
+        quality_output = (
+            Path(args.quality_output)
+            if explicit_quality
+            else output_dir / "train.quality.json"
+        )
+        manifest_output = (
+            Path(args.manifest_output)
+            if explicit_manifest
+            else output_dir / "dataset_metadata.json"
+        )
+        feature_schema_output = (
+            Path(args.feature_schema_output)
+            if explicit_feature_schema
+            else output_dir / "feature_schema.json"
+        )
+        feature_columns_output = (
+            Path(args.feature_columns_output)
+            if explicit_feature_columns
+            else output_dir / "feature_columns.json"
+        )
+        label_columns_output = (
+            Path(args.label_columns_output)
+            if explicit_label_columns
+            else output_dir / "label_columns.json"
+        )
+    else:
+        output_path = inferred_output
+        schema_output = Path(args.schema_output)
+        quality_output = Path(args.quality_output)
+        manifest_output = Path(args.manifest_output)
+        feature_schema_output = Path(args.feature_schema_output)
+        feature_columns_output = Path(args.feature_columns_output)
+        label_columns_output = Path(args.label_columns_output)
+
+    return {
+        "output_path": output_path,
+        "schema_output": schema_output,
+        "quality_output": quality_output,
+        "manifest_output": manifest_output,
+        "feature_schema_output": feature_schema_output,
+        "feature_columns_output": feature_columns_output,
+        "label_columns_output": label_columns_output,
+        "output_dir": output_dir,
+        "output_format": output_format,
+    }
+
+
+def validate_lightgbm_columns(
+    rows: list[dict[str, Any]],
+    feature_columns: list[str],
+    label_columns: list[str],
+) -> list[str]:
+    issues: list[str] = []
+    if not feature_columns:
+        issues.append("No feature columns were detected for LightGBM export.")
+    if not label_columns:
+        issues.append("No label columns were detected for LightGBM export.")
+    if not rows:
+        return issues
+    sample = rows[0]
+    for column in feature_columns:
+        value = sample.get(column)
+        if value is not None and not isinstance(value, (int, float, bool)):
+            issues.append(
+                f"Feature column {column} is not numeric in the sampled training rows."
+            )
+            break
+    return issues
+
+
+def build_validation_summary(
+    *,
+    accepted: bool,
+    args: argparse.Namespace,
+    output_format: str,
+    database_url_source: str,
+    database_url_fallback_used: bool,
+    source_row_counts: dict[str, int],
+    expected_rows: int,
+    sample_rows: list[dict[str, Any]],
+    manifest: dict[str, Any],
+    validation_errors: list[str],
+    validation_warnings: list[str],
+    validation_mode_used: str,
+) -> dict[str, Any]:
+    return {
+        "accepted": accepted,
+        "validation_only": True,
+        "validation_mode_used": validation_mode_used,
+        "supports_validate_only": True,
+        "supports_run_id_filter": True,
+        "supports_game_id_prefix_filter": True,
+        "run_id": args.run_id,
+        "game_id_prefix": args.game_id_prefix,
+        "database_url_source": database_url_source,
+        "database_url_fallback_used": database_url_fallback_used,
+        "source_tables_expected": ["matches", "decisions", "events"],
+        "current_run_matches_count": source_row_counts["matches"],
+        "current_run_events_count": source_row_counts["events"],
+        "current_run_decisions_count": source_row_counts["decisions"],
+        "expected_training_row_count": expected_rows,
+        "sample_training_row_count": len(sample_rows),
+        "detected_feature_schema_version": manifest.get("schema_version"),
+        "detected_label_schema_version": manifest.get("schema_version"),
+        "supports_lightgbm_output": len(validation_errors) == 0,
+        "supported_output_formats": ["parquet", "csv.gz", "jsonl"],
+        "expected_lightgbm_files": [
+            default_output_name_for_format(output_format),
+            "dataset_metadata.json",
+            "feature_schema.json",
+            "feature_columns.json",
+            "label_columns.json",
+        ],
+        "feature_columns": manifest.get("feature_columns", []),
+        "label_columns": manifest.get("label_columns", []),
+        "validation_status": "accepted" if accepted else "failed",
+        "validation_errors": validation_errors,
+        "validation_warnings": validation_warnings,
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--database-url", default=default_database_url())
+    parser.add_argument("--database-url", default=None)
     parser.add_argument("--phase", default="play")
     parser.add_argument("--provider", default=None)
+    parser.add_argument("--run-id", default=None)
+    parser.add_argument("--game-id-prefix", default=None)
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--chunk-size", type=int, default=500)
     parser.add_argument("--label-mode", choices=["imitation", "observed_outcome", "rollout"], default="imitation")
@@ -1152,6 +1489,7 @@ def main() -> None:
     parser.add_argument("--no-include-rollouts", dest="include_rollouts", action="store_false")
     parser.add_argument("--rollout-input", default=None)
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT))
+    parser.add_argument("--output-dir", default=None)
     parser.add_argument("--schema-output", default=str(DEFAULT_SCHEMA_OUTPUT))
     parser.add_argument("--quality-output", default=str(DEFAULT_QUALITY_OUTPUT))
     parser.add_argument("--manifest-output", default=str(DEFAULT_MANIFEST_OUTPUT))
@@ -1159,17 +1497,31 @@ def main() -> None:
         "--feature-schema-output",
         default=str(DEFAULT_FEATURE_SCHEMA_OUTPUT),
     )
+    parser.add_argument(
+        "--feature-columns-output",
+        default=str(DEFAULT_FEATURE_COLUMNS_OUTPUT),
+    )
+    parser.add_argument(
+        "--label-columns-output",
+        default=str(DEFAULT_LABEL_COLUMNS_OUTPUT),
+    )
     parser.add_argument("--format", choices=["parquet", "csv.gz", "jsonl"], default=None)
+    parser.add_argument("--validate-only", action="store_true", default=False)
+    parser.add_argument("--dry-run", action="store_true", default=False)
     args = parser.parse_args()
 
-    output_path = Path(args.output)
-    schema_output = Path(args.schema_output)
-    quality_output = Path(args.quality_output)
+    validation_only = args.validate_only or args.dry_run
+    resolved_paths = resolve_output_paths(args)
+    output_path = resolved_paths["output_path"]
+    schema_output = resolved_paths["schema_output"]
+    quality_output = resolved_paths["quality_output"]
     quality_md_output = quality_output.with_suffix(".md")
-    manifest_output = Path(args.manifest_output)
-    feature_schema_output = Path(args.feature_schema_output)
+    manifest_output = resolved_paths["manifest_output"]
+    feature_schema_output = resolved_paths["feature_schema_output"]
+    feature_columns_output = resolved_paths["feature_columns_output"]
+    label_columns_output = resolved_paths["label_columns_output"]
     phase = resolve_phase_filter(args.phase)
-    output_format = infer_output_format(args.format, output_path)
+    output_format = str(resolved_paths["output_format"])
 
     tracemalloc.start()
     stats = ExportStats()
@@ -1178,9 +1530,37 @@ def main() -> None:
     writer = DatasetWriter(output_path, output_format)
     first_row: dict[str, Any] | None = None
     written_columns: list[str] = []
+    database_url_used = default_database_url()
+    database_url_source = "default"
+    database_url_fallback_used = False
     try:
-        query, params = build_query(phase, args.provider, args.limit)
-        with psycopg.connect(args.database_url, row_factory=dict_row) as connection:
+        query, params = build_query(
+            phase,
+            args.provider,
+            args.limit,
+            args.run_id,
+            args.game_id_prefix,
+        )
+        connection = None
+        try:
+            (
+                connection,
+                database_url_used,
+                database_url_source,
+                database_url_fallback_used,
+            ) = connect_with_fallback(args.database_url)
+            source_row_counts = {
+                "decisions": count_rows_for_scope(
+                    connection, "decisions", args.run_id, args.game_id_prefix
+                ),
+                "events": count_rows_for_scope(
+                    connection, "events", args.run_id, args.game_id_prefix
+                ),
+                "matches": count_matches_for_scope(connection, args.game_id_prefix),
+            }
+            potential_row_count = expected_training_row_count(
+                connection, args.run_id, args.game_id_prefix
+            )
             with connection.cursor(
                 name="decision_export_cursor",
                 row_factory=dict_row,
@@ -1213,9 +1593,15 @@ def main() -> None:
                     if rows and first_row is None:
                         first_row = rows[0]
                         written_columns = list(rows[0].keys())
+                    if validation_only:
+                        break
                     writer.write_rows(rows)
+        finally:
+            if connection is not None:
+                connection.close()
     finally:
-        writer.close()
+        if not validation_only:
+            writer.close()
 
     current, peak = tracemalloc.get_traced_memory()
     _ = current
@@ -1223,12 +1609,76 @@ def main() -> None:
 
     if first_row is None:
         first_row = {}
+    manifest = build_manifest(
+        written_columns,
+        created_at,
+        args.label_mode,
+        run_id=args.run_id,
+        game_id_prefix=args.game_id_prefix,
+        source_row_counts=source_row_counts,
+        exported_training_row_count=stats.candidate_rows_written
+        if not validation_only
+        else potential_row_count,
+        validation_status="validated" if validation_only else "accepted",
+        filtering_strategy="game_id_prefix" if args.game_id_prefix else "run_id_metadata"
+        if args.run_id
+        else "unscoped",
+        ml_export_command=" ".join(sys.argv),
+    )
+    manifest["database_url_source"] = database_url_source
+    manifest["database_url_fallback_used"] = database_url_fallback_used
+    feature_columns = manifest.get("feature_columns", [])
+    label_columns = manifest.get("label_columns", [])
+    validation_errors = validate_lightgbm_columns(
+        [first_row] if first_row else [],
+        feature_columns,
+        label_columns,
+    )
+    validation_warnings: list[str] = []
+
+    if validation_only:
+        if source_row_counts["decisions"] == 0:
+            validation_errors.append("No scoped decisions were found for the requested run.")
+        if source_row_counts["events"] == 0:
+            validation_errors.append("No scoped events were found for the requested run.")
+        if potential_row_count == 0 and source_row_counts["decisions"] > 0:
+            validation_errors.append(
+                "Scoped decisions were found, but no legal-action training rows could be inferred."
+            )
+        if source_row_counts["matches"] == 0:
+            validation_warnings.append(
+                "No scoped matches were found; match lifecycle completion may still be pending."
+            )
+        summary = build_validation_summary(
+            accepted=len(validation_errors) == 0,
+            args=args,
+            output_format=output_format,
+            database_url_source=database_url_source,
+            database_url_fallback_used=database_url_fallback_used,
+            source_row_counts=source_row_counts,
+            expected_rows=potential_row_count,
+            sample_rows=[first_row] if first_row else [],
+            manifest=manifest,
+            validation_errors=validation_errors,
+            validation_warnings=validation_warnings,
+            validation_mode_used="validate_only" if args.validate_only else "dry_run",
+        )
+        print(json.dumps(summary))
+        if not summary["accepted"]:
+            sys.exit(1)
+        return
+
+    if stats.candidate_rows_written == 0:
+        raise ValueError(
+            "ml:export produced zero training rows. Verify scoped telemetry includes decisions with legal actions and full state."
+        )
 
     write_feature_schema(feature_schema_output)
-    manifest = build_manifest(written_columns, created_at, args.label_mode)
     schema = build_schema(written_columns, first_row)
     write_json(manifest_output, manifest)
     write_json(schema_output, schema)
+    write_json(feature_columns_output, {"feature_columns": feature_columns})
+    write_json(label_columns_output, {"label_columns": label_columns})
 
     quality_payload = stats.to_quality_payload(
         label_mode=args.label_mode,
@@ -1257,6 +1707,8 @@ def main() -> None:
                 "schema_output": str(schema_output),
                 "quality_output": str(quality_output),
                 "manifest_output": str(manifest_output),
+                "feature_columns_output": str(feature_columns_output),
+                "label_columns_output": str(label_columns_output),
             }
         )
     )
