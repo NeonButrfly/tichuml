@@ -226,6 +226,9 @@ powershell -ExecutionPolicy Bypass -File scripts\windows\start-training-data.ps1
 
 Key operator rules:
 
+- Run `scripts/linux/start-training-data-tmux.sh --help` or
+  `scripts/windows/start-training-data.ps1 -Help` to see the full parameter
+  list, defaults, session behavior, and artifact locations.
 - Default mode is `CLEAR DATABASE MODE`; pass `-noclear` or `-NoClear` for
   `NO-CLEAR APPEND MODE`.
 - Every run gets a unique `run_id`, a unique session or job name, a dedicated

@@ -7,6 +7,85 @@ set -Eeuo pipefail
 # growth, validates ml:export compatibility without running a full export,
 # and packages current-run-only CSV/log artifacts into /tmp on finalize.
 
+print_help() {
+  cat <<'EOF'
+Usage:
+  scripts/linux/start-training-data-tmux.sh [options]
+
+Starts an isolated training-data self-play session inside tmux.
+
+Modes:
+  Default: CLEAR DATABASE MODE
+  -noclear, --no-clear: NO-CLEAR APPEND MODE
+
+Help:
+  --help, -help
+      Show this help text and exit.
+
+Session control:
+  --session <name>
+      Use an explicit tmux session name instead of the auto-generated
+      tichuml-<run_id> value.
+  --replace-session
+      Kill and recreate an existing tmux session with the same name.
+  --attach
+      Attach to the tmux session after launch.
+  --detach-only
+      Start the tmux session without attaching. This is the default.
+
+Simulation:
+  --games <count>
+      Games per batch. Default: 1000
+  --provider <local|server_heuristic|lightgbm_model>
+      Decision provider. Default: server_heuristic
+  --backend-url <url>
+      Backend base URL. Default: http://127.0.0.1:4310
+  --strict-telemetry <true|false>
+      Whether telemetry failures should be strict. Default: false
+  --interval-seconds <seconds>
+      Seconds between scoped verification snapshots. Default: 15
+
+Database:
+  --pg-host <host>
+      Postgres host. Default: 127.0.0.1
+  --pg-port <port>
+      Postgres port. Default: 54329
+  --pg-user <user>
+      Postgres user. Default: tichu
+  --pg-db <database>
+      Postgres database name. Default: tichu
+  --pg-password <password>
+      Postgres password used for this run only. Default: tichu_dev_password
+  --allow-clear-db-name <name>
+      Allow destructive clear only when current_database() matches this name.
+      Default expected name is tichu.
+  --allow-unhealthy-backend
+      Continue even if the backend health check fails.
+  -noclear, --no-clear
+      Preserve existing rows and append new scoped training data.
+
+Validation and export:
+  --dry-run
+      Print the resolved run/session/export plan without launching tmux.
+  --skip-ml-export-check
+      Skip the validation-only ml:export compatibility check.
+  --ml-export-command <command>
+      Command label recorded in metadata and logs. Default: npm run ml:export
+
+Artifacts created per run:
+  training-runs/<run_id>/metadata.json
+  training-runs/<run_id>/run.log
+  training-runs/<run_id>/verification.log
+  training-runs/<run_id>/commands.txt
+  training-runs/<run_id>/last_10_games.txt
+  training-runs/<run_id>/database_counts.txt
+  training-runs/<run_id>/ml_export_check.log
+  training-runs/<run_id>/ml_export_check_summary.json
+  /tmp/tichuml-training-export-<run_id>/
+  /tmp/tichuml-training-export-<run_id>.tar.gz
+EOF
+}
+
 script_dir() {
   CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd
 }
@@ -82,6 +161,10 @@ SESSION_NAME=""
 
 while (($#)); do
   case "$1" in
+    --help|-help)
+      print_help
+      exit 0
+      ;;
     --session)
       SESSION_NAME="${2:?missing value for --session}"
       shift 2

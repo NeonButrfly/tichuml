@@ -20,13 +20,103 @@ param(
   [switch]$DetachOnly,
   [switch]$SkipMlExportCheck,
   [string]$MlExportCommand = "npm run ml:export",
+  [switch]$Help,
   [switch]$InternalRunner,
   [string]$MetadataFile,
-  [string]$PgPasswordFile
+  [string]$PgPasswordFile,
+  [Parameter(ValueFromRemainingArguments = $true)]
+  [string[]]$RemainingArgs
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+function Show-HelpText {
+  @"
+Usage:
+  scripts\windows\start-training-data.ps1 [options]
+
+Starts an isolated training-data self-play session in a background PowerShell job/process.
+
+Modes:
+  Default: CLEAR DATABASE MODE
+  -NoClear: NO-CLEAR APPEND MODE
+
+Help:
+  -Help
+  --help
+      Show this help text and exit.
+
+Session control:
+  -SessionName <name>
+      Use an explicit session/job name instead of the auto-generated
+      tichuml-training-<run_id> value.
+  -ReplaceSession
+      Stop and replace an existing session with the same name.
+  -Attach
+      Tail the run log after launch.
+  -DetachOnly
+      Start the background job without attaching. This is the default behavior.
+
+Simulation:
+  -Games <count>
+      Games per batch. Default: 1000
+  -Provider <local|server_heuristic|lightgbm_model>
+      Decision provider. Default: server_heuristic
+  -BackendUrl <url>
+      Backend base URL. Default: http://127.0.0.1:4310
+  -StrictTelemetry <true|false>
+      Whether telemetry failures should be strict. Default: false
+  -IntervalSeconds <seconds>
+      Seconds between scoped verification snapshots. Default: 15
+
+Database:
+  -PgHost <host>
+      Postgres host. Default: 127.0.0.1
+  -PgPort <port>
+      Postgres port. Default: 54329
+  -PgUser <user>
+      Postgres user. Default: tichu
+  -PgDb <database>
+      Postgres database name. Default: tichu
+  -PgPassword <password>
+      Postgres password used for this run only. Default: tichu_dev_password
+  -AllowClearDbName <name>
+      Allow destructive clear only when current_database() matches this name.
+      Default expected name is tichu.
+  -AllowUnhealthyBackend
+      Continue even if the backend health check fails.
+  -NoClear
+      Preserve existing rows and append new scoped training data.
+
+Validation and export:
+  -DryRun
+      Print the resolved run/session/export plan without launching a background job.
+  -SkipMlExportCheck
+      Skip the validation-only ml:export compatibility check.
+  -MlExportCommand <command>
+      Command label recorded in metadata and logs. Default: npm run ml:export
+
+Internal-only parameters:
+  -InternalRunner
+  -MetadataFile <path>
+  -PgPasswordFile <path>
+      Used by the launcher to run the background worker. Operators should not
+      invoke these directly.
+
+Artifacts created per run:
+  training-runs\<run_id>\metadata.json
+  training-runs\<run_id>\run.log
+  training-runs\<run_id>\verification.log
+  training-runs\<run_id>\commands.txt
+  training-runs\<run_id>\last_10_games.txt
+  training-runs\<run_id>\database_counts.txt
+  training-runs\<run_id>\ml_export_check.log
+  training-runs\<run_id>\ml_export_check_summary.json
+  `$env:TEMP\tichuml-training-export-<run_id>\
+  `$env:TEMP\tichuml-training-export-<run_id>.tar.gz
+"@
+}
 
 function Get-RepoRoot {
   return (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
@@ -91,6 +181,11 @@ Get-ChildItem "`$env:TEMP\tichuml-training-export-$RunId.tar.gz"
 }
 
 $repoRoot = Get-RepoRoot
+
+if ($Help -or ($RemainingArgs -contains "--help")) {
+  Show-HelpText
+  exit 0
+}
 
 if ($InternalRunner) {
   Set-Location $repoRoot
