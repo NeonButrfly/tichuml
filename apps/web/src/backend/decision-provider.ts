@@ -116,6 +116,45 @@ export async function resolveDecisionWithProvider(config: {
     };
   }
 
+  if (context.state.phase === "trick_play" && context.state.activeSeat === null) {
+    const startedAt = performance.now();
+    const endpointError =
+      "trick_play requests must not be sent with activeSeat=null.";
+    console.error(
+      "[decision-provider] refusing backend request for trick_play with activeSeat=null",
+      {
+        actor,
+        pendingDragonGiftWinner: context.state.pendingDragonGift?.winner ?? null,
+        legalActionCount: (context.legalActions[actor] ?? []).length
+      }
+    );
+    const chosen = heuristicsV1Policy.chooseAction(context);
+    return {
+      chosen,
+      requestedProvider: requestPayload.requested_provider,
+      providerUsed: "local_heuristic",
+      providerReason:
+        "Resolved locally because the browser observed an invalid trick_play state with activeSeat=null and skipped the backend request to prevent a retry loop.",
+      responseMetadata: {
+        requested_provider: requestPayload.requested_provider,
+        malformed_state: "trick_play activeSeat=null"
+      },
+      telemetryId: null,
+      latencyMs: performance.now() - startedAt,
+      endpointReachable: null,
+      endpointStatus: "client_validation_error",
+      endpointError,
+      validationErrors: [
+        {
+          path: "state_raw.activeSeat",
+          message: endpointError
+        }
+      ],
+      handledByServerTelemetry: false,
+      usedFallback: false
+    };
+  }
+
   const startedAt = performance.now();
   try {
     const response = await postDecisionRequest(

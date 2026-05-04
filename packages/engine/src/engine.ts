@@ -244,6 +244,26 @@ function getMahjongHolder(state: GameState): SeatId {
   return holder;
 }
 
+function assertTrickPlayActiveSeatInvariant(
+  state: Pick<GameState, "phase" | "activeSeat" | "pendingDragonGift">
+): void {
+  if (state.phase !== "trick_play") {
+    return;
+  }
+
+  assertInvariant(
+    state.activeSeat !== null,
+    "[engine] trick_play requires activeSeat to be defined."
+  );
+
+  if (state.pendingDragonGift) {
+    assertInvariant(
+      state.activeSeat === state.pendingDragonGift.winner,
+      `[engine] Dragon gift winner ${state.pendingDragonGift.winner} must remain the activeSeat during trick_play.`
+    );
+  }
+}
+
 function isSmallTichuWindow(phase: GameState["phase"]): boolean {
   return (
     phase === "pass_select" ||
@@ -344,6 +364,7 @@ function createDerivedView(state: GameState): PublicDerivedState {
 }
 
 function createResult(state: GameState, events: EngineEvent[]): EngineResult {
+  assertTrickPlayActiveSeatInvariant(state);
   return {
     nextState: state,
     events,
@@ -1270,7 +1291,7 @@ function resolveCompletedTrick(
       roundEndsAfterGift: roundEndsAfterResolution
     };
     state.currentTrick = null;
-    state.activeSeat = null;
+    state.activeSeat = winner;
     return;
   }
 

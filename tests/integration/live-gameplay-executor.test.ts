@@ -5,9 +5,13 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   applyEngineAction,
+  cardsFromIds,
   createInitialGameState,
+  createScenarioState,
   getCanonicalActiveSeatFromState,
+  getLegalActions,
   type EngineResult,
+  type GameState,
   type SeatId
 } from "@tichuml/engine";
 import { App } from "../../apps/web/src/App";
@@ -924,6 +928,68 @@ describe("live gameplay executor", () => {
     expect(() =>
       applyEngineAction(trickPlay.nextState, resolution.chosen.action)
     ).not.toThrow();
+  });
+
+  it("skips the backend and resolves locally when a malformed trick_play state has activeSeat=null", async () => {
+    const state = {
+      ...createScenarioState({
+        phase: "trick_play",
+        hands: {
+          "seat-0": cardsFromIds(["dragon"]),
+          "seat-1": cardsFromIds(["jade-7"]),
+          "seat-2": cardsFromIds(["jade-6"]),
+          "seat-3": cardsFromIds(["jade-5"])
+        },
+        pendingDragonGift: {
+          winner: "seat-0",
+          trickCards: cardsFromIds(["dragon"]),
+          nextLeader: "seat-1",
+          roundEndsAfterGift: false
+        }
+      }),
+      activeSeat: null
+    } as GameState;
+    const legalActions = getLegalActions(state);
+    const fetchImpl = vi.fn();
+
+    const resolution = await resolveDecisionWithProvider({
+      context: {
+        state,
+        legalActions
+      },
+      actor: "seat-0",
+      settings: {
+        decisionMode: "server_heuristic",
+        backendBaseUrl: "http://127.0.0.1:4310",
+        telemetryEnabled: true,
+        serverFallbackEnabled: false
+      },
+      requestPayload: {
+        game_id: "malformed-trick-play-game",
+        hand_id: "malformed-trick-play-hand",
+        phase: "trick_play",
+        actor_seat: "seat-0",
+        schema_version: 1,
+        engine_version: "test",
+        sim_version: "test",
+        state_raw: state as unknown as JsonObject,
+        state_norm: state as unknown as JsonObject,
+        legal_actions: legalActions["seat-0"] as unknown as JsonObject[],
+        requested_provider: "server_heuristic",
+        metadata: {
+          scoring_path: "rich_path"
+        }
+      },
+      fetchImpl: fetchImpl as unknown as typeof fetch
+    });
+
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(resolution.providerUsed).toBe("local_heuristic");
+    expect(resolution.endpointStatus).toBe("client_validation_error");
+    expect(resolution.chosen.action).toMatchObject({
+      type: "assign_dragon_trick",
+      seat: "seat-0"
+    });
   });
 
   it("records a real GT auto-advance failure for manual recovery", async () => {

@@ -14,6 +14,29 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 
 ## Entries
 
+### 2026-05-03 - Trick-play auto-advance must never enter the browser with a missing active seat
+
+- Prompt Signal: Live gameplay was reaching `trick_play` with the runtime error
+  `Cannot derive canonical active seat from state: phase=trick_play, activeSeat=null.`,
+  which led to backend 500s, repeated `frontend_apply_failed` retries, and a
+  stuck UI after exchange / Dragon-gift handoff.
+- Interpreted Requirement: Issue
+  [#58](https://github.com/NeonButrfly/tichuml/issues/58) also tracks a
+  stricter live turn-flow invariant: when the engine enters or remains in
+  `trick_play`, it must carry a real `activeSeat` for the acting seat,
+  including Dragon-gift selection states; exchange completion must hand the
+  lead to the Mahjong holder; and the browser decision-provider must refuse to
+  send backend requests for malformed `trick_play` states with
+  `activeSeat=null`, resolving locally instead of entering an infinite retry
+  loop.
+- Affected Systems: `packages/engine/src/engine.ts`,
+  `apps/web/src/backend/decision-provider.ts`,
+  `tests/integration/engine-core.test.ts`,
+  `tests/integration/live-gameplay-executor.test.ts`.
+- Linked GitHub Issue: [#58](https://github.com/NeonButrfly/tichuml/issues/58)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.
+
 ### 2026-05-03 - Browser decision-provider code must not depend on Node globals during trick play
 
 - Prompt Signal: Live trick-play automation was failing in the browser with

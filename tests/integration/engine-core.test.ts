@@ -1089,6 +1089,7 @@ describe("engine core", () => {
     });
 
     expect(afterExchangeComplete.nextState.phase).toBe("trick_play");
+    expect(afterExchangeComplete.nextState.activeSeat).toBe("seat-0");
     expect(afterExchangeComplete.nextState.currentTrick).toBeNull();
     expect(afterExchangeComplete.nextState.hands["seat-0"].map((card) => card.id)).toEqual(
       revealed.nextState.hands["seat-0"].map((card) => card.id)
@@ -1156,6 +1157,7 @@ describe("engine core", () => {
     const dragonActions = getLegalActions(afterPass3.nextState)["seat-0"] ?? [];
 
     expect(afterPass3.nextState.pendingDragonGift?.winner).toBe("seat-0");
+    expect(afterPass3.nextState.activeSeat).toBe("seat-0");
     expect(dragonActions).toEqual([
       { type: "assign_dragon_trick", seat: "seat-0", recipient: "seat-1" },
       { type: "assign_dragon_trick", seat: "seat-0", recipient: "seat-3" }
