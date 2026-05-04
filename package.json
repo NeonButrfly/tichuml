@@ -30,6 +30,7 @@
     "db:migrate": "tsx infra/db/scripts/migrate.ts",
     "db:migrate:status": "tsx infra/db/scripts/migrate.ts status",
     "sim": "tsx apps/sim-runner/src/cli.ts",
+    "selfplay:validate-short-games": "npm run build:shared && npm run build:engine && npm run build:telemetry && npm run build:ai && npm run build:sim-runner && tsx apps/sim-runner/src/selfplay-validate-short-games.ts",
     "sim:diag": "tsx scripts/sim-diagnostics.ts",
     "sim:doctor": "tsx scripts/sim-doctor.ts",
     "sim:doctor:linux": "bash scripts/linux/sim-doctor.sh",

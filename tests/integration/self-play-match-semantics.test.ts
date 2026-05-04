@@ -30,7 +30,7 @@ describe("self-play match semantics", () => {
     vi.doUnmock("@tichuml/engine");
   });
 
-  it("completes each simulated game after the first scored hand", async () => {
+  it("starts the next carried hand after scoring until the match is complete", async () => {
     const createInitialGameState = vi
       .fn()
       .mockImplementationOnce((seedOrConfig: unknown) => {
@@ -65,6 +65,65 @@ describe("self-play match semantics", () => {
           legalActions: {},
           events: []
         };
+      })
+      .mockImplementationOnce((seedOrConfig: unknown) => {
+        expect(seedOrConfig).toEqual({
+          seed: "semantic-seed-0-hand-2",
+          matchScore: {
+            "team-0": 840,
+            "team-1": 700
+          },
+          matchHistory: [
+            buildMatchHistoryEntry({
+              handNumber: 1,
+              roundSeed: "semantic-seed-0",
+              team0: 840,
+              team1: 700
+            })
+          ]
+        });
+        return {
+          nextState: {
+            phase: "finished",
+            matchComplete: true,
+            matchWinner: "team-0",
+            matchScore: {
+              "team-0": 1040,
+              "team-1": 760
+            },
+            matchHistory: [
+              buildMatchHistoryEntry({
+                handNumber: 1,
+                roundSeed: "semantic-seed-0",
+                team0: 840,
+                team1: 700
+              }),
+              {
+                ...buildMatchHistoryEntry({
+                  handNumber: 2,
+                  roundSeed: "semantic-seed-0-hand-2",
+                  team0: 200,
+                  team1: 60
+                }),
+                cumulativeScores: {
+                  "team-0": 1040,
+                  "team-1": 760
+                }
+              }
+            ]
+          },
+          derivedView: {
+            phase: "finished",
+            matchScore: {
+              "team-0": 1040,
+              "team-1": 760
+            },
+            matchComplete: true,
+            matchWinner: "team-0"
+          },
+          legalActions: {},
+          events: []
+        };
       });
 
     vi.doMock("@tichuml/engine", async () => {
@@ -78,11 +137,11 @@ describe("self-play match semantics", () => {
       };
     });
 
-    const { runSelfPlayBatch } = await import(
+    const { runSelfPlayBatchDetailed } = await import(
       "../../apps/sim-runner/src/self-play-batch"
     );
 
-    const summary = await runSelfPlayBatch({
+    const result = await runSelfPlayBatchDetailed({
       games: 1,
       baseSeed: "semantic-seed",
       defaultProvider: "local",
@@ -90,23 +149,25 @@ describe("self-play match semantics", () => {
       quiet: true
     });
 
-    expect(createInitialGameState).toHaveBeenCalledTimes(1);
-    expect(summary.gamesPlayed).toBe(1);
-    expect(summary.handsPlayed).toBe(1);
-    expect(summary.lastCompletedGameId).toBe(
+    expect(createInitialGameState).toHaveBeenCalledTimes(2);
+    expect(result.summary.gamesPlayed).toBe(1);
+    expect(result.summary.handsPlayed).toBe(2);
+    expect(result.summary.lastCompletedGameId).toBe(
       "selfplay-semantic-seed-game-000001"
     );
-    expect(summary.lastCompletedHandId).toBe(
-      "selfplay-semantic-seed-game-000001-hand-1"
+    expect(result.summary.lastCompletedHandId).toBe(
+      "selfplay-semantic-seed-game-000001-hand-2"
     );
-    expect(summary.lastCompletedMatchScore).toEqual({
-      "team-0": 840,
-      "team-1": 700
+    expect(result.summary.lastCompletedMatchScore).toEqual({
+      "team-0": 1040,
+      "team-1": 760
     });
-    expect(summary.lastCompletedMatchWinner).toBe("team-0");
-    expect(summary.totalScoreByTeam).toEqual({
-      "team-0": 840,
-      "team-1": 700
+    expect(result.summary.lastCompletedMatchWinner).toBe("team-0");
+    expect(result.summary.totalScoreByTeam).toEqual({
+      "team-0": 1040,
+      "team-1": 760
     });
+    expect(result.games[0]?.stopReason).toBe("terminal_game_finished");
+    expect(result.games[0]?.handsPlayed).toBe(2);
   });
 });

@@ -14,6 +14,15 @@ Use this file to preserve gameplay-facing prompt intent and link it to GitHub wo
 
 ## Entries
 
+### 2026-05-03 - Selfplay continuation across every non-terminal phase transition
+
+- Prompt Signal: Short and low-count selfplay exports proved that games were silently stopping after valid non-terminal actions in `grand_tichu_window`, `pass_select`, `trick_play`, Dragon gift resolution, and round scoring or next-hand transitions.
+- Interpreted Requirement: After every selfplay action, the simulator must use the returned state, recompute legal actions plus the next actor through phase-aware rules, continue until terminal match completion or an explicit stop reason, and emit stop-reason telemetry for every short or failed game instead of silently terminating.
+- Affected Systems: `apps/sim-runner/src/self-play-batch.ts`, `apps/sim-runner/src/ml-rollouts.ts`, `apps/sim-runner/src/selfplay-validate-short-games.ts`, selfplay integration tests, telemetry and validation reporting.
+- Linked GitHub Issue: [#60](https://github.com/NeonButrfly/tichuml/issues/60)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.
+
 ### 2026-05-01 - Live Grand Tichu continuation and full-hand executor integrity
 
 - Prompt Signal: The live normal UI must stop appearing to freeze at East during `grand_tichu_window`, keep the UI actor aligned with the engine actor that actually has legal GT actions, continue automatically through GT/deal/exchange/trick/scoring/next-hand startup, and never leave gameplay hanging on stale automated provider work.

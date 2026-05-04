@@ -68,6 +68,13 @@ import {
 
 export type SeatProviderOverrides = Partial<Record<SeatId, DecisionMode>>;
 export type TelemetryMode = "minimal" | "full";
+export type SelfPlayStopReason =
+  | "terminal_game_finished"
+  | "waiting_for_local_input"
+  | "no_legal_actions"
+  | "invalid_state"
+  | "backend_error"
+  | "max_steps_guard";
 
 export type SelfPlayBatchOptions = {
   games: number;
@@ -134,10 +141,20 @@ export type SelfPlayGameResult = {
   telemetryFailureByKind: Record<string, number>;
   telemetryBackoffUntil: string | null;
   telemetryRuntime: TelemetryRuntimeState | null;
+  stopReason: SelfPlayStopReason;
+  stopDetails: JsonObject;
+  lastPhase: string;
+  lastActor: string | null;
+  lastActionType: string | null;
   latencyByProvider: Record<
     string,
     { count: number; totalMs: number; averageMs: number }
   >;
+};
+
+export type SelfPlayBatchDetailedResult = {
+  summary: SelfPlayBatchSummary;
+  games: SelfPlayGameResult[];
 };
 
 export type SelfPlayBatchSummary = {
@@ -1075,6 +1092,80 @@ function buildGameOutcomeMetadata(config: {
   };
 }
 
+type SelfPlayContinuationPlan =
+  | {
+      kind: "continue";
+      actor: SeatId | typeof SYSTEM_ACTOR;
+      derivation: string;
+      derivedFromLegalActions: boolean;
+    }
+  | {
+      kind: "next_hand";
+      nextHandNumber: number;
+      nextResult: ReturnType<typeof createInitialGameState>;
+    }
+  | {
+      kind: "stop";
+      stopReason: SelfPlayStopReason;
+      details: JsonObject;
+    };
+
+function planSelfPlayContinuation(config: {
+  result: ReturnType<typeof createInitialGameState>;
+  baseSeed: string;
+  gameIndex: number;
+  currentHandNumber: number;
+}): SelfPlayContinuationPlan {
+  const { result } = config;
+  const state = result.nextState;
+
+  if (state.phase === "finished") {
+    if (state.matchComplete) {
+      return {
+        kind: "stop",
+        stopReason: "terminal_game_finished",
+        details: {
+          phase: state.phase,
+          handNumber: config.currentHandNumber,
+          matchComplete: true,
+          matchWinner: state.matchWinner,
+          matchScore: cloneTeamScores(state.matchScore) as unknown as JsonObject
+        }
+      };
+    }
+
+    const nextHandNumber = getCurrentHandNumber(state);
+    const carryState = createNextDealCarryState(state);
+    return {
+      kind: "next_hand",
+      nextHandNumber,
+      nextResult: createInitialGameState({
+        seed: buildHandSeed(config.baseSeed, config.gameIndex, nextHandNumber),
+        ...carryState
+      })
+    };
+  }
+
+  const actorResolution = resolveAutomatedContinuationActor({
+    legalActions: result.legalActions,
+    state
+  });
+  if (actorResolution.ok) {
+    return {
+      kind: "continue",
+      actor: actorResolution.actor,
+      derivation: actorResolution.derivation,
+      derivedFromLegalActions: actorResolution.derivedFromLegalActions
+    };
+  }
+
+  return {
+    kind: "stop",
+    stopReason: actorResolution.stopReason,
+    details: actorResolution.details
+  };
+}
+
 function resolveRequestedProvider(
   seat: SeatId,
   defaultProvider: DecisionMode,
@@ -1091,32 +1182,304 @@ function getActorLegalActions(
   return Array.isArray(actorActions) ? actorActions : [];
 }
 
+function hasActorLegalActions(
+  legalActions: LegalActionMap,
+  actor: SeatId | typeof SYSTEM_ACTOR
+): boolean {
+  return getActorLegalActions(legalActions, actor).length > 0;
+}
+
+function actorHasLegalActionTypes(
+  legalActions: LegalActionMap,
+  actor: SeatId,
+  actionTypes: LegalAction["type"][]
+): boolean {
+  return (legalActions[actor] ?? []).some((action) =>
+    actionTypes.includes(action.type)
+  );
+}
+
+function listSeatActorsWithLegalActionTypes(
+  legalActions: LegalActionMap,
+  actionTypes: LegalAction["type"][]
+): SeatId[] {
+  return SEAT_IDS.filter((seat) =>
+    actorHasLegalActionTypes(legalActions, seat, actionTypes)
+  );
+}
+
+function summarizeLegalActors(legalActions: LegalActionMap): JsonObject {
+  const actors = Object.fromEntries(
+    [
+      SYSTEM_ACTOR,
+      ...SEAT_IDS
+    ].map((actor) => [
+      actor,
+      (legalActions[actor] ?? []).map((action) => action.type)
+    ])
+  ) as JsonObject;
+
+  return {
+    legal_actors: actors
+  };
+}
+
+type ContinuationActorResolution =
+  | {
+      ok: true;
+      actor: SeatId | typeof SYSTEM_ACTOR;
+      derivation: string;
+      derivedFromLegalActions: boolean;
+    }
+  | {
+      ok: false;
+      stopReason: "invalid_state" | "no_legal_actions";
+      details: JsonObject;
+    };
+
+export function resolveAutomatedContinuationActor(config: {
+  legalActions: LegalActionMap;
+  state: GameState;
+}): ContinuationActorResolution {
+  const { legalActions, state } = config;
+  const systemHasActions = hasActorLegalActions(legalActions, SYSTEM_ACTOR);
+  const seatActionCount = SEAT_IDS.reduce(
+    (count, seat) => count + getActorLegalActions(legalActions, seat).length,
+    0
+  );
+
+  if (!systemHasActions && seatActionCount === 0) {
+    return {
+      ok: false,
+      stopReason: "no_legal_actions",
+      details: {
+        phase: state.phase,
+        activeSeat: state.activeSeat,
+        ...summarizeLegalActors(legalActions)
+      }
+    };
+  }
+
+  switch (state.phase) {
+    case "grand_tichu_window": {
+      const queueSeat = state.grandTichuQueue[0] ?? null;
+      if (
+        queueSeat &&
+        actorHasLegalActionTypes(legalActions, queueSeat, [
+          "decline_grand_tichu",
+          "call_grand_tichu"
+        ])
+      ) {
+        return {
+          ok: true,
+          actor: queueSeat,
+          derivation: "grand_tichu_queue",
+          derivedFromLegalActions: false
+        };
+      }
+      return {
+        ok: false,
+        stopReason: "invalid_state",
+        details: {
+          phase: state.phase,
+          activeSeat: state.activeSeat,
+          grandTichuQueue: [...state.grandTichuQueue],
+          ...summarizeLegalActors(legalActions)
+        }
+      };
+    }
+    case "pass_select": {
+      const pendingSeat =
+        SEAT_IDS.find((seat) => !state.passSelections[seat]) ?? null;
+      if (
+        pendingSeat &&
+        actorHasLegalActionTypes(legalActions, pendingSeat, ["select_pass"])
+      ) {
+        return {
+          ok: true,
+          actor: pendingSeat,
+          derivation: "next_pending_pass_selection",
+          derivedFromLegalActions: false
+        };
+      }
+      return {
+        ok: false,
+        stopReason: "invalid_state",
+        details: {
+          phase: state.phase,
+          activeSeat: state.activeSeat,
+          passSelections: state.passSelections as unknown as JsonObject,
+          selectPassActors: listSeatActorsWithLegalActionTypes(legalActions, [
+            "select_pass"
+          ]),
+          ...summarizeLegalActors(legalActions)
+        }
+      };
+    }
+    case "pass_reveal":
+    case "exchange_complete":
+    case "round_scoring": {
+      if (systemHasActions) {
+        return {
+          ok: true,
+          actor: SYSTEM_ACTOR,
+          derivation: `${state.phase}_system_actor`,
+          derivedFromLegalActions: false
+        };
+      }
+      return {
+        ok: false,
+        stopReason: "invalid_state",
+        details: {
+          phase: state.phase,
+          activeSeat: state.activeSeat,
+          ...summarizeLegalActors(legalActions)
+        }
+      };
+    }
+    case "trick_play": {
+      if (state.pendingDragonGift) {
+        const dragonWinner = state.pendingDragonGift.winner;
+        if (
+          actorHasLegalActionTypes(legalActions, dragonWinner, [
+            "assign_dragon_trick"
+          ])
+        ) {
+          return {
+            ok: true,
+            actor: dragonWinner,
+            derivation: "pending_dragon_gift_winner",
+            derivedFromLegalActions: false
+          };
+        }
+        const dragonActors = listSeatActorsWithLegalActionTypes(legalActions, [
+          "assign_dragon_trick"
+        ]);
+        if (dragonActors.length === 1) {
+          return {
+            ok: true,
+            actor: dragonActors[0]!,
+            derivation: "derived_dragon_gift_actor",
+            derivedFromLegalActions: true
+          };
+        }
+        return {
+          ok: false,
+          stopReason: "invalid_state",
+          details: {
+            phase: state.phase,
+            activeSeat: state.activeSeat,
+            pendingDragonGift: {
+              winner: dragonWinner,
+              nextLeader: state.pendingDragonGift.nextLeader,
+              roundEndsAfterGift: state.pendingDragonGift.roundEndsAfterGift
+            } as unknown as JsonObject,
+            dragonActors,
+            ...summarizeLegalActors(legalActions)
+          }
+        };
+      }
+
+      if (
+        typeof state.activeSeat === "string" &&
+        SEAT_IDS.includes(state.activeSeat as SeatId)
+      ) {
+        const activeSeat = state.activeSeat as SeatId;
+        if (hasActorLegalActions(legalActions, activeSeat)) {
+          return {
+            ok: true,
+            actor: activeSeat,
+            derivation: "active_seat",
+            derivedFromLegalActions: false
+          };
+        }
+        return {
+          ok: false,
+          stopReason: "invalid_state",
+          details: {
+            phase: state.phase,
+            activeSeat: state.activeSeat,
+            ...summarizeLegalActors(legalActions)
+          }
+        };
+      }
+
+      const trickActors = listSeatActorsWithLegalActionTypes(legalActions, [
+        "play_cards",
+        "pass_turn",
+        "assign_dragon_trick"
+      ]);
+      if (trickActors.length === 1) {
+        return {
+          ok: true,
+          actor: trickActors[0]!,
+          derivation: "derived_trick_actor_from_legal_actions",
+          derivedFromLegalActions: true
+        };
+      }
+      return {
+        ok: false,
+        stopReason: "invalid_state",
+        details: {
+          phase: state.phase,
+          activeSeat: state.activeSeat,
+          trickActors,
+          ...summarizeLegalActors(legalActions)
+        }
+      };
+    }
+    default: {
+      if (systemHasActions) {
+        return {
+          ok: true,
+          actor: SYSTEM_ACTOR,
+          derivation: "system_actor_fallback",
+          derivedFromLegalActions: false
+        };
+      }
+      const seatActors = SEAT_IDS.filter((seat) =>
+        hasActorLegalActions(legalActions, seat)
+      );
+      if (seatActors.length === 1) {
+        return {
+          ok: true,
+          actor: seatActors[0]!,
+          derivation: "single_legal_actor_fallback",
+          derivedFromLegalActions: true
+        };
+      }
+      return {
+        ok: false,
+        stopReason: "invalid_state",
+        details: {
+          phase: state.phase,
+          activeSeat: state.activeSeat,
+          ...summarizeLegalActors(legalActions)
+        }
+      };
+    }
+  }
+}
+
 function resolveNextActor(
   legalActions: LegalActionMap,
   state: GameState
 ): SeatId | typeof SYSTEM_ACTOR {
-  if (getActorLegalActions(legalActions, SYSTEM_ACTOR).length > 0) {
-    return SYSTEM_ACTOR;
-  }
-
-  try {
-    const canonicalActor = getCanonicalActiveSeatFromState(state);
-    if (getActorLegalActions(legalActions, canonicalActor).length > 0) {
-      return canonicalActor;
-    }
-  } catch {
-    // Non-seat phases are system-owned. If no system action exists, fall back to
-    // the stable absolute engine seat order, never a presentation rotation.
-  }
-
-  for (const seat of SEAT_IDS) {
-    if (getActorLegalActions(legalActions, seat).length > 0) {
-      return seat;
-    }
+  const resolution = resolveAutomatedContinuationActor({
+    legalActions,
+    state
+  });
+  if (resolution.ok) {
+    return resolution.actor;
   }
 
   throw new Error(
-    "No legal actor was available for the next self-play decision."
+    [
+      "No legal actor was available for the next self-play decision.",
+      `stop_reason=${resolution.stopReason}`,
+      `phase=${state.phase}`,
+      `activeSeat=${String(state.activeSeat ?? "null")}`
+    ].join(" ")
   );
 }
 
@@ -2333,7 +2696,7 @@ async function runSingleGame(
   const gameId = buildGameId(options.baseSeed, index);
   const firstHandId = buildHandId(gameId, 1);
   const startedAt = Date.now();
-  const gameIndex = 1;
+  const gameIndex = index + 1;
   let currentHandNumber = 1;
   let currentTrickIndex = 1;
   let result = createInitialGameState(
@@ -2371,6 +2734,127 @@ async function runSingleGame(
   let wishActiveDecisions = 0;
   let invalidDecisions = 0;
   const startedHands = new Set<number>();
+  let lastHandId = firstHandId;
+  let lastPhase = result.nextState.phase;
+  let lastActor: string | null = null;
+  let lastActionType: string | null = null;
+  let stopReason: SelfPlayStopReason | null = null;
+  let stopDetails: JsonObject = {};
+
+  const persistHandCompleted = async (handId: string): Promise<void> => {
+    const completedWinningTeam =
+      result.nextState.matchScore["team-0"] ===
+      result.nextState.matchScore["team-1"]
+        ? "tie"
+        : result.nextState.matchScore["team-0"] >
+            result.nextState.matchScore["team-1"]
+          ? "team-0"
+          : "team-1";
+    const handCompleted = await persistEvent(
+      { type: "hand_completed", detail: handId },
+      result.derivedView as unknown as JsonObject,
+      {
+        backendBaseUrl,
+        telemetryEnabled: options.telemetryEnabled,
+        ...(options.strictTelemetry !== undefined
+          ? { strictTelemetry: options.strictTelemetry }
+          : {}),
+        ...(options.traceBackend !== undefined
+          ? { traceBackend: options.traceBackend }
+          : {}),
+        ...(options.telemetryMode !== undefined
+          ? { telemetryMode: options.telemetryMode }
+          : {}),
+        ...(options.telemetryMaxBytes !== undefined
+          ? { telemetryMaxBytes: options.telemetryMaxBytes }
+          : {}),
+        ...telemetryTransportConfig(options),
+        ...(telemetryManager ? { telemetryManager } : {}),
+        ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
+        gameId,
+        handId,
+        actorSeat: SYSTEM_ACTOR,
+        eventIndex: eventIndex++,
+        providerUsed: "system_local",
+        requestedProvider: "system_local",
+        metadata: {
+          ...buildHandOutcomeMetadata({
+            state: result.nextState,
+            handId,
+            handIndex: currentHandNumber,
+            gameIndex
+          }),
+          hand_number: String(result.nextState.matchHistory.length),
+          hands_played: String(result.nextState.matchHistory.length),
+          winner_team: completedWinningTeam === "tie" ? null : completedWinningTeam,
+          final_team_0_score: result.nextState.matchScore["team-0"],
+          final_team_1_score: result.nextState.matchScore["team-1"]
+        },
+        ...(options.workerId ? { workerId: options.workerId } : {}),
+        ...(options.controllerMode ? { controllerMode: true } : {})
+      }
+    );
+    if (handCompleted) {
+      recordTelemetryFailure(telemetryFailureStats, handCompleted);
+    }
+  };
+
+  const persistGameCompleted = async (handId: string): Promise<void> => {
+    const completedWinningTeam =
+      result.nextState.matchScore["team-0"] ===
+      result.nextState.matchScore["team-1"]
+        ? "tie"
+        : result.nextState.matchScore["team-0"] >
+            result.nextState.matchScore["team-1"]
+          ? "team-0"
+          : "team-1";
+    const gameCompleted = await persistEvent(
+      { type: "game_completed", detail: completedWinningTeam },
+      result.derivedView as unknown as JsonObject,
+      {
+        backendBaseUrl,
+        telemetryEnabled: options.telemetryEnabled,
+        ...(options.strictTelemetry !== undefined
+          ? { strictTelemetry: options.strictTelemetry }
+          : {}),
+        ...(options.traceBackend !== undefined
+          ? { traceBackend: options.traceBackend }
+          : {}),
+        ...(options.telemetryMode !== undefined
+          ? { telemetryMode: options.telemetryMode }
+          : {}),
+        ...(options.telemetryMaxBytes !== undefined
+          ? { telemetryMaxBytes: options.telemetryMaxBytes }
+          : {}),
+        ...telemetryTransportConfig(options),
+        ...(telemetryManager ? { telemetryManager } : {}),
+        ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
+        gameId,
+        handId,
+        actorSeat: SYSTEM_ACTOR,
+        eventIndex: eventIndex++,
+        providerUsed: "system_local",
+        requestedProvider: "system_local",
+        metadata: {
+          ...buildGameOutcomeMetadata({
+            state: result.nextState,
+            handIndex: currentHandNumber,
+            gameIndex
+          }),
+          hand_number: String(result.nextState.matchHistory.length),
+          hands_played: String(result.nextState.matchHistory.length),
+          winner_team: completedWinningTeam === "tie" ? null : completedWinningTeam,
+          final_team_0_score: result.nextState.matchScore["team-0"],
+          final_team_1_score: result.nextState.matchScore["team-1"]
+        },
+        ...(options.workerId ? { workerId: options.workerId } : {}),
+        ...(options.controllerMode ? { controllerMode: true } : {})
+      }
+    );
+    if (gameCompleted) {
+      recordTelemetryFailure(telemetryFailureStats, gameCompleted);
+    }
+  };
 
   try {
     const gameStarted = await persistEvent(
@@ -2412,8 +2896,9 @@ async function runSingleGame(
       recordTelemetryFailure(telemetryFailureStats, gameStarted);
     }
 
-    while (true) {
+    gameLoop: while (true) {
       const handId = buildHandId(gameId, currentHandNumber);
+      lastHandId = handId;
       if (!startedHands.has(currentHandNumber)) {
         startedHands.add(currentHandNumber);
         const handStarted = await persistEvent(
@@ -2509,70 +2994,117 @@ async function runSingleGame(
         }
       }
 
-      while (result.nextState.phase !== "finished") {
+      while (true) {
         if (
           options.maxDecisionsPerGame !== undefined &&
           decisionIndex >= options.maxDecisionsPerGame
         ) {
-          throw new MaxDecisionLimitError({
+          stopReason = "max_steps_guard";
+          stopDetails = {
             gameId,
             handId,
-            decisionsEvaluated: decisionIndex,
-            handsPlayed: currentHandNumber,
-            maxDecisionsPerGame: options.maxDecisionsPerGame
-          });
+            handNumber: currentHandNumber,
+            decisionIndex,
+            maxDecisionsPerGame: options.maxDecisionsPerGame,
+            phase: result.nextState.phase,
+            activeSeat: result.nextState.activeSeat
+          };
+          break gameLoop;
         }
 
-        const actor = resolveNextActor(result.legalActions, result.nextState);
-        const resolved = await resolveDecision({
-          backendBaseUrl,
-          telemetryEnabled: options.telemetryEnabled,
-          gameId,
-          handId,
-          actor,
-          decisionIndex,
-          stateRaw: result.nextState as unknown as JsonObject,
-          stateNorm: result.derivedView as unknown as JsonObject,
-          legalActions: result.legalActions,
-          phase: result.nextState.phase,
-          defaultProvider: options.defaultProvider,
-          ...(options.seatProviders
-            ? { seatProviders: options.seatProviders }
-            : {}),
-          ...(options.serverFallbackEnabled !== undefined
-            ? { serverFallbackEnabled: options.serverFallbackEnabled }
-            : {}),
-          ...(options.strictTelemetry !== undefined
-            ? { strictTelemetry: options.strictTelemetry }
-            : {}),
-          ...(options.traceBackend !== undefined
-            ? { traceBackend: options.traceBackend }
-            : {}),
-          ...(options.telemetryMode !== undefined
-            ? { telemetryMode: options.telemetryMode }
-            : {}),
-          ...(options.telemetryMaxBytes !== undefined
-            ? { telemetryMaxBytes: options.telemetryMaxBytes }
-            : {}),
-          ...(telemetryManager ? { telemetryManager } : {}),
-          ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
-          ...telemetryTransportConfig(options),
-          metadata: buildDecisionTelemetryMetadata({
-            handId,
-            handIndex: currentHandNumber,
-            gameIndex,
-            trickIndex:
-              result.nextState.currentTrick !== null ||
-              result.nextState.pendingDragonGift !== null
-                ? currentTrickIndex
-                : null
-          }),
-          ...(options.workerId ? { workerId: options.workerId } : {}),
-          ...(options.controllerMode ? { controllerMode: true } : {}),
-          ...(options.fullStateDecisionRequests !== undefined
-            ? { fullStateDecisionRequests: options.fullStateDecisionRequests }
-            : {})
+        const continuation = planSelfPlayContinuation({
+          result,
+          baseSeed: options.baseSeed,
+          gameIndex: index,
+          currentHandNumber
         });
+
+        if (continuation.kind === "stop") {
+          stopReason = continuation.stopReason;
+          stopDetails = continuation.details;
+          if (continuation.stopReason === "terminal_game_finished") {
+            await persistHandCompleted(handId);
+            await persistGameCompleted(handId);
+          }
+          break gameLoop;
+        }
+
+        if (continuation.kind === "next_hand") {
+          await persistHandCompleted(handId);
+          currentHandNumber = continuation.nextHandNumber;
+          currentTrickIndex = 1;
+          result = continuation.nextResult;
+          lastPhase = result.nextState.phase;
+          continue gameLoop;
+        }
+
+        const actor = continuation.actor;
+        lastActor = String(actor);
+        lastPhase = result.nextState.phase;
+
+        let resolved: SimulatedDecision;
+        try {
+          resolved = await resolveDecision({
+            backendBaseUrl,
+            telemetryEnabled: options.telemetryEnabled,
+            gameId,
+            handId,
+            actor,
+            decisionIndex,
+            stateRaw: result.nextState as unknown as JsonObject,
+            stateNorm: result.derivedView as unknown as JsonObject,
+            legalActions: result.legalActions,
+            phase: result.nextState.phase,
+            defaultProvider: options.defaultProvider,
+            ...(options.seatProviders
+              ? { seatProviders: options.seatProviders }
+              : {}),
+            ...(options.serverFallbackEnabled !== undefined
+              ? { serverFallbackEnabled: options.serverFallbackEnabled }
+              : {}),
+            ...(options.strictTelemetry !== undefined
+              ? { strictTelemetry: options.strictTelemetry }
+              : {}),
+            ...(options.traceBackend !== undefined
+              ? { traceBackend: options.traceBackend }
+              : {}),
+            ...(options.telemetryMode !== undefined
+              ? { telemetryMode: options.telemetryMode }
+              : {}),
+            ...(options.telemetryMaxBytes !== undefined
+              ? { telemetryMaxBytes: options.telemetryMaxBytes }
+              : {}),
+            ...(telemetryManager ? { telemetryManager } : {}),
+            ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
+            ...telemetryTransportConfig(options),
+            metadata: buildDecisionTelemetryMetadata({
+              handId,
+              handIndex: currentHandNumber,
+              gameIndex,
+              trickIndex:
+                result.nextState.currentTrick !== null ||
+                result.nextState.pendingDragonGift !== null
+                  ? currentTrickIndex
+                  : null
+            }),
+            ...(options.workerId ? { workerId: options.workerId } : {}),
+            ...(options.controllerMode ? { controllerMode: true } : {}),
+            ...(options.fullStateDecisionRequests !== undefined
+              ? { fullStateDecisionRequests: options.fullStateDecisionRequests }
+              : {})
+          });
+        } catch (error) {
+          stopReason = "backend_error";
+          stopDetails = {
+            phase: result.nextState.phase,
+            actor,
+            decisionIndex,
+            derivation: continuation.derivation,
+            derivedFromLegalActions: continuation.derivedFromLegalActions,
+            error: serializeError(error)
+          };
+          break gameLoop;
+        }
 
         countByKey(providerUsage, resolved.providerUsed);
         countByKey(decisionsByPhase, result.nextState.phase);
@@ -2609,6 +3141,7 @@ async function runSingleGame(
           fallbackCount += 1;
         }
 
+        lastActionType = resolved.chosenAction.type;
         const matchedLegalAction = findMatchingLegalAction(
           result.legalActions,
           actor,
@@ -2617,9 +3150,15 @@ async function runSingleGame(
 
         if (!matchedLegalAction) {
           invalidDecisions += 1;
-          throw new Error(
-            `Resolved action for actor ${actor} did not match a legal action: ${JSON.stringify(resolved.chosenAction)}`
-          );
+          stopReason = "invalid_state";
+          stopDetails = {
+            phase: result.nextState.phase,
+            actor,
+            decisionIndex,
+            chosenAction: resolved.chosenAction as unknown as JsonObject,
+            ...summarizeLegalActors(result.legalActions)
+          };
+          break gameLoop;
         }
 
         if (matchedLegalAction.type === "pass_turn") {
@@ -2640,10 +3179,21 @@ async function runSingleGame(
           }
         }
 
-        const nextResult = applyEngineAction(
-          result.nextState,
-          resolved.chosenAction
-        );
+        let nextResult: ReturnType<typeof applyEngineAction>;
+        try {
+          nextResult = applyEngineAction(result.nextState, resolved.chosenAction);
+        } catch (error) {
+          stopReason = "invalid_state";
+          stopDetails = {
+            phase: result.nextState.phase,
+            actor,
+            decisionIndex,
+            chosenAction: resolved.chosenAction as unknown as JsonObject,
+            error: serializeError(error)
+          };
+          break gameLoop;
+        }
+
         for (const event of nextResult.events) {
           countByKey(eventsByPhase, nextResult.nextState.phase);
           const currentEventIndex = eventIndex++;
@@ -2729,113 +3279,9 @@ async function runSingleGame(
         }
 
         result = nextResult;
+        lastPhase = result.nextState.phase;
         decisionIndex += 1;
       }
-
-      const completedWinningTeam =
-        result.nextState.matchScore["team-0"] ===
-        result.nextState.matchScore["team-1"]
-          ? "tie"
-          : result.nextState.matchScore["team-0"] >
-              result.nextState.matchScore["team-1"]
-            ? "team-0"
-            : "team-1";
-
-      const handCompleted = await persistEvent(
-        { type: "hand_completed", detail: handId },
-        result.derivedView as unknown as JsonObject,
-        {
-          backendBaseUrl,
-          telemetryEnabled: options.telemetryEnabled,
-          ...(options.strictTelemetry !== undefined
-            ? { strictTelemetry: options.strictTelemetry }
-            : {}),
-          ...(options.traceBackend !== undefined
-            ? { traceBackend: options.traceBackend }
-            : {}),
-          ...(options.telemetryMode !== undefined
-            ? { telemetryMode: options.telemetryMode }
-            : {}),
-          ...(options.telemetryMaxBytes !== undefined
-            ? { telemetryMaxBytes: options.telemetryMaxBytes }
-            : {}),
-          ...telemetryTransportConfig(options),
-          ...(telemetryManager ? { telemetryManager } : {}),
-          ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
-          gameId,
-          handId,
-          actorSeat: SYSTEM_ACTOR,
-          eventIndex: eventIndex++,
-          providerUsed: "system_local",
-          requestedProvider: "system_local",
-          metadata: {
-            ...buildHandOutcomeMetadata({
-              state: result.nextState,
-              handId,
-              handIndex: currentHandNumber,
-              gameIndex
-            }),
-            hand_number: String(result.nextState.matchHistory.length),
-            hands_played: String(result.nextState.matchHistory.length),
-            winner_team: completedWinningTeam === "tie" ? null : completedWinningTeam,
-            final_team_0_score: result.nextState.matchScore["team-0"],
-            final_team_1_score: result.nextState.matchScore["team-1"]
-          },
-          ...(options.workerId ? { workerId: options.workerId } : {}),
-          ...(options.controllerMode ? { controllerMode: true } : {})
-        }
-      );
-      if (handCompleted) {
-        recordTelemetryFailure(telemetryFailureStats, handCompleted);
-      }
-
-      const gameCompleted = await persistEvent(
-        { type: "game_completed", detail: completedWinningTeam },
-        result.derivedView as unknown as JsonObject,
-        {
-          backendBaseUrl,
-          telemetryEnabled: options.telemetryEnabled,
-          ...(options.strictTelemetry !== undefined
-            ? { strictTelemetry: options.strictTelemetry }
-            : {}),
-          ...(options.traceBackend !== undefined
-            ? { traceBackend: options.traceBackend }
-            : {}),
-          ...(options.telemetryMode !== undefined
-            ? { telemetryMode: options.telemetryMode }
-            : {}),
-          ...(options.telemetryMaxBytes !== undefined
-            ? { telemetryMaxBytes: options.telemetryMaxBytes }
-            : {}),
-          ...telemetryTransportConfig(options),
-          ...(telemetryManager ? { telemetryManager } : {}),
-          ...(options.quiet !== undefined ? { quiet: options.quiet } : {}),
-          gameId,
-          handId,
-          actorSeat: SYSTEM_ACTOR,
-          eventIndex: eventIndex++,
-          providerUsed: "system_local",
-          requestedProvider: "system_local",
-          metadata: {
-            ...buildGameOutcomeMetadata({
-              state: result.nextState,
-              handIndex: currentHandNumber,
-              gameIndex
-            }),
-            hand_number: String(result.nextState.matchHistory.length),
-            hands_played: String(result.nextState.matchHistory.length),
-            winner_team: completedWinningTeam === "tie" ? null : completedWinningTeam,
-            final_team_0_score: result.nextState.matchScore["team-0"],
-            final_team_1_score: result.nextState.matchScore["team-1"]
-          },
-          ...(options.workerId ? { workerId: options.workerId } : {}),
-          ...(options.controllerMode ? { controllerMode: true } : {})
-        }
-      );
-      if (gameCompleted) {
-        recordTelemetryFailure(telemetryFailureStats, gameCompleted);
-      }
-      break;
     }
   } finally {
     if (telemetryManager) {
@@ -2857,8 +3303,26 @@ async function runSingleGame(
     }
   }
 
-  const handsPlayed = result.nextState.matchHistory.length;
-  const handId = buildHandId(gameId, handsPlayed);
+  if (stopReason === null) {
+    stopReason = "invalid_state";
+    stopDetails = {
+      phase: result.nextState.phase,
+      message: "Self-play exited without an explicit stop reason."
+    };
+  }
+
+  emitDecisionDiagnostic(options, "selfplay_stop", {
+    game_id: gameId,
+    hand_id: lastHandId,
+    hand_number: currentHandNumber,
+    stop_reason: stopReason,
+    last_phase: lastPhase,
+    last_actor: lastActor,
+    last_action_type: lastActionType,
+    ...stopDetails
+  });
+
+  const handsPlayed = startedHands.size;
   const teamScores = cloneTeamScores(result.nextState.matchScore);
   const historyMetrics = summarizeMatchHistory(result.nextState.matchHistory);
   const scoreMargin = Math.abs(teamScores["team-0"] - teamScores["team-1"]);
@@ -2871,9 +3335,9 @@ async function runSingleGame(
 
   return {
     gameId,
-    handId,
+    handId: lastHandId,
     firstHandId,
-    lastHandId: handId,
+    lastHandId,
     handsPlayed,
     decisions: decisionIndex,
     events: eventIndex,
@@ -2890,8 +3354,8 @@ async function runSingleGame(
     tichuSuccesses: historyMetrics.tichuSuccesses,
     grandTichuCalls: historyMetrics.grandTichuCalls,
     grandTichuSuccesses: historyMetrics.grandTichuSuccesses,
-    matchComplete: true,
-    matchWinner: winningTeam === "tie" ? null : winningTeam,
+    matchComplete: result.nextState.matchComplete,
+    matchWinner: result.nextState.matchWinner,
     scoreMargin,
     passActions,
     playActions,
@@ -2902,6 +3366,11 @@ async function runSingleGame(
     ...telemetryFailureStats,
     telemetryBackoffUntil,
     telemetryRuntime: telemetryRuntimeState,
+    stopReason,
+    stopDetails,
+    lastPhase,
+    lastActor,
+    lastActionType,
     latencyByProvider: summarizeLatency(latencyByProvider)
   };
 }
@@ -2915,9 +3384,9 @@ function mergeCounts(
   }
 }
 
-export async function runSelfPlayBatch(
+export async function runSelfPlayBatchDetailed(
   options: SelfPlayBatchOptions
-): Promise<SelfPlayBatchSummary> {
+): Promise<SelfPlayBatchDetailedResult> {
   const backendBaseUrl = normalizeBackendBaseUrl(
     options.backendBaseUrl ?? "http://localhost:4310"
   );
@@ -3019,20 +3488,24 @@ export async function runSelfPlayBatch(
   let totalGrandTichuCalls = 0;
   let totalGrandTichuSuccesses = 0;
   const latencyTotals: Record<string, { count: number; totalMs: number }> = {};
+  const games: SelfPlayGameResult[] = [];
 
   for (let index = 0; index < options.games; index += 1) {
     try {
       const game = await runSingleGame(index, options, backendBaseUrl);
+      games.push(game);
       summary.gamesPlayed += 1;
       summary.handsPlayed += game.handsPlayed;
       summary.decisionsRecorded += game.decisions;
       summary.eventsRecorded += game.events;
       summary.decisionsEvaluated += game.decisions;
       summary.fallbackCount += game.fallbackCount;
-      summary.lastCompletedGameId = game.gameId;
-      summary.lastCompletedHandId = game.lastHandId;
-      summary.lastCompletedMatchWinner = game.winningTeam;
-      summary.lastCompletedMatchScore = cloneTeamScores(game.teamScores);
+      if (game.stopReason === "terminal_game_finished") {
+        summary.lastCompletedGameId = game.gameId;
+        summary.lastCompletedHandId = game.lastHandId;
+        summary.lastCompletedMatchWinner = game.winningTeam;
+        summary.lastCompletedMatchScore = cloneTeamScores(game.teamScores);
+      }
       summary.invalidDecisionCount += game.invalidDecisions;
       summary.telemetryDecisionFailures += game.telemetryDecisionFailures;
       summary.telemetryEventFailures += game.telemetryEventFailures;
@@ -3068,6 +3541,12 @@ export async function runSelfPlayBatch(
         game.doubleVictoryCountsByTeam
       );
       countByKey(summary.winCountsByTeam, game.winningTeam);
+      if (game.stopReason !== "terminal_game_finished") {
+        summary.errors += 1;
+      }
+      if (game.stopReason === "max_steps_guard") {
+        summary.maxDecisionLimitHit += 1;
+      }
       summary.exchangePhaseRecorded =
         summary.exchangePhaseRecorded ||
         game.decisionsByPhase.pass_select !== undefined ||
@@ -3092,7 +3571,8 @@ export async function runSelfPlayBatch(
             game_id: game.gameId,
             decisions: game.decisions,
             events: game.events,
-            duration_ms: game.durationMs
+            duration_ms: game.durationMs,
+            stop_reason: game.stopReason
           })
         );
       }
@@ -3179,5 +3659,15 @@ export async function runSelfPlayBatch(
     ])
   );
 
-  return summary;
+  return {
+    summary,
+    games
+  };
+}
+
+export async function runSelfPlayBatch(
+  options: SelfPlayBatchOptions
+): Promise<SelfPlayBatchSummary> {
+  const detailed = await runSelfPlayBatchDetailed(options);
+  return detailed.summary;
 }

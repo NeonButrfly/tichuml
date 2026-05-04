@@ -48,11 +48,13 @@ export type HeadlessBatchOptions = {
 
 export type {
   SelfPlayBatchOptions,
+  SelfPlayBatchDetailedResult,
   SelfPlayBatchSummary,
   SelfPlayGameResult,
+  SelfPlayStopReason,
   SeatProviderOverrides
 } from "./self-play-batch.js";
-export { runSelfPlayBatch } from "./self-play-batch.js";
+export { runSelfPlayBatch, runSelfPlayBatchDetailed } from "./self-play-batch.js";
 export {
   buildDiagnosticsComparison,
   createDiagnosticsAccumulator,

@@ -26,7 +26,10 @@ import {
   stableJsonString,
   summarizeRolloutSamples
 } from "./ml-rollout-utils.js";
-import { resolveDecision } from "./self-play-batch.js";
+import {
+  resolveAutomatedContinuationActor,
+  resolveDecision
+} from "./self-play-batch.js";
 
 type ProviderMode = "local" | "server_heuristic" | "lightgbm_model";
 
@@ -284,35 +287,17 @@ function resolveNextActor(
   legalActions: LegalActionMap,
   state: GameState
 ): SeatId | typeof SYSTEM_ACTOR {
-  if ((legalActions[SYSTEM_ACTOR] ?? []).length > 0) {
-    return SYSTEM_ACTOR;
+  const resolution = resolveAutomatedContinuationActor({
+    legalActions,
+    state
+  });
+  if (resolution.ok) {
+    return resolution.actor;
   }
 
-  if (
-    typeof state.activeSeat === "string" &&
-    SEAT_IDS.includes(state.activeSeat as SeatId) &&
-    (legalActions[state.activeSeat as SeatId] ?? []).length > 0
-  ) {
-    return state.activeSeat as SeatId;
-  }
-
-  if (state.phase === "pass_select") {
-    const pendingSeat = SEAT_IDS.find(
-      (seat) =>
-        !state.passSelections[seat] && (legalActions[seat] ?? []).length > 0
-    );
-    if (pendingSeat) {
-      return pendingSeat;
-    }
-  }
-
-  for (const seat of SEAT_IDS) {
-    if ((legalActions[seat] ?? []).length > 0) {
-      return seat;
-    }
-  }
-
-  throw new Error("No legal actor was available for the rollout continuation.");
+  throw new Error(
+    `No legal actor was available for the rollout continuation. stop_reason=${resolution.stopReason}`
+  );
 }
 
 async function loadExportSelection(
