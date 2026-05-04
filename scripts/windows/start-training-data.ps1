@@ -5,7 +5,7 @@ param(
   [string]$Provider = "server_heuristic",
   [string]$BackendUrl = "http://127.0.0.1:4310",
   [bool]$StrictTelemetry = $false,
-  [int]$DecisionTimeoutMs = 500,
+  [int]$DecisionTimeoutMs = 2000,
   [string]$PgHost = "127.0.0.1",
   [string]$PgPort = "54329",
   [string]$PgUser = "tichu",
@@ -32,6 +32,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "common.ps1")
 
 function Show-HelpText {
   @"
@@ -122,14 +123,59 @@ Artifacts created per run:
 "@
 }
 
-function Get-RepoRoot {
-  return (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
-}
-
 function Require-Command {
   param([string]$Name)
   if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
     throw "Missing required command: $Name"
+  }
+}
+
+function Normalize-CommandOutput {
+  param([object]$Value)
+
+  if ($null -eq $Value) {
+    return ""
+  }
+
+  if ($Value -is [System.Array]) {
+    return (($Value | ForEach-Object { "$_" }) -join [Environment]::NewLine).Trim()
+  }
+
+  return "$Value".Trim()
+}
+
+function Get-OutputPreview {
+  param([string]$Text)
+
+  if ([string]::IsNullOrWhiteSpace($Text)) {
+    return "(no output)"
+  }
+
+  $normalized = $Text.Replace("`r", " ").Replace("`n", " ").Trim()
+  if ($normalized.Length -le 240) {
+    return $normalized
+  }
+
+  return $normalized.Substring(0, 240) + "..."
+}
+
+function Invoke-ProcessCapture {
+  param(
+    [string]$FilePath,
+    [string[]]$ArgumentList
+  )
+
+  $stdoutFile = Join-Path $env:TEMP ("tichuml-capture-stdout-" + [guid]::NewGuid().ToString("N") + ".log")
+  $stderrFile = Join-Path $env:TEMP ("tichuml-capture-stderr-" + [guid]::NewGuid().ToString("N") + ".log")
+  try {
+    $process = Start-Process -FilePath $FilePath -ArgumentList $ArgumentList -WorkingDirectory $repoRoot -WindowStyle Hidden -PassThru -Wait -RedirectStandardOutput $stdoutFile -RedirectStandardError $stderrFile
+    return [pscustomobject]@{
+      ExitCode = $process.ExitCode
+      Stdout = if (Test-Path $stdoutFile) { (Get-Content -Path $stdoutFile -Raw) } else { "" }
+      Stderr = if (Test-Path $stderrFile) { (Get-Content -Path $stderrFile -Raw) } else { "" }
+    }
+  } finally {
+    Remove-Item -LiteralPath $stdoutFile, $stderrFile -Force -ErrorAction SilentlyContinue
   }
 }
 
@@ -184,7 +230,10 @@ Get-ChildItem "`$env:TEMP\tichuml-training-export-$RunId.tar.gz"
 "@ | Set-Content -Path $FilePath -Encoding UTF8
 }
 
-$repoRoot = Get-RepoRoot
+$repoRoot = Enter-RepoRoot -BaseDir $PSScriptRoot
+$trainingDataScript = Assert-RepoPath -RepoRoot $repoRoot -RelativePath "scripts\\training-data.ts" -Description "Training data entrypoint"
+$stopTrainingScript = Assert-RepoPath -RepoRoot $repoRoot -RelativePath "scripts\\windows\\stop-training-data.ps1" -Description "Training stop script"
+$selfScriptPath = Assert-RepoPath -RepoRoot $repoRoot -RelativePath "scripts\\windows\\start-training-data.ps1" -Description "Training start script"
 
 if ($Help -or ($RemainingArgs -contains "--help") -or ($RemainingArgs -contains "-help")) {
   Show-HelpText
@@ -192,14 +241,14 @@ if ($Help -or ($RemainingArgs -contains "--help") -or ($RemainingArgs -contains 
 }
 
 if ($InternalRunner) {
-  Set-Location $repoRoot
-  & npx tsx scripts/training-data.ts run-loop --metadata-file $MetadataFile --pg-password-file $PgPasswordFile
+  Set-Location -LiteralPath $repoRoot
+  & npx tsx $trainingDataScript run-loop --metadata-file $MetadataFile --pg-password-file $PgPasswordFile
   exit $LASTEXITCODE
 }
 
 Require-Command node
-Require-Command npm
-Require-Command npx
+Require-Command npm.cmd
+Require-Command npx.cmd
 Require-Command git
 Require-Command psql
 Require-Command tar
@@ -208,7 +257,7 @@ Require-Command powershell
 $tmpMetadata = Join-Path $env:TEMP ("tichuml-training-metadata-" + [guid]::NewGuid().ToString("N") + ".json")
 try {
   $prepareArgs = @(
-    "tsx", "scripts/training-data.ts", "prepare-run",
+    "tsx", $trainingDataScript, "prepare-run",
     "--repo-root", $repoRoot,
     "--training-runs-root", (Join-Path $repoRoot "training-runs"),
     "--export-root", $env:TEMP,
@@ -230,8 +279,22 @@ try {
   if (-not [string]::IsNullOrWhiteSpace($SessionName)) {
     $prepareArgs += @("--session-name", $SessionName)
   }
-  $prepareJson = & npx @prepareArgs
-  $prepareJson | Set-Content -Path $tmpMetadata -Encoding UTF8
+  $prepareResult = Invoke-ProcessCapture -FilePath "npx.cmd" -ArgumentList $prepareArgs
+  $prepareStdout = Normalize-CommandOutput -Value $prepareResult.Stdout
+  $prepareStderr = Normalize-CommandOutput -Value $prepareResult.Stderr
+  if ($prepareResult.ExitCode -ne 0) {
+    $previewText = if (-not [string]::IsNullOrWhiteSpace($prepareStderr)) { $prepareStderr } else { $prepareStdout }
+    throw "Training metadata preparation failed. Output preview: $(Get-OutputPreview -Text $previewText)"
+  }
+  if ([string]::IsNullOrWhiteSpace($prepareStdout)) {
+    throw "Training metadata preparation failed. No JSON metadata was returned."
+  }
+  try {
+    $null = $prepareStdout | ConvertFrom-Json
+  } catch {
+    throw "Training metadata preparation failed. Output was not valid JSON. Preview: $(Get-OutputPreview -Text $prepareStdout)"
+  }
+  $prepareStdout | Set-Content -Path $tmpMetadata -Encoding UTF8
 
   $runId = Get-HelperJsonValue -FilePath $tmpMetadata -Key "run_id"
   $sessionNameResolved = Get-HelperJsonValue -FilePath $tmpMetadata -Key "session_name"
@@ -248,7 +311,7 @@ try {
   $existing = Find-TrainingMetadataBySession -RepoRoot $repoRoot -Name $sessionNameResolved
   if ($existing) {
     if ($ReplaceSession) {
-      & powershell -ExecutionPolicy Bypass -File (Join-Path $repoRoot "scripts\windows\stop-training-data.ps1") -SessionName $sessionNameResolved -Force | Out-Host
+      & powershell -ExecutionPolicy Bypass -File $stopTrainingScript -SessionName $sessionNameResolved -Force | Out-Host
     } else {
       throw "Session already exists: $sessionNameResolved`nStop: scripts\windows\stop-training-data.ps1 -SessionName $sessionNameResolved"
     }
@@ -273,7 +336,7 @@ try {
     Write-Host "Stop command: scripts\windows\stop-training-data.ps1 -SessionName $sessionNameResolved"
     try {
       $dryDbArgs = @(
-        "tsx", "scripts/training-data.ts", "prepare-database",
+        "tsx", $trainingDataScript, "prepare-database",
         "--metadata-file", $tmpMetadata,
         "--pg-password", $PgPassword,
         "--dry-run",
@@ -290,13 +353,13 @@ try {
   }
 
   New-Item -ItemType Directory -Force -Path $runDir, (Split-Path $stopFile -Parent) | Out-Null
-  $prepareJson | Set-Content -Path $metadataPath -Encoding UTF8
+  $prepareStdout | Set-Content -Path $metadataPath -Encoding UTF8
   $PgPassword | Set-Content -Path $passwordFile -Encoding UTF8
   New-Item -ItemType File -Force -Path (Join-Path $runDir "run.log"), (Join-Path $runDir "verification.log"), (Join-Path $runDir "ml_export_check.log") | Out-Null
   Write-CommandsFile -FilePath $commandsFile -RunId $runId -GameIdPrefix $gameIdPrefix -SessionNameValue $sessionNameResolved
 
   $dbArgs = @(
-    "tsx", "scripts/training-data.ts", "prepare-database",
+    "tsx", $trainingDataScript, "prepare-database",
     "--metadata-file", $metadataPath,
     "--pg-password-file", $passwordFile,
     "--allow-unhealthy-backend", "$AllowUnhealthyBackend"
@@ -311,7 +374,7 @@ try {
   $runnerArgs = @(
     "-NoProfile",
     "-ExecutionPolicy", "Bypass",
-    "-File", (Join-Path $repoRoot "scripts\windows\start-training-data.ps1"),
+    "-File", $selfScriptPath,
     "-InternalRunner",
     "-MetadataFile", $metadataPath,
     "-PgPasswordFile", $passwordFile

@@ -1,13 +1,7 @@
-param(
-  [Alias("?")]
-  [switch]$Help,
-  [Parameter(ValueFromRemainingArguments = $true)]
-  [string[]]$RemainingArgs
-)
-
 $ErrorActionPreference = "Stop"
-if ($Help -or ($RemainingArgs -contains "--help") -or ($RemainingArgs -contains "-help")) {
-  & (Join-Path $PSScriptRoot "windows\\bootstrap.ps1") -Help
-  exit $LASTEXITCODE
-}
-& (Join-Path $PSScriptRoot "windows\\bootstrap.ps1") @RemainingArgs
+. (Join-Path $PSScriptRoot "windows\\common.ps1")
+
+$repoRoot = Enter-RepoRoot -BaseDir $PSScriptRoot
+$target = Assert-RepoPath -RepoRoot $repoRoot -RelativePath "scripts\\windows\\bootstrap.ps1" -Description "Bootstrap launcher"
+& $target @args
+exit $LASTEXITCODE

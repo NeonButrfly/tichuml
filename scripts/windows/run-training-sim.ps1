@@ -8,7 +8,8 @@ param(
   [int]$TruthEveryLoops = 5
 )
 $ErrorActionPreference = "Stop"
-$repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
+. (Join-Path $PSScriptRoot "common.ps1")
+$repoRoot = Enter-RepoRoot -BaseDir $PSScriptRoot
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 $script:StopRequested = $false
 [Console]::TreatControlCAsInput = $false

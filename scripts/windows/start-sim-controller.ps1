@@ -7,6 +7,7 @@ param(
   [switch]$Help
 )
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "common.ps1")
 if ($Help) {
 @"
 Usage:
@@ -23,7 +24,7 @@ Options:
 "@ | Write-Host
   exit 0
 }
-$repo = if ($env:BACKEND_REPO_ROOT) { $env:BACKEND_REPO_ROOT } else { "C:\tichu\tichuml" }
+$repo = Enter-RepoRoot -BaseDir $PSScriptRoot
 $runtime = Join-Path $repo ".runtime\sim-controller"
 New-Item -ItemType Directory -Force -Path $runtime | Out-Null
 $runtimeFile = Join-Path $runtime "state.json"
@@ -32,5 +33,5 @@ $pauseFile = Join-Path $runtime "pause"
 $stopFile = Join-Path $runtime "stop"
 $logFile = Join-Path $runtime "controller.ndjson"
 Remove-Item $stopFile -Force -ErrorAction SilentlyContinue
-cd $repo
-npm run sim -- --forever --provider $Provider --games-per-batch $GamesPerBatch --sleep-seconds 0 --worker-count $WorkerCount --telemetry true --server-fallback true --strict-telemetry false --trace-backend false --full-state false --telemetry-mode full --telemetry-max-bytes 25165824 --telemetry-timeout-ms 60000 --telemetry-retry-attempts 2 --telemetry-retry-delay-ms 250 --telemetry-backoff-ms 15000 --backend-url $BackendUrl --runtime-file $runtimeFile --lock-file $lockFile --pause-file $pauseFile --stop-file $stopFile --log-file $logFile --quiet
+Set-Location -LiteralPath $repo
+npm.cmd run sim -- --forever --provider $Provider --games-per-batch $GamesPerBatch --sleep-seconds 0 --worker-count $WorkerCount --telemetry true --server-fallback true --strict-telemetry false --trace-backend false --full-state false --telemetry-mode full --telemetry-max-bytes 25165824 --telemetry-timeout-ms 60000 --telemetry-retry-attempts 2 --telemetry-retry-delay-ms 250 --telemetry-backoff-ms 15000 --backend-url $BackendUrl --runtime-file $runtimeFile --lock-file $lockFile --pause-file $pauseFile --stop-file $stopFile --log-file $logFile --quiet

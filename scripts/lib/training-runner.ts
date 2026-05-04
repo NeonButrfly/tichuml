@@ -19,6 +19,8 @@ export type StreamingProcessResult = {
   errorMessage: string | null;
   enobufsDetected: boolean;
   outputTail: string[];
+  startedAt: string;
+  finishedAt: string;
 };
 
 export function computeRemainingRequestedGames(input: {
@@ -30,6 +32,10 @@ export function computeRemainingRequestedGames(input: {
 
 function ensureParent(filePath: string): void {
   fs.mkdirSync(path.dirname(path.resolve(filePath)), { recursive: true });
+}
+
+function nowIso(): string {
+  return new Date().toISOString();
 }
 
 function trimTail(lines: string[], limit: number): void {
@@ -104,6 +110,8 @@ export async function runStreamingProcess(
 ): Promise<StreamingProcessResult> {
   ensureParent(options.logFile);
   const tailLineLimit = Math.max(10, options.tailLineLimit ?? 60);
+  const startedAt = nowIso();
+  const commandLine = [options.command, ...options.args].join(" ");
 
   return new Promise<StreamingProcessResult>((resolve) => {
     const logStream = fs.createWriteStream(options.logFile, {
@@ -115,6 +123,32 @@ export async function runStreamingProcess(
     let settled = false;
     let errorMessage: string | null = null;
     let enobufsDetected = false;
+    let finishedAt = startedAt;
+
+    logStream.write(`[${startedAt}] COMMAND ${commandLine}\n`);
+    tailLines.push(`COMMAND ${commandLine}`);
+    trimTail(tailLines, tailLineLimit);
+
+    const finalize = (exitCode: number, signal: NodeJS.Signals | null) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      finishedAt = nowIso();
+      flushTailRemainders(tailLines, remainders, tailLineLimit);
+      logStream.write(`[${finishedAt}] PROCESS_EXIT exitCode=${exitCode} signal=${signal ?? "null"}\n`);
+      logStream.end(() => {
+        resolve({
+          exitCode,
+          signal,
+          errorMessage,
+          enobufsDetected,
+          outputTail: [...tailLines],
+          startedAt,
+          finishedAt
+        });
+      });
+    };
 
     const child = spawn(options.command, options.args, {
       cwd: options.cwd,
@@ -149,23 +183,15 @@ export async function runStreamingProcess(
       errorMessage = error.message;
       enobufsDetected =
         error.message.includes("ENOBUFS") || (error as NodeJS.ErrnoException).code === "ENOBUFS";
+      const errorLine = `[${nowIso()}] PROCESS_ERROR ${error.message}`;
+      logStream.write(`${errorLine}\n`);
+      tailLines.push(errorLine);
+      trimTail(tailLines, tailLineLimit);
+      finalize(1, null);
     });
 
     child.on("close", (exitCode, signal) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      flushTailRemainders(tailLines, remainders, tailLineLimit);
-      logStream.end(() => {
-        resolve({
-          exitCode: exitCode ?? 1,
-          signal,
-          errorMessage,
-          enobufsDetected,
-          outputTail: [...tailLines]
-        });
-      });
+      finalize(exitCode ?? 1, signal);
     });
   });
 }

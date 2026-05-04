@@ -7,6 +7,7 @@ param(
   [switch]$Help
 )
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "common.ps1")
 if ($Help) {
 @"
 Usage:
@@ -23,7 +24,7 @@ Options:
 "@ | Write-Host
   exit 0
 }
-$repo = if ($env:BACKEND_REPO_ROOT) { $env:BACKEND_REPO_ROOT } else { "C:\tichu\tichuml" }
+$repo = Enter-RepoRoot -BaseDir $PSScriptRoot
 $telemetryValue = if ($Telemetry) { "true" } else { "false" }
-cd $repo
-npm run sim -- --games $Games --provider $Provider --backend-url $BackendUrl --telemetry $telemetryValue --strict-telemetry false
+Set-Location -LiteralPath $repo
+npm.cmd run sim -- --games $Games --provider $Provider --backend-url $BackendUrl --telemetry $telemetryValue --strict-telemetry false

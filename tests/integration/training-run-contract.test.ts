@@ -11,6 +11,7 @@ import {
   sanitizeSessionName
 } from "@tichuml/shared";
 import {
+  formatTrainingSimCommandForLog,
   buildTrainingSimArgs,
   parseSimBatchSummaryFromLines
 } from "../../scripts/training-data.js";
@@ -66,7 +67,7 @@ describe("training run helpers", () => {
     expect(() => sanitizeSessionName("///")).toThrow(/Session name/);
   });
 
-  it("builds training sim args without forcing rich full-state decision requests", () => {
+  it("builds the known-good training sim command shape without forcing rich full-state requests", () => {
     const args = buildTrainingSimArgs({
       metadata: {
         run_id: "training-20260504-000000-deadbeef",
@@ -75,7 +76,8 @@ describe("training run helpers", () => {
         strict_telemetry: false,
         telemetry_mode: "full",
         seed_hash: "abc123",
-        decision_timeout_ms: 500
+        decision_timeout_ms: 2000,
+        game_id_prefix: "selfplay-training-20260504-000000-deadbeef"
       },
       remainingGames: 3,
       batchId: "batch-000001",
@@ -86,8 +88,47 @@ describe("training run helpers", () => {
 
     expect(args).toContain("--telemetry-mode");
     expect(args).toContain("full");
-    expect(args).toContain("--quiet");
+    expect(args).toContain("--progress");
+    expect(args).not.toContain("--quiet");
     expect(args).not.toContain("--full-state");
+    expect(args).toEqual([
+      "run",
+      "sim",
+      "--",
+      "--games",
+      "3",
+      "--provider",
+      "server_heuristic",
+      "--backend-url",
+      "http://127.0.0.1:4310",
+      "--telemetry",
+      "true",
+      "--strict-telemetry",
+      "false",
+      "--telemetry-mode",
+      "full",
+      "--seed",
+      "feedfacefeedfacefeedfacefeedface",
+      "--seed-prefix",
+      "training-data",
+      "--run-id",
+      "training-20260504-000000-deadbeef",
+      "--batch-id",
+      "batch-000001",
+      "--game-id-prefix",
+      "selfplay-training-20260504-000000-deadbeef-batch-000001",
+      "--seed-hash",
+      "abc123",
+      "--decision-timeout-ms",
+      "2000",
+      "--progress"
+    ]);
+    expect(
+      formatTrainingSimCommandForLog(
+        process.platform === "win32" ? "npm.cmd" : "npm",
+        args
+      )
+    ).toContain("--progress");
   });
 
   it("parses compact sim summaries from streaming training output", () => {

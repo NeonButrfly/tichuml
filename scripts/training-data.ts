@@ -282,7 +282,10 @@ function quoteShellArg(value: string): string {
   return JSON.stringify(value);
 }
 
-function formatCommandForLog(command: string, args: string[]): string {
+export function formatTrainingSimCommandForLog(
+  command: string,
+  args: string[]
+): string {
   return [command, ...args].map((part) => quoteShellArg(part)).join(" ");
 }
 
@@ -1062,7 +1065,6 @@ export function buildTrainingSimArgs(config: {
     metadataBoolean(config.metadata, "strict_telemetry") ? "true" : "false",
     "--telemetry-mode",
     metadataString(config.metadata, "telemetry_mode"),
-    "--quiet",
     "--seed",
     config.batchSeed,
     "--seed-prefix",
@@ -1079,6 +1081,7 @@ export function buildTrainingSimArgs(config: {
   if (decisionTimeoutMs > 0) {
     args.push("--decision-timeout-ms", String(decisionTimeoutMs));
   }
+  args.push("--progress");
   return args;
 }
 
@@ -1167,7 +1170,8 @@ async function runLoop(options: CliOptions): Promise<void> {
         batchSeed,
         batchGameIdPrefix
       });
-      const command = formatCommandForLog("npm", args);
+      const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+      const command = formatTrainingSimCommandForLog(npmCommand, args);
       appendLine(
         runLog,
         JSON.stringify({
@@ -1185,13 +1189,19 @@ async function runLoop(options: CliOptions): Promise<void> {
         })
       );
       const result = await runStreamingProcess({
-        command: process.platform === "win32" ? "npm.cmd" : "npm",
+        command: npmCommand,
         args,
         cwd: repoRoot,
         logFile: runLog,
         mirrorToParent: true,
       });
       metadata.sim_exit_code = result.exitCode;
+      metadata.sim_exit_signal = result.signal;
+      metadata.sim_command = command;
+      metadata.sim_args = args;
+      metadata.sim_started_at = result.startedAt;
+      metadata.sim_finished_at = result.finishedAt;
+      metadata.output_tail = result.outputTail;
       metadata.enobufs_detected =
         metadata.enobufs_detected === true || result.enobufsDetected;
       if (result.errorMessage) {
@@ -1202,8 +1212,10 @@ async function runLoop(options: CliOptions): Promise<void> {
             event: "batch_process_error",
             batch_id: batchId,
             exit_code: result.exitCode,
+            signal: result.signal,
             error: result.errorMessage,
             enobufs_detected: result.enobufsDetected,
+            output_tail: result.outputTail,
           })
         );
       }
@@ -1215,6 +1227,8 @@ async function runLoop(options: CliOptions): Promise<void> {
           batch_id: batchId,
           exit_code: result.exitCode,
           signal: result.signal,
+          started_at: result.startedAt,
+          finished_at: result.finishedAt,
         })
       );
       const parsedSummary = parseSimBatchSummaryFromLines(result.outputTail);
@@ -1312,7 +1326,12 @@ async function runLoop(options: CliOptions): Promise<void> {
 
       if (!madeScopedProgress) {
         metadata.failure_reason =
-          "sim exited without increasing scoped matches, decisions, or events";
+          batchNumber === 1 &&
+          afterSnapshot.scoped_counts.matches === 0 &&
+          afterSnapshot.scoped_counts.decisions === 0 &&
+          afterSnapshot.scoped_counts.events === 0
+            ? "sim exited before producing scoped matches, decisions, or events"
+            : "sim exited without increasing scoped matches, decisions, or events";
         saveMetadata(metadataFile, metadata);
         appendLine(
           runLog,
@@ -1320,6 +1339,7 @@ async function runLoop(options: CliOptions): Promise<void> {
             ts: nowIso(),
             event: "batch_progress_stalled",
             batch_id: batchId,
+            scoped_counts: afterSnapshot.scoped_counts,
             output_tail: result.outputTail,
           })
         );

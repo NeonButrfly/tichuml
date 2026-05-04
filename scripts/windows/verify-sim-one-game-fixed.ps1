@@ -1,5 +1,5 @@
 param(
-  [string]$RepoRoot = "C:\tichu\tichuml",
+  [string]$RepoRoot = "",
   [string]$BackendUrl = "http://127.0.0.1:4310",
   [string]$PostgresContainer = "tichu-postgres",
   [string]$PostgresUser = "tichu",
@@ -9,6 +9,7 @@ param(
 )
 
 $ErrorActionPreference = "Continue"
+. (Join-Path $PSScriptRoot "common.ps1")
 $Timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $OutputDir = Join-Path $RepoRoot "diagnostics\verify-one-game-$Timestamp"
 $ZipOutput = Join-Path $RepoRoot "verify-one-game-$Timestamp.zip"
@@ -41,7 +42,13 @@ function Read-Count { param([string]$Table)
   [int](($raw | Select-Object -First 1).Trim())
 }
 
-Set-Location $RepoRoot
+if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
+  $RepoRoot = Enter-RepoRoot -BaseDir $PSScriptRoot
+} else {
+  $RepoRoot = (Resolve-Path -LiteralPath $RepoRoot).Path
+  Assert-RepoRoot -RepoRoot $RepoRoot
+  Set-Location -LiteralPath $RepoRoot
+}
 Write-Log "RepoRoot: $RepoRoot"
 Write-Log "BackendUrl: $BackendUrl"
 Write-Log "PostgresContainer: $PostgresContainer"

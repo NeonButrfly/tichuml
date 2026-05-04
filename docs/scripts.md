@@ -22,6 +22,19 @@ All human-runnable operator entrypoints now support built-in usage help:
 Compatibility wrappers forward help requests to their canonical OS-specific
 targets so older commands remain discoverable instead of failing silently.
 
+## Repo Root Rules
+
+Scripts that run `npm`, `npx`, `tsx`, `node`, workspace commands, or
+repo-relative `psql` export/import paths must resolve and enter repo root
+before execution. Shared helpers now live at:
+
+- `scripts/windows/common.ps1`
+- `scripts/linux/common.sh`
+
+These helpers resolve from script location, validate `package.json`, validate
+expected repo files such as `scripts/training-data.ts`, and then switch into
+repo root before operator-facing command execution.
+
 Operator-friendly entrypoints now include:
 
 - `scripts/start-frontend.sh`
@@ -36,6 +49,18 @@ Operator-friendly entrypoints now include:
 - `scripts/windows/restart-backend.ps1`
 - `scripts/windows/backend-health.ps1`
 - `scripts/windows/backend-logs.ps1`
+- `scripts/start-training-data.ps1`
+- `scripts/stop-training-data.ps1`
+- `scripts/start-training-data.sh`
+- `scripts/start-sim.ps1`
+- `scripts/start-sim-controller.ps1`
+- `scripts/status-sim-controller.ps1`
+- `scripts/stop-sim-controller.ps1`
+- `scripts/run-training-sim.ps1`
+- `scripts/run-training-sim.sh`
+- `scripts/sim-doctor.ps1`
+- `scripts/sim-doctor.sh`
+- `scripts/verify-sim-one-game-fixed.sh`
 
 ## Canonical Layout
 
@@ -51,21 +76,33 @@ scripts/
   reset_postgres_windows.ps1
   restart_backend_windows.ps1
   runtime_action_linux.sh
+  run-training-sim.ps1
+  run-training-sim.sh
   sim-controller.sh
+  sim-doctor.ps1
+  sim-doctor.sh
+  start-sim.ps1
+  start-sim-controller.ps1
+  start-training-data.ps1
+  start-training-data.sh
   start_backend_linux.sh
   start_backend_windows.ps1
   start_sim_controller_windows.ps1
   start_sim_windows.ps1
   status_backend_linux.sh
   status_backend_windows.ps1
+  status-sim-controller.ps1
   status_sim_controller_windows.ps1
   stop_backend_linux.sh
   stop_backend_windows.ps1
+  stop-sim-controller.ps1
+  stop-training-data.ps1
   stop_sim_controller_windows.ps1
   unblock_windows_scripts.ps1
   update_backend_linux.sh
   update_backend_windows.ps1
   verify-full-sim-backend.sh
+  verify-sim-one-game-fixed.sh
   verify-sim-one-game-fixed.ps1
   linux/
     backend-common.sh
@@ -134,6 +171,18 @@ scripts/
 | `scripts/stop_sim_controller_windows.ps1` | `scripts/windows/stop-sim-controller.ps1` |
 | `scripts/verify-sim-one-game-fixed.ps1` | `scripts/windows/verify-sim-one-game-fixed.ps1` |
 | `scripts/unblock_windows_scripts.ps1` | `scripts/windows/unblock-scripts.ps1` |
+| `scripts/start-training-data.ps1` | `scripts/windows/start-training-data.ps1` |
+| `scripts/stop-training-data.ps1` | `scripts/windows/stop-training-data.ps1` |
+| `scripts/start-sim.ps1` | `scripts/windows/start-sim.ps1` |
+| `scripts/start-sim-controller.ps1` | `scripts/windows/start-sim-controller.ps1` |
+| `scripts/status-sim-controller.ps1` | `scripts/windows/status-sim-controller.ps1` |
+| `scripts/stop-sim-controller.ps1` | `scripts/windows/stop-sim-controller.ps1` |
+| `scripts/run-training-sim.ps1` | `scripts/windows/run-training-sim.ps1` |
+| `scripts/sim-doctor.ps1` | `scripts/windows/sim-doctor.ps1` |
+| `scripts/start-training-data.sh` | `scripts/linux/start-training-data-tmux.sh` |
+| `scripts/run-training-sim.sh` | `scripts/linux/run-training-sim.sh` |
+| `scripts/sim-doctor.sh` | `scripts/linux/sim-doctor.sh` |
+| `scripts/verify-sim-one-game-fixed.sh` | `scripts/linux/verify-sim-one-game-fixed.sh` |
 
 ## Safe And Destructive Scripts
 
@@ -182,6 +231,7 @@ Scripts that require explicit confirmation or destructive flags:
 ./scripts/linux/update-backend.sh
 ./scripts/linux/start-backend.sh
 ./scripts/linux/status-backend.sh
+./scripts/start-training-data.sh --help
 npm run sim:doctor -- --backend-url http://127.0.0.1:4310 --timeout-ms 30000
 ./scripts/linux/verify-full-sim-backend.sh --repo-root /opt/tichuml --clear-database --games 100 --provider local --telemetry-mode minimal
 ```
@@ -232,6 +282,9 @@ Linux examples:
 
 ```bash
 chmod +x scripts/linux/start-training-data-tmux.sh
+chmod +x scripts/start-training-data.sh
+scripts/start-training-data.sh --help
+scripts/start-training-data.sh --games 1000 --provider server_heuristic --backend-url http://127.0.0.1:4310
 scripts/linux/start-training-data-tmux.sh --games 1000 --provider server_heuristic --backend-url http://127.0.0.1:4310
 scripts/linux/start-training-data-tmux.sh --games 1000 --provider server_heuristic --backend-url http://127.0.0.1:4310 -noclear
 scripts/linux/start-training-data-tmux.sh --session tichuml-training-test --games 1000 --provider server_heuristic --backend-url http://127.0.0.1:4310
@@ -241,6 +294,10 @@ scripts/linux/start-training-data-tmux.sh --games 1000 --skip-ml-export-check
 Windows examples:
 
 ```powershell
+powershell -ExecutionPolicy Bypass -File scripts\start-training-data.ps1 -Games 1000 -Provider server_heuristic -BackendUrl http://127.0.0.1:4310
+powershell -ExecutionPolicy Bypass -File scripts\stop-training-data.ps1 -SessionName tichuml-training-test
+powershell -ExecutionPolicy Bypass -File scripts\start-sim.ps1 -Games 1 -Provider server_heuristic -Telemetry
+powershell -ExecutionPolicy Bypass -File scripts\sim-doctor.ps1 -Help
 powershell -ExecutionPolicy Bypass -File scripts\windows\start-training-data.ps1 -Games 1000 -Provider server_heuristic -BackendUrl http://127.0.0.1:4310
 powershell -ExecutionPolicy Bypass -File scripts\windows\start-training-data.ps1 -Games 1000 -Provider server_heuristic -BackendUrl http://127.0.0.1:4310 -NoClear
 powershell -ExecutionPolicy Bypass -File scripts\windows\start-training-data.ps1 -SessionName tichuml-training-test -Games 1000 -Provider server_heuristic -BackendUrl http://127.0.0.1:4310
@@ -249,15 +306,16 @@ powershell -ExecutionPolicy Bypass -File scripts\windows\start-training-data.ps1
 
 Key operator rules:
 
-- Run `scripts/linux/start-training-data-tmux.sh --help` or
-  `scripts/windows/start-training-data.ps1 -Help` to see the full parameter
-  list, defaults, session behavior, and artifact locations.
+- Run `scripts/start-training-data.sh --help`,
+  `scripts/linux/start-training-data-tmux.sh --help`, or
+  `scripts/start-training-data.ps1 -Help` to see the full parameter list,
+  defaults, session behavior, and artifact locations.
 - `server_heuristic` training now stays on the normal fast-path request shape
   even when telemetry is full. The workflow no longer forces `--full-state`
   rich decision requests as the default server path.
 - The `server_heuristic` training fix is the request-path correction above, not
-  a larger timeout. The default `500ms` timeout remains intact; the timeout
-  flag is only a diagnostic escape hatch.
+  a larger timeout. The current launcher default is `2000ms`, and the timeout
+  flag remains a diagnostic escape hatch rather than the primary fix.
 - Use `--decision-timeout-ms` or `-DecisionTimeoutMs` only as a diagnostic
   escape hatch. It is not the primary fix for `server_heuristic` training
   behavior.
@@ -279,3 +337,5 @@ Key operator rules:
 - Manual ML output is written under `training-runs/<run_id>/ml` and includes
   LightGBM-ready metadata such as `dataset_metadata.json`,
   `feature_columns.json`, and `label_columns.json`.
+- Direct simulator fallback from repo root remains:
+  `cd C:\tichu\tichuml; npm.cmd run sim -- --games 1000 --provider server_heuristic --backend-url http://127.0.0.1:4310 --telemetry true --strict-telemetry false --telemetry-mode full --seed training-manual-20260504-01 --seed-prefix training-data --game-id-prefix selfplay-training-manual-20260504-01 --decision-timeout-ms 2000 --progress`

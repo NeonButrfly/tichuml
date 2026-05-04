@@ -9,6 +9,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "common.ps1")
 
 if ($Help) {
 @"
@@ -31,10 +32,6 @@ if ([string]::IsNullOrWhiteSpace($SessionName)) {
   throw "SessionName is required unless -Help or -? is used."
 }
 
-function Get-RepoRoot {
-  return (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
-}
-
 function Find-TrainingMetadataBySession {
   param([string]$RepoRoot, [string]$Name)
   $trainingRoot = Join-Path $RepoRoot "training-runs"
@@ -51,7 +48,8 @@ function Find-TrainingMetadataBySession {
   return $null
 }
 
-$repoRoot = Get-RepoRoot
+$repoRoot = Enter-RepoRoot -BaseDir $PSScriptRoot
+$trainingDataScript = Assert-RepoPath -RepoRoot $repoRoot -RelativePath "scripts\\training-data.ts" -Description "Training data entrypoint"
 $found = Find-TrainingMetadataBySession -RepoRoot $repoRoot -Name $SessionName
 if (-not $found) {
   throw "No training session metadata found for $SessionName"
@@ -84,7 +82,7 @@ if (Test-Path $pidFile) {
       if ($Force) {
         Push-Location $repoRoot
         try {
-          & npx tsx scripts/training-data.ts finalize-run --metadata-file $metadataPath --pg-password-file $passwordFile | Out-Host
+          & npx tsx $trainingDataScript finalize-run --metadata-file $metadataPath --pg-password-file $passwordFile | Out-Host
         } finally {
           Pop-Location
         }

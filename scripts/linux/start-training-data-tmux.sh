@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+# shellcheck disable=SC1091
+. "$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 # Starts an isolated training-data self-play session inside tmux.
 # Default mode clears events/decisions/matches in the training database,
@@ -139,6 +141,8 @@ EOF
 }
 
 REPO_ROOT="${BACKEND_REPO_ROOT:-$(repo_root_default)}"
+common_require_repo_root "$REPO_ROOT"
+TRAINING_DATA_SCRIPT="$(common_require_repo_file "$REPO_ROOT" "scripts/training-data.ts" "Training data entrypoint")"
 TRAINING_CLEAR_SQL="TRUNCATE TABLE events, decisions, matches RESTART IDENTITY CASCADE;"
 GAMES=1000
 PROVIDER="server_heuristic"
@@ -164,7 +168,7 @@ SESSION_NAME=""
 
 while (($#)); do
   case "$1" in
-    --help|-h|-help)
+    --help|-h|-help|help)
       print_help
       exit 0
       ;;
@@ -275,6 +279,8 @@ elif ! command -v tmux >/dev/null 2>&1; then
   echo "Warning: tmux is not installed in this environment; live Linux launch would currently fail." >&2
 fi
 
+cd "$REPO_ROOT"
+
 tmp_metadata="$(mktemp)"
 cleanup() {
   rm -f "$tmp_metadata"
@@ -282,7 +288,7 @@ cleanup() {
 trap cleanup EXIT
 
 prepare_args=(
-  tsx scripts/training-data.ts prepare-run
+  tsx "$TRAINING_DATA_SCRIPT" prepare-run
   --repo-root "$REPO_ROOT"
   --training-runs-root "$REPO_ROOT/training-runs"
   --export-root "/tmp"
@@ -355,7 +361,7 @@ if [[ "$DRY_RUN" == "true" ]]; then
   if ! (
     cd "$REPO_ROOT" &&
       prepare_db_args=(
-        tsx scripts/training-data.ts prepare-database
+        tsx "$TRAINING_DATA_SCRIPT" prepare-database
         --metadata-file "$tmp_metadata"
         --pg-password "$PG_PASSWORD"
         --dry-run
@@ -381,7 +387,7 @@ cp "$tmp_metadata" "$METADATA_FILE"
 write_commands_file "$COMMANDS_FILE" "$SESSION_NAME_RESOLVED" "$RUN_ID" "$GAME_ID_PREFIX" "$RUN_DIR" "$ARCHIVE_PATH"
 
 prepare_db_args=(
-  tsx scripts/training-data.ts prepare-database
+  tsx "$TRAINING_DATA_SCRIPT" prepare-database
   --metadata-file "$METADATA_FILE"
   --pg-password-file "$(dirname "$STOP_FILE")/pg-password.txt"
   --allow-unhealthy-backend "$ALLOW_UNHEALTHY_BACKEND"
@@ -394,8 +400,13 @@ fi
   npx "${prepare_db_args[@]}"
 )
 
-RUNNER_CMD="cd \"$REPO_ROOT\" && bash -lc 'trap \"npx tsx scripts/training-data.ts finalize-run --metadata-file \\\"$METADATA_FILE\\\" --pg-password-file \\\"$(dirname "$STOP_FILE")/pg-password.txt\\\" >/dev/null 2>&1 || true\" EXIT HUP INT TERM; npx tsx scripts/training-data.ts run-loop --metadata-file \"$METADATA_FILE\" --pg-password-file \"$(dirname "$STOP_FILE")/pg-password.txt\"'"
-VERIFIER_CMD="cd \"$REPO_ROOT\" && bash -lc 'while true; do npx tsx scripts/training-data.ts verify-run --metadata-file \"$METADATA_FILE\" --pg-password-file \"$(dirname "$STOP_FILE")/pg-password.txt\" || true; sleep $INTERVAL_SECONDS; done'"
+RUNNER_PASSWORD_FILE="$(dirname "$STOP_FILE")/pg-password.txt"
+REPO_ROOT_ESCAPED="$(printf '%q' "$REPO_ROOT")"
+TRAINING_DATA_SCRIPT_ESCAPED="$(printf '%q' "$TRAINING_DATA_SCRIPT")"
+METADATA_FILE_ESCAPED="$(printf '%q' "$METADATA_FILE")"
+RUNNER_PASSWORD_FILE_ESCAPED="$(printf '%q' "$RUNNER_PASSWORD_FILE")"
+RUNNER_CMD="cd \"$REPO_ROOT\" && bash -lc 'trap \"npx tsx $TRAINING_DATA_SCRIPT_ESCAPED finalize-run --metadata-file $METADATA_FILE_ESCAPED --pg-password-file $RUNNER_PASSWORD_FILE_ESCAPED >/dev/null 2>&1 || true\" EXIT HUP INT TERM; npx tsx $TRAINING_DATA_SCRIPT_ESCAPED run-loop --metadata-file $METADATA_FILE_ESCAPED --pg-password-file $RUNNER_PASSWORD_FILE_ESCAPED'"
+VERIFIER_CMD="cd \"$REPO_ROOT\" && bash -lc 'while true; do npx tsx $TRAINING_DATA_SCRIPT_ESCAPED verify-run --metadata-file $METADATA_FILE_ESCAPED --pg-password-file $RUNNER_PASSWORD_FILE_ESCAPED || true; sleep $INTERVAL_SECONDS; done'"
 MONITOR_CMD="cd \"$REPO_ROOT\" && bash -lc 'echo Session: $SESSION_NAME_RESOLVED; echo Run: $RUN_ID; tail -n 20 -f \"$RUN_DIR/run.log\" \"$RUN_DIR/verification.log\" \"$RUN_DIR/ml_export_check.log\"'"
 
 tmux new-session -d -s "$SESSION_NAME_RESOLVED" -n runner "$RUNNER_CMD"
