@@ -271,6 +271,22 @@ function logVerification(
   appendLine(verificationLog, JSON.stringify({ ts: nowIso(), ...payload }));
 }
 
+function readFiniteNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function parseHandNumberFromHandId(handId: string | null): number | null {
+  if (!handId) {
+    return null;
+  }
+  const match = /-hand-(\d+)$/u.exec(handId);
+  if (!match) {
+    return null;
+  }
+  const value = Number(match[1]);
+  return Number.isFinite(value) ? value : null;
+}
+
 async function renderLastTenGames(
   sql: ReturnType<typeof createDatabaseClient>,
   prefix: string
@@ -279,13 +295,15 @@ async function renderLastTenGames(
   const rows = await sql<
     Array<{
       game_id: string;
-      hands: number | null;
+      latest_hand_id: string | null;
       decisions: number;
       events: number;
-      ns_score: number | null;
-      ew_score: number | null;
-      winner: string | null;
+      match_hands: number | null;
+      match_ns_score: number | null;
+      match_ew_score: number | null;
+      match_winner: string | null;
       last_event: string | null;
+      state_norm: Record<string, unknown> | null;
     }>
   >`
     WITH decision_counts AS (
@@ -299,21 +317,33 @@ async function renderLastTenGames(
       FROM events
       WHERE game_id LIKE ${likeValue}
       GROUP BY game_id
+    ),
+    latest_events AS (
+      SELECT DISTINCT ON (game_id)
+        game_id,
+        hand_id AS latest_hand_id,
+        ts::text AS last_event,
+        state_norm
+      FROM events
+      WHERE game_id LIKE ${likeValue}
+      ORDER BY game_id ASC, ts DESC, event_index DESC
     )
     SELECT
-      m.game_id,
-      m.hands_played AS hands,
+      e.game_id,
+      l.latest_hand_id,
       COALESCE(d.decisions, 0) AS decisions,
-      COALESCE(e.events, 0) AS events,
-      m.final_team_0_score AS ns_score,
-      m.final_team_1_score AS ew_score,
-      m.winner_team AS winner,
-      COALESCE(e.last_event, m.completed_at::text, m.updated_at::text, m.started_at::text, m.created_at::text) AS last_event
-    FROM matches m
-    LEFT JOIN decision_counts d ON d.game_id = m.game_id
-    LEFT JOIN event_counts e ON e.game_id = m.game_id
-    WHERE m.game_id LIKE ${likeValue}
-    ORDER BY COALESCE(m.completed_at, m.updated_at, m.started_at, m.created_at) DESC NULLS LAST, m.game_id DESC
+      e.events,
+      m.hands_played AS match_hands,
+      m.final_team_0_score AS match_ns_score,
+      m.final_team_1_score AS match_ew_score,
+      m.winner_team AS match_winner,
+      l.last_event,
+      l.state_norm
+    FROM event_counts e
+    LEFT JOIN decision_counts d ON d.game_id = e.game_id
+    LEFT JOIN latest_events l ON l.game_id = e.game_id
+    LEFT JOIN matches m ON m.game_id = e.game_id
+    ORDER BY l.last_event DESC NULLS LAST, e.game_id DESC
     LIMIT 10
   `;
 
@@ -322,15 +352,36 @@ async function renderLastTenGames(
     "game_id\thands\tdecisions\tevents\tns_score\tew_score\twinner\tlast_event",
   ];
   for (const row of rows) {
+    const stateNorm =
+      row.state_norm && typeof row.state_norm === "object" ? row.state_norm : null;
+    const stateMatchScore =
+      stateNorm && typeof stateNorm.matchScore === "object"
+        ? (stateNorm.matchScore as Record<string, unknown>)
+        : null;
+    const hands =
+      parseHandNumberFromHandId(row.latest_hand_id) ??
+      (typeof row.match_hands === "number" && row.match_hands > 0
+        ? row.match_hands
+        : null);
+    const nsScore =
+      readFiniteNumber(stateMatchScore?.["team-0"]) ??
+      readFiniteNumber(row.match_ns_score);
+    const ewScore =
+      readFiniteNumber(stateMatchScore?.["team-1"]) ??
+      readFiniteNumber(row.match_ew_score);
+    const winner =
+      (typeof stateNorm?.matchWinner === "string" && stateNorm.matchWinner) ||
+      row.match_winner ||
+      "";
     lines.push(
       [
         row.game_id,
-        row.hands ?? "",
+        hands ?? "",
         row.decisions,
         row.events,
-        row.ns_score ?? "",
-        row.ew_score ?? "",
-        row.winner ?? "",
+        nsScore ?? "",
+        ewScore ?? "",
+        winner,
         row.last_event ?? "",
       ].join("\t")
     );
