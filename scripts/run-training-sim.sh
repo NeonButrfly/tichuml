@@ -7,9 +7,9 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROVIDER="local"
 TELEMETRY="true"
 STRICT_TELEMETRY="false"
-BACKEND_URL="$BACKEND_BASE_URL"
+BACKEND_URL="${BACKEND_BASE_URL:-http://127.0.0.1:${PORT:-4310}}"
 GAMES_PER_LOOP=100
-LOG_DIR="$SIM_LOG_DIR"
+LOG_DIR="${SIM_LOG_DIR:-$BACKEND_REPO_ROOT/logs/sim-training}"
 TRUTH_EVERY_LOOPS=5
 
 while [ "$#" -gt 0 ]; do
@@ -22,7 +22,31 @@ while [ "$#" -gt 0 ]; do
     --log-dir) LOG_DIR="${2:?missing log dir}"; shift ;;
     --truth-every-loops) TRUTH_EVERY_LOOPS="${2:?missing truth interval}"; shift ;;
     --help|-h)
-      echo "Usage: scripts/run-training-sim.sh --provider local --telemetry true --strict-telemetry false --backend-url http://127.0.0.1:4310 --games-per-loop 100 --log-dir /opt/tichuml/logs/sim-training"
+      cat <<'EOF'
+Usage:
+  scripts/run-training-sim.sh [options]
+
+Purpose:
+  Runs a continuous Linux simulator loop for training-data generation.
+
+Options:
+  --provider <name>               Provider to use. Default: local
+  --telemetry <true|false>        Emit telemetry. Default: true
+  --strict-telemetry <true|false> Fail gameplay on telemetry errors. Default: false
+  --backend-url <url>             Backend base URL. Default: BACKEND_BASE_URL or http://127.0.0.1:$PORT
+  --games-per-loop <count>        Games per loop. Default: 100
+  --batch-size <count>            Alias for --games-per-loop.
+  --log-dir <path>                Log directory. Default: logs/sim-training under the repo.
+  --truth-every-loops <count>     Print DB truth every N loops. Default: 5
+  --help, -h                      Show this help text.
+
+Examples:
+  scripts/run-training-sim.sh --provider local --games-per-loop 1
+  scripts/run-training-sim.sh --provider server_heuristic --backend-url http://127.0.0.1:4310
+
+Environment:
+  Auto-detects the repo root from the script location and loads backend .env before execution.
+EOF
       exit 0
       ;;
     *) log_fail "Unknown training option: $1"; exit 2 ;;

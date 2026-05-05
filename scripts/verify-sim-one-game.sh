@@ -6,7 +6,7 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 CLEAR_DATABASE=false
 TIMEOUT_SECONDS=90
-BACKEND_URL="$BACKEND_BASE_URL"
+BACKEND_URL="${BACKEND_BASE_URL:-http://127.0.0.1:${PORT:-4310}}"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -22,7 +22,29 @@ while [ "$#" -gt 0 ]; do
       shift
       ;;
     --help|-h)
-      echo "Usage: scripts/verify-sim-one-game.sh [--clear-database] [--timeout-seconds 90] [--backend-url http://127.0.0.1:4310]"
+      cat <<'EOF'
+Usage:
+  scripts/verify-sim-one-game.sh [options]
+
+Purpose:
+  Runs exactly one Linux simulator game and captures backend/telemetry diagnostics.
+
+Options:
+  --clear-database                Destructive: truncate telemetry tables before running.
+  --timeout-seconds <seconds>     Simulator timeout. Default: 90
+  --backend-url <url>             Backend base URL. Default: BACKEND_BASE_URL or http://127.0.0.1:$PORT
+  --help, -h                      Show this help text.
+
+Examples:
+  scripts/verify-sim-one-game.sh --timeout-seconds 90
+  scripts/verify-sim-one-game.sh --clear-database --backend-url http://127.0.0.1:4310
+
+Environment:
+  Auto-detects the repo root from the script location and loads backend .env before execution.
+
+Safety:
+  --clear-database is destructive and must be explicitly provided.
+EOF
       exit 0
       ;;
     *)

@@ -47,6 +47,36 @@ log_command() {
   printf '\n'
 }
 
+print_help() {
+  cat <<EOF
+Usage:
+  scripts/install-backend.sh
+
+Purpose:
+  Installs or refreshes the Linux backend host prerequisites and repo checkout.
+
+Options:
+  --help, -h                      Show this help text.
+
+Examples:
+  scripts/install-backend.sh
+  REPO_DIR=/opt/tichuml GIT_BRANCH=main scripts/install-backend.sh
+
+Environment:
+  REPO_URL                         Git remote to clone. Default: $DEFAULT_REPO_URL
+  GIT_BRANCH                       Branch to deploy. Default: $DEFAULT_BRANCH
+  REPO_DIR                         Target checkout. Default: $DEFAULT_REPO_DIR
+  PORT, HOST, BACKEND_BASE_URL      Backend runtime settings written to .env when needed.
+  DATABASE_URL, PG_BOOTSTRAP_URL    Database URLs used for backend startup/bootstrap.
+  POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_PORT
+                                   Local Postgres identity for Docker/bootstrap.
+
+Safety:
+  This script installs system packages and may force-sync the target checkout to origin/$DEFAULT_BRANCH.
+  Run it on the Linux backend host only. It auto-detects paths; it does not require repo-root cwd.
+EOF
+}
+
 run_root() {
   if [ "$(id -u)" -eq 0 ]; then
     "$@"
@@ -694,6 +724,15 @@ clone_or_update_repo() {
 }
 
 main() {
+  for arg in "$@"; do
+    case "$arg" in
+      --help|-h)
+        print_help
+        exit 0
+        ;;
+    esac
+  done
+
   ensure_system_dependencies
 
   local repo_root
