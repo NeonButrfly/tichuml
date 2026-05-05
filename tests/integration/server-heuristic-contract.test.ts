@@ -586,11 +586,19 @@ describe("server_heuristic actor contract", () => {
         actor: request.actor_seat as SeatId
       })
     ).toEqual([]);
+    expect(request.metadata).toMatchObject({ scoring_path: "fast_path" });
     expect(request.state_raw).toBeNull();
     expect(Array.isArray(request.legal_actions)).toBe(true);
     expect(() =>
       validateServerHeuristicDecisionRequestContract(request)
     ).not.toThrow();
+  });
+
+  it("promotes grand Tichu server_heuristic requests to rich path automatically", () => {
+    const grandTichuRequest = createServerHeuristicPayload(advanceToGrandTichuWindow());
+
+    expect(grandTichuRequest.metadata).toMatchObject({ scoring_path: "rich_path" });
+    expect(grandTichuRequest.state_raw).not.toBeNull();
   });
 
   it("rejects mismatched simulator requests before sending them", () => {
@@ -1023,7 +1031,54 @@ describe("server_heuristic actor contract", () => {
 
   it("returns backend decision success metadata without changing the response contract", async () => {
     await withServer(async ({ baseUrl, repository }) => {
-      const request = createServerHeuristicPayload(advanceToPassSelect());
+      const leadCombination = getLegalActions(
+        scenario({
+          phase: "trick_play",
+          activeSeat: "seat-1",
+          hands: {
+            "seat-1": cardsFromIds(["jade-7"])
+          }
+        })
+      )["seat-1"]?.find(
+        (action): action is Extract<LegalAction, { type: "play_cards" }> =>
+          action.type === "play_cards"
+      )?.combination;
+      if (!leadCombination) {
+        throw new Error("Expected a lead combination for the fast-path contract test.");
+      }
+      const leadState = scenario({
+        phase: "trick_play",
+        activeSeat: "seat-0",
+        calls: {
+          "seat-0": { grandTichu: false, smallTichu: false, hasPlayedFirstCard: true },
+          "seat-1": { grandTichu: false, smallTichu: false, hasPlayedFirstCard: true },
+          "seat-2": { grandTichu: false, smallTichu: false, hasPlayedFirstCard: true },
+          "seat-3": { grandTichu: false, smallTichu: false, hasPlayedFirstCard: true }
+        },
+        currentTrick: {
+          leader: "seat-1",
+          currentWinner: "seat-1",
+          currentCombination: leadCombination,
+          entries: [{ type: "play", seat: "seat-1", combination: leadCombination }],
+          passingSeats: []
+        },
+        hands: {
+          "seat-0": cardsFromIds(["jade-8", "sword-9", "pagoda-10"]),
+          "seat-1": cardsFromIds(["jade-7"]),
+          "seat-2": cardsFromIds(["jade-5"]),
+          "seat-3": cardsFromIds(["jade-6"])
+        }
+      });
+      const request = buildDecisionRequestPayload({
+        gameId: "fast-path-contract-game",
+        handId: "fast-path-contract-hand",
+        stateRaw: leadState as unknown as JsonObject,
+        stateNorm: leadState as unknown as JsonObject,
+        legalActions: getLegalActions(leadState),
+        phase: leadState.phase,
+        requestedProvider: "server_heuristic",
+        decisionIndex: 1
+      });
       const response = await fetch(`${baseUrl}${DECISION_REQUEST_PATH}`, {
         method: "POST",
         headers: { "content-type": "application/json" },

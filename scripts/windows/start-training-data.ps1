@@ -21,6 +21,10 @@ param(
   [switch]$DetachOnly,
   [switch]$SkipMlExportCheck,
   [string]$MlExportCommand = "npm run ml:export",
+  [string]$ExplorationProfile = "off",
+  [double]$ExplorationRate = 0,
+  [int]$ExplorationTopN = 0,
+  [double]$ExplorationMaxScoreGap = 0,
   [Alias("?")]
   [switch]$Help,
   [switch]$InternalRunner,
@@ -71,9 +75,17 @@ Simulation:
   -StrictTelemetry <true|false>
       Whether telemetry failures should be strict. Default: false
   -DecisionTimeoutMs <milliseconds>
-      Diagnostic escape hatch for backend decision timeouts. Default: 500
+      Diagnostic escape hatch for backend decision timeouts. Default: 2000
   -IntervalSeconds <seconds>
       Seconds between scoped verification snapshots. Default: 15
+  -ExplorationProfile <off|conservative|training_diversity>
+      Exploration profile for explicit diversity runs. Default: off
+  -ExplorationRate <number>
+      Optional near-policy exploration rate. Ignored when profile is off.
+  -ExplorationTopN <count>
+      Optional bounded top-N pool for exploration. Ignored when profile is off.
+  -ExplorationMaxScoreGap <number>
+      Optional score-gap cap for exploration. Ignored when profile is off.
 
 Database:
   -PgHost <host>
@@ -268,6 +280,10 @@ try {
     "--strict-telemetry", "$StrictTelemetry",
     "--telemetry-mode", "full",
     "--decision-timeout-ms", "$DecisionTimeoutMs",
+    "--exploration-profile", $ExplorationProfile,
+    "--exploration-rate", "$ExplorationRate",
+    "--exploration-top-n", "$ExplorationTopN",
+    "--exploration-max-score-gap", "$ExplorationMaxScoreGap",
     "--pg-host", $PgHost,
     "--pg-port", $PgPort,
     "--pg-user", $PgUser,
@@ -326,6 +342,10 @@ try {
     Write-Host "Run directory: $runDir"
     Write-Host "Archive path: $archivePath"
     Write-Host "Decision timeout ms: $DecisionTimeoutMs"
+    Write-Host "Exploration profile: $ExplorationProfile"
+    Write-Host "Exploration rate: $ExplorationRate"
+    Write-Host "Exploration top-N: $ExplorationTopN"
+    Write-Host "Exploration max score gap: $ExplorationMaxScoreGap"
     Write-Host "Decision request mode: fast_path_default"
     Write-Host "Clear SQL: TRUNCATE TABLE events, decisions, matches RESTART IDENTITY CASCADE;"
     Write-Host "Scoped export filter: game_id LIKE '$gameIdPrefix%'"

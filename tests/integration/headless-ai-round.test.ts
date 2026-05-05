@@ -1,3 +1,5 @@
+import path from "node:path";
+import { spawn } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import { runHeadlessRound } from "@tichuml/sim-runner";
 import {
@@ -5,48 +7,116 @@ import {
   heuristicsV1Policy
 } from "@tichuml/ai-heuristics";
 
-function withSilencedConsole<T>(run: () => T): T {
-  const originalLog = console.log;
-  const originalInfo = console.info;
-  const originalWarn = console.warn;
-  const originalError = console.error;
-
-  console.log = () => undefined;
-  console.info = () => undefined;
-  console.warn = () => undefined;
-  console.error = () => undefined;
-
-  try {
-    return run();
-  } finally {
-    console.log = originalLog;
-    console.info = originalInfo;
-    console.warn = originalWarn;
-    console.error = originalError;
-  }
-}
+type HeadlessRoundResult = ReturnType<typeof runHeadlessRound>;
 
 async function yieldToEventLoop(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 let cachedReplayRounds:
-  | [ReturnType<typeof runHeadlessRound>, ReturnType<typeof runHeadlessRound>]
+  | [HeadlessRoundResult, HeadlessRoundResult]
   | null = null;
 
+async function runHeadlessRoundInChild(matchId: string): Promise<HeadlessRoundResult> {
+  return await new Promise((resolve, reject) => {
+    const child = spawn(
+      process.execPath,
+      [
+        path.join(process.cwd(), "node_modules", "tsx", "dist", "cli.mjs"),
+        "--eval",
+        [
+          "import { runHeadlessRound } from '@tichuml/sim-runner';",
+          "const originalLog = console.log;",
+          "const originalInfo = console.info;",
+          "const originalWarn = console.warn;",
+          "const originalError = console.error;",
+          "console.log = () => undefined;",
+          "console.info = () => undefined;",
+          "console.warn = () => undefined;",
+          "console.error = () => undefined;",
+          "try {",
+          `  const result = runHeadlessRound({ seed: 'headless-round', matchId: '${matchId}' });`,
+          "  originalLog(JSON.stringify(result));",
+          "} finally {",
+          "  console.log = originalLog;",
+          "  console.info = originalInfo;",
+          "  console.warn = originalWarn;",
+          "  console.error = originalError;",
+          "}"
+        ].join(" ")
+      ],
+      {
+        cwd: process.cwd(),
+        stdio: ["ignore", "pipe", "pipe"],
+        env: {
+          ...process.env,
+          FORCE_COLOR: "0"
+        }
+      }
+    );
+
+    let stdout = "";
+    let stderr = "";
+    const timeout = setTimeout(() => {
+      child.kill("SIGKILL");
+      reject(
+        new Error(
+          `headless round child timed out for ${matchId}.\nstdout=${stdout}\nstderr=${stderr}`
+        )
+      );
+    }, 180_000);
+
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    child.on("error", (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+    child.on("close", (exitCode) => {
+      clearTimeout(timeout);
+      if (exitCode !== 0) {
+        reject(
+          new Error(
+            `headless round child exited with ${exitCode} for ${matchId}.\nstdout=${stdout}\nstderr=${stderr}`
+          )
+        );
+        return;
+      }
+
+      const jsonLine = stdout
+        .split(/\r?\n/u)
+        .map((line) => line.trim())
+        .filter((line) => line.startsWith("{") && line.endsWith("}"))
+        .at(-1);
+      if (!jsonLine) {
+        reject(
+          new Error(
+            `headless round child produced no JSON for ${matchId}.\nstdout=${stdout}\nstderr=${stderr}`
+          )
+        );
+        return;
+      }
+
+      resolve(JSON.parse(jsonLine) as HeadlessRoundResult);
+    });
+  });
+}
+
 async function getReplayRounds(): Promise<
-  [ReturnType<typeof runHeadlessRound>, ReturnType<typeof runHeadlessRound>]
+  [HeadlessRoundResult, HeadlessRoundResult]
 > {
   if (cachedReplayRounds) {
     return cachedReplayRounds;
   }
-  const first = withSilencedConsole(() =>
-    runHeadlessRound({ seed: "headless-round", matchId: "match-headless-round-a" })
-  );
+  const first = await runHeadlessRoundInChild("match-headless-round-a");
   await yieldToEventLoop();
-  const second = withSilencedConsole(() =>
-    runHeadlessRound({ seed: "headless-round", matchId: "match-headless-round-b" })
-  );
+  const second = await runHeadlessRoundInChild("match-headless-round-b");
   cachedReplayRounds = [first, second];
   return cachedReplayRounds;
 }

@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { SEAT_IDS, type SeatId } from "@tichuml/engine";
 import { runSelfPlayBatch, type SeatProviderOverrides } from "./self-play-batch.js";
 import type {
+  ExplorationProfile,
   JsonObject,
   DecisionMode,
   SimControllerConfig,
@@ -14,7 +15,11 @@ import type {
   SimWorkerRuntimeState,
   TelemetryRuntimeState
 } from "@tichuml/shared";
-import { buildTrainingGameIdPrefix, buildTrainingSeedHash } from "@tichuml/shared";
+import {
+  buildTrainingGameIdPrefix,
+  buildTrainingSeedHash,
+  parseExplorationProfile
+} from "@tichuml/shared";
 
 const DEFAULT_TELEMETRY_MAX_POST_BYTES = 24 * 1024 * 1024;
 const DEFAULT_TELEMETRY_POST_TIMEOUT_MS = 10_000;
@@ -42,6 +47,10 @@ type ParsedArgs = {
   telemetryMaxBytes: number;
   telemetryTimeoutMs: number;
   decisionTimeoutMs: number;
+  explorationProfile: ExplorationProfile;
+  explorationRate: number | null;
+  explorationTopN: number | null;
+  explorationMaxScoreGap: number | null;
   telemetryRetryAttempts: number;
   telemetryRetryDelayMs: number;
   telemetryBackoffMs: number;
@@ -94,6 +103,27 @@ function parseTelemetryMode(value: string | undefined): "minimal" | "full" {
 function parsePositiveInteger(value: string | undefined, fallback: number): number {
   const parsed = Number(value ?? fallback);
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+
+function parseNonNegativeInteger(value: string | undefined, fallback: number): number {
+  const parsed = Number(value ?? fallback);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : fallback;
+}
+
+function parseOptionalPositiveNumber(value: string | undefined): number | null {
+  if (!value) {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function parseOptionalNonNegativeNumber(value: string | undefined): number | null {
+  if (!value) {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
 function parseSeatProvider(value: string, seatProviders: SeatProviderOverrides): void {
@@ -185,16 +215,29 @@ function parseArgs(argv: string[]): ParsedArgs {
       process.env.TELEMETRY_POST_TIMEOUT_MS,
       DEFAULT_TELEMETRY_POST_TIMEOUT_MS
     ),
-    decisionTimeoutMs: 500,
-    telemetryRetryAttempts: parsePositiveInteger(
+    decisionTimeoutMs: 2000,
+    explorationProfile: parseExplorationProfile(
+      process.env.TICHU_EXPLORATION_PROFILE,
+      "off"
+    ),
+    explorationRate: parseOptionalPositiveNumber(
+      process.env.TICHU_EXPLORATION_RATE
+    ),
+    explorationTopN: parseOptionalPositiveNumber(
+      process.env.TICHU_EXPLORATION_TOP_N
+    ),
+    explorationMaxScoreGap: parseOptionalNonNegativeNumber(
+      process.env.TICHU_EXPLORATION_MAX_SCORE_GAP
+    ),
+    telemetryRetryAttempts: parseNonNegativeInteger(
       process.env.TELEMETRY_RETRY_ATTEMPTS,
       DEFAULT_TELEMETRY_RETRY_ATTEMPTS
     ),
-    telemetryRetryDelayMs: parsePositiveInteger(
+    telemetryRetryDelayMs: parseNonNegativeInteger(
       process.env.TELEMETRY_RETRY_DELAY_MS,
       DEFAULT_TELEMETRY_RETRY_DELAY_MS
     ),
-    telemetryBackoffMs: parsePositiveInteger(
+    telemetryBackoffMs: parseNonNegativeInteger(
       process.env.TELEMETRY_BACKOFF_MS,
       DEFAULT_TELEMETRY_BACKOFF_MS
     ),
@@ -288,16 +331,41 @@ function parseArgs(argv: string[]): ParsedArgs {
         parsed.decisionTimeoutMs = parsePositiveInteger(next, parsed.decisionTimeoutMs);
         index += 1;
         break;
+      case "--exploration-profile":
+        parsed.explorationProfile = parseExplorationProfile(next, "off");
+        index += 1;
+        break;
+      case "--exploration-rate":
+        parsed.explorationRate = parseOptionalPositiveNumber(next);
+        index += 1;
+        break;
+      case "--exploration-top-n":
+        parsed.explorationTopN = parseOptionalPositiveNumber(next);
+        index += 1;
+        break;
+      case "--exploration-max-score-gap":
+        parsed.explorationMaxScoreGap = parseOptionalNonNegativeNumber(next);
+        index += 1;
+        break;
       case "--telemetry-retry-attempts":
-        parsed.telemetryRetryAttempts = parsePositiveInteger(next, parsed.telemetryRetryAttempts);
+        parsed.telemetryRetryAttempts = parseNonNegativeInteger(
+          next,
+          parsed.telemetryRetryAttempts
+        );
         index += 1;
         break;
       case "--telemetry-retry-delay-ms":
-        parsed.telemetryRetryDelayMs = parsePositiveInteger(next, parsed.telemetryRetryDelayMs);
+        parsed.telemetryRetryDelayMs = parseNonNegativeInteger(
+          next,
+          parsed.telemetryRetryDelayMs
+        );
         index += 1;
         break;
       case "--telemetry-backoff-ms":
-        parsed.telemetryBackoffMs = parsePositiveInteger(next, parsed.telemetryBackoffMs);
+        parsed.telemetryBackoffMs = parseNonNegativeInteger(
+          next,
+          parsed.telemetryBackoffMs
+        );
         index += 1;
         break;
       case "--seed":
@@ -507,6 +575,11 @@ function buildRunMetadata(args: ParsedArgs): JsonObject | undefined {
   if (gameIdPrefix) {
     metadata.game_id_prefix = gameIdPrefix;
   }
+  metadata.exploration_profile = args.explorationProfile;
+  metadata.exploration_enabled = args.explorationProfile !== "off";
+  metadata.exploration_rate = args.explorationRate;
+  metadata.exploration_top_n = args.explorationTopN;
+  metadata.exploration_max_score_gap = args.explorationMaxScoreGap;
   return metadata;
 }
 
@@ -531,6 +604,10 @@ function buildControllerConfig(args: ParsedArgs): SimControllerConfig {
     manual_seed_override_enabled: runSeedInfo.manual_override_enabled,
     manual_seed_override: runSeedInfo.manual_override_seed ?? "",
     seed_prefix: args.seedNamespace,
+    exploration_profile: args.explorationProfile,
+    exploration_rate: args.explorationRate,
+    exploration_top_n: args.explorationTopN,
+    exploration_max_score_gap: args.explorationMaxScoreGap,
     sleep_seconds: args.sleepSeconds,
     worker_count: args.workerCount,
     quiet: args.quiet,
@@ -856,6 +933,16 @@ async function runWorker(args: ParsedArgs, worker: SimWorkerRuntimeState): Promi
         telemetryMaxBytes: args.telemetryMaxBytes,
         telemetryTimeoutMs: args.telemetryTimeoutMs,
         decisionTimeoutMs: args.decisionTimeoutMs,
+        explorationProfile: args.explorationProfile,
+        ...(args.explorationRate !== null
+          ? { explorationRate: args.explorationRate }
+          : {}),
+        ...(args.explorationTopN !== null
+          ? { explorationTopN: args.explorationTopN }
+          : {}),
+        ...(args.explorationMaxScoreGap !== null
+          ? { explorationMaxScoreGap: args.explorationMaxScoreGap }
+          : {}),
         telemetryRetryAttempts: args.telemetryRetryAttempts,
         telemetryRetryDelayMs: args.telemetryRetryDelayMs,
         telemetryBackoffMs: args.telemetryBackoffMs,
@@ -1042,6 +1129,16 @@ async function main(): Promise<void> {
       telemetryMaxBytes: args.telemetryMaxBytes,
       telemetryTimeoutMs: args.telemetryTimeoutMs,
       decisionTimeoutMs: args.decisionTimeoutMs,
+      explorationProfile: args.explorationProfile,
+      ...(args.explorationRate !== null
+        ? { explorationRate: args.explorationRate }
+        : {}),
+      ...(args.explorationTopN !== null
+        ? { explorationTopN: args.explorationTopN }
+        : {}),
+      ...(args.explorationMaxScoreGap !== null
+        ? { explorationMaxScoreGap: args.explorationMaxScoreGap }
+        : {}),
       telemetryRetryAttempts: args.telemetryRetryAttempts,
       telemetryRetryDelayMs: args.telemetryRetryDelayMs,
       telemetryBackoffMs: args.telemetryBackoffMs,

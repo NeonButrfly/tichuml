@@ -5,7 +5,9 @@ import {
   DEFAULT_SERVER_PORT,
   defaultDatabaseUrl,
   type DecisionMode,
+  type ExplorationProfile,
   normalizeBackendBaseUrl,
+  parseExplorationProfile,
   parseBooleanEnv
 } from "@tichuml/shared";
 import { detectSystemIps, parseEnvFile } from "./env-file.js";
@@ -36,6 +38,10 @@ export type ServerConfig = {
   telemetryPersistenceConcurrency: number;
   simDefaultProvider: DecisionMode;
   simDefaultBackendUrl: string;
+  simDefaultExplorationProfile: ExplorationProfile;
+  simDefaultExplorationRate: number | null;
+  simDefaultExplorationTopN: number | null;
+  simDefaultExplorationMaxScoreGap: number | null;
   simDefaultWorkerCount: number;
   simDefaultGamesPerBatch: number;
   simControllerRuntimeDir: string;
@@ -56,6 +62,22 @@ const DEFAULT_TELEMETRY_BACKOFF_MS = 15_000;
 function parsePositiveInteger(value: string | undefined, fallback: number): number {
   const parsed = Number(value ?? fallback);
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+
+function parseOptionalPositiveNumber(value: string | undefined): number | null {
+  if (!value) {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function parseOptionalNonNegativeNumber(value: string | undefined): number | null {
+  if (!value) {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
 function parseDecisionMode(value: string | undefined): DecisionMode {
@@ -260,6 +282,19 @@ export function loadServerConfig(
     ),
     simDefaultProvider: parseDecisionMode(mergedEnv.SIM_PROVIDER),
     simDefaultBackendUrl: normalizeBackendBaseUrl(simBackendUrl),
+    simDefaultExplorationProfile: parseExplorationProfile(
+      mergedEnv.TICHU_EXPLORATION_PROFILE,
+      "off"
+    ),
+    simDefaultExplorationRate: parseOptionalPositiveNumber(
+      mergedEnv.TICHU_EXPLORATION_RATE
+    ),
+    simDefaultExplorationTopN: parseOptionalPositiveNumber(
+      mergedEnv.TICHU_EXPLORATION_TOP_N
+    ),
+    simDefaultExplorationMaxScoreGap: parseOptionalNonNegativeNumber(
+      mergedEnv.TICHU_EXPLORATION_MAX_SCORE_GAP
+    ),
     simDefaultWorkerCount: parsePositiveInteger(mergedEnv.SIM_WORKER_COUNT, 1),
     simDefaultGamesPerBatch: parsePositiveInteger(
       mergedEnv.SIM_GAMES_PER_BATCH,

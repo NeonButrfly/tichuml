@@ -49,7 +49,7 @@ export function normalizeTelemetryConfig(
     retryAttempts:
       Number.isFinite(input.retryAttempts) &&
       input.retryAttempts !== undefined &&
-      input.retryAttempts > 0
+      input.retryAttempts >= 0
         ? Math.floor(input.retryAttempts)
         : 2,
     retryDelayMs:

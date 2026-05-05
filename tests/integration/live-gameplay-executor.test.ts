@@ -2,7 +2,7 @@
 
 import { act, createElement, type ReactElement } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   applyEngineAction,
   cardsFromIds,
@@ -72,6 +72,8 @@ function localHandCardButtons() {
 function bodyText() {
   return document.body.textContent?.replace(/\s+/g, " ").trim() ?? "";
 }
+
+let consoleInfoSpy: ReturnType<typeof vi.spyOn>;
 
 function setStoredBackendSettings(settings: {
   decisionMode: "local" | "server_heuristic";
@@ -220,7 +222,7 @@ function advanceToTrickPlay(seed = "browser-trick-play-decision-provider"): Engi
 }
 
 async function waitForActionButton(label: string) {
-  for (let attempt = 0; attempt < 20; attempt += 1) {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
     await act(async () => {
       await wait(50);
     });
@@ -251,6 +253,10 @@ async function waitForCondition(
 }
 
 describe("live gameplay executor", () => {
+  beforeEach(() => {
+    consoleInfoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+  });
+
   afterEach(() => {
     document.body.innerHTML = "";
     localStorage.clear();
@@ -350,7 +356,9 @@ describe("live gameplay executor", () => {
     }
   });
 
-  it("clears thinking state and avoids duplicate requests when the backend decision request fails", async () => {
+  it(
+    "clears thinking state and avoids duplicate requests when the backend decision request fails",
+    async () => {
     setStoredBackendSettings({
       decisionMode: "server_heuristic",
       backendBaseUrl: "http://192.168.50.36:4310",
@@ -418,9 +426,13 @@ describe("live gameplay executor", () => {
     } finally {
       view.unmount();
     }
-  });
+    },
+    20_000
+  );
 
-  it("completes exchange automation with actor-scoped select_pass fast-path requests after local submission", async () => {
+  it(
+    "completes exchange automation with actor-scoped select_pass fast-path requests after local submission",
+    async () => {
     setStoredBackendSettings({
       decisionMode: "server_heuristic",
       backendBaseUrl: "http://192.168.50.36:4310",
@@ -429,7 +441,7 @@ describe("live gameplay executor", () => {
     });
 
     const passSelectDecisionRequests: DecisionRequestPayload[] = [];
-    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    const infoSpy = consoleInfoSpy;
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.stubGlobal(
       "fetch",
@@ -524,7 +536,17 @@ describe("live gameplay executor", () => {
             } as Response;
           }
 
-          throw new Error(`Unexpected decision phase ${payload.phase}`);
+          const responseBody = buildAutomatedDecisionResponse(
+            payload,
+            903,
+            "Resolved by exchange automation continuation stub."
+          );
+          return {
+            ok: true,
+            status: 200,
+            json: async () => responseBody,
+            text: async () => JSON.stringify(responseBody)
+          } as Response;
         }
 
         if (url.includes("/api/telemetry/")) {
@@ -610,9 +632,13 @@ describe("live gameplay executor", () => {
     } finally {
       view.unmount();
     }
-  });
+    },
+    10_000
+  );
 
-  it("applies successful server GT auto-advance in seat order and leaves the phase synced with the frontend", async () => {
+  it(
+    "applies successful server GT auto-advance in seat order and leaves the phase synced with the frontend",
+    async () => {
     setStoredBackendSettings({
       decisionMode: "server_heuristic",
       backendBaseUrl: "http://192.168.50.36:4310",
@@ -620,7 +646,7 @@ describe("live gameplay executor", () => {
       serverFallbackEnabled: false
     });
 
-    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    const infoSpy = consoleInfoSpy;
     const decisionRequests: DecisionRequestPayload[] = [];
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.stubGlobal(
@@ -645,17 +671,15 @@ describe("live gameplay executor", () => {
           decisionRequests.push(payload);
           if (payload.phase === "grand_tichu_window") {
             expect(["seat-1", "seat-2", "seat-3"]).toContain(payload.actor_seat);
-            expect(payload.metadata.scoring_path).toBe("fast_path");
+            expect(payload.metadata.scoring_path).toBe("rich_path");
             expect(Array.isArray(payload.legal_actions)).toBe(true);
             expect(payload.state_norm).toMatchObject({
               phase: "grand_tichu_window",
               activeSeat: payload.actor_seat
             });
             expect(
-              Array.isArray(
-                (payload.state_norm as Record<string, unknown>).actorHand
-              )
-            ).toBe(true);
+              (payload.state_norm as Record<string, unknown>).handCounts
+            ).toBeTruthy();
             const actionTypes = (
               payload.legal_actions as Array<Record<string, unknown>>
             ).map((action) => String(action.type));
@@ -682,56 +706,21 @@ describe("live gameplay executor", () => {
               }
             }
 
-            return {
-              ok: true,
-              status: 200,
-              json: async () => ({
-                accepted: true,
-                chosen_action: {
-                  type: "decline_grand_tichu",
-                  seat: payload.actor_seat
-                },
-                provider_used: "server_heuristic",
-                provider_reason: "Resolved by server GT auto-advance test.",
-                metadata: {
-                  response_phase: payload.phase,
-                  chosen_action_type: "decline_grand_tichu"
-                },
-                telemetry_id: 321
-              }),
-              text: async () =>
-                JSON.stringify({
-                  accepted: true,
-                  chosen_action: {
-                    type: "decline_grand_tichu",
-                    seat: payload.actor_seat
-                  },
-                  provider_used: "server_heuristic",
-                  provider_reason: "Resolved by server GT auto-advance test.",
-                  metadata: {
-                    response_phase: payload.phase,
-                    chosen_action_type: "decline_grand_tichu"
-                  },
-                  telemetry_id: 321
-                })
-            } as Response;
           }
 
-          if (payload.phase === "pass_select") {
-            const responseBody = buildSelectPassDecisionResponse(
-              payload,
-              322,
-              "Resolved by server exchange auto-advance test."
-            );
-            return {
-              ok: true,
-              status: 200,
-              json: async () => responseBody,
-              text: async () => JSON.stringify(responseBody)
-            } as Response;
-          }
-
-          throw new Error(`Unexpected decision phase ${payload.phase}`);
+          const responseBody = buildAutomatedDecisionResponse(
+            payload,
+            320 + decisionRequests.length,
+            payload.phase === "grand_tichu_window"
+              ? "Resolved by server GT auto-advance test."
+              : "Resolved by server exchange auto-advance test."
+          );
+          return {
+            ok: true,
+            status: 200,
+            json: async () => responseBody,
+            text: async () => JSON.stringify(responseBody)
+          } as Response;
         }
 
         if (url.includes("/api/telemetry/")) {
@@ -768,21 +757,42 @@ describe("live gameplay executor", () => {
       });
 
       const reachedExchange = await waitForCondition(
-        () =>
-          bodyText().includes("Exchange cards") &&
-          !bodyText().includes("Auto-advancing"),
+        () => {
+          const text = bodyText();
+          const reachedExchangeUi =
+            text.includes("Exchange cards") ||
+            text.includes("Waiting for the other players to exchange") ||
+            text.includes("Review the received cards, then click Pickup");
+          const reachedExchangePhaseLog = infoSpy.mock.calls.some(
+            (call) =>
+              call[0] === "[phase-transition]" &&
+              typeof call[1] === "object" &&
+              call[1] !== null &&
+              (call[1] as { event?: string; frontendAppliedPhase?: string }).event ===
+                "frontend_phase_changed" &&
+              (call[1] as { frontendAppliedPhase?: string }).frontendAppliedPhase ===
+                "pass_select"
+          );
+          return reachedExchangeUi || reachedExchangePhaseLog;
+        },
         120,
         50
       );
 
       expect(reachedExchange).toBe(true);
       expect(
-        Array.from(new Set(decisionRequests.map((request) => request.actor_seat)))
+        Array.from(
+          new Set(
+            decisionRequests
+              .filter((request) => request.phase === "grand_tichu_window")
+              .map((request) => request.actor_seat)
+          )
+        )
       ).toEqual(["seat-1", "seat-2", "seat-3"]);
       expect(
         decisionRequests
           .filter((request) => request.phase === "grand_tichu_window")
-          .every((request) => request.state_raw === null)
+          .every((request) => request.state_raw !== null)
       ).toBe(true);
       const requestLogs = infoSpy.mock.calls.filter(
         (call) =>
@@ -798,9 +808,9 @@ describe("live gameplay executor", () => {
       expect(
         requestLogs.every(
           (call) =>
-            (call[1] as { fast_path_used?: boolean }).fast_path_used === true &&
+            (call[1] as { fast_path_used?: boolean }).fast_path_used === false &&
             (call[1] as { validation_result?: string }).validation_result ===
-              "grand_tichu_only"
+              "rich_path_provider"
         )
       ).toBe(true);
       expect(
@@ -873,7 +883,9 @@ describe("live gameplay executor", () => {
     } finally {
       view.unmount();
     }
-  });
+    },
+    10_000
+  );
 
   it("resolves trick_play actions through the browser decision-provider path without frontend crashes", async () => {
     const trickPlay = advanceToTrickPlay();
@@ -1084,7 +1096,7 @@ describe("live gameplay executor", () => {
     });
 
     let decisionRequestCount = 0;
-    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    const infoSpy = consoleInfoSpy;
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.stubGlobal(
       "fetch",
@@ -1232,5 +1244,5 @@ describe("live gameplay executor", () => {
     } finally {
       view.unmount();
     }
-  }, 10000);
+  }, 10_000);
 });

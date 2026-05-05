@@ -39,4 +39,28 @@ describe("runStreamingProcess", () => {
     const logText = fs.readFileSync(logFile, "utf8");
     expect(logText).toContain("__missing_training_command__");
   });
+
+  it("launches npm.cmd successfully on Windows", async () => {
+    if (process.platform !== "win32") {
+      return;
+    }
+
+    const tempRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), "training-runner-streaming-win-")
+    );
+    tempRoots.push(tempRoot);
+    const logFile = path.join(tempRoot, "run.log");
+
+    const result = await runStreamingProcess({
+      command: "npm.cmd",
+      args: ["--version"],
+      cwd: path.resolve(import.meta.dirname, "..", ".."),
+      logFile,
+      mirrorToParent: false
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.errorMessage).toBeNull();
+    expect(result.outputTail.join("\n")).toMatch(/\d+\.\d+\.\d+/);
+  });
 });

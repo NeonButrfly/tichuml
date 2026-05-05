@@ -1,10 +1,12 @@
 import {
   chooseServerFastPathDecision,
   heuristicsV1Policy,
+  type ChosenDecision,
   type ServerFastPathState
 } from "@tichuml/ai-heuristics";
 import {
   getDecisionScoringPath,
+  parseExplorationProfile,
   type DecisionRequestPayload,
   type JsonObject
 } from "@tichuml/shared";
@@ -22,7 +24,7 @@ import {
 function createFastPathExplanation(config: {
   actor: SeatId;
   candidates: ReturnType<typeof chooseServerFastPathDecision>["candidates"];
-}) {
+}): ChosenDecision["explanation"] {
   const candidates = Array.isArray(config.candidates) ? config.candidates : [];
   return {
     policy: "server-fast-path",
@@ -34,6 +36,7 @@ function createFastPathExplanation(config: {
       tags: [],
       ...(candidate.mahjongWish ? { mahjongWish: candidate.mahjongWish } : {}),
       ...(candidate.tichuCall ? { tichuCall: candidate.tichuCall } : {}),
+      ...(candidate.passBundle ? { passBundle: candidate.passBundle } : {}),
       ...(candidate.pass_reduction_v1
         ? { pass_reduction_v1: candidate.pass_reduction_v1 }
         : {}),
@@ -110,6 +113,46 @@ function getLegalActionCount(payload: DecisionRequestPayload): number {
   return actorActions.length;
 }
 
+function buildHeuristicDecisionOptions(
+  payload: DecisionRequestPayload
+): Parameters<typeof heuristicsV1Policy.chooseAction>[1] {
+  const profile = parseExplorationProfile(
+    typeof payload.metadata.exploration_profile === "string"
+      ? payload.metadata.exploration_profile
+      : undefined,
+    "off"
+  );
+  const rate =
+    typeof payload.metadata.exploration_rate === "number" &&
+    Number.isFinite(payload.metadata.exploration_rate)
+      ? payload.metadata.exploration_rate
+      : null;
+  const topN =
+    typeof payload.metadata.exploration_top_n === "number" &&
+    Number.isFinite(payload.metadata.exploration_top_n)
+      ? payload.metadata.exploration_top_n
+      : null;
+  const maxScoreGap =
+    typeof payload.metadata.exploration_max_score_gap === "number" &&
+    Number.isFinite(payload.metadata.exploration_max_score_gap)
+      ? payload.metadata.exploration_max_score_gap
+      : null;
+  return {
+    exploration: {
+      profile,
+      ...(rate !== null ? { rate } : {}),
+      ...(topN !== null ? { topN } : {}),
+      ...(maxScoreGap !== null ? { maxScoreGap } : {})
+    },
+    selectionKey: [
+      payload.game_id,
+      payload.hand_id,
+      payload.actor_seat,
+      String(payload.metadata.decision_index ?? "")
+    ].join("|")
+  };
+}
+
 export function routeHeuristicDecision(
   payload: DecisionRequestPayload,
   options: {
@@ -182,10 +225,12 @@ export function routeHeuristicDecision(
     const fastState = payload.state_norm as unknown as ServerFastPathState;
     const normalizeMs = Date.now() - normalizeStartedAt;
     const evaluateStartedAt = Date.now();
+    const heuristicOptions = buildHeuristicDecisionOptions(payload);
     const fastDecision = chooseServerFastPathDecision({
       state: fastState,
       actor: payload.actor_seat as SeatId,
-      legalActions: actorLegalActions
+      legalActions: actorLegalActions,
+      ...(heuristicOptions ? { options: heuristicOptions } : {})
     });
     const evaluateMs = Date.now() - evaluateStartedAt;
     if (fastDecision.actor !== payload.actor_seat) {
@@ -204,6 +249,36 @@ export function routeHeuristicDecision(
       actor: fastDecision.actor,
       candidates: fastDecision.candidates
     });
+    const selectedCandidate =
+      fastDecision.candidates[fastDecision.selectedRank] ??
+      fastDecision.candidates[0];
+    explanation.selectedReasonSummary =
+      selectedCandidate?.reasons ?? explanation.selectedReasonSummary;
+    if (selectedCandidate?.mahjongWish) {
+      explanation.selectedMahjongWish = selectedCandidate.mahjongWish;
+    }
+    if (selectedCandidate?.tichuCall) {
+      explanation.selectedTichuCall = selectedCandidate.tichuCall;
+    }
+    if (selectedCandidate?.passBundle) {
+      explanation.selectedPassBundle = selectedCandidate.passBundle;
+    }
+    if (selectedCandidate?.pass_reduction_v1) {
+      explanation.selectedPassReductionV1 = selectedCandidate.pass_reduction_v1;
+    }
+    if (selectedCandidate?.tichu_aggression_v1) {
+      explanation.selectedTichuAggressionV1 =
+        selectedCandidate.tichu_aggression_v1;
+    }
+    if (selectedCandidate?.grand_tichu_aggression_v1) {
+      explanation.selectedGrandTichuAggressionV1 =
+        selectedCandidate.grand_tichu_aggression_v1;
+    }
+    if (selectedCandidate?.aggression_context_v1) {
+      explanation.selectedAggressionContextV1 =
+        selectedCandidate.aggression_context_v1;
+    }
+    explanation.exploration = fastDecision.exploration;
     const providerReason =
       options.providerReason ??
       "Resolved through the bounded fast-path server heuristic.";
@@ -289,7 +364,7 @@ export function routeHeuristicDecision(
   const chosen = heuristicsV1Policy.chooseAction({
     state: payload.state_raw,
     legalActions: richPathLegalActions
-  });
+  }, buildHeuristicDecisionOptions(payload));
   const evaluateMs = Date.now() - evaluateStartedAt;
 
   if (chosen.actor !== payload.actor_seat) {

@@ -43,9 +43,37 @@ DEFAULT_MANIFEST_OUTPUT = Path("artifacts/ml/export-manifest.json")
 DEFAULT_FEATURE_SCHEMA_OUTPUT = Path("ml/feature_schema.json")
 DEFAULT_FEATURE_COLUMNS_OUTPUT = Path("artifacts/ml/feature-columns.json")
 DEFAULT_LABEL_COLUMNS_OUTPUT = Path("artifacts/ml/label-columns.json")
+DEFAULT_VALIDATION_REPORT_OUTPUT = Path("artifacts/ml/validation-report.json")
 DEFAULT_LOCAL_TRAINING_DATABASE_URL = (
     "postgres://tichu:tichu_dev_password@127.0.0.1:54329/tichu"
 )
+DEFAULT_SPLIT_FRACTIONS = {
+    "train": 0.8,
+    "validation": 0.1,
+    "test": 0.1,
+}
+TRAINING_LABEL_COLUMNS = ["outcome_reward"]
+EXPLORATION_PROFILES = {"off", "conservative", "training_diversity"}
+LEAKAGE_DENYLIST = {
+    "outcome_reward",
+    "outcome_components",
+    "actor_team_won_game",
+    "actor_team_won_hand",
+    "game_ns_final_score",
+    "game_ew_final_score",
+    "final_game_winner_team",
+    "final_hand_winner_team",
+    "hand_ns_score_delta",
+    "hand_ew_score_delta",
+    "actor_team_hand_score_delta",
+    "trick_winner_seat",
+    "trick_winner_team",
+    "actor_team_won_trick",
+    "winner_team",
+    "completed_at",
+    "final_team_0_score",
+    "final_team_1_score",
+}
 ROLLOUT_COLUMNS = [
     "rollout_available",
     "rollout_samples",
@@ -121,6 +149,24 @@ CONTEXT_COLUMNS = [
     "schema_version",
     "engine_version",
     "sim_version",
+    "chosen_action_type",
+    "has_explanation",
+    "has_candidate_scores",
+    "has_state_features",
+    "outcome_reward",
+    "exploration_enabled",
+    "exploration_profile",
+    "exploration_selected",
+    "exploration_reason",
+    "original_top_action_type",
+    "original_top_score",
+    "selected_rank_in_candidates",
+    "selected_score",
+    "score_gap_from_top",
+    "exploration_rate",
+    "exploration_top_n",
+    "exploration_max_score_gap",
+    "split",
 ]
 EXPORT_ALIAS_FEATURE_COLUMNS = [
     "actor_hand_count",
@@ -150,6 +196,29 @@ EXPORT_ALIAS_FEATURE_COLUMNS = [
     "candidate_uses_dog",
     "candidate_uses_mahjong",
     "candidate_action_semantics",
+]
+NUMERIC_ALIAS_FEATURE_COLUMNS = [
+    "actor_hand_count",
+    "partner_hand_count",
+    "left_opponent_hand_count",
+    "right_opponent_hand_count",
+    "actor_team_score",
+    "opponent_team_score",
+    "score_delta",
+    "current_trick_size",
+    "current_top_combo_rank",
+    "wish_active",
+    "wished_rank",
+    "candidate_satisfies_wish",
+    "opponents_called_tichu_count",
+    "opponents_called_grand_tichu_count",
+    "candidate_card_count",
+    "candidate_rank_strength",
+    "candidate_uses_bomb",
+    "candidate_uses_dragon",
+    "candidate_uses_phoenix",
+    "candidate_uses_dog",
+    "candidate_uses_mahjong",
 ]
 LEAKAGE_EXCLUDED_COLUMNS = [
     "ts",
@@ -219,6 +288,7 @@ STRING_COLUMNS = {
     "requested_provider",
     "policy_source",
     "policy_name",
+    "chosen_action_type",
     "state_hash",
     "legal_actions_hash",
     "chosen_action_hash",
@@ -234,6 +304,10 @@ STRING_COLUMNS = {
     "observed_double_victory_team",
     "observed_final_winner_team",
     "missing_outcome_reason",
+    "exploration_profile",
+    "exploration_reason",
+    "original_top_action_type",
+    "split",
     "rollout_continuation_provider",
     "rollout_seed",
     "rollout_engine_version",
@@ -350,8 +424,28 @@ def safe_int(value: Any) -> int | None:
         return int(value)
     if isinstance(value, int):
         return value
+    if hasattr(value, "__int__") and not isinstance(value, str):
+        try:
+            coerced = int(value)
+            if float(coerced) == float(value):
+                return coerced
+        except (TypeError, ValueError, OverflowError):
+            pass
     if isinstance(value, float) and value.is_integer():
         return int(value)
+    if isinstance(value, str):
+        text = value.strip()
+        if text:
+            try:
+                parsed = int(text)
+                return parsed
+            except ValueError:
+                try:
+                    parsed_float = float(text)
+                    if parsed_float.is_integer():
+                        return int(parsed_float)
+                except ValueError:
+                    return None
     return None
 
 
@@ -360,6 +454,18 @@ def safe_float(value: Any) -> float | None:
         return float(int(value))
     if isinstance(value, (int, float)):
         return float(value)
+    if hasattr(value, "__float__") and not isinstance(value, str):
+        try:
+            return float(value)
+        except (TypeError, ValueError, OverflowError):
+            pass
+    if isinstance(value, str):
+        text = value.strip()
+        if text:
+            try:
+                return float(text)
+            except ValueError:
+                return None
     return None
 
 
@@ -607,6 +713,8 @@ def build_query(
             has_state_features,
             explanation_quality_level,
             chosen_action_type,
+            outcome_reward,
+            outcome_components,
             state_hash,
             legal_actions_hash,
             chosen_action_hash,
@@ -796,6 +904,78 @@ def build_candidate_feature_map(
     return (state_features if isinstance(state_features, dict) else {}, feature_map)
 
 
+def extract_selected_candidate_features(
+    explanation: dict[str, Any],
+    decision: dict[str, Any],
+    candidate_feature_map: dict[tuple[Any, ...], dict[str, Any]],
+) -> dict[str, Any]:
+    selected_features = explanation.get("selectedFeatures")
+    if isinstance(selected_features, dict):
+        return selected_features
+    chosen_signature = action_signature(decision.get("chosen_action", {}))
+    return candidate_feature_map.get(chosen_signature, {})
+
+
+def hash_bucket(text: str) -> float:
+    hash_value = 0x811C9DC5
+    for char in text:
+        hash_value ^= ord(char)
+        hash_value = (hash_value * 0x01000193) & 0xFFFFFFFF
+    return hash_value / 0xFFFFFFFF if hash_value else 0.0
+
+
+def choose_split_for_game(game_id: str) -> str:
+    bucket = hash_bucket(game_id)
+    if bucket < DEFAULT_SPLIT_FRACTIONS["train"]:
+        return "train"
+    if bucket < DEFAULT_SPLIT_FRACTIONS["train"] + DEFAULT_SPLIT_FRACTIONS["validation"]:
+        return "validation"
+    return "test"
+
+
+def extract_exploration_metadata(
+    explanation: dict[str, Any], decision: dict[str, Any]
+) -> dict[str, Any]:
+    raw = explanation.get("exploration")
+    if not isinstance(raw, dict):
+        metadata = safe_dict(decision.get("metadata"))
+        raw = {
+            "exploration_enabled": metadata.get("exploration_enabled"),
+            "exploration_profile": metadata.get("exploration_profile"),
+            "exploration_selected": metadata.get("exploration_selected"),
+            "exploration_reason": metadata.get("exploration_reason"),
+            "original_top_action_type": metadata.get("original_top_action_type"),
+            "original_top_score": metadata.get("original_top_score"),
+            "selected_rank_in_candidates": metadata.get("selected_rank_in_candidates"),
+            "selected_score": metadata.get("selected_score"),
+            "score_gap_from_top": metadata.get("score_gap_from_top"),
+            "exploration_config": metadata.get("exploration_config"),
+        }
+    config = safe_dict(raw.get("exploration_config"))
+    profile = raw.get("exploration_profile")
+    normalized_profile = profile if isinstance(profile, str) and profile in EXPLORATION_PROFILES else "off"
+    exploration_selected = bool(raw.get("exploration_selected", False))
+    exploration_enabled = bool(raw.get("exploration_enabled", normalized_profile != "off"))
+    return {
+        "exploration_enabled": exploration_enabled,
+        "exploration_profile": normalized_profile,
+        "exploration_selected": exploration_selected,
+        "exploration_reason": raw.get("exploration_reason")
+        if isinstance(raw.get("exploration_reason"), str)
+        else None,
+        "original_top_action_type": raw.get("original_top_action_type")
+        if isinstance(raw.get("original_top_action_type"), str)
+        else None,
+        "original_top_score": safe_float(raw.get("original_top_score")),
+        "selected_rank_in_candidates": safe_int(raw.get("selected_rank_in_candidates")),
+        "selected_score": safe_float(raw.get("selected_score")),
+        "score_gap_from_top": safe_float(raw.get("score_gap_from_top")),
+        "exploration_rate": safe_float(config.get("rate")),
+        "exploration_top_n": safe_int(config.get("top_n")),
+        "exploration_max_score_gap": safe_float(config.get("max_score_gap")),
+    }
+
+
 def choose_label(
     label_mode: str,
     candidate_was_chosen: bool,
@@ -921,6 +1101,7 @@ class ExportStats:
     decisions_read: int = 0
     decisions_processed: int = 0
     candidate_rows_written: int = 0
+    exported_decision_rows: int = 0
     malformed_decisions: int = 0
     missing_state_raw_count: int = 0
     missing_state_norm_count: int = 0
@@ -935,8 +1116,24 @@ class ExportStats:
     hands_with_outcomes: int = 0
     rows_by_phase: Counter[str] = field(default_factory=Counter)
     rows_by_provider: Counter[str] = field(default_factory=Counter)
+    rows_by_chosen_action_type: Counter[str] = field(default_factory=Counter)
     rows_by_actor_seat: Counter[str] = field(default_factory=Counter)
     missing_outcome_reason_counts: Counter[str] = field(default_factory=Counter)
+    dropped_rows_by_reason: Counter[str] = field(default_factory=Counter)
+    split_row_counts: Counter[str] = field(default_factory=Counter)
+    split_game_ids: dict[str, set[str]] = field(
+        default_factory=lambda: {"train": set(), "validation": set(), "test": set()}
+    )
+    exploration_profile_counts: Counter[str] = field(default_factory=Counter)
+    exploration_selected_count: int = 0
+    non_exploration_count: int = 0
+    reward_values: list[float] = field(default_factory=list)
+    reward_values_by_action_type: dict[str, list[float]] = field(default_factory=dict)
+    reward_values_by_exploration_bucket: dict[str, list[float]] = field(
+        default_factory=lambda: {"exploration": [], "non_exploration": []}
+    )
+    feature_null_counts: Counter[str] = field(default_factory=Counter)
+    feature_nan_counts: Counter[str] = field(default_factory=Counter)
     games_with_outcomes_seen: set[str] = field(default_factory=set)
     hands_with_outcomes_seen: set[tuple[str, str]] = field(default_factory=set)
 
@@ -959,8 +1156,10 @@ class ExportStats:
             "decisions_read": self.decisions_read,
             "decisions_processed": self.decisions_processed,
             "candidate_rows_written": self.candidate_rows_written,
+            "exported_decision_rows": self.exported_decision_rows,
             "rows_by_phase": dict(self.rows_by_phase),
             "rows_by_provider": dict(self.rows_by_provider),
+            "rows_by_chosen_action_type": dict(self.rows_by_chosen_action_type),
             "rows_by_actor_seat": dict(self.rows_by_actor_seat),
             "fallback_rows": self.fallback_rows,
             "malformed_decisions": self.malformed_decisions,
@@ -976,6 +1175,7 @@ class ExportStats:
             "games_with_outcomes": len(self.games_with_outcomes_seen),
             "hands_with_outcomes": len(self.hands_with_outcomes_seen),
             "missing_outcome_reason_counts": dict(self.missing_outcome_reason_counts),
+            "dropped_rows_by_reason": dict(self.dropped_rows_by_reason),
             "label_mode": label_mode,
             "feature_count": feature_count,
             "output_format": output_format,
@@ -983,6 +1183,46 @@ class ExportStats:
             "peak_memory_bytes": peak_memory_bytes,
             "schema_version": SCHEMA_VERSION,
         }
+
+    def record_exported_decision_row(
+        self,
+        *,
+        game_id: str,
+        split: str,
+        provider_used: str,
+        phase: str,
+        chosen_action_type: str,
+        outcome_reward: float | None,
+        exploration_profile: str,
+        exploration_selected: bool,
+    ) -> None:
+        self.exported_decision_rows += 1
+        self.split_row_counts[split] += 1
+        self.split_game_ids.setdefault(split, set()).add(game_id)
+        self.rows_by_provider[provider_used] += 1
+        self.rows_by_phase[phase] += 1
+        self.rows_by_chosen_action_type[chosen_action_type] += 1
+        self.exploration_profile_counts[exploration_profile] += 1
+        if exploration_selected:
+            self.exploration_selected_count += 1
+            bucket = "exploration"
+        else:
+            self.non_exploration_count += 1
+            bucket = "non_exploration"
+        if outcome_reward is not None:
+            self.reward_values.append(outcome_reward)
+            self.reward_values_by_exploration_bucket[bucket].append(outcome_reward)
+            rewards_for_action = self.reward_values_by_action_type.setdefault(
+                chosen_action_type, []
+            )
+            rewards_for_action.append(outcome_reward)
+
+    def record_feature_health(self, row: dict[str, Any]) -> None:
+        for column, value in row.items():
+            if value is None:
+                self.feature_null_counts[column] += 1
+            elif isinstance(value, float) and pd.isna(value):
+                self.feature_nan_counts[column] += 1
 
 
 def build_alias_feature_columns(
@@ -1176,6 +1416,302 @@ def build_rows_for_chunk(
     return rows
 
 
+def summarize_rewards(values: list[float]) -> dict[str, Any]:
+    if not values:
+        return {
+            "count": 0,
+            "missing_count": 0,
+            "min": None,
+            "p01": None,
+            "p05": None,
+            "median": None,
+            "mean": None,
+            "p95": None,
+            "p99": None,
+            "max": None,
+            "positive_count": 0,
+            "zero_count": 0,
+            "negative_count": 0,
+        }
+    series = pd.Series(values, dtype="float64")
+    return {
+        "count": int(series.count()),
+        "missing_count": 0,
+        "min": float(series.min()),
+        "p01": float(series.quantile(0.01)),
+        "p05": float(series.quantile(0.05)),
+        "median": float(series.median()),
+        "mean": float(series.mean()),
+        "p95": float(series.quantile(0.95)),
+        "p99": float(series.quantile(0.99)),
+        "max": float(series.max()),
+        "positive_count": int((series > 0).sum()),
+        "zero_count": int((series == 0).sum()),
+        "negative_count": int((series < 0).sum()),
+    }
+
+
+def build_training_feature_columns(frame_columns: list[str]) -> list[str]:
+    ordered = [column for column in FEATURE_ORDER if column in frame_columns]
+    ordered.extend(
+        column
+        for column in NUMERIC_ALIAS_FEATURE_COLUMNS
+        if column in frame_columns and column not in ordered
+    )
+    return ordered
+
+
+def build_metadata_columns(
+    frame_columns: list[str], feature_columns: list[str], label_columns: list[str]
+) -> list[str]:
+    return [
+        column
+        for column in frame_columns
+        if column not in feature_columns and column not in label_columns
+    ]
+
+
+def validate_leakage_columns(feature_columns: list[str]) -> list[str]:
+    leaked = sorted(LEAKAGE_DENYLIST.intersection(feature_columns))
+    if not leaked:
+        return []
+    return [
+        "Leakage denylist violation. The following columns must not be training features: "
+        + ", ".join(leaked)
+    ]
+
+
+def build_decision_training_row(
+    *,
+    decision: dict[str, Any],
+    actor_seat: str,
+    phase: str,
+    state_features: dict[str, Any],
+    selected_features: dict[str, Any],
+    chosen_action: dict[str, Any],
+    observed: dict[str, Any],
+    exploration: dict[str, Any],
+    split: str,
+) -> dict[str, Any]:
+    features = build_feature_row(
+        decision.get("state_raw"),
+        phase,
+        actor_seat,
+        chosen_action,
+        state_features=state_features,
+        candidate_features=selected_features,
+    )
+    row = {
+        "decision_id": int(decision.get("id", 0)),
+        "ts": str(decision.get("ts", "")),
+        "game_id": str(decision.get("game_id", "")),
+        "hand_id": str(decision.get("hand_id", "")),
+        "phase": phase,
+        "actor_seat": actor_seat,
+        "actor_team": team_for_seat(actor_seat),
+        "opponent_team": opponent_team_for_seat(actor_seat),
+        "decision_index": int(decision.get("decision_index", 0)),
+        "event_index": safe_int(safe_dict(decision.get("metadata")).get("event_index")),
+        "candidate_action_index": 0,
+        "candidate_action_type": str(chosen_action.get("type", "")),
+        "candidate_action_key": stable_json(action_signature(chosen_action)),
+        "candidate_action_canonical_json": stable_json(chosen_action),
+        "candidate_was_chosen": True,
+        "label": safe_float(decision.get("outcome_reward")),
+        "outcome_reward": safe_float(decision.get("outcome_reward")),
+        "provider_used": str(decision.get("provider_used") or decision.get("policy_source", "")),
+        "requested_provider": str(decision.get("requested_provider") or ""),
+        "policy_source": str(decision.get("policy_source") or ""),
+        "policy_name": str(decision.get("policy_name") or ""),
+        "fallback_used": bool(decision.get("fallback_used", False)),
+        "chosen_action_is_legal": bool(decision.get("chosen_action_is_legal", False)),
+        "legal_action_count": int(decision.get("legal_action_count", 0)),
+        "state_hash": str(decision.get("state_hash") or ""),
+        "legal_actions_hash": str(decision.get("legal_actions_hash") or ""),
+        "chosen_action_hash": str(decision.get("chosen_action_hash") or ""),
+        "schema_version": int(decision.get("schema_version", 0)),
+        "engine_version": str(decision.get("engine_version") or ""),
+        "sim_version": str(decision.get("sim_version") or ""),
+        "chosen_action_type": str(decision.get("chosen_action_type") or chosen_action.get("type", "")),
+        "has_explanation": bool(decision.get("has_explanation", False)),
+        "has_candidate_scores": bool(decision.get("has_candidate_scores", False)),
+        "has_state_features": bool(decision.get("has_state_features", False)),
+        "split": split,
+        **exploration,
+    }
+    row.update({feature_name: features.get(feature_name, 0.0) for feature_name in FEATURE_ORDER})
+    row.update(build_alias_feature_columns(decision, features, chosen_action))
+    row.update(observed)
+    return row
+
+
+def build_training_rows_for_chunk(
+    decisions: list[dict[str, Any]],
+    *,
+    hand_outcomes: dict[tuple[str, str], dict[str, Any]],
+    match_outcomes: dict[str, dict[str, Any]],
+    stats: ExportStats,
+    include_exploration: bool,
+    exploration_profile_filter: str | None,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for decision in decisions:
+        stats.decisions_read += 1
+        actor_seat = str(decision.get("actor_seat", ""))
+        if not is_player_actor_seat(actor_seat):
+            stats.non_player_actor_decisions_skipped += 1
+            stats.dropped_rows_by_reason["non_player_actor"] += 1
+            continue
+        if not bool(decision.get("chosen_action_is_legal", False)):
+            stats.dropped_rows_by_reason["chosen_action_illegal"] += 1
+            continue
+        if not bool(decision.get("has_state_features", False)):
+            stats.dropped_rows_by_reason["missing_state_features"] += 1
+            continue
+        explanation = extract_explanation_metadata(decision)
+        if not explanation:
+            stats.dropped_rows_by_reason["missing_explanation"] += 1
+            continue
+        state_features, candidate_feature_map = build_candidate_feature_map(
+            explanation, decision
+        )
+        selected_features = extract_selected_candidate_features(
+            explanation, decision, candidate_feature_map
+        )
+        outcome_reward = safe_float(decision.get("outcome_reward"))
+        if outcome_reward is None:
+            stats.dropped_rows_by_reason["missing_outcome_reward"] += 1
+            continue
+        phase = str(decision.get("phase", ""))
+        chosen_action = safe_dict(decision.get("chosen_action"))
+        if not chosen_action:
+            stats.dropped_rows_by_reason["missing_chosen_action"] += 1
+            continue
+        exploration = extract_exploration_metadata(explanation, decision)
+        if exploration_profile_filter and exploration["exploration_profile"] != exploration_profile_filter:
+            stats.dropped_rows_by_reason["exploration_profile_filter"] += 1
+            continue
+        if not include_exploration and exploration["exploration_selected"]:
+            stats.dropped_rows_by_reason["exploration_excluded"] += 1
+            continue
+        game_id = str(decision.get("game_id", ""))
+        hand_id = str(decision.get("hand_id", ""))
+        hand_outcome = hand_outcomes.get((game_id, hand_id), {})
+        match_outcome = match_outcomes.get(game_id, {})
+        observed = observed_outcomes_for_actor(actor_seat, hand_outcome, match_outcome)
+        split = choose_split_for_game(game_id)
+        row = build_decision_training_row(
+            decision=decision,
+            actor_seat=actor_seat,
+            phase=phase,
+            state_features=state_features,
+            selected_features=selected_features,
+            chosen_action=chosen_action,
+            observed=observed,
+            exploration=exploration,
+            split=split,
+        )
+        stats.record_feature_health(row)
+        rows.append(row)
+        stats.record_exported_decision_row(
+            game_id=game_id,
+            split=split,
+            provider_used=row["provider_used"],
+            phase=phase,
+            chosen_action_type=row["chosen_action_type"],
+            outcome_reward=outcome_reward,
+            exploration_profile=row["exploration_profile"],
+            exploration_selected=row["exploration_selected"],
+        )
+        if observed.get("observed_outcome_available"):
+            stats.observed_outcome_available_rows += 1
+        if observed.get("observed_hand_outcome_available"):
+            stats.observed_hand_outcome_available_rows += 1
+        if observed.get("observed_match_outcome_available"):
+            stats.observed_match_outcome_available_rows += 1
+        reason = row.get("missing_outcome_reason")
+        if isinstance(reason, str) and reason:
+            stats.missing_outcome_reason_counts[reason] += 1
+        stats.decisions_processed += 1
+    return rows
+
+
+def build_validation_report(
+    *,
+    args: argparse.Namespace,
+    stats: ExportStats,
+    feature_columns: list[str],
+    label_columns: list[str],
+    metadata_columns: list[str],
+    source_row_counts: dict[str, int],
+    included_exploration: bool,
+    leakage_errors: list[str],
+) -> dict[str, Any]:
+    reward_by_action = {
+        action_type: summarize_rewards(values)
+        for action_type, values in sorted(stats.reward_values_by_action_type.items())
+    }
+    exploration_reward_distribution = {
+        bucket: summarize_rewards(values)
+        for bucket, values in stats.reward_values_by_exploration_bucket.items()
+    }
+    split_game_counts = {
+        split: len(game_ids) for split, game_ids in stats.split_game_ids.items()
+    }
+    return {
+        "accepted": len(leakage_errors) == 0 and stats.exported_decision_rows > 0,
+        "validation_status": "accepted"
+        if len(leakage_errors) == 0 and stats.exported_decision_rows > 0
+        else "failed",
+        "export_mode": "chosen_decision_rows",
+        "phase": resolve_phase_filter(args.phase),
+        "provider": args.provider,
+        "run_id": args.run_id,
+        "game_id_prefix": args.game_id_prefix,
+        "candidate_row_count_before_filters": source_row_counts.get("decisions", 0),
+        "total_exported_rows": stats.exported_decision_rows,
+        "dropped_rows_by_reason": dict(stats.dropped_rows_by_reason),
+        "provider_distribution": dict(stats.rows_by_provider),
+        "phase_distribution": dict(stats.rows_by_phase),
+        "chosen_action_type_distribution": dict(stats.rows_by_chosen_action_type),
+        "reward_distribution": summarize_rewards(stats.reward_values),
+        "reward_distribution_by_chosen_action_type": reward_by_action,
+        "legal_chosen_action_count": stats.exported_decision_rows,
+        "feature_count": len(feature_columns),
+        "label_count": len(label_columns),
+        "feature_columns": feature_columns,
+        "label_columns": label_columns,
+        "metadata_columns": metadata_columns,
+        "null_nan_feature_counts": {
+            column: {
+                "null_count": int(stats.feature_null_counts.get(column, 0)),
+                "nan_count": int(stats.feature_nan_counts.get(column, 0)),
+            }
+            for column in feature_columns
+        },
+        "game_id_grouped_split_confirmation": {
+            "accepted": True,
+            "split_row_counts": dict(stats.split_row_counts),
+            "split_game_counts": split_game_counts,
+        },
+        "leakage_denylist_pass": len(leakage_errors) == 0,
+        "leakage_errors": leakage_errors,
+        "exploration_rows_excluded_by_default": not included_exploration,
+        "exploration_rows_count": stats.exploration_selected_count,
+        "non_exploration_rows_count": stats.non_exploration_count,
+        "rows_excluded_due_to_exploration": stats.dropped_rows_by_reason.get(
+            "exploration_excluded", 0
+        ),
+        "explored_decision_rate": (
+            stats.exploration_selected_count / stats.exported_decision_rows
+            if stats.exported_decision_rows > 0
+            else 0.0
+        ),
+        "reward_distribution_by_exploration": exploration_reward_distribution,
+        "source_row_counts": source_row_counts,
+    }
+
+
 def write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
@@ -1282,6 +1818,7 @@ def quality_markdown(payload: dict[str, Any]) -> str:
             "",
             f"- decisions_read: {payload['decisions_read']}",
             f"- decisions_processed: {payload['decisions_processed']}",
+            f"- exported_decision_rows: {payload['exported_decision_rows']}",
             f"- candidate_rows_written: {payload['candidate_rows_written']}",
             f"- malformed_decisions: {payload['malformed_decisions']}",
             f"- missing_state_raw_count: {payload['missing_state_raw_count']}",
@@ -1348,6 +1885,9 @@ def resolve_output_paths(args: argparse.Namespace) -> dict[str, Path | None]:
     explicit_label_columns = (
         args.label_columns_output != str(DEFAULT_LABEL_COLUMNS_OUTPUT)
     )
+    explicit_validation_report = (
+        args.validation_report_output != str(DEFAULT_VALIDATION_REPORT_OUTPUT)
+    )
     inferred_output = Path(args.output)
     output_format = infer_output_format(args.format, inferred_output)
 
@@ -1388,6 +1928,11 @@ def resolve_output_paths(args: argparse.Namespace) -> dict[str, Path | None]:
             if explicit_label_columns
             else output_dir / "label_columns.json"
         )
+        validation_report_output = (
+            Path(args.validation_report_output)
+            if explicit_validation_report
+            else output_dir / "validation_report.json"
+        )
     else:
         output_path = inferred_output
         schema_output = Path(args.schema_output)
@@ -1396,6 +1941,7 @@ def resolve_output_paths(args: argparse.Namespace) -> dict[str, Path | None]:
         feature_schema_output = Path(args.feature_schema_output)
         feature_columns_output = Path(args.feature_columns_output)
         label_columns_output = Path(args.label_columns_output)
+        validation_report_output = Path(args.validation_report_output)
 
     return {
         "output_path": output_path,
@@ -1405,6 +1951,7 @@ def resolve_output_paths(args: argparse.Namespace) -> dict[str, Path | None]:
         "feature_schema_output": feature_schema_output,
         "feature_columns_output": feature_columns_output,
         "label_columns_output": label_columns_output,
+        "validation_report_output": validation_report_output,
         "output_dir": output_dir,
         "output_format": output_format,
     }
@@ -1475,6 +2022,7 @@ def build_validation_summary(
             "feature_schema.json",
             "feature_columns.json",
             "label_columns.json",
+            "validation_report.json",
         ],
         "feature_columns": manifest.get("feature_columns", []),
         "label_columns": manifest.get("label_columns", []),
@@ -1487,7 +2035,7 @@ def build_validation_summary(
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--database-url", default=None)
-    parser.add_argument("--phase", default="play")
+    parser.add_argument("--phase", default="trick_play")
     parser.add_argument("--provider", default=None)
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--game-id-prefix", default=None)
@@ -1516,7 +2064,22 @@ def main() -> None:
         "--label-columns-output",
         default=str(DEFAULT_LABEL_COLUMNS_OUTPUT),
     )
+    parser.add_argument(
+        "--validation-report-output",
+        default=str(DEFAULT_VALIDATION_REPORT_OUTPUT),
+    )
     parser.add_argument("--format", choices=["parquet", "csv.gz", "jsonl"], default=None)
+    parser.add_argument(
+        "--include-exploration",
+        dest="include_exploration",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "--exploration-profile",
+        choices=["off", "conservative", "training_diversity", "any"],
+        default="off",
+    )
     parser.add_argument("--validate-only", action="store_true", default=False)
     parser.add_argument("--dry-run", action="store_true", default=False)
     args = parser.parse_args()
@@ -1531,19 +2094,23 @@ def main() -> None:
     feature_schema_output = resolved_paths["feature_schema_output"]
     feature_columns_output = resolved_paths["feature_columns_output"]
     label_columns_output = resolved_paths["label_columns_output"]
+    validation_report_output = resolved_paths["validation_report_output"]
     phase = resolve_phase_filter(args.phase)
     output_format = str(resolved_paths["output_format"])
 
     tracemalloc.start()
     stats = ExportStats()
     created_at = datetime.now(UTC).isoformat()
-    rollout_rows = parse_rollout_file(args.rollout_input) if args.include_rollouts else {}
+    source_row_counts: dict[str, int] = {"decisions": 0, "events": 0, "matches": 0}
     writer = DatasetWriter(output_path, output_format)
     first_row: dict[str, Any] | None = None
     written_columns: list[str] = []
     database_url_used = default_database_url()
     database_url_source = "default"
     database_url_fallback_used = False
+    exploration_profile_filter = (
+        None if args.exploration_profile == "any" else args.exploration_profile
+    )
     try:
         query, params = build_query(
             phase,
@@ -1569,9 +2136,6 @@ def main() -> None:
                 ),
                 "matches": count_matches_for_scope(connection, args.game_id_prefix),
             }
-            potential_row_count = expected_training_row_count(
-                connection, args.run_id, args.game_id_prefix
-            )
             with connection.cursor(
                 name="decision_export_cursor",
                 row_factory=dict_row,
@@ -1591,22 +2155,21 @@ def main() -> None:
                     events = load_events_for_games(connection, game_ids)
                     matches = load_matches_for_games(connection, game_ids)
                     hand_outcomes, match_outcomes = build_outcome_maps(events, matches)
-                    rows = build_rows_for_chunk(
+                    rows = build_training_rows_for_chunk(
                         decisions,
                         hand_outcomes=hand_outcomes,
                         match_outcomes=match_outcomes,
-                        rollout_rows=rollout_rows,
-                        label_mode=args.label_mode,
-                        include_outcomes=args.include_outcomes,
-                        include_rollouts=args.include_rollouts,
                         stats=stats,
+                        include_exploration=args.include_exploration,
+                        exploration_profile_filter=exploration_profile_filter,
                     )
                     if rows and first_row is None:
                         first_row = rows[0]
                         written_columns = list(rows[0].keys())
-                    if validation_only:
-                        break
-                    writer.write_rows(rows)
+                    if rows:
+                        if validation_only:
+                            continue
+                        writer.write_rows(rows)
         finally:
             if connection is not None:
                 connection.close()
@@ -1620,16 +2183,26 @@ def main() -> None:
 
     if first_row is None:
         first_row = {}
+    feature_columns = build_training_feature_columns(written_columns)
+    label_columns = TRAINING_LABEL_COLUMNS if written_columns else []
+    metadata_columns = build_metadata_columns(
+        written_columns, feature_columns, label_columns
+    )
+    validation_errors = validate_lightgbm_columns(
+        [first_row] if first_row else [],
+        feature_columns,
+        label_columns,
+    )
+    leakage_errors = validate_leakage_columns(feature_columns)
+    validation_errors.extend(leakage_errors)
     manifest = build_manifest(
         written_columns,
         created_at,
-        args.label_mode,
+        "outcome_reward",
         run_id=args.run_id,
         game_id_prefix=args.game_id_prefix,
         source_row_counts=source_row_counts,
-        exported_training_row_count=stats.candidate_rows_written
-        if not validation_only
-        else potential_row_count,
+        exported_training_row_count=stats.exported_decision_rows,
         validation_status="validated" if validation_only else "accepted",
         filtering_strategy="game_id_prefix" if args.game_id_prefix else "run_id_metadata"
         if args.run_id
@@ -1638,23 +2211,36 @@ def main() -> None:
     )
     manifest["database_url_source"] = database_url_source
     manifest["database_url_fallback_used"] = database_url_fallback_used
-    feature_columns = manifest.get("feature_columns", [])
-    label_columns = manifest.get("label_columns", [])
-    validation_errors = validate_lightgbm_columns(
-        [first_row] if first_row else [],
-        feature_columns,
-        label_columns,
-    )
+    manifest["feature_columns"] = feature_columns
+    manifest["label_columns"] = label_columns
+    manifest["metadata_columns"] = metadata_columns
+    manifest["export_mode"] = "chosen_decision_rows"
+    manifest["include_exploration"] = bool(args.include_exploration)
+    manifest["exploration_profile_filter"] = exploration_profile_filter or "any"
+    manifest["split_row_counts"] = dict(stats.split_row_counts)
+    manifest["split_game_counts"] = {
+        split: len(game_ids) for split, game_ids in stats.split_game_ids.items()
+    }
     validation_warnings: list[str] = []
+    validation_report = build_validation_report(
+        args=args,
+        stats=stats,
+        feature_columns=feature_columns,
+        label_columns=label_columns,
+        metadata_columns=metadata_columns,
+        source_row_counts=source_row_counts,
+        included_exploration=bool(args.include_exploration),
+        leakage_errors=leakage_errors,
+    )
 
     if validation_only:
         if source_row_counts["decisions"] == 0:
             validation_errors.append("No scoped decisions were found for the requested run.")
         if source_row_counts["events"] == 0:
             validation_errors.append("No scoped events were found for the requested run.")
-        if potential_row_count == 0 and source_row_counts["decisions"] > 0:
+        if stats.exported_decision_rows == 0 and source_row_counts["decisions"] > 0:
             validation_errors.append(
-                "Scoped decisions were found, but no legal-action training rows could be inferred."
+                "Scoped decisions were found, but no clean chosen-decision training rows passed export filters."
             )
         if source_row_counts["matches"] == 0:
             validation_warnings.append(
@@ -1667,7 +2253,7 @@ def main() -> None:
             database_url_source=database_url_source,
             database_url_fallback_used=database_url_fallback_used,
             source_row_counts=source_row_counts,
-            expected_rows=potential_row_count,
+            expected_rows=stats.exported_decision_rows,
             sample_rows=[first_row] if first_row else [],
             manifest=manifest,
             validation_errors=validation_errors,
@@ -1679,10 +2265,12 @@ def main() -> None:
             sys.exit(1)
         return
 
-    if stats.candidate_rows_written == 0:
+    if stats.exported_decision_rows == 0:
         raise ValueError(
-            "ml:export produced zero training rows. Verify scoped telemetry includes decisions with legal actions and full state."
+            "ml:export produced zero clean chosen-decision training rows. Verify scoped telemetry includes legal chosen actions, state features, and outcome rewards."
         )
+    if leakage_errors:
+        raise ValueError("ml:export rejected the dataset because leakage fields appeared in feature columns.")
 
     write_feature_schema(feature_schema_output)
     schema = build_schema(written_columns, first_row)
@@ -1690,13 +2278,14 @@ def main() -> None:
     write_json(schema_output, schema)
     write_json(feature_columns_output, {"feature_columns": feature_columns})
     write_json(label_columns_output, {"label_columns": label_columns})
+    write_json(validation_report_output, validation_report)
 
     quality_payload = stats.to_quality_payload(
-        label_mode=args.label_mode,
+        label_mode="outcome_reward",
         output_format=output_format,
         chunk_size=args.chunk_size,
         peak_memory_bytes=peak,
-        feature_count=len(manifest["feature_columns"]),
+        feature_count=len(feature_columns),
     )
     write_json(quality_output, quality_payload)
     write_markdown(quality_md_output, quality_markdown(quality_payload))
@@ -1705,21 +2294,21 @@ def main() -> None:
         json.dumps(
             {
                 "accepted": True,
-                "rows": stats.candidate_rows_written,
+                "rows": stats.exported_decision_rows,
                 "decisions": stats.decisions_processed,
                 "phase": phase,
                 "provider": args.provider,
                 "output": str(output_path),
                 "format": output_format,
-                "label_mode": args.label_mode,
-                "include_outcomes": args.include_outcomes,
-                "include_rollouts": args.include_rollouts,
+                "label_mode": "outcome_reward",
+                "include_exploration": args.include_exploration,
                 "feature_schema": str(feature_schema_output),
                 "schema_output": str(schema_output),
                 "quality_output": str(quality_output),
                 "manifest_output": str(manifest_output),
                 "feature_columns_output": str(feature_columns_output),
                 "label_columns_output": str(label_columns_output),
+                "validation_report_output": str(validation_report_output),
             }
         )
     )

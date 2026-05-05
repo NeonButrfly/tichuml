@@ -7,7 +7,11 @@ import {
   type StandardRank
 } from "@tichuml/engine";
 import { engineFoundation } from "@tichuml/engine";
-import { readRuntimeEnv } from "@tichuml/shared";
+import {
+  parseExplorationProfile,
+  readRuntimeEnv,
+  type ExplorationProfile
+} from "@tichuml/shared";
 import {
   buildAggressionContextV1,
   computeGrandTichuAggressionV1,
@@ -23,7 +27,9 @@ import { scoreDragonGift, scoreGrandTichu, scoreTichu } from "./TichuDecisionEng
 import type {
   CandidateDecision,
   ChosenDecision,
+  ExplorationSelectionMetadata,
   HeadlessDecisionContext,
+  HeuristicDecisionOptions,
   HeuristicPolicy,
   PassLegalAction,
   PlayLegalAction,
@@ -38,6 +44,8 @@ export type {
   HandEvaluation,
   TacticalFeatureSnapshot,
   CandidateActionFeatureSnapshot,
+  HeuristicDecisionOptions,
+  PassSelectionMetadata,
   PolicyExplanation,
   PolicyTag,
   UrgencyProfile,
@@ -68,6 +76,7 @@ export {
   type ServerFastPathDecision,
   type ServerFastPathState
 } from "./serverFastPath.js";
+export { createPassSelectionAction, scorePassSelection } from "./PassHeuristicEngine.js";
 export {
   buildCanonicalDecisionRequest,
   createCanonicalDecisionLegalActions,
@@ -79,6 +88,181 @@ function traceStraightResponsesEnabled(): boolean {
     ?.trim()
     .toLowerCase();
   return rawValue === "1" || rawValue === "true" || rawValue === "yes";
+}
+
+function parseFiniteEnvNumber(name: string): number | null {
+  const rawValue = readRuntimeEnv(name)?.trim();
+  if (!rawValue) {
+    return null;
+  }
+  const parsed = Number(rawValue);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function resolveExplorationConfig(
+  options?: HeuristicDecisionOptions
+): {
+  profile: ExplorationProfile;
+  rate: number | null;
+  topN: number | null;
+  maxScoreGap: number | null;
+} {
+  const profile =
+    options?.exploration?.profile ??
+    parseExplorationProfile(readRuntimeEnv("TICHU_EXPLORATION_PROFILE"), "off");
+  const rate =
+    options?.exploration?.rate ??
+    parseFiniteEnvNumber("TICHU_EXPLORATION_RATE");
+  const topN =
+    options?.exploration?.topN ??
+    parseFiniteEnvNumber("TICHU_EXPLORATION_TOP_N");
+  const maxScoreGap =
+    options?.exploration?.maxScoreGap ??
+    parseFiniteEnvNumber("TICHU_EXPLORATION_MAX_SCORE_GAP");
+  return {
+    profile,
+    rate: rate !== null && rate > 0 ? rate : null,
+    topN: topN !== null && topN > 0 ? Math.floor(topN) : null,
+    maxScoreGap: maxScoreGap !== null && maxScoreGap >= 0 ? maxScoreGap : null
+  };
+}
+
+function hashSelectionKey(input: string): number {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return hash >>> 0;
+}
+
+function deterministicUnitInterval(seed: string): number {
+  return hashSelectionKey(seed) / 0xffffffff;
+}
+
+function buildExplorationSelection(config: {
+  candidates: CandidateDecision[];
+  selectedByScore: CandidateDecision;
+  selectionKey?: string;
+  options?: HeuristicDecisionOptions;
+}): {
+  selected: CandidateDecision;
+  metadata: ExplorationSelectionMetadata;
+} {
+  const exploration = resolveExplorationConfig(config.options);
+  const topCandidate = config.candidates[0] ?? config.selectedByScore;
+  const baseMetadata: ExplorationSelectionMetadata = {
+    exploration_enabled: exploration.profile !== "off",
+    exploration_profile: exploration.profile,
+    exploration_selected: false,
+    exploration_reason: null,
+    original_top_action_type: topCandidate?.action.type ?? null,
+    original_top_score: topCandidate?.score ?? null,
+    selected_rank_in_candidates: 0,
+    selected_score: config.selectedByScore.score,
+    score_gap_from_top:
+      topCandidate ? Number((topCandidate.score - config.selectedByScore.score).toFixed(4)) : null,
+    exploration_config: {
+      rate: exploration.rate,
+      top_n: exploration.topN,
+      max_score_gap: exploration.maxScoreGap
+    }
+  };
+
+  if (exploration.profile === "off" || config.candidates.length <= 1) {
+    return {
+      selected: config.selectedByScore,
+      metadata: baseMetadata
+    };
+  }
+
+  const defaultRate =
+    exploration.profile === "training_diversity" ? 0.2 : 0.08;
+  const defaultTopN =
+    exploration.profile === "training_diversity" ? 4 : 2;
+  const defaultMaxScoreGap =
+    exploration.profile === "training_diversity" ? 20 : 8;
+  const explorationRate = exploration.rate ?? defaultRate;
+  const topN = exploration.topN ?? defaultTopN;
+  const maxScoreGap = exploration.maxScoreGap ?? defaultMaxScoreGap;
+  const eligiblePool = config.candidates
+    .slice(0, Math.max(1, topN))
+    .filter((candidate, index) => {
+      if (index === 0) {
+        return true;
+      }
+      if (topCandidate.actor !== candidate.actor) {
+        return false;
+      }
+      if (topCandidate.score - candidate.score > maxScoreGap) {
+        return false;
+      }
+      if (candidate.tags.includes("unjustified_partner_bomb")) {
+        return false;
+      }
+      return true;
+    });
+
+  if (eligiblePool.length <= 1) {
+    return {
+      selected: config.selectedByScore,
+      metadata: baseMetadata
+    };
+  }
+
+  const selectionKey =
+    config.options?.selectionKey ??
+    config.selectionKey ??
+    [
+      topCandidate.actor,
+      topCandidate.action.type,
+      topCandidate.score,
+      ...eligiblePool.map((candidate) => `${candidate.action.type}:${candidate.score}`)
+    ].join("|");
+  const shouldExplore =
+    deterministicUnitInterval(`${selectionKey}|explore`) < explorationRate;
+  if (!shouldExplore) {
+    return {
+      selected: config.selectedByScore,
+      metadata: baseMetadata
+    };
+  }
+
+  const alternatePool = eligiblePool.slice(1);
+  const chosenOffset = Math.min(
+    alternatePool.length - 1,
+    Math.floor(
+      deterministicUnitInterval(`${selectionKey}|pick`) * alternatePool.length
+    )
+  );
+  const selected = alternatePool[Math.max(0, chosenOffset)] ?? config.selectedByScore;
+  const selectedRank = Math.max(
+    0,
+    config.candidates.findIndex((candidate) => candidate === selected)
+  );
+
+  return {
+    selected,
+    metadata: {
+      exploration_enabled: true,
+      exploration_profile: exploration.profile,
+      exploration_selected: selected !== config.selectedByScore,
+      exploration_reason:
+        selected !== config.selectedByScore
+          ? `near_policy_${exploration.profile}`
+          : null,
+      original_top_action_type: topCandidate.action.type,
+      original_top_score: topCandidate.score,
+      selected_rank_in_candidates: selectedRank,
+      selected_score: selected.score,
+      score_gap_from_top: Number((topCandidate.score - selected.score).toFixed(4)),
+      exploration_config: {
+        rate: explorationRate,
+        top_n: topN,
+        max_score_gap: maxScoreGap
+      }
+    }
+  };
 }
 
 function filterWishLockedActions(
@@ -473,7 +657,8 @@ function selectProgressionCandidateForActiveTurn(
 function toChosenDecision(
   selected: CandidateDecision,
   candidates: CandidateDecision[],
-  stateFeatures?: TacticalFeatureSnapshot | null
+  stateFeatures?: TacticalFeatureSnapshot | null,
+  exploration?: ExplorationSelectionMetadata
 ): ChosenDecision {
   return {
     actor: selected.actor,
@@ -491,6 +676,7 @@ function toChosenDecision(
         ...(candidate.features ? { features: candidate.features } : {}),
         ...(candidate.mahjongWish ? { mahjongWish: candidate.mahjongWish } : {}),
         ...(candidate.tichuCall ? { tichuCall: candidate.tichuCall } : {}),
+        ...(candidate.passBundle ? { passBundle: candidate.passBundle } : {}),
         ...(candidate.pass_reduction_v1
           ? { pass_reduction_v1: candidate.pass_reduction_v1 }
           : {}),
@@ -513,6 +699,7 @@ function toChosenDecision(
       ...(selected.features ? { selectedFeatures: selected.features } : {}),
       ...(selected.mahjongWish ? { selectedMahjongWish: selected.mahjongWish } : {}),
       ...(selected.tichuCall ? { selectedTichuCall: selected.tichuCall } : {}),
+      ...(selected.passBundle ? { selectedPassBundle: selected.passBundle } : {}),
       ...(selected.pass_reduction_v1
         ? { selectedPassReductionV1: selected.pass_reduction_v1 }
         : {}),
@@ -527,28 +714,35 @@ function toChosenDecision(
         : {}),
       ...(selected.aggression_context_v1
         ? { selectedAggressionContextV1: selected.aggression_context_v1 }
-        : {})
+        : {}),
+      ...(exploration ? { exploration } : {})
     }
   };
 }
 
 export const heuristicsV1Policy: HeuristicPolicy = {
   name: "heuristics-v1",
-  chooseAction(ctx) {
+  chooseAction(ctx, options) {
     try {
       const candidates = collectCandidates(ctx);
       const progressionSelected = selectProgressionCandidateForActiveTurn(ctx, candidates);
-      const selected =
+      const selectedByScore =
         progressionSelected ?? candidates[0] ?? selectEmergencyPassCandidate(ctx);
       const analyzer = createHeuristicFeatureAnalyzer(ctx);
       const selectedStateFeatures =
-        selected && selected.actor !== SYSTEM_ACTOR
-          ? analyzer.getStateFeatures(selected.actor)
+        selectedByScore && selectedByScore.actor !== SYSTEM_ACTOR
+          ? analyzer.getStateFeatures(selectedByScore.actor)
           : null;
 
-      if (!selected) {
+      if (!selectedByScore) {
         throw new Error("No legal action candidates available for heuristics-v1.");
       }
+
+      const { selected, metadata: exploration } = buildExplorationSelection({
+        candidates,
+        selectedByScore,
+        ...(options ? { options } : {})
+      });
 
       if (candidates.length === 0) {
         console.error(
@@ -563,7 +757,7 @@ export const heuristicsV1Policy: HeuristicPolicy = {
         );
       }
 
-      return toChosenDecision(selected, candidates, selectedStateFeatures);
+      return toChosenDecision(selected, candidates, selectedStateFeatures, exploration);
     } catch (error) {
       const activeSeatFallback =
         ctx.state.activeSeat && ctx.state.phase === "trick_play"
@@ -602,7 +796,22 @@ export const heuristicsV1Policy: HeuristicPolicy = {
       const analyzer = createHeuristicFeatureAnalyzer(ctx);
       const fallbackStateFeatures =
         fallback.actor !== SYSTEM_ACTOR ? analyzer.getStateFeatures(fallback.actor) : null;
-      return toChosenDecision(fallback, [], fallbackStateFeatures);
+      return toChosenDecision(fallback, [], fallbackStateFeatures, {
+        exploration_enabled: false,
+        exploration_profile: "off",
+        exploration_selected: false,
+        exploration_reason: null,
+        original_top_action_type: fallback.action.type,
+        original_top_score: fallback.score,
+        selected_rank_in_candidates: 0,
+        selected_score: fallback.score,
+        score_gap_from_top: 0,
+        exploration_config: {
+          rate: null,
+          top_n: null,
+          max_score_gap: null
+        }
+      });
     }
   }
 };

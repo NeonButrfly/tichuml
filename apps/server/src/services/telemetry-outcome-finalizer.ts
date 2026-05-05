@@ -81,6 +81,9 @@ export type TrainingDataValidationSummary = {
   warnings: string[];
 };
 
+const RETRYABLE_POSTGRES_CODES = new Set(["40P01", "40001"]);
+const MAX_FINALIZER_RETRIES = 3;
+
 function readJsonObject(
   value: unknown
 ): Record<string, unknown> | null {
@@ -281,6 +284,7 @@ async function recomputeRewardForWhere(
             metadata
           FROM decisions
           WHERE ${whereSql}
+          ORDER BY id ASC
         ) decision_rows
         CROSS JOIN LATERAL (
           SELECT
@@ -349,7 +353,33 @@ async function recomputeRewardForWhere(
   );
 }
 
-export async function applyOutcomeAttributionForDecisionEvent(
+function isRetryablePostgresError(error: unknown): error is { code: string; message?: string } {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof (error as { code?: unknown }).code === "string" &&
+    RETRYABLE_POSTGRES_CODES.has((error as { code: string }).code)
+  );
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function retryDelayMs(config: { attempt: number; payload: TelemetryEventPayload }): number {
+  const seed =
+    `${config.payload.game_id}|${config.payload.hand_id}|${config.payload.event_index}|${config.attempt}`;
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash ^= seed.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  const jitterMs = (hash >>> 0) % 35;
+  return config.attempt * 40 + jitterMs;
+}
+
+async function applyOutcomeAttributionForDecisionEventOnce(
   sql: DatabaseClient,
   payload: TelemetryEventPayload
 ): Promise<void> {
@@ -433,6 +463,52 @@ export async function applyOutcomeAttributionForDecisionEvent(
       WHERE game_id = ${payload.game_id}
     `;
     await recomputeRewardForWhere(sql, "game_id = $1", [payload.game_id]);
+  }
+}
+
+export async function applyOutcomeAttributionForDecisionEvent(
+  sql: DatabaseClient,
+  payload: TelemetryEventPayload
+): Promise<void> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= MAX_FINALIZER_RETRIES; attempt += 1) {
+    try {
+      await applyOutcomeAttributionForDecisionEventOnce(sql, payload);
+      if (attempt > 1) {
+        console.warn(
+          JSON.stringify({
+            ts: new Date().toISOString(),
+            event: "telemetry_outcome_finalizer_retry_succeeded",
+            retry_count: attempt - 1,
+            postgres_code:
+              isRetryablePostgresError(lastError) ? lastError.code : null,
+            game_id: payload.game_id,
+            hand_id: payload.hand_id,
+            event_index: payload.event_index
+          })
+        );
+      }
+      return;
+    } catch (error) {
+      lastError = error;
+      if (!isRetryablePostgresError(error) || attempt >= MAX_FINALIZER_RETRIES) {
+        console.error(
+          JSON.stringify({
+            ts: new Date().toISOString(),
+            event: "telemetry_outcome_finalizer_failed",
+            postgres_code: isRetryablePostgresError(error) ? error.code : null,
+            attempt,
+            max_attempts: MAX_FINALIZER_RETRIES,
+            game_id: payload.game_id,
+            hand_id: payload.hand_id,
+            event_index: payload.event_index,
+            message: error instanceof Error ? error.message : String(error)
+          })
+        );
+        throw error;
+      }
+      await sleep(retryDelayMs({ attempt, payload }));
+    }
   }
 }
 

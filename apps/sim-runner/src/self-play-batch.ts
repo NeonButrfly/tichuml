@@ -5,7 +5,8 @@ import {
   chooseServerFastPathDecision,
   generateFastTrickPlayCandidates,
   SERVER_HEURISTIC_FAST_PATH_LIMITS,
-  type ChosenDecision
+  type ChosenDecision,
+  type HeuristicDecisionOptions
 } from "@tichuml/ai-heuristics";
 import {
   BACKEND_HEALTH_PATH,
@@ -107,6 +108,10 @@ export type SelfPlayBatchOptions = {
   controllerMode?: boolean;
   fullStateDecisionRequests?: boolean;
   telemetryStorageRoot?: string;
+  explorationProfile?: "off" | "conservative" | "training_diversity";
+  explorationRate?: number;
+  explorationTopN?: number;
+  explorationMaxScoreGap?: number;
   onTelemetryRuntimeState?:
     | ((state: TelemetryRuntimeState) => void)
     | undefined;
@@ -1249,9 +1254,30 @@ function resolveNextActor(
 }
 
 function resolveDecisionScoringPath(config?: {
+  stateRaw?: JsonObject;
+  legalActions?: LegalActionMap;
+  actor?: SeatId | typeof SYSTEM_ACTOR;
+  requestedProvider?: Exclude<DecisionMode, "local">;
   fullStateDecisionRequests?: boolean;
 }): DecisionScoringPath {
-  return config?.fullStateDecisionRequests === true ? "rich_path" : "fast_path";
+  if (config?.fullStateDecisionRequests === true) {
+    return "rich_path";
+  }
+  if (
+    config?.requestedProvider === "server_heuristic" &&
+    config.actor &&
+    config.actor !== SYSTEM_ACTOR &&
+    config.stateRaw &&
+    config.legalActions &&
+    shouldUseRichServerHeuristicScoring({
+      state: config.stateRaw as unknown as GameState,
+      actor: config.actor,
+      legalActions: config.legalActions
+    })
+  ) {
+    return "rich_path";
+  }
+  return "fast_path";
 }
 
 function extractActorLegalActionList(
@@ -1299,6 +1325,16 @@ function buildFastPathLegalActionPayload(
   }
 
   return boundedActions.length > 0 ? boundedActions : actorActions;
+}
+
+function shouldUseRichServerHeuristicScoring(config: {
+  state: GameState;
+  actor: SeatId;
+  legalActions: LegalActionMap;
+}): boolean {
+  void config.actor;
+  void config.legalActions;
+  return config.state.phase === "grand_tichu_window";
 }
 
 function buildFastDecisionStatePayload(
@@ -1829,8 +1865,23 @@ async function resolveLocalHeuristicDecision(config: {
       legalActions: config.legalActions,
       phase: config.phase
     });
+  const heuristicDecisionOptions = buildHeuristicDecisionOptions(config.metadata);
+  const actualScoringPath =
+    strategy === "server_fast_path" &&
+    config.actor !== SYSTEM_ACTOR &&
+    shouldUseRichServerHeuristicScoring({
+      state: config.stateRaw as unknown as GameState,
+      actor: config.actor,
+      legalActions: config.legalActions
+    })
+      ? "rich_path"
+      : strategy === "server_fast_path"
+        ? "fast_path"
+        : "rich_path";
   const chosen =
-    strategy === "server_fast_path" && config.actor !== SYSTEM_ACTOR
+    strategy === "server_fast_path" &&
+    config.actor !== SYSTEM_ACTOR &&
+    actualScoringPath === "fast_path"
       ? (() => {
           const actorLegalActions = extractActorLegalActionList(
             config.legalActions,
@@ -1847,8 +1898,12 @@ async function resolveLocalHeuristicDecision(config: {
               config.actor,
               config.phase,
               actorLegalActions
-            )
+            ),
+            options: heuristicDecisionOptions
           });
+          const selectedCandidate =
+            fastDecision.candidates[fastDecision.selectedRank] ??
+            fastDecision.candidates[0];
           return {
             actor: fastDecision.actor,
             action: fastDecision.action,
@@ -1865,23 +1920,30 @@ async function resolveLocalHeuristicDecision(config: {
                   : {}),
                 ...(candidate.tichuCall
                   ? { tichuCall: candidate.tichuCall }
+                  : {}),
+                ...(candidate.passBundle
+                  ? { passBundle: candidate.passBundle }
                   : {})
               })),
-              selectedReasonSummary: fastDecision.candidates[0]?.reasons ?? [],
+              selectedReasonSummary: selectedCandidate?.reasons ?? [],
               selectedTags: [],
-              ...(fastDecision.candidates[0]?.mahjongWish
-                ? { selectedMahjongWish: fastDecision.candidates[0].mahjongWish }
+              ...(selectedCandidate?.mahjongWish
+                ? { selectedMahjongWish: selectedCandidate.mahjongWish }
                 : {}),
-              ...(fastDecision.candidates[0]?.tichuCall
-                ? { selectedTichuCall: fastDecision.candidates[0].tichuCall }
-                : {})
+              ...(selectedCandidate?.tichuCall
+                ? { selectedTichuCall: selectedCandidate.tichuCall }
+                : {}),
+              ...(selectedCandidate?.passBundle
+                ? { selectedPassBundle: selectedCandidate.passBundle }
+                : {}),
+              exploration: fastDecision.exploration
             }
           } satisfies ChosenDecision;
         })()
       : heuristicsV1Policy.chooseAction({
           state: config.stateRaw as never,
           legalActions: actorScopedLegalActions
-        });
+        }, heuristicDecisionOptions);
   emitDiagnosticsTiming(
     config,
     "local_decision_policy",
@@ -1893,7 +1955,7 @@ async function resolveLocalHeuristicDecision(config: {
       actor_seat: String(config.actor),
       decision_index: config.decisionIndex,
       requested_provider: config.requestedProvider,
-      scoring_path: strategy === "server_fast_path" ? "fast_path" : "rich_path"
+      scoring_path: actualScoringPath
     }
   );
   const latencyMs = Date.now() - config.startedAt;
@@ -2003,6 +2065,47 @@ async function resolveLocalHeuristicDecision(config: {
     latencyMs,
     telemetryFailureStats,
     ...(telemetryFailure ? { telemetryFailure } : {})
+  };
+}
+
+function metadataStringValue(
+  metadata: JsonObject | undefined,
+  key: string
+): string | null {
+  const value = metadata?.[key];
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function metadataNumberValue(
+  metadata: JsonObject | undefined,
+  key: string
+): number | null {
+  const value = metadata?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function buildHeuristicDecisionOptions(metadata: JsonObject | undefined): HeuristicDecisionOptions {
+  const profile = metadataStringValue(metadata, "exploration_profile");
+  const rate = metadataNumberValue(metadata, "exploration_rate");
+  const topN = metadataNumberValue(metadata, "exploration_top_n");
+  const maxScoreGap = metadataNumberValue(metadata, "exploration_max_score_gap");
+  const selectionKey = [
+    metadataStringValue(metadata, "run_id") ?? "",
+    metadataStringValue(metadata, "game_id") ?? "",
+    metadataStringValue(metadata, "hand_id") ?? "",
+    String(metadataNumberValue(metadata, "decision_index") ?? "")
+  ].join("|");
+  return {
+    exploration: {
+      profile:
+        profile === "conservative" || profile === "training_diversity"
+          ? profile
+          : "off",
+      ...(rate !== null ? { rate } : {}),
+      ...(topN !== null ? { topN } : {}),
+      ...(maxScoreGap !== null ? { maxScoreGap } : {})
+    },
+    selectionKey
   };
 }
 
@@ -2234,7 +2337,15 @@ export async function resolveDecision(config: {
   };
 
   const validationStartedAt = Date.now();
-  const scoringPath = resolveDecisionScoringPath(config);
+  const scoringPath = resolveDecisionScoringPath({
+    stateRaw: config.stateRaw,
+    legalActions: config.legalActions,
+    actor: config.actor,
+    requestedProvider,
+    ...(config.fullStateDecisionRequests !== undefined
+      ? { fullStateDecisionRequests: config.fullStateDecisionRequests }
+      : {})
+  });
   const validation = validateBackendDecisionRequestInput({
     gameId: config.gameId,
     handId: config.handId,
@@ -3077,7 +3188,7 @@ async function runSingleGame(
       const flushTimeoutMs =
         options.strictTelemetry === true
           ? Math.max(options.telemetryTimeoutMs ?? 10_000, 1_000)
-          : Math.max(50, Math.min(options.telemetryTimeoutMs ?? 250, 250));
+          : 0;
       await telemetryManager.flush(flushTimeoutMs);
       const telemetrySnapshot = telemetryManager.snapshot();
       mergeTelemetryFailureStats(
@@ -3191,7 +3302,9 @@ export async function runSelfPlayBatchDetailed(
   const usesBackendProvider = [...requestedProviders].some(
     (provider) => provider !== "local"
   );
-  if (options.telemetryEnabled || usesBackendProvider) {
+  const telemetryRequiresBackend =
+    options.telemetryEnabled && options.strictTelemetry === true;
+  if (telemetryRequiresBackend || usesBackendProvider) {
     try {
       await verifyBackend(backendBaseUrl, {
         ...(options.traceBackend ? { traceBackend: true } : {}),
@@ -3200,7 +3313,6 @@ export async function runSelfPlayBatchDetailed(
         ...(options.controllerMode ? { controllerMode: true } : {})
       });
     } catch (error) {
-      const telemetryRequiresBackend = false;
       const providerRequiresBackend =
         usesBackendProvider && options.serverFallbackEnabled === false;
       if (telemetryRequiresBackend || providerRequiresBackend) {

@@ -271,4 +271,27 @@ describe("async telemetry pipeline resilience", () => {
     expect(fetchMock).toHaveBeenCalled();
     expect(summary.errors).toBeGreaterThanOrEqual(0);
   });
+
+  it("reports live pending separately from persisted backlog files", async () => {
+    const root = await createTempDir();
+    const pendingDir = path.join(root, "pending");
+    await fsp.mkdir(pendingDir, { recursive: true });
+    await fsp.writeFile(
+      path.join(pendingDir, "persisted-backlog.ndjson"),
+      "{\"saved\":true}\n",
+      "utf8"
+    );
+
+    const manager = new AsyncTelemetryManager({
+      enabled: true,
+      storageRoot: root,
+      quiet: true,
+      maxConcurrency: 1
+    });
+
+    const snapshot = manager.snapshot();
+
+    expect(snapshot.runtimeState.pending_count).toBe(0);
+    expect(snapshot.runtimeState.persisted_pending_file_count).toBe(1);
+  });
 });

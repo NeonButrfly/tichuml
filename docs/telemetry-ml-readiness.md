@@ -59,12 +59,25 @@ for trick, hand, and game results plus:
 
 ## Export semantics
 
-`ml:export` now treats outcomes honestly.
+`ml:export` now treats outcomes honestly and exports a clean baseline slice by
+default.
 
 - observed outcome columns are named `observed_*`
 - they represent the logged continuation only
 - they may appear on every candidate row for context
 - they are excluded from runtime feature manifests by default
+- baseline export focuses on clean chosen-decision rows for the requested
+  scope, not merely raw telemetry row presence
+- baseline export excludes `exploration_selected=true` rows unless
+  `--include-exploration` is passed explicitly
+- grouped train/validation/test split reporting is by `game_id`, never random
+  decision-row splitting
+- `validation_report.json` now records row counts, provider/phase/action
+  distributions, reward quantiles, split counts, exploration counts, and the
+  leakage-denylist result
+- `feature_columns.json` must never include leakage fields such as
+  `outcome_reward`, final score fields, winner fields, or completion
+  timestamps
 
 This prevents the old conceptual mistake where unchosen actions appear to have
 their own observed outcomes.
@@ -89,10 +102,20 @@ Use the quality report first when checking a dataset. It shows:
 - fallback row counts
 - phase, provider, and actor-seat distributions
 
+Use `validation_report.json` when deciding whether a run is LightGBM-ready.
+That report is the hard gate for:
+
+- grouped-by-game split confirmation
+- exploration exclusion by default
+- leakage-denylist pass/fail
+- null and NaN feature counts
+- reward distribution by chosen action type and exploration bucket
+
 For DB-backed result attribution and training-readiness checks, use:
 
 - `npm run telemetry:finalize-results`
 - `npm run telemetry:validate-training-data`
+- `npm run telemetry:validate-run -- --game-id-prefix <prefix>`
 
 The validator now reports coverage for `hand_result`, `game_result`, and
 `outcome_reward`, reward min/avg/max, action and phase distributions, provider

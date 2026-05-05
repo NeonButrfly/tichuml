@@ -1,7 +1,9 @@
 import {
   getCanonicalCardIdsKey,
+  getLeftSeat,
   getOpponentSeats,
   getPartnerSeat,
+  getRightSeat,
   getTeamForSeat,
   type CallState,
   type Card,
@@ -15,6 +17,11 @@ import {
   type StandardRank,
   type TrickState
 } from "@tichuml/engine";
+import {
+  parseExplorationProfile,
+  readRuntimeEnv,
+  type ExplorationProfile
+} from "@tichuml/shared";
 import {
   buildAggressionContextV1,
   computeGrandTichuAggressionV1,
@@ -32,7 +39,10 @@ import {
 import { chooseMahjongWishRank } from "./HandAnalysis.js";
 import type {
   CandidateDecision,
+  ExplorationSelectionMetadata,
+  HeuristicDecisionOptions,
   MahjongWishMetadata,
+  PassSelectionMetadata,
   TichuCallMetadata
 } from "./types.js";
 
@@ -94,6 +104,7 @@ export type ServerFastPathCandidate = {
   reasons: string[];
   mahjongWish?: MahjongWishMetadata;
   tichuCall?: TichuCallMetadata;
+  passBundle?: PassSelectionMetadata;
   pass_reduction_v1?: CandidateDecision["pass_reduction_v1"];
   tichu_aggression_v1?: CandidateDecision["tichu_aggression_v1"];
   grand_tichu_aggression_v1?: CandidateDecision["grand_tichu_aggression_v1"];
@@ -103,9 +114,57 @@ export type ServerFastPathCandidate = {
 export type ServerFastPathDecision = {
   actor: SeatId;
   action: EngineAction;
+  selectedRank: number;
   candidateCount: number;
   candidates: ServerFastPathCandidate[];
+  exploration: ExplorationSelectionMetadata;
 };
+
+function parseFiniteEnvNumber(name: string): number | null {
+  const rawValue = readRuntimeEnv(name)?.trim();
+  if (!rawValue) {
+    return null;
+  }
+  const parsed = Number(rawValue);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function resolveExplorationConfig(
+  options?: HeuristicDecisionOptions
+): {
+  profile: ExplorationProfile;
+  rate: number | null;
+  topN: number | null;
+  maxScoreGap: number | null;
+} {
+  return {
+    profile:
+      options?.exploration?.profile ??
+      parseExplorationProfile(readRuntimeEnv("TICHU_EXPLORATION_PROFILE"), "off"),
+    rate:
+      options?.exploration?.rate ??
+      parseFiniteEnvNumber("TICHU_EXPLORATION_RATE"),
+    topN:
+      options?.exploration?.topN ??
+      parseFiniteEnvNumber("TICHU_EXPLORATION_TOP_N"),
+    maxScoreGap:
+      options?.exploration?.maxScoreGap ??
+      parseFiniteEnvNumber("TICHU_EXPLORATION_MAX_SCORE_GAP")
+  };
+}
+
+function hashSelectionKey(input: string): number {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return hash >>> 0;
+}
+
+function deterministicUnitInterval(seed: string): number {
+  return hashSelectionKey(seed) / 0xffffffff;
+}
 
 function applyControlledAggressionToFastCandidates(config: {
   state: ServerFastPathState;
@@ -214,8 +273,8 @@ type RemainingHandMetrics = {
   removedIsolatedLowCount: number;
 };
 
-const FAST_TICHU_CALL_THRESHOLD = 245;
-const FAST_GRAND_TICHU_CALL_THRESHOLD = 300;
+const FAST_TICHU_CALL_THRESHOLD = 300;
+const FAST_GRAND_TICHU_CALL_THRESHOLD = 360;
 
 function roundFastScore(value: number): number {
   return Number(value.toFixed(2));
@@ -683,25 +742,51 @@ function scorePassSelectionAction(config: {
     config.handContext,
     removedCardIds
   );
-  let score = config.leftScore + config.partnerScore + config.rightScore;
-
-  score +=
+  const selfPreservationScore =
     (config.handContext.deadSingleCount - removedMetrics.deadSingleCount) *
       weights.clutter_reduction_weight +
-    removedMetrics.removedIsolatedLowCount * weights.isolated_low_card_bonus;
-  score +=
+    removedMetrics.removedIsolatedLowCount * weights.isolated_low_card_bonus +
     (removedMetrics.pairLikeCount - config.handContext.pairLikeCount) *
-    weights.hand_shape_balance_bonus;
-  score +=
+    weights.hand_shape_balance_bonus +
     (removedMetrics.tripleLikeCount - config.handContext.tripleLikeCount) *
-    weights.combo_preservation_weight;
-  score +=
+    weights.combo_preservation_weight +
     (removedMetrics.straightLinkCount - config.handContext.straightLinkCount) *
     weights.combo_preservation_weight;
+  let score =
+    config.leftScore +
+    config.partnerScore +
+    config.rightScore +
+    selfPreservationScore;
 
   const selectedCards = removedCardIds
     .map((cardId) => config.handContext.byId.get(cardId))
     .filter((card): card is Card => Boolean(card));
+  const protectedCardPassed = selectedCards.some(
+    (card) =>
+      config.handContext.bombCardIds.has(card.id) ||
+      config.handContext.controlCardIds.has(card.id) ||
+      isSpecialCard(card, "dragon") ||
+      isSpecialCard(card, "phoenix")
+  );
+  const controlCardPassed = selectedCards.some((card) =>
+    config.handContext.controlCardIds.has(card.id)
+  );
+  const partner = getPartnerSeat(config.actor);
+  const partnerCalled =
+    config.state.calls[partner].smallTichu || config.state.calls[partner].grandTichu;
+  const selfCalled =
+    config.state.calls[config.actor].smallTichu ||
+    config.state.calls[config.actor].grandTichu;
+  const leftOpponent = getLeftSeat(config.actor);
+  const rightOpponent = getRightSeat(config.actor);
+  const leftOpponentCalledTichu =
+    config.state.calls[leftOpponent].smallTichu ||
+    config.state.calls[leftOpponent].grandTichu;
+  const rightOpponentCalledTichu =
+    config.state.calls[rightOpponent].smallTichu ||
+    config.state.calls[rightOpponent].grandTichu;
+  const pointCardToOpponent = Number(isPointCard(selectedCards[0]!)) + Number(isPointCard(selectedCards[2]!));
+  const pointCardToPartner = Number(isPointCard(selectedCards[1]!));
   const reasons: string[] = [
     "bounded pass search prefers low-impact singles and keeps structural resources intact"
   ];
@@ -728,10 +813,58 @@ function scorePassSelectionAction(config: {
     }
   }
 
+  const passReasonTags: string[] = [];
+  if (selfPreservationScore >= 0) {
+    passReasonTags.push("preserve_self_structure");
+  }
+  if (partnerCalled) {
+    passReasonTags.push("support_partner_tichu");
+  }
+  if (selfCalled) {
+    passReasonTags.push("protect_tichu_line");
+  }
+  if (leftOpponentCalledTichu || rightOpponentCalledTichu) {
+    passReasonTags.push("deny_opponent_tichu_help");
+  }
+  if (pointCardToOpponent === 0) {
+    passReasonTags.push("avoid_point_gifts_to_opponents");
+  }
+  if (!protectedCardPassed && !controlCardPassed) {
+    passReasonTags.push("avoid_protected_control_leaks");
+  }
+
   return {
     action: config.action,
     score,
-    reasons
+    reasons,
+    passBundle: {
+      selected_left_card_id: config.action.left,
+      selected_partner_card_id: config.action.partner,
+      selected_right_card_id: config.action.right,
+      bundle_score: score,
+      self_preservation_score: selfPreservationScore,
+      opponent_dump_score_left: config.leftScore,
+      opponent_dump_score_right: config.rightScore,
+      partner_support_score: config.partnerScore,
+      self_structure_delta:
+        removedMetrics.pairLikeCount -
+        config.handContext.pairLikeCount +
+        removedMetrics.tripleLikeCount -
+        config.handContext.tripleLikeCount +
+        removedMetrics.straightLinkCount -
+        config.handContext.straightLinkCount,
+      dead_singles_delta:
+        removedMetrics.deadSingleCount - config.handContext.deadSingleCount,
+      protected_card_passed: protectedCardPassed,
+      control_card_passed: controlCardPassed,
+      point_card_to_opponent: pointCardToOpponent,
+      point_card_to_partner: pointCardToPartner,
+      partner_called_tichu: partnerCalled,
+      self_called_tichu: selfCalled,
+      left_opponent_called_tichu: leftOpponentCalledTichu,
+      right_opponent_called_tichu: rightOpponentCalledTichu,
+      pass_reason_tags: passReasonTags
+    }
   };
 }
 
@@ -770,22 +903,34 @@ function scoreCallTichuAction(
   handContext: HandContext,
   action: Extract<LegalAction, { type: "call_tichu" }>
 ): ServerFastPathCandidate {
+  const premiumCount =
+    [...handContext.controlCardIds].filter((cardId) =>
+      ["dragon", "phoenix"].includes(cardId)
+    ).length +
+    [...handContext.byId.values()].filter(
+      (card) => isStandardCard(card) && card.rank === 14
+    ).length;
   const loserGroups =
     handContext.deadSingleCount + handContext.isolatedLowCardIds.size;
   const structuralEvidence =
     handContext.controlCardIds.size >= 4 ||
-    handContext.bombCardIds.size > 0 ||
-    (handContext.controlCardIds.size >= 3 && handContext.tripleLikeCount > 0);
+    (handContext.controlCardIds.size >= 3 &&
+      (handContext.bombCardIds.size > 0 || handContext.tripleLikeCount > 0));
   const exitEvidence =
-    handContext.deadSingleCount <= 3 &&
-    handContext.straightLinkCount + handContext.pairLikeCount * 2 >= 8 &&
-    loserGroups <= 2;
+    handContext.deadSingleCount <= 2 &&
+    handContext.isolatedLowCardIds.size <= 1 &&
+    handContext.straightLinkCount + handContext.pairLikeCount * 2 >= 9 &&
+    loserGroups <= 1;
   const clearsPredictiveScoreGate =
-    handContext.handStrength >= FAST_TICHU_CALL_THRESHOLD + 8;
+    handContext.handStrength >= FAST_TICHU_CALL_THRESHOLD + 12;
+  const premiumEvidence =
+    premiumCount >= 2 ||
+    (premiumCount >= 1 && handContext.controlCardIds.size >= 4);
   const strongEnough =
     clearsPredictiveScoreGate &&
     structuralEvidence &&
-    exitEvidence;
+    exitEvidence &&
+    premiumEvidence;
   const riskFlags = [
     ...(handContext.controlCardIds.size < 3 && handContext.bombCardIds.size === 0
       ? ["low_control"]
@@ -793,6 +938,7 @@ function scoreCallTichuAction(
     ...(handContext.deadSingleCount >= 4 ? ["too_many_dead_singles"] : []),
     ...(handContext.isolatedLowCardIds.size >= 3 ? ["fragmented_hand"] : []),
     ...(loserGroups > 2 ? ["too_many_exit_steps"] : []),
+    ...(premiumCount < 2 ? ["insufficient_premium_cards"] : []),
     ...(!exitEvidence ? ["weak_exit_path"] : [])
   ];
   const metadata = buildFastTichuMetadata({
@@ -838,11 +984,11 @@ function scoreGrandTichuActions(
 ): ServerFastPathCandidate[] {
   const structuralEvidence =
     handContext.controlCardIds.size >= 5 ||
-    (handContext.controlCardIds.size >= 4 && handContext.tripleLikeCount > 0) ||
-    handContext.bombCardIds.size > 0;
+    (handContext.controlCardIds.size >= 4 && handContext.tripleLikeCount > 0);
   const exitEvidence =
-    handContext.deadSingleCount <= 2 &&
-    handContext.straightLinkCount + handContext.pairLikeCount * 2 >= 7;
+    handContext.deadSingleCount <= 1 &&
+    handContext.isolatedLowCardIds.size <= 1 &&
+    handContext.straightLinkCount + handContext.pairLikeCount * 2 >= 9;
   const strongEnough =
     handContext.handStrength >= FAST_GRAND_TICHU_CALL_THRESHOLD &&
     structuralEvidence &&
@@ -1497,6 +1643,7 @@ export function chooseServerFastPathDecision(config: {
   state: ServerFastPathState;
   actor: SeatId;
   legalActions: LegalAction[];
+  options?: HeuristicDecisionOptions;
 }): ServerFastPathDecision {
   const handContext = buildHandContext(config.state.actorHand);
   const candidates: ServerFastPathCandidate[] = [];
@@ -1595,15 +1742,99 @@ export function chooseServerFastPathDecision(config: {
           getConcreteActionSortKey(right.action)
         )
   );
-  const selected = ordered[0];
+  const topCandidate = ordered[0];
+  if (!topCandidate) {
+    throw new Error("No bounded fast-path candidate was available for the actor.");
+  }
+
+  const exploration = resolveExplorationConfig(config.options);
+  const defaultRate =
+    exploration.profile === "training_diversity" ? 0.2 : 0.08;
+  const defaultTopN =
+    exploration.profile === "training_diversity" ? 4 : 2;
+  const defaultMaxScoreGap =
+    exploration.profile === "training_diversity" ? 20 : 8;
+  const explorationRate = exploration.rate ?? defaultRate;
+  const topN =
+    exploration.topN !== null && exploration.topN !== undefined && exploration.topN > 0
+      ? Math.floor(exploration.topN)
+      : defaultTopN;
+  const maxScoreGap =
+    exploration.maxScoreGap !== null &&
+    exploration.maxScoreGap !== undefined &&
+    exploration.maxScoreGap >= 0
+      ? exploration.maxScoreGap
+      : defaultMaxScoreGap;
+  const eligiblePool =
+    exploration.profile === "off"
+      ? [topCandidate]
+      : ordered
+          .slice(0, Math.max(1, topN))
+          .filter((candidate, index) => {
+            if (index === 0) {
+              return true;
+            }
+            if (topCandidate.score - candidate.score > maxScoreGap) {
+              return false;
+            }
+            return !candidate.reasons.some((reason) =>
+              reason.toLowerCase().includes("partner")
+            );
+          });
+  const selectionKey =
+    config.options?.selectionKey ??
+    [
+      config.actor,
+      config.state.phase,
+      ...eligiblePool.map((candidate) => `${candidate.action.type}:${candidate.score}`)
+    ].join("|");
+  const shouldExplore =
+    exploration.profile !== "off" &&
+    eligiblePool.length > 1 &&
+    deterministicUnitInterval(`${selectionKey}|explore`) < explorationRate;
+  const selected =
+    shouldExplore
+      ? eligiblePool[
+          Math.min(
+            eligiblePool.length - 1,
+            1 +
+              Math.floor(
+                deterministicUnitInterval(`${selectionKey}|pick`) *
+                  (eligiblePool.length - 1)
+              )
+          )
+        ] ?? topCandidate
+      : topCandidate;
   if (!selected) {
     throw new Error("No bounded fast-path candidate was available for the actor.");
   }
+  const selectedRank = Math.max(
+    0,
+    ordered.findIndex((candidate) => candidate === selected)
+  );
 
   return {
     actor: config.actor,
     action: selected.action,
+    selectedRank,
     candidateCount: ordered.length,
-    candidates: ordered
+    candidates: ordered,
+    exploration: {
+      exploration_enabled: exploration.profile !== "off",
+      exploration_profile: exploration.profile,
+      exploration_selected: selected !== topCandidate,
+      exploration_reason:
+        selected !== topCandidate ? `near_policy_${exploration.profile}` : null,
+      original_top_action_type: topCandidate.action.type,
+      original_top_score: topCandidate.score,
+      selected_rank_in_candidates: selectedRank,
+      selected_score: selected.score,
+      score_gap_from_top: Number((topCandidate.score - selected.score).toFixed(4)),
+      exploration_config: {
+        rate: exploration.profile === "off" ? null : explorationRate,
+        top_n: exploration.profile === "off" ? null : topN,
+        max_score_gap: exploration.profile === "off" ? null : maxScoreGap
+      }
+    }
   };
 }

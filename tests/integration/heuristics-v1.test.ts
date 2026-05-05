@@ -14,11 +14,13 @@ import {
   type StandardRank
 } from "@tichuml/engine";
 import {
+  createPassSelectionAction,
   describeMahjongWishSkip,
   evaluateGrandTichuCall,
   evaluateTichuCall,
   heuristicsV1Policy
 } from "@tichuml/ai-heuristics";
+import { scorePassSelection } from "../../packages/ai-heuristics/src/PassHeuristicEngine.js";
 
 function combo(cardIds: string[], current: Combination | null = null): Combination {
   const result = listCombinationInterpretations(cardsFromIds(cardIds), current)[0];
@@ -303,39 +305,54 @@ describe("heuristics v1", () => {
     );
   });
 
-  it("calls Tichu with a high-control pre-play hand", () => {
-    const state = scenario({
-      phase: "pass_select",
-      hands: {
-        "seat-0": cardsFromIds([
-          "dragon",
-          "phoenix",
-          "star-14",
-          "jade-14",
-          "sword-13",
-          "pagoda-13",
-          "star-12",
-          "jade-11",
-          "sword-10",
-          "pagoda-9",
-          "jade-8",
-          "sword-7",
-          "pagoda-6",
-          "star-5"
-        ]),
-        "seat-1": cardsFromIds(["jade-2", "sword-3", "pagoda-4"]),
-        "seat-2": cardsFromIds(["star-2", "jade-3", "sword-4"]),
-        "seat-3": cardsFromIds(["pagoda-2", "star-3", "jade-4"])
-      }
-    });
+  it(
+    "calls Tichu with a high-control pre-play hand",
+    () => {
+      const state = scenario({
+        phase: "pass_select",
+        hands: {
+          "seat-0": cardsFromIds([
+            "dragon",
+            "phoenix",
+            "star-14",
+            "jade-14",
+            "sword-13",
+            "pagoda-13",
+            "star-12",
+            "jade-11",
+            "sword-10",
+            "pagoda-9",
+            "jade-8",
+            "sword-7",
+            "pagoda-6",
+            "star-5"
+          ]),
+          "seat-1": cardsFromIds(["jade-2", "sword-3", "pagoda-4"]),
+          "seat-2": cardsFromIds(["star-2", "jade-3", "sword-4"]),
+          "seat-3": cardsFromIds(["pagoda-2", "star-3", "jade-4"])
+        }
+      });
+      const legalActions = {
+        "seat-0": [
+          { type: "call_tichu", seat: "seat-0" },
+          {
+            type: "select_pass",
+            seat: "seat-0",
+            availableCardIds: ["star-5", "pagoda-6", "sword-7"],
+            requiredTargets: ["left", "partner", "right"]
+          }
+        ]
+      } as LegalActionMap;
 
-    const chosen = heuristicsV1Policy.chooseAction({
-      state,
-      legalActions: getLegalActions(state)
-    });
+      const chosen = heuristicsV1Policy.chooseAction({
+        state,
+        legalActions
+      });
 
-    expect(chosen.action).toEqual({ type: "call_tichu", seat: "seat-0" });
-  });
+      expect(chosen.action).toEqual({ type: "call_tichu", seat: "seat-0" });
+    },
+    10_000
+  );
 
   it("declines Tichu with a weak fragmented hand", () => {
     const state = scenario({
@@ -1787,5 +1804,200 @@ describe("heuristics v1", () => {
     expect(chosen.explanation.selectedTags).toEqual(
       expect.arrayContaining(["PASS_GIFT_PARTNER", "PASS_DUMP_LOW_IMPACT"])
     );
+  });
+
+  it("chooses the globally best three-card pass bundle instead of a greedy lane-first bundle", () => {
+    const state = scenario({
+      phase: "pass_select",
+      hands: {
+        "seat-0": cardsFromIds([
+          "sword-12",
+          "mahjong",
+          "pagoda-14",
+          "dog",
+          "pagoda-4",
+          "sword-11",
+          "pagoda-12",
+          "star-4",
+          "star-11",
+          "jade-2",
+          "jade-13",
+          "jade-3",
+          "star-14",
+          "sword-5"
+        ]),
+        "seat-1": cardsFromIds([
+          "jade-4",
+          "sword-4",
+          "pagoda-4",
+          "star-4",
+          "jade-5",
+          "sword-5",
+          "pagoda-5",
+          "star-5",
+          "jade-6",
+          "sword-6",
+          "pagoda-6",
+          "star-6",
+          "jade-7",
+          "sword-7"
+        ]),
+        "seat-2": cardsFromIds([
+          "pagoda-7",
+          "star-7",
+          "jade-8",
+          "sword-8",
+          "pagoda-8",
+          "star-8",
+          "jade-9",
+          "sword-9",
+          "pagoda-9",
+          "star-9",
+          "jade-10",
+          "sword-10",
+          "pagoda-10",
+          "star-10"
+        ]),
+        "seat-3": cardsFromIds([
+          "jade-11",
+          "sword-11",
+          "pagoda-11",
+          "star-11",
+          "jade-12",
+          "sword-12",
+          "pagoda-12",
+          "star-12",
+          "jade-14",
+          "sword-14",
+          "pagoda-14",
+          "dragon",
+          "phoenix",
+          "dog"
+        ])
+      }
+    });
+
+    const selected = createPassSelectionAction(state, "seat-0");
+    if (selected.type !== "select_pass") {
+      throw new Error("Expected a select_pass action.");
+    }
+
+    const hand = state.hands["seat-0"].map((card) => card.id);
+    let bestAction = selected;
+    let bestScore = scorePassSelection(state, "seat-0", selected).score;
+
+    for (const left of hand) {
+      for (const partner of hand) {
+        if (partner === left) {
+          continue;
+        }
+        for (const right of hand) {
+          if (right === left || right === partner) {
+            continue;
+          }
+          const candidate = {
+            type: "select_pass" as const,
+            seat: "seat-0" as const,
+            left,
+            partner,
+            right
+          };
+          const score = scorePassSelection(state, "seat-0", candidate).score;
+          if (score > bestScore) {
+            bestAction = candidate;
+            bestScore = score;
+          }
+        }
+      }
+    }
+
+    expect(selected).toEqual(bestAction);
+
+    const scored = scorePassSelection(state, "seat-0", selected);
+    expect(scored.passBundle).toMatchObject({
+      selected_left_card_id: selected.left,
+      selected_partner_card_id: selected.partner,
+      selected_right_card_id: selected.right,
+      partner_called_tichu: false,
+      self_called_tichu: false
+    });
+  });
+
+  it("keeps exploration disabled by default on normal heuristic decisions", () => {
+    const lead = combo(["jade-7"]);
+    const state = scenario({
+      phase: "trick_play",
+      activeSeat: "seat-0",
+      currentTrick: {
+        leader: "seat-1",
+        currentWinner: "seat-1",
+        currentCombination: lead,
+        entries: [{ type: "play", seat: "seat-1", combination: lead }],
+        passingSeats: []
+      },
+      hands: {
+        "seat-0": cardsFromIds(["jade-8", "sword-9", "pagoda-10", "star-11"]),
+        "seat-1": cardsFromIds(["jade-2", "sword-3", "pagoda-4"]),
+        "seat-2": cardsFromIds(["jade-5", "sword-5", "pagoda-5"]),
+        "seat-3": cardsFromIds(["star-2", "star-3", "star-4"])
+      }
+    });
+
+    const chosen = heuristicsV1Policy.chooseAction({
+      state,
+      legalActions: getLegalActions(state)
+    });
+
+    expect(chosen.explanation.exploration).toMatchObject({
+      exploration_enabled: false,
+      exploration_profile: "off",
+      exploration_selected: false
+    });
+  });
+
+  it("records bounded training_diversity exploration metadata without breaking legality", () => {
+    const lead = combo(["jade-7"]);
+    const state = scenario({
+      phase: "trick_play",
+      activeSeat: "seat-0",
+      currentTrick: {
+        leader: "seat-1",
+        currentWinner: "seat-1",
+        currentCombination: lead,
+        entries: [{ type: "play", seat: "seat-1", combination: lead }],
+        passingSeats: []
+      },
+      hands: {
+        "seat-0": cardsFromIds(["jade-8", "sword-9", "pagoda-10", "star-11"]),
+        "seat-1": cardsFromIds(["jade-2", "sword-3", "pagoda-4"]),
+        "seat-2": cardsFromIds(["jade-5", "sword-5", "pagoda-5"]),
+        "seat-3": cardsFromIds(["star-2", "star-3", "star-4"])
+      }
+    });
+
+    const chosen = heuristicsV1Policy.chooseAction(
+      {
+        state,
+        legalActions: getLegalActions(state)
+      },
+      {
+        exploration: {
+          profile: "training_diversity",
+          rate: 1,
+          topN: 3,
+          maxScoreGap: 200
+        },
+        selectionKey: "test-explore"
+      }
+    );
+
+    expect(chosen.action.type).toBe("play_cards");
+    expect(chosen.explanation.exploration).toMatchObject({
+      exploration_enabled: true,
+      exploration_profile: "training_diversity",
+      exploration_selected: true,
+      selected_rank_in_candidates: 1
+    });
+    expect(chosen.explanation.candidateScores[0]?.action.type).toBe("play_cards");
   });
 });

@@ -48,21 +48,35 @@ function serializeStartupError(error: unknown): Record<string, unknown> {
 
 export async function startServer() {
   const serverConfig = loadServerConfig();
+  console.info("[server] startup", {
+    stage: "config_loaded",
+    host: serverConfig.host,
+    port: serverConfig.port,
+    autoBootstrapDatabase: serverConfig.autoBootstrapDatabase,
+    autoMigrate: serverConfig.autoMigrate
+  });
+
+  console.info("[server] startup", { stage: "database_ready_begin" });
   await ensureDatabaseReady({
     databaseUrl: serverConfig.databaseUrl,
     bootstrapUrl: serverConfig.pgBootstrapUrl,
     autoBootstrapDatabase: serverConfig.autoBootstrapDatabase,
     autoMigrate: serverConfig.autoMigrate
   });
+  console.info("[server] startup", { stage: "database_ready_complete" });
 
   const sql = createDatabaseClient(serverConfig.databaseUrl);
+  console.info("[server] startup", { stage: "database_client_created" });
   const repository = new PostgresTelemetryRepository(sql);
+  console.info("[server] startup", { stage: "repository_created" });
   const lightgbmScorer = createLightgbmScorer(serverConfig);
+  console.info("[server] startup", { stage: "lightgbm_scorer_created" });
   const server = createAppServer({
     serverConfig,
     repository,
     lightgbmScorer
   });
+  console.info("[server] startup", { stage: "http_server_created" });
 
   await new Promise<void>((resolve) => {
     server.listen(serverConfig.port, serverConfig.host, () => {

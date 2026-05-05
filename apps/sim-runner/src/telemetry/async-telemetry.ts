@@ -230,9 +230,10 @@ export class AsyncTelemetryManager {
   private lastFailureReason: string | null = null;
   private fatalError: Error | null = null;
   private lastFailure: TelemetryWriteResult | undefined;
+  private flushAborting = false;
 
   constructor(private readonly options: AsyncTelemetryManagerOptions) {
-    this.maxConcurrency = Math.max(1, options.maxConcurrency ?? 2);
+    this.maxConcurrency = Math.max(1, options.maxConcurrency ?? 4);
     this.maxQueueDepth = Math.max(1, options.maxQueueDepth ?? 256);
     this.storageRoot = options.storageRoot;
     this.pendingRoot = pendingDir(this.storageRoot);
@@ -412,6 +413,11 @@ export class AsyncTelemetryManager {
   }
 
   private pump(): void {
+    if (this.flushAborting) {
+      this.emitSnapshot();
+      this.throwIfFatal();
+      return;
+    }
     while (this.queue.length > 0 && this.inFlight < this.maxConcurrency) {
       const item = this.queue.shift();
       if (!item) {
@@ -450,7 +456,9 @@ export class AsyncTelemetryManager {
             this.pending.delete(task);
           }
           this.emitSnapshot();
-          this.pump();
+          if (!this.flushAborting) {
+            this.pump();
+          }
         }
       })();
       this.pending.add(task);
@@ -529,12 +537,14 @@ export class AsyncTelemetryManager {
   }
 
   async flush(timeoutMs: number): Promise<void> {
-    const deadlineAt = Date.now() + Math.max(1, timeoutMs);
-    while (this.queue.length > 0 || this.inFlight > 0) {
-      if (Date.now() >= deadlineAt) {
-        break;
+    if (timeoutMs > 0) {
+      const deadlineAt = Date.now() + timeoutMs;
+      while (this.queue.length > 0 || this.inFlight > 0) {
+        if (Date.now() >= deadlineAt) {
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 5));
       }
-      await new Promise((resolve) => setTimeout(resolve, 10));
     }
 
     if (this.queue.length === 0 && this.inFlight === 0) {
@@ -542,6 +552,7 @@ export class AsyncTelemetryManager {
       return;
     }
 
+    this.flushAborting = true;
     for (const controller of this.controllers) {
       controller.abort();
     }
@@ -565,6 +576,7 @@ export class AsyncTelemetryManager {
         diagnostics: []
       });
     }
+    this.flushAborting = false;
     this.emitSnapshot();
   }
 
@@ -585,6 +597,10 @@ export class AsyncTelemetryManager {
       ]
     );
     const endpointValues = endpointStates.map(([, value]) => value);
+    const aggregatePendingCount = endpointValues.reduce(
+      (sum, value) => sum + value.pending_count,
+      0
+    );
     const nextRetry = endpointValues
       .map((value) => value.next_retry_at)
       .filter((value): value is string => typeof value === "string")
@@ -596,7 +612,8 @@ export class AsyncTelemetryManager {
       accepted_count: this.acceptedCount,
       failed_count: this.failedCount,
       dropped_count: this.droppedCount,
-      pending_count: this.pendingCount,
+      pending_count: aggregatePendingCount,
+      persisted_pending_file_count: this.pendingCount,
       last_success_at: this.lastSuccessAt,
       last_failure_at: this.lastFailureAt,
       last_failure_reason: this.lastFailureReason,

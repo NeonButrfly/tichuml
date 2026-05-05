@@ -369,7 +369,7 @@ describe("server heuristic fast path", () => {
     expect(callCandidate?.score).toBeLessThan(-10_000);
     expect(callCandidate?.tichuCall).toMatchObject({
       tichu_call_score: 187,
-      tichu_call_threshold: 245,
+      tichu_call_threshold: 300,
       tichu_call_reason: "decline_below_threshold",
       tichu_call_selected: false
     });

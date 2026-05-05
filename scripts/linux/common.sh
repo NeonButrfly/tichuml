@@ -25,6 +25,10 @@ common_resolve_repo_root() {
   return 1
 }
 
+resolve_repo_root() {
+  common_resolve_repo_root "$1"
+}
+
 common_require_repo_root() {
   local repo_root="$1"
   if [ ! -d "$repo_root" ]; then
@@ -37,6 +41,12 @@ common_require_repo_root() {
   fi
 }
 
+cd_repo_root() {
+  local repo_root="$1"
+  common_require_repo_root "$repo_root"
+  cd "$repo_root"
+}
+
 common_require_repo_file() {
   local repo_root="$1"
   local relative_path="$2"
@@ -47,4 +57,20 @@ common_require_repo_file() {
     return 1
   fi
   printf '%s\n' "$resolved"
+}
+
+require_command() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    printf 'Missing required command: %s\n' "$1" >&2
+    return 1
+  fi
+}
+
+require_file() {
+  local file_path="$1"
+  local description="${2:-Required file}"
+  if [ ! -e "$file_path" ]; then
+    printf '%s is missing: %s\n' "$description" "$file_path" >&2
+    return 1
+  fi
 }

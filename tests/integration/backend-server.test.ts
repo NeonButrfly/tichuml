@@ -1106,9 +1106,9 @@ describe("backend foundation server routes", () => {
       expect(payload.provider_used).toBe("server_heuristic");
       expect(payload.chosen_action.type).toBeDefined();
       expect(payload.telemetry_id).toBeGreaterThan(0);
-      expect(payload.metadata?.scoring_path).toBe("fast_path");
+      expect(payload.metadata?.scoring_path).toBe("rich_path");
       expect(payload.metadata?.timing).toMatchObject({
-        scoring_path: "fast_path"
+        scoring_path: "rich_path"
       });
       expect(repository.decisions).toHaveLength(1);
       expect(repository.decisions[0]?.policy_source).toBe("server_heuristic");
@@ -1124,7 +1124,7 @@ describe("backend foundation server routes", () => {
       expect(repository.decisions[0]?.legal_action_count).toBeGreaterThan(0);
       expect(repository.decisions[0]?.has_candidate_scores).toBe(true);
       expect(repository.decisions[0]?.metadata.telemetry_state_raw_source).toBe(
-        "synthesized_fast_path"
+        undefined
       );
     });
   });

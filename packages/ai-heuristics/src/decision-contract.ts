@@ -161,6 +161,16 @@ function buildFastPathLegalActionPayload(
   return boundedActions.length > 0 ? boundedActions : actorActions;
 }
 
+function shouldUseRichServerHeuristicScoring(config: {
+  state: GameState;
+  actor: SeatId;
+  legalActions: LegalActionMap;
+}): boolean {
+  void config.actor;
+  void config.legalActions;
+  return config.state.phase === "grand_tichu_window";
+}
+
 export function createCanonicalDecisionLegalActions(config: {
   state: GameState;
   legalActions: LegalActionMap;
@@ -202,13 +212,29 @@ export function createCanonicalDecisionLegalActions(config: {
 }
 
 function determineScoringPath(config: {
+  state: GameState;
+  legalActions: LegalActionMap;
   requestedProvider: RequestedDecisionProvider;
   fullStateDecisionRequests?: boolean;
+  actorSeat: SeatId;
 }): DecisionScoringPath {
   if (config.requestedProvider === "lightgbm_model") {
     return "rich_path";
   }
-  return config.fullStateDecisionRequests === true ? "rich_path" : "fast_path";
+  if (config.fullStateDecisionRequests === true) {
+    return "rich_path";
+  }
+  if (
+    config.requestedProvider === "server_heuristic" &&
+    shouldUseRichServerHeuristicScoring({
+      state: config.state,
+      actor: config.actorSeat,
+      legalActions: config.legalActions
+    })
+  ) {
+    return "rich_path";
+  }
+  return "fast_path";
 }
 
 function buildDecisionRequestStateNorm(config: {
@@ -278,7 +304,10 @@ export function buildCanonicalDecisionRequest(config: {
 }): CanonicalDecisionRequestBuildResult {
   const actorSeat = config.actorSeat ?? getCanonicalActiveSeatFromState(config.state);
   const scoringPath = determineScoringPath({
+    state: config.state,
+    legalActions: config.legalActions,
     requestedProvider: config.requestedProvider,
+    actorSeat,
     ...(config.fullStateDecisionRequests !== undefined
       ? { fullStateDecisionRequests: config.fullStateDecisionRequests }
       : {})

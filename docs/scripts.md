@@ -336,6 +336,22 @@ Key operator rules:
   `npm run ml:export -- --run-id <run_id> --game-id-prefix <game_id_prefix> --output-dir training-runs/<run_id>/ml`
 - Manual ML output is written under `training-runs/<run_id>/ml` and includes
   LightGBM-ready metadata such as `dataset_metadata.json`,
-  `feature_columns.json`, and `label_columns.json`.
+  `feature_columns.json`, `label_columns.json`, and `validation_report.json`.
+- Clean baseline training should keep exploration off:
+  `--exploration-profile off`
+- Separate diversity/scenario runs may opt in explicitly:
+  `--exploration-profile training_diversity`
+- The training wrappers, simulator CLI, `.env`, and admin sim controls now
+  default exploration to `off`. Do not silently mix exploration-selected rows
+  into the baseline LightGBM export.
+- Run-scoped validation is now available from repo root:
+  `powershell -ExecutionPolicy Bypass -File scripts\validate-training-run.ps1 --game-id-prefix <prefix>`
+- Linux or npm equivalents are:
+  `scripts/validate-training-run.sh --game-id-prefix <prefix>`
+  and `npm run telemetry:validate-run -- --game-id-prefix <prefix>`
+- `ml:export --validate-only` now checks for a clean chosen-decision training
+  slice, grouped-by-game split readiness, leakage-denylist enforcement, and
+  default exploration exclusion rather than only confirming that raw telemetry
+  rows exist.
 - Direct simulator fallback from repo root remains:
   `cd C:\tichu\tichuml; npm.cmd run sim -- --games 1000 --provider server_heuristic --backend-url http://127.0.0.1:4310 --telemetry true --strict-telemetry false --telemetry-mode full --seed training-manual-20260504-01 --seed-prefix training-data --game-id-prefix selfplay-training-manual-20260504-01 --decision-timeout-ms 2000 --progress`

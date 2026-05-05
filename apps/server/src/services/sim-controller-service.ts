@@ -424,8 +424,24 @@ export class FileSimControllerService implements SimControllerService {
       "--telemetry-backoff-ms",
       String(resolved.config.telemetry_backoff_ms),
       "--backend-url",
-      resolved.config.backend_url
+      resolved.config.backend_url,
+      "--exploration-profile",
+      resolved.config.exploration_profile ?? "off"
     ];
+    if (resolved.config.exploration_profile !== "off") {
+      if (resolved.config.exploration_rate !== null) {
+        args.push("--exploration-rate", String(resolved.config.exploration_rate));
+      }
+      if (resolved.config.exploration_top_n !== null) {
+        args.push("--exploration-top-n", String(resolved.config.exploration_top_n));
+      }
+      if (resolved.config.exploration_max_score_gap !== null) {
+        args.push(
+          "--exploration-max-score-gap",
+          String(resolved.config.exploration_max_score_gap)
+        );
+      }
+    }
     for (const [seat, provider] of Object.entries(resolved.config.seat_providers)) {
       args.push("--seat-provider", `${seat}=${provider}`);
     }
@@ -493,6 +509,8 @@ export class FileSimControllerService implements SimControllerService {
       String(resolved.config.telemetry_backoff_ms),
       "--backend-url",
       resolved.config.backend_url,
+      "--exploration-profile",
+      resolved.config.exploration_profile ?? "off",
       "--runtime-file",
       this.paths.runtimePath,
       "--lock-file",
@@ -504,6 +522,20 @@ export class FileSimControllerService implements SimControllerService {
       "--log-file",
       this.paths.logPath
     ];
+    if (resolved.config.exploration_profile !== "off") {
+      if (resolved.config.exploration_rate !== null) {
+        args.push("--exploration-rate", String(resolved.config.exploration_rate));
+      }
+      if (resolved.config.exploration_top_n !== null) {
+        args.push("--exploration-top-n", String(resolved.config.exploration_top_n));
+      }
+      if (resolved.config.exploration_max_score_gap !== null) {
+        args.push(
+          "--exploration-max-score-gap",
+          String(resolved.config.exploration_max_score_gap)
+        );
+      }
+    }
     for (const [seat, provider] of Object.entries(resolved.config.seat_providers)) {
       args.push("--seat-provider", `${seat}=${provider}`);
     }
@@ -888,6 +920,29 @@ export class FileSimControllerService implements SimControllerService {
               payload.seed_prefix.length > 0
             ? payload.seed_prefix
             : "controller",
+      exploration_profile:
+        payload.exploration_profile === "conservative" ||
+        payload.exploration_profile === "training_diversity"
+          ? payload.exploration_profile
+          : "off",
+      exploration_rate:
+        typeof payload.exploration_rate === "number" &&
+        Number.isFinite(payload.exploration_rate) &&
+        payload.exploration_rate > 0
+          ? payload.exploration_rate
+          : null,
+      exploration_top_n:
+        typeof payload.exploration_top_n === "number" &&
+        Number.isFinite(payload.exploration_top_n) &&
+        payload.exploration_top_n > 0
+          ? Math.floor(payload.exploration_top_n)
+          : null,
+      exploration_max_score_gap:
+        typeof payload.exploration_max_score_gap === "number" &&
+        Number.isFinite(payload.exploration_max_score_gap) &&
+        payload.exploration_max_score_gap >= 0
+          ? payload.exploration_max_score_gap
+          : null,
       sleep_seconds: Math.max(0, Number(payload.sleep_seconds ?? 5)),
       worker_count: workerCount,
       quiet: payload.quiet === true,
@@ -929,7 +984,12 @@ export class FileSimControllerService implements SimControllerService {
       seed_namespace: state.config.seed_namespace ?? state.config.seed_prefix ?? "controller",
       manual_seed_override_enabled:
         state.config.manual_seed_override_enabled ?? false,
-      manual_seed_override: state.config.manual_seed_override ?? ""
+      manual_seed_override: state.config.manual_seed_override ?? "",
+      exploration_profile: state.config.exploration_profile ?? "off",
+      exploration_rate: state.config.exploration_rate ?? null,
+      exploration_top_n: state.config.exploration_top_n ?? null,
+      exploration_max_score_gap:
+        state.config.exploration_max_score_gap ?? null
     };
     const workersById = new Map<string, SimWorkerRuntimeState>();
     for (const worker of state.workers) {

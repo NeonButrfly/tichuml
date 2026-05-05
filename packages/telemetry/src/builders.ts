@@ -77,6 +77,7 @@ export type DecisionRecord = {
       tags: string[];
       mahjongWish?: JsonObject;
       tichuCall?: JsonObject;
+      passBundle?: JsonObject;
       teamplay?: {
         partnerCalledTichu: boolean;
         partnerStillLiveForTichu: boolean;
@@ -95,6 +96,7 @@ export type DecisionRecord = {
     selectedTags: string[];
     selectedMahjongWish?: JsonObject;
     selectedTichuCall?: JsonObject;
+    selectedPassBundle?: JsonObject;
     selectedTeamplay?: {
       partnerCalledTichu: boolean;
       partnerStillLiveForTichu: boolean;
@@ -195,7 +197,7 @@ export function createTelemetrySession(): TelemetrySession {
 
 function readExplanationField(
   explanation: SeedJsonValue | null | undefined,
-  key: "candidateScores" | "stateFeatures"
+  key: "candidateScores" | "stateFeatures" | "exploration"
 ): SeedJsonValue | null {
   if (
     typeof explanation !== "object" ||
@@ -985,6 +987,8 @@ export function buildTelemetryDecisionPayloads(config: {
   const candidateScores =
     config.candidateScores ??
     readExplanationField(explanation, "candidateScores");
+  const exploration =
+    readExplanationField(explanation, "exploration") as JsonObject | null;
   const providedStateFeatures =
     config.stateFeatures ??
     (readExplanationField(explanation, "stateFeatures") as JsonObject | null);
@@ -1018,12 +1022,58 @@ export function buildTelemetryDecisionPayloads(config: {
       requested_provider: config.requestedProvider,
       provider_used: config.providerUsed,
       ...candidateScoreCoverage,
-      ...(config.mode === "full" && explanation ? { explanation } : {}),
-      ...(config.metadata ?? {}),
-      ...compactMetadata,
-      requested_provider_canonical: requestedProviderCanonical,
-      provider_used_canonical: providerUsedCanonical,
-      fallback_used: fallbackUsed
+        ...(config.mode === "full" && explanation ? { explanation } : {}),
+        ...(config.metadata ?? {}),
+        ...compactMetadata,
+        exploration_enabled:
+          typeof exploration?.exploration_enabled === "boolean"
+            ? exploration.exploration_enabled
+            : false,
+        exploration_profile:
+          typeof exploration?.exploration_profile === "string"
+            ? exploration.exploration_profile
+            : "off",
+        exploration_selected:
+          typeof exploration?.exploration_selected === "boolean"
+            ? exploration.exploration_selected
+            : false,
+        exploration_reason:
+          typeof exploration?.exploration_reason === "string"
+            ? exploration.exploration_reason
+            : null,
+        original_top_action_type:
+          typeof exploration?.original_top_action_type === "string"
+            ? exploration.original_top_action_type
+            : null,
+        original_top_score:
+          typeof exploration?.original_top_score === "number"
+            ? exploration.original_top_score
+            : null,
+        selected_rank_in_candidates:
+          typeof exploration?.selected_rank_in_candidates === "number"
+            ? exploration.selected_rank_in_candidates
+            : null,
+        selected_score:
+          typeof exploration?.selected_score === "number"
+            ? exploration.selected_score
+            : null,
+        score_gap_from_top:
+          typeof exploration?.score_gap_from_top === "number"
+            ? exploration.score_gap_from_top
+            : null,
+        exploration_config:
+          exploration?.exploration_config &&
+          typeof exploration.exploration_config === "object" &&
+          !Array.isArray(exploration.exploration_config)
+            ? exploration.exploration_config
+            : {
+                rate: null,
+                top_n: null,
+                max_score_gap: null
+              },
+        requested_provider_canonical: requestedProviderCanonical,
+        provider_used_canonical: providerUsedCanonical,
+        fallback_used: fallbackUsed
     },
     workerId: config.workerId,
     controllerMode: config.controllerMode

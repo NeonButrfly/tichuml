@@ -533,6 +533,72 @@ async function renderLastTenGames(
   return lines.join("\n");
 }
 
+function isPidAlive(pid: number | null): boolean {
+  if (!pid || !Number.isInteger(pid) || pid <= 0) {
+    return false;
+  }
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function readPidValue(pidFile: string): number | null {
+  if (!fs.existsSync(pidFile)) {
+    return null;
+  }
+  const raw = fs.readFileSync(pidFile, "utf8").trim();
+  if (!/^\d+$/u.test(raw)) {
+    return null;
+  }
+  return Number.parseInt(raw, 10);
+}
+
+function readLogTail(filePath: string, tailLines: number): string[] {
+  if (!fs.existsSync(filePath)) {
+    return [];
+  }
+  return fs
+    .readFileSync(filePath, "utf8")
+    .split(/\r?\n/u)
+    .filter((line) => line.trim().length > 0)
+    .slice(-Math.max(1, tailLines));
+}
+
+async function collectScopedLatestTimestamps(
+  sql: ReturnType<typeof createDatabaseClient>,
+  prefix: string
+): Promise<{
+  latestDecisionTs: string | null;
+  latestEventTs: string | null;
+}> {
+  const likeValue = `${prefix}%`;
+  const [row] = await sql<
+    Array<{
+      latest_decision_ts: string | null;
+      latest_event_ts: string | null;
+    }>
+  >`
+    SELECT
+      (
+        SELECT MAX(created_at)::text
+        FROM decisions
+        WHERE game_id LIKE ${likeValue}
+      ) AS latest_decision_ts,
+      (
+        SELECT MAX(created_at)::text
+        FROM events
+        WHERE game_id LIKE ${likeValue}
+      ) AS latest_event_ts
+  `;
+  return {
+    latestDecisionTs: row?.latest_decision_ts ?? null,
+    latestEventTs: row?.latest_event_ts ?? null,
+  };
+}
+
 function buildScopedSelect(table: "matches" | "decisions" | "events", prefix: string): string {
   return `SELECT * FROM ${table} WHERE game_id LIKE '${escapeSqlLiteral(prefix)}%' ORDER BY game_id ASC`;
 }
@@ -756,7 +822,15 @@ async function prepareRun(options: CliOptions): Promise<void> {
   );
   const controlDirectory = path.join(runDirectory, "control");
   const requestedGames = optionNumber(options, "games-per-batch", 1000);
-  const decisionTimeoutMs = optionNumber(options, "decision-timeout-ms", 500);
+  const decisionTimeoutMs = optionNumber(options, "decision-timeout-ms", 2000);
+  const explorationProfile = optionString(options, "exploration-profile", "off");
+  const explorationRate = optionNumber(options, "exploration-rate", 0);
+  const explorationTopN = optionNumber(options, "exploration-top-n", 0);
+  const explorationMaxScoreGap = optionNumber(
+    options,
+    "exploration-max-score-gap",
+    0
+  );
   const metadata: TrainingMetadata = {
     run_id: runId,
     session_name: sessionName,
@@ -789,6 +863,10 @@ async function prepareRun(options: CliOptions): Promise<void> {
     strict_telemetry: optionBoolean(options, "strict-telemetry", false),
     telemetry_mode: optionString(options, "telemetry-mode", "full"),
     decision_timeout_ms: decisionTimeoutMs,
+    exploration_profile: explorationProfile,
+    exploration_rate: explorationRate,
+    exploration_top_n: explorationTopN,
+    exploration_max_score_gap: explorationMaxScoreGap,
     decision_request_mode: "fast_path_default",
     pg_host: optionString(options, "pg-host"),
     pg_port: optionString(options, "pg-port"),
@@ -842,6 +920,13 @@ async function prepareRun(options: CliOptions): Promise<void> {
     run_complete: false,
     failure_reason: null,
     sim_exit_code: null,
+    sim_exit_signal: null,
+    sim_command: null,
+    sim_args: [],
+    sim_cwd: repoRoot,
+    sim_child_started_at: null,
+    sim_child_finished_at: null,
+    output_tail: [],
     enobufs_detected: false,
     run_seed_info: runSeedInfo,
   };
@@ -916,6 +1001,91 @@ async function verifyRunOnce(options: CliOptions): Promise<void> {
   } finally {
     await sql.end({ timeout: 5 });
   }
+}
+
+async function statusRun(options: CliOptions): Promise<void> {
+  const metadataFile = path.resolve(optionString(options, "metadata-file"));
+  const metadata = loadMetadata(metadataFile);
+  const tailLines = optionNumber(options, "tail-lines", 20);
+  const prefix = scopePrefix(metadata);
+  const pid = readPidValue(metadataString(metadata, "pid_file"));
+  const processRunning = isPidAlive(pid);
+  const backendHealthyNow = await backendHealthy(
+    metadataString(metadata, "backend_url")
+  );
+
+  let dbConnected = false;
+  let snapshot: VerificationSnapshot | null = null;
+  let latestDecisionTs: string | null = null;
+  let latestEventTs: string | null = null;
+  let lastTenGames = "";
+
+  const sql = createDatabaseClient({
+    host: metadataString(metadata, "pg_host"),
+    port: Number(metadataString(metadata, "pg_port")),
+    user: metadataString(metadata, "pg_user"),
+    password: resolvePassword(options),
+    database: metadataString(metadata, "pg_db"),
+  });
+  try {
+    snapshot = await buildVerificationSnapshot(metadata, sql);
+    dbConnected = true;
+    const timestamps = await collectScopedLatestTimestamps(sql, prefix);
+    latestDecisionTs = timestamps.latestDecisionTs;
+    latestEventTs = timestamps.latestEventTs;
+    lastTenGames = await renderLastTenGames(sql, prefix);
+  } catch {
+    dbConnected = false;
+  } finally {
+    await sql.end({ timeout: 5 }).catch(() => undefined);
+  }
+
+  const report = {
+    run_id: metadataString(metadata, "run_id"),
+    session_name: metadataString(metadata, "session_name"),
+    process_id: pid,
+    process_running: processRunning,
+    game_id_prefix: prefix,
+    run_directory: metadataString(metadata, "run_directory"),
+    metadata_file: metadataFile,
+    run_log: metadataString(metadata, "run_log"),
+    verification_log: metadataString(metadata, "verification_log"),
+    latest_log_lines: readLogTail(metadataString(metadata, "run_log"), tailLines),
+    latest_verification_lines: readLogTail(
+      metadataString(metadata, "verification_log"),
+      Math.min(10, tailLines)
+    ),
+    completed_scoped_matches:
+      snapshot?.scoped_counts.matches ?? metadata["completed_scoped_matches"] ?? 0,
+    completed_scoped_decisions:
+      snapshot?.scoped_counts.decisions ?? metadata["completed_scoped_decisions"] ?? 0,
+    completed_scoped_events:
+      snapshot?.scoped_counts.events ?? metadata["completed_scoped_events"] ?? 0,
+    sim_exit_code: metadata["sim_exit_code"] ?? null,
+    sim_exit_signal: metadata["sim_exit_signal"] ?? null,
+    failure_reason: metadata["failure_reason"] ?? null,
+    output_tail: metadata["output_tail"] ?? [],
+    backend_healthy: backendHealthyNow,
+    db_connected: dbConnected,
+    latest_decision_ts: latestDecisionTs,
+    latest_event_ts: latestEventTs,
+    scoped_snapshot: snapshot,
+    last_10_games: lastTenGames,
+    telemetry_failures: {
+      fallback_count: metadata["fallback_count"] ?? 0,
+      decision_provider_failures:
+        metadata["decision_provider_failures"] ?? 0,
+      decision_timeout_count: metadata["decision_timeout_count"] ?? 0,
+    },
+    exploration: {
+      profile: metadata["exploration_profile"] ?? "off",
+      rate: metadata["exploration_rate"] ?? 0,
+      top_n: metadata["exploration_top_n"] ?? 0,
+      max_score_gap: metadata["exploration_max_score_gap"] ?? 0,
+    },
+  };
+
+  process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
 }
 
 async function finalizeRun(metadata: TrainingMetadata, pgPassword: string): Promise<void> {
@@ -1048,7 +1218,24 @@ export function buildTrainingSimArgs(config: {
   batchGameIdPrefix: string;
 }): string[] {
   const decisionTimeoutMs =
-    metadataOptionalNumber(config.metadata, "decision_timeout_ms") ?? 500;
+    metadataOptionalNumber(config.metadata, "decision_timeout_ms") ?? 2000;
+  const explorationProfile =
+    typeof config.metadata["exploration_profile"] === "string" &&
+    `${config.metadata["exploration_profile"]}`.trim().length > 0
+      ? `${config.metadata["exploration_profile"]}`.trim()
+      : "off";
+  const explorationRate = metadataOptionalNumber(
+    config.metadata,
+    "exploration_rate"
+  );
+  const explorationTopN = metadataOptionalNumber(
+    config.metadata,
+    "exploration_top_n"
+  );
+  const explorationMaxScoreGap = metadataOptionalNumber(
+    config.metadata,
+    "exploration_max_score_gap"
+  );
   const args = [
     "run",
     "sim",
@@ -1080,6 +1267,21 @@ export function buildTrainingSimArgs(config: {
   ];
   if (decisionTimeoutMs > 0) {
     args.push("--decision-timeout-ms", String(decisionTimeoutMs));
+  }
+  args.push("--exploration-profile", explorationProfile);
+  if (explorationProfile !== "off") {
+    if (explorationRate !== null && explorationRate > 0) {
+      args.push("--exploration-rate", String(explorationRate));
+    }
+    if (explorationTopN !== null && explorationTopN > 0) {
+      args.push("--exploration-top-n", String(explorationTopN));
+    }
+    if (explorationMaxScoreGap !== null && explorationMaxScoreGap > 0) {
+      args.push(
+        "--exploration-max-score-gap",
+        String(explorationMaxScoreGap)
+      );
+    }
   }
   args.push("--progress");
   return args;
@@ -1188,19 +1390,47 @@ async function runLoop(options: CliOptions): Promise<void> {
           args,
         })
       );
-      const result = await runStreamingProcess({
-        command: npmCommand,
-        args,
-        cwd: repoRoot,
-        logFile: runLog,
-        mirrorToParent: true,
-      });
+      let result;
+      try {
+        result = await runStreamingProcess({
+          command: npmCommand,
+          args,
+          cwd: repoRoot,
+          logFile: runLog,
+          mirrorToParent: true,
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        metadata.sim_exit_code = 1;
+        metadata.sim_exit_signal = null;
+        metadata.sim_command = command;
+        metadata.sim_args = args;
+        metadata.sim_cwd = repoRoot;
+        metadata.sim_child_started_at = nowIso();
+        metadata.sim_child_finished_at = nowIso();
+        metadata.output_tail = [errorMessage];
+        metadata.failure_reason = `sim launch failed: ${errorMessage}`;
+        saveMetadata(metadataFile, metadata);
+        appendLine(
+          runLog,
+          JSON.stringify({
+            ts: nowIso(),
+            event: "batch_launch_failure",
+            batch_id: batchId,
+            command,
+            error: errorMessage,
+          })
+        );
+        fatalError = new Error(metadata.failure_reason);
+        break;
+      }
       metadata.sim_exit_code = result.exitCode;
       metadata.sim_exit_signal = result.signal;
       metadata.sim_command = command;
       metadata.sim_args = args;
-      metadata.sim_started_at = result.startedAt;
-      metadata.sim_finished_at = result.finishedAt;
+      metadata.sim_cwd = repoRoot;
+      metadata.sim_child_started_at = result.startedAt;
+      metadata.sim_child_finished_at = result.finishedAt;
       metadata.output_tail = result.outputTail;
       metadata.enobufs_detected =
         metadata.enobufs_detected === true || result.enobufsDetected;
@@ -1388,6 +1618,10 @@ async function main(): Promise<void> {
   }
   if (command === "verify-run") {
     await verifyRunOnce(options);
+    return;
+  }
+  if (command === "status-run") {
+    await statusRun(options);
     return;
   }
   if (command === "run-loop") {

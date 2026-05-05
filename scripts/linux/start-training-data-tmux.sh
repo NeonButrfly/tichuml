@@ -45,9 +45,17 @@ Simulation:
   --strict-telemetry <true|false>
       Whether telemetry failures should be strict. Default: false
   --decision-timeout-ms <milliseconds>
-      Diagnostic escape hatch for backend decision timeouts. Default: 500
+      Diagnostic escape hatch for backend decision timeouts. Default: 2000
   --interval-seconds <seconds>
       Seconds between scoped verification snapshots. Default: 15
+  --exploration-profile <off|conservative|training_diversity>
+      Exploration profile for explicit diversity runs. Default: off
+  --exploration-rate <number>
+      Optional near-policy exploration rate. Ignored when profile is off.
+  --exploration-top-n <count>
+      Optional bounded top-N pool for exploration. Ignored when profile is off.
+  --exploration-max-score-gap <number>
+      Optional score-gap cap for exploration. Ignored when profile is off.
 
 Database:
   --pg-host <host>
@@ -148,7 +156,11 @@ GAMES=1000
 PROVIDER="server_heuristic"
 BACKEND_URL="http://127.0.0.1:4310"
 STRICT_TELEMETRY="false"
-DECISION_TIMEOUT_MS="500"
+DECISION_TIMEOUT_MS="2000"
+EXPLORATION_PROFILE="off"
+EXPLORATION_RATE="0"
+EXPLORATION_TOP_N="0"
+EXPLORATION_MAX_SCORE_GAP="0"
 PG_HOST="127.0.0.1"
 PG_PORT="54329"
 PG_USER="tichu"
@@ -194,6 +206,22 @@ while (($#)); do
       ;;
     --decision-timeout-ms)
       DECISION_TIMEOUT_MS="${2:?missing value for --decision-timeout-ms}"
+      shift 2
+      ;;
+    --exploration-profile)
+      EXPLORATION_PROFILE="${2:?missing value for --exploration-profile}"
+      shift 2
+      ;;
+    --exploration-rate)
+      EXPLORATION_RATE="${2:?missing value for --exploration-rate}"
+      shift 2
+      ;;
+    --exploration-top-n)
+      EXPLORATION_TOP_N="${2:?missing value for --exploration-top-n}"
+      shift 2
+      ;;
+    --exploration-max-score-gap)
+      EXPLORATION_MAX_SCORE_GAP="${2:?missing value for --exploration-max-score-gap}"
       shift 2
       ;;
     --pg-host)
@@ -299,6 +327,10 @@ prepare_args=(
   --strict-telemetry "$STRICT_TELEMETRY"
   --telemetry-mode "full"
   --decision-timeout-ms "$DECISION_TIMEOUT_MS"
+  --exploration-profile "$EXPLORATION_PROFILE"
+  --exploration-rate "$EXPLORATION_RATE"
+  --exploration-top-n "$EXPLORATION_TOP_N"
+  --exploration-max-score-gap "$EXPLORATION_MAX_SCORE_GAP"
   --pg-host "$PG_HOST"
   --pg-port "$PG_PORT"
   --pg-user "$PG_USER"
@@ -350,6 +382,10 @@ if [[ "$DRY_RUN" == "true" ]]; then
   echo "Run directory: $RUN_DIR"
   echo "Archive path: $ARCHIVE_PATH"
   echo "Decision timeout ms: $DECISION_TIMEOUT_MS"
+  echo "Exploration profile: $EXPLORATION_PROFILE"
+  echo "Exploration rate: $EXPLORATION_RATE"
+  echo "Exploration top-N: $EXPLORATION_TOP_N"
+  echo "Exploration max score gap: $EXPLORATION_MAX_SCORE_GAP"
   echo "Decision request mode: fast_path_default"
   echo "Clear SQL: $TRAINING_CLEAR_SQL"
   echo "Scoped export filter: game_id LIKE '${GAME_ID_PREFIX}%'"

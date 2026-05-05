@@ -121,6 +121,8 @@ describe("training run helpers", () => {
       "abc123",
       "--decision-timeout-ms",
       "2000",
+      "--exploration-profile",
+      "off",
       "--progress"
     ]);
     expect(
@@ -129,6 +131,39 @@ describe("training run helpers", () => {
         args
       )
     ).toContain("--progress");
+  });
+
+  it("carries explicit exploration controls into the training sim command", () => {
+    const args = buildTrainingSimArgs({
+      metadata: {
+        run_id: "training-20260504-000000-deadbeef",
+        provider: "server_heuristic",
+        backend_url: "http://127.0.0.1:4310",
+        strict_telemetry: false,
+        telemetry_mode: "full",
+        seed_hash: "abc123",
+        decision_timeout_ms: 2000,
+        game_id_prefix: "selfplay-training-20260504-000000-deadbeef",
+        exploration_profile: "training_diversity",
+        exploration_rate: 0.15,
+        exploration_top_n: 3,
+        exploration_max_score_gap: 12
+      },
+      remainingGames: 2,
+      batchId: "batch-000002",
+      batchSeed: "feedfacefeedfacefeedfacefeedface",
+      batchGameIdPrefix:
+        "selfplay-training-20260504-000000-deadbeef-batch-000002"
+    });
+
+    expect(args).toContain("--exploration-profile");
+    expect(args).toContain("training_diversity");
+    expect(args).toContain("--exploration-rate");
+    expect(args).toContain("0.15");
+    expect(args).toContain("--exploration-top-n");
+    expect(args).toContain("3");
+    expect(args).toContain("--exploration-max-score-gap");
+    expect(args).toContain("12");
   });
 
   it("parses compact sim summaries from streaming training output", () => {

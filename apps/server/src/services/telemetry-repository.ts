@@ -128,6 +128,17 @@ function readPayloadScore(
 }
 
 function readHandsPlayed(payload: TelemetryPayload): number | null {
+  const numericHands = readMetadataNumber(payload.metadata, "hands_played");
+  if (numericHands !== null) {
+    return numericHands;
+  }
+  const metadataHands = readMetadataString(payload.metadata, "hands_played");
+  if (metadataHands) {
+    const parsed = Number.parseInt(metadataHands, 10);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
   if ("state_norm" in payload) {
     const stateNorm =
       payload.state_norm &&
@@ -135,19 +146,15 @@ function readHandsPlayed(payload: TelemetryPayload): number | null {
       !Array.isArray(payload.state_norm)
         ? (payload.state_norm as Record<string, unknown>)
         : null;
+    const matchHistory = Array.isArray(stateNorm?.matchHistory)
+      ? stateNorm.matchHistory
+      : null;
+    if (matchHistory) {
+      return matchHistory.length;
+    }
     const roundSummary = stateNorm?.roundSummary;
     if (stateNorm?.matchComplete === true && typeof stateNorm?.matchWinner === "string") {
-      const numericHands = readMetadataNumber(payload.metadata, "hands_played");
-      if (numericHands !== null) {
-        return numericHands;
-      }
-      const metadataHands = readMetadataString(payload.metadata, "hands_played");
-      if (metadataHands) {
-        const parsed = Number.parseInt(metadataHands, 10);
-        if (Number.isFinite(parsed)) {
-          return parsed;
-        }
-      }
+      return readMetadataNumber(payload.metadata, "hand_number");
     }
     if (roundSummary) {
       const numericHandNumber = readMetadataNumber(payload.metadata, "hand_number");
@@ -767,23 +774,38 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
       )
       ON CONFLICT (game_id) WHERE game_id IS NOT NULL DO UPDATE SET
         last_hand_id = EXCLUDED.last_hand_id,
-        provider = COALESCE(matches.provider, EXCLUDED.provider),
-        requested_provider = COALESCE(matches.requested_provider, EXCLUDED.requested_provider),
-        telemetry_mode = COALESCE(matches.telemetry_mode, EXCLUDED.telemetry_mode),
-        strict_telemetry = COALESCE(matches.strict_telemetry, EXCLUDED.strict_telemetry),
-        sim_version = COALESCE(matches.sim_version, EXCLUDED.sim_version),
-        engine_version = COALESCE(matches.engine_version, EXCLUDED.engine_version),
-        final_team_0_score = COALESCE(matches.final_team_0_score, EXCLUDED.final_team_0_score),
-        final_team_1_score = COALESCE(matches.final_team_1_score, EXCLUDED.final_team_1_score),
-        winner_team = COALESCE(matches.winner_team, EXCLUDED.winner_team),
-        hands_played = COALESCE(matches.hands_played, EXCLUDED.hands_played),
-        failure_reason = COALESCE(matches.failure_reason, EXCLUDED.failure_reason),
+        provider = CASE
+          WHEN EXCLUDED.provider IS NULL THEN matches.provider
+          WHEN matches.provider IS NULL THEN EXCLUDED.provider
+          WHEN matches.provider = EXCLUDED.provider THEN matches.provider
+          ELSE 'mixed'
+        END,
+        requested_provider = CASE
+          WHEN EXCLUDED.requested_provider IS NULL THEN matches.requested_provider
+          WHEN matches.requested_provider IS NULL THEN EXCLUDED.requested_provider
+          WHEN matches.requested_provider = EXCLUDED.requested_provider THEN matches.requested_provider
+          ELSE 'mixed'
+        END,
+        telemetry_mode = COALESCE(EXCLUDED.telemetry_mode, matches.telemetry_mode),
+        strict_telemetry = COALESCE(EXCLUDED.strict_telemetry, matches.strict_telemetry),
+        sim_version = COALESCE(EXCLUDED.sim_version, matches.sim_version),
+        engine_version = COALESCE(EXCLUDED.engine_version, matches.engine_version),
+        final_team_0_score = COALESCE(EXCLUDED.final_team_0_score, matches.final_team_0_score),
+        final_team_1_score = COALESCE(EXCLUDED.final_team_1_score, matches.final_team_1_score),
+        winner_team = COALESCE(EXCLUDED.winner_team, matches.winner_team),
+        hands_played = CASE
+          WHEN matches.hands_played IS NULL THEN EXCLUDED.hands_played
+          WHEN EXCLUDED.hands_played IS NULL THEN matches.hands_played
+          ELSE GREATEST(matches.hands_played, EXCLUDED.hands_played)
+        END,
+        failure_reason = COALESCE(EXCLUDED.failure_reason, matches.failure_reason),
         started_at = LEAST(
           COALESCE(matches.started_at, EXCLUDED.started_at),
           EXCLUDED.started_at
         ),
-        completed_at = COALESCE(matches.completed_at, EXCLUDED.completed_at),
+        completed_at = COALESCE(EXCLUDED.completed_at, matches.completed_at),
         status = CASE
+          WHEN EXCLUDED.failure_reason IS NOT NULL THEN 'failed'
           WHEN EXCLUDED.completed_at IS NOT NULL THEN EXCLUDED.status
           WHEN matches.status = 'created' THEN 'running'
           ELSE matches.status

@@ -169,7 +169,30 @@ function buildSnapshotFromState(
   const evaluation = getEvaluation(seat);
   const opponentThreatEstimate = buildOpponentThreatEstimate(state, seat);
   const endgamePressure = buildEndgamePressure(state, seat);
+  const partnerAdvantageEstimate = buildPartnerAdvantageEstimate(
+    state,
+    seat,
+    getEvaluation
+  );
 
+  return buildSnapshotFromEvaluation(
+    state,
+    seat,
+    evaluation,
+    opponentThreatEstimate,
+    endgamePressure,
+    partnerAdvantageEstimate
+  );
+}
+
+function buildSnapshotFromEvaluation(
+  state: GameState,
+  seat: SeatId,
+  evaluation: HandEvaluation,
+  opponentThreatEstimate: number,
+  endgamePressure: number,
+  partnerAdvantageEstimate: number
+): TacticalFeatureSnapshot {
   return {
     seat,
     hand_size: state.hands[seat].length,
@@ -192,11 +215,7 @@ function buildSnapshotFromState(
       evaluation,
       opponentThreatEstimate
     ),
-    partner_advantage_estimate: buildPartnerAdvantageEstimate(
-      state,
-      seat,
-      getEvaluation
-    ),
+    partner_advantage_estimate: partnerAdvantageEstimate,
     opponent_threat_estimate: opponentThreatEstimate,
     urgency_mode: resolveUrgencyMode(state, seat),
     endgame_pressure: endgamePressure,
@@ -401,13 +420,21 @@ export function createHeuristicFeatureAnalyzer(
       action.type === "select_pass"
         ? buildHandEvaluation(projectedReferenceState, actor)
         : buildProjectedEvaluation(ctx.state, actor, action);
-    const projectedStateSnapshot = buildSnapshotFromState(
+    const projectedOpponentThreatEstimate = buildOpponentThreatEstimate(
+      projectedReferenceState,
+      actor
+    );
+    const projectedEndgamePressure = buildEndgamePressure(
+      projectedReferenceState,
+      actor
+    );
+    const projectedStateSnapshot = buildSnapshotFromEvaluation(
       projectedReferenceState,
       actor,
-      (seatId) =>
-        seatId === actor
-          ? projectedEvaluation
-          : buildHandEvaluation(projectedReferenceState, seatId)
+      projectedEvaluation,
+      projectedOpponentThreatEstimate,
+      projectedEndgamePressure,
+      beforeSnapshot.partner_advantage_estimate
     );
 
     const comboMetadata = resolveComboMetadata(legalAction);

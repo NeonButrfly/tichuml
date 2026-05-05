@@ -11,6 +11,7 @@ import {
 } from "@tichuml/engine";
 import type {
   AggressionContextV1,
+  ExplorationProfile,
   GrandTichuAggressionV1,
   PassReductionV1,
   TichuAggressionV1
@@ -154,6 +155,7 @@ export type PolicyExplanation = {
     features?: CandidateActionFeatureSnapshot;
     mahjongWish?: MahjongWishMetadata;
     tichuCall?: TichuCallMetadata;
+    passBundle?: PassSelectionMetadata;
     pass_reduction_v1?: PassReductionV1;
     tichu_aggression_v1?: TichuAggressionV1;
     grand_tichu_aggression_v1?: GrandTichuAggressionV1;
@@ -165,10 +167,12 @@ export type PolicyExplanation = {
   selectedFeatures?: CandidateActionFeatureSnapshot;
   selectedMahjongWish?: MahjongWishMetadata;
   selectedTichuCall?: TichuCallMetadata;
+  selectedPassBundle?: PassSelectionMetadata;
   selectedPassReductionV1?: PassReductionV1;
   selectedTichuAggressionV1?: TichuAggressionV1;
   selectedGrandTichuAggressionV1?: GrandTichuAggressionV1;
   selectedAggressionContextV1?: AggressionContextV1;
+  exploration?: ExplorationSelectionMetadata;
 };
 
 export type HeadlessDecisionContext = {
@@ -182,9 +186,63 @@ export type ChosenDecision = {
   explanation: PolicyExplanation;
 };
 
+export type HeuristicExplorationConfig = {
+  profile: ExplorationProfile;
+  rate?: number | null;
+  topN?: number | null;
+  maxScoreGap?: number | null;
+};
+
+export type HeuristicDecisionOptions = {
+  exploration?: HeuristicExplorationConfig;
+  selectionKey?: string;
+};
+
+export type ExplorationSelectionMetadata = {
+  exploration_enabled: boolean;
+  exploration_profile: ExplorationProfile;
+  exploration_selected: boolean;
+  exploration_reason: string | null;
+  original_top_action_type: string | null;
+  original_top_score: number | null;
+  selected_rank_in_candidates: number | null;
+  selected_score: number | null;
+  score_gap_from_top: number | null;
+  exploration_config: {
+    rate: number | null;
+    top_n: number | null;
+    max_score_gap: number | null;
+  };
+};
+
+export type PassSelectionMetadata = {
+  selected_left_card_id: string;
+  selected_partner_card_id: string;
+  selected_right_card_id: string;
+  bundle_score: number;
+  self_preservation_score: number;
+  opponent_dump_score_left: number;
+  opponent_dump_score_right: number;
+  partner_support_score: number;
+  self_structure_delta: number;
+  dead_singles_delta: number;
+  protected_card_passed: boolean;
+  control_card_passed: boolean;
+  point_card_to_opponent: number;
+  point_card_to_partner: number;
+  partner_called_tichu: boolean;
+  self_called_tichu: boolean;
+  left_opponent_called_tichu: boolean;
+  right_opponent_called_tichu: boolean;
+  pass_reason_tags: string[];
+};
+
 export type HeuristicPolicy = {
   name: string;
-  chooseAction(ctx: HeadlessDecisionContext): ChosenDecision;
+  chooseAction(
+    ctx: HeadlessDecisionContext,
+    options?: HeuristicDecisionOptions
+  ): ChosenDecision;
 };
 
 export type CandidateDecision = {
@@ -197,6 +255,7 @@ export type CandidateDecision = {
   features?: CandidateActionFeatureSnapshot;
   mahjongWish?: MahjongWishMetadata;
   tichuCall?: TichuCallMetadata;
+  passBundle?: PassSelectionMetadata;
   pass_reduction_v1?: PassReductionV1;
   tichu_aggression_v1?: TichuAggressionV1;
   grand_tichu_aggression_v1?: GrandTichuAggressionV1;

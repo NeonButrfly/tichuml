@@ -39,6 +39,7 @@
     "telemetry:sanity": "tsx scripts/telemetry-sanity.ts",
     "telemetry:finalize-results": "tsx scripts/telemetry-finalize-results.ts",
     "telemetry:validate-training-data": "tsx scripts/telemetry-validate-training-data.ts",
+    "telemetry:validate-run": "tsx scripts/telemetry-validate-run.ts",
     "verify:sim:one:windows": "powershell -ExecutionPolicy Bypass -File scripts/windows/verify-sim-one-game-fixed.ps1",
     "verify:sim:one:linux": "bash scripts/linux/verify-sim-one-game-fixed.sh",
     "telemetry:replay": "tsx apps/sim-runner/src/telemetry/replay.ts",

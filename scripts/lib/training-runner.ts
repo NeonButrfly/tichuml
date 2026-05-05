@@ -23,6 +23,12 @@ export type StreamingProcessResult = {
   finishedAt: string;
 };
 
+type ResolvedSpawnCommand = {
+  command: string;
+  args: string[];
+  shell: boolean;
+};
+
 export function computeRemainingRequestedGames(input: {
   requestedGames: number;
   scopedMatches: number;
@@ -36,6 +42,46 @@ function ensureParent(filePath: string): void {
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+function quoteForWindowsCmd(value: string): string {
+  if (value.length === 0) {
+    return "\"\"";
+  }
+  if (!/[\s"&()[\]{}^=;!'+,`~|<>]/u.test(value)) {
+    return value;
+  }
+  return `"${value.replace(/"/g, '\\"')}"`;
+}
+
+function resolveSpawnCommand(
+  command: string,
+  args: string[],
+  shell: boolean
+): ResolvedSpawnCommand {
+  if (
+    process.platform === "win32" &&
+    !shell &&
+    /\.(cmd|bat)$/iu.test(command)
+  ) {
+    const comspec = process.env.ComSpec || "cmd.exe";
+    return {
+      command: comspec,
+      args: [
+        "/d",
+        "/s",
+        "/c",
+        [command, ...args].map((part) => quoteForWindowsCmd(part)).join(" ")
+      ],
+      shell: false
+    };
+  }
+
+  return {
+    command,
+    args,
+    shell
+  };
 }
 
 function trimTail(lines: string[], limit: number): void {
@@ -150,13 +196,33 @@ export async function runStreamingProcess(
       });
     };
 
-    const child = spawn(options.command, options.args, {
-      cwd: options.cwd,
-      env: options.env ?? process.env,
-      shell: options.shell ?? false,
-      windowsHide: true,
-      stdio: ["ignore", "pipe", "pipe"]
-    });
+    const resolvedCommand = resolveSpawnCommand(
+      options.command,
+      options.args,
+      options.shell ?? false
+    );
+    let child: ChildProcessWithoutNullStreams;
+    try {
+      child = spawn(resolvedCommand.command, resolvedCommand.args, {
+        cwd: options.cwd,
+        env: options.env ?? process.env,
+        shell: resolvedCommand.shell,
+        windowsHide: true,
+        stdio: ["ignore", "pipe", "pipe"]
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      errorMessage = message;
+      enobufsDetected =
+        message.includes("ENOBUFS") ||
+        ((error as NodeJS.ErrnoException | undefined)?.code === "ENOBUFS");
+      const errorLine = `[${nowIso()}] PROCESS_ERROR ${message}`;
+      logStream.write(`${errorLine}\n`);
+      tailLines.push(errorLine);
+      trimTail(tailLines, tailLineLimit);
+      finalize(1, null);
+      return;
+    }
 
     attachStreamingListener(
       child,

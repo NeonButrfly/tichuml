@@ -2015,6 +2015,11 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
       return;
     }
 
+    if (manualNextRetryEnabled) {
+      clearAutomationState();
+      return;
+    }
+
     if (!primaryActor) {
       clearAutomationState();
       return;
@@ -2534,6 +2539,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     localHasOptionalAction,
     localIsPrimaryActor,
     matchId,
+    manualNextRetryEnabled,
     activeResponseTurn,
     openingLeadPending,
     pickupPending,

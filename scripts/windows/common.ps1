@@ -21,6 +21,12 @@ function Get-RepoRoot {
   throw "Could not resolve repo root from $BaseDir"
 }
 
+function Get-TichumlRepoRoot {
+  param([string]$BaseDir = $PSScriptRoot)
+
+  return Get-RepoRoot -BaseDir $BaseDir
+}
+
 function Assert-RepoRoot {
   param([string]$RepoRoot)
 
@@ -42,6 +48,15 @@ function Resolve-RepoPath {
 
   Assert-RepoRoot -RepoRoot $RepoRoot
   return (Join-Path $RepoRoot $RelativePath)
+}
+
+function Resolve-TichumlPath {
+  param(
+    [string]$RepoRoot,
+    [string]$RelativePath
+  )
+
+  return Resolve-RepoPath -RepoRoot $RepoRoot -RelativePath $RelativePath
 }
 
 function Assert-RepoPath {
@@ -66,6 +81,30 @@ function Enter-RepoRoot {
   Assert-RepoRoot -RepoRoot $repoRoot
   Set-Location -LiteralPath $repoRoot
   return $repoRoot
+}
+
+function Set-TichumlRepoRoot {
+  param([string]$BaseDir = $PSScriptRoot)
+
+  return Enter-RepoRoot -BaseDir $BaseDir
+}
+
+function Invoke-TichumlNodeScript {
+  param(
+    [string]$RepoRoot,
+    [string]$ScriptPath,
+    [string[]]$ArgumentList = @()
+  )
+
+  $resolvedScript = Assert-RepoPath -RepoRoot $RepoRoot -RelativePath $ScriptPath -Description "Node/TypeScript entrypoint"
+  $nodeRunner = if (Get-Command npx.cmd -ErrorAction SilentlyContinue) { "npx.cmd" } else { "npx" }
+  Push-Location $RepoRoot
+  try {
+    & $nodeRunner "tsx" $resolvedScript @ArgumentList
+    return $LASTEXITCODE
+  } finally {
+    Pop-Location
+  }
 }
 
 function Invoke-WindowsScriptTarget {

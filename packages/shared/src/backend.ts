@@ -39,6 +39,16 @@ export type DecisionProviderUsed =
   | RequestedDecisionProvider
   | "local_heuristic";
 export type DecisionScoringPath = "fast_path" | "rich_path";
+export type ExplorationProfile =
+  | "off"
+  | "conservative"
+  | "training_diversity";
+export type ExplorationConfig = {
+  profile: ExplorationProfile;
+  rate: number | null;
+  top_n: number | null;
+  max_score_gap: number | null;
+};
 export type CanonicalDecisionProvider =
   | "local_heuristic"
   | "server_heuristic"
@@ -139,6 +149,10 @@ export type SimControllerConfig = {
   manual_seed_override_enabled: boolean;
   manual_seed_override: string;
   seed_prefix: string;
+  exploration_profile?: ExplorationProfile;
+  exploration_rate?: number | null;
+  exploration_top_n?: number | null;
+  exploration_max_score_gap?: number | null;
   sleep_seconds: number;
   worker_count: number;
   quiet: boolean;
@@ -283,6 +297,7 @@ export type TelemetryRuntimeState = {
   failed_count: number;
   dropped_count: number;
   pending_count: number;
+  persisted_pending_file_count?: number;
   last_success_at: string | null;
   last_failure_at: string | null;
   last_failure_reason: string | null;
@@ -374,6 +389,10 @@ export type SimControllerRequestPayload = Partial<{
   seed_prefix: string;
   manual_seed_override_enabled: boolean;
   manual_seed_override: string;
+  exploration_profile: ExplorationProfile;
+  exploration_rate: number;
+  exploration_top_n: number;
+  exploration_max_score_gap: number;
   sleep_seconds: number;
   worker_count: number;
   sim_threads: number;
@@ -1350,5 +1369,20 @@ export function parseBooleanEnv(
     return false;
   }
 
+  return fallback;
+}
+
+export function parseExplorationProfile(
+  value: string | undefined,
+  fallback: ExplorationProfile = "off"
+): ExplorationProfile {
+  const normalized = value?.trim().toLowerCase();
+  if (
+    normalized === "off" ||
+    normalized === "conservative" ||
+    normalized === "training_diversity"
+  ) {
+    return normalized;
+  }
   return fallback;
 }

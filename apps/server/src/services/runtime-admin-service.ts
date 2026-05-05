@@ -204,6 +204,10 @@ const CONFIG_SCHEMA: Array<{
   { key: "TELEMETRY_PERSISTENCE_CONCURRENCY", label: "Telemetry concurrency", category: "Admin", type: "number", restart_required: true, description: "Concurrent backend telemetry persistence batches.", validate: validatePositiveNumber },
   { key: "SIM_PROVIDER", label: "Provider", category: "Simulator", type: "select", restart_required: true, description: "Default simulator provider.", options: ["local", "server_heuristic", "lightgbm_model"], validate: validateDecisionMode },
   { key: "SIM_BACKEND_URL", label: "Backend URL", category: "Simulator", type: "string", restart_required: true, description: "Default backend URL for simulator/controller calls.", validate: validateUrl },
+  { key: "TICHU_EXPLORATION_PROFILE", label: "Exploration profile", category: "Simulator", type: "select", restart_required: true, description: "Default simulator exploration profile. Keep off for clean baseline training.", options: ["off", "conservative", "training_diversity"], validate: validateExplorationProfile },
+  { key: "TICHU_EXPLORATION_RATE", label: "Exploration rate", category: "Simulator", type: "number", restart_required: true, description: "Optional exploration rate used when profile is not off.", validate: validateOptionalPositiveNumber },
+  { key: "TICHU_EXPLORATION_TOP_N", label: "Exploration top N", category: "Simulator", type: "number", restart_required: true, description: "Optional bounded top-N candidate pool for exploration.", validate: validateOptionalPositiveNumber },
+  { key: "TICHU_EXPLORATION_MAX_SCORE_GAP", label: "Exploration max score gap", category: "Simulator", type: "number", restart_required: true, description: "Optional near-policy score-gap cap for exploration.", validate: validateOptionalNonNegativeNumber },
   { key: "SIM_WORKER_COUNT", label: "Worker count", category: "Simulator", type: "number", restart_required: true, description: "Default simulator controller worker count.", validate: validatePositiveNumber },
   { key: "SIM_GAMES_PER_BATCH", label: "Games per batch", category: "Simulator", type: "number", restart_required: true, description: "Default simulator controller games per batch.", validate: validatePositiveNumber },
   { key: "SIM_CONTROLLER_RUNTIME_DIR", label: "Sim controller runtime dir", category: "Runtime", type: "string", restart_required: true, description: "Simulator controller runtime directory." },
@@ -243,6 +247,20 @@ function validatePositiveNumber(value: string): string | null {
     : "Expected a positive number.";
 }
 
+function validateOptionalPositiveNumber(value: string): string | null {
+  return value.trim() === "" ? null : validatePositiveNumber(value);
+}
+
+function validateOptionalNonNegativeNumber(value: string): string | null {
+  if (value.trim() === "") {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0
+    ? null
+    : "Expected a non-negative number.";
+}
+
 function validateByteSize(value: string): string | null {
   return value.trim() === "" || /^\d+(?:\.\d+)?\s*(b|kb|kib|mb|mib)?$/iu.test(value)
     ? null
@@ -259,6 +277,12 @@ function validateDecisionMode(value: string): string | null {
   return /^(local|server_heuristic|lightgbm_model)$/iu.test(value)
     ? null
     : "Expected local, server_heuristic, or lightgbm_model.";
+}
+
+function validateExplorationProfile(value: string): string | null {
+  return /^(off|conservative|training_diversity)$/iu.test(value)
+    ? null
+    : "Expected off, conservative, or training_diversity.";
 }
 
 function normalizeBooleanValue(value: string): string {
@@ -538,6 +562,19 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
       ),
       SIM_PROVIDER: this.config.simDefaultProvider,
       SIM_BACKEND_URL: this.config.simDefaultBackendUrl,
+      TICHU_EXPLORATION_PROFILE: this.config.simDefaultExplorationProfile,
+      TICHU_EXPLORATION_RATE:
+        this.config.simDefaultExplorationRate !== null
+          ? String(this.config.simDefaultExplorationRate)
+          : "",
+      TICHU_EXPLORATION_TOP_N:
+        this.config.simDefaultExplorationTopN !== null
+          ? String(this.config.simDefaultExplorationTopN)
+          : "",
+      TICHU_EXPLORATION_MAX_SCORE_GAP:
+        this.config.simDefaultExplorationMaxScoreGap !== null
+          ? String(this.config.simDefaultExplorationMaxScoreGap)
+          : "",
       SIM_WORKER_COUNT: String(this.config.simDefaultWorkerCount),
       SIM_GAMES_PER_BATCH: String(this.config.simDefaultGamesPerBatch),
       SIM_CONTROLLER_RUNTIME_DIR: this.config.simControllerRuntimeDir,
@@ -629,6 +666,20 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
         return this.config.simDefaultProvider;
       case "SIM_BACKEND_URL":
         return this.config.simDefaultBackendUrl;
+      case "TICHU_EXPLORATION_PROFILE":
+        return this.config.simDefaultExplorationProfile;
+      case "TICHU_EXPLORATION_RATE":
+        return this.config.simDefaultExplorationRate !== null
+          ? String(this.config.simDefaultExplorationRate)
+          : "";
+      case "TICHU_EXPLORATION_TOP_N":
+        return this.config.simDefaultExplorationTopN !== null
+          ? String(this.config.simDefaultExplorationTopN)
+          : "";
+      case "TICHU_EXPLORATION_MAX_SCORE_GAP":
+        return this.config.simDefaultExplorationMaxScoreGap !== null
+          ? String(this.config.simDefaultExplorationMaxScoreGap)
+          : "";
       case "SIM_WORKER_COUNT":
         return String(this.config.simDefaultWorkerCount);
       case "SIM_GAMES_PER_BATCH":

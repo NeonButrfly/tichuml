@@ -35,6 +35,10 @@ type FormState = {
   seedNamespace: string;
   manualSeedOverrideEnabled: boolean;
   manualSeedOverride: string;
+  explorationProfile: "off" | "conservative" | "training_diversity";
+  explorationRate: number;
+  explorationTopN: number;
+  explorationMaxScoreGap: number;
   sleepSeconds: number;
   workerCount: number;
   confirmToken: string;
@@ -92,6 +96,10 @@ function createInitialForm(): FormState {
     seedNamespace: "controller",
     manualSeedOverrideEnabled: false,
     manualSeedOverride: "",
+    explorationProfile: "off",
+    explorationRate: 0,
+    explorationTopN: 0,
+    explorationMaxScoreGap: 0,
     sleepSeconds: 5,
     workerCount: 1,
     confirmToken: ADMIN_CONFIRMATION_VALUE
@@ -113,6 +121,10 @@ function toPayload(form: FormState): SimControllerRequestPayload {
     seed_namespace: form.seedNamespace,
     manual_seed_override_enabled: form.manualSeedOverrideEnabled,
     manual_seed_override: form.manualSeedOverride,
+    exploration_profile: form.explorationProfile,
+    exploration_rate: form.explorationRate,
+    exploration_top_n: form.explorationTopN,
+    exploration_max_score_gap: form.explorationMaxScoreGap,
     sleep_seconds: form.sleepSeconds,
     worker_count: form.workerCount,
     quiet: true,
@@ -154,6 +166,10 @@ function formFromRuntimeConfig(
     seedNamespace: config.seed_namespace ?? config.seed_prefix,
     manualSeedOverrideEnabled: config.manual_seed_override_enabled ?? false,
     manualSeedOverride: config.manual_seed_override ?? "",
+    explorationProfile: config.exploration_profile ?? "off",
+    explorationRate: config.exploration_rate ?? 0,
+    explorationTopN: config.exploration_top_n ?? 0,
+    explorationMaxScoreGap: config.exploration_max_score_gap ?? 0,
     sleepSeconds: config.sleep_seconds,
     workerCount: config.worker_count
   };
@@ -476,16 +492,85 @@ export function SimControlDashboard() {
               }
             />
           </label>
-          <label>
-            Backend URL
-            <input
-              value={form.backendUrl}
-              onChange={(event) =>
-                updateForm((current) => ({ ...current, backendUrl: event.target.value }))
-              }
-            />
-          </label>
-          <div className="sim-seed-panel">
+            <label>
+              Backend URL
+              <input
+                value={form.backendUrl}
+                onChange={(event) =>
+                  updateForm((current) => ({ ...current, backendUrl: event.target.value }))
+                }
+              />
+            </label>
+            <label>
+              Exploration profile
+              <select
+                value={form.explorationProfile}
+                onChange={(event) =>
+                  updateForm((current) => ({
+                    ...current,
+                    explorationProfile:
+                      event.target.value === "conservative" ||
+                      event.target.value === "training_diversity"
+                        ? event.target.value
+                        : "off"
+                  }))
+                }
+              >
+                <option value="off">off</option>
+                <option value="conservative">conservative</option>
+                <option value="training_diversity">training_diversity</option>
+              </select>
+            </label>
+            <label>
+              Exploration rate
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                value={form.explorationRate}
+                onChange={(event) =>
+                  updateForm((current) => ({
+                    ...current,
+                    explorationRate: Math.max(0, Number(event.target.value))
+                  }))
+                }
+              />
+            </label>
+            <label>
+              Exploration top N
+              <input
+                type="number"
+                min={0}
+                step={1}
+                value={form.explorationTopN}
+                onChange={(event) =>
+                  updateForm((current) => ({
+                    ...current,
+                    explorationTopN: Math.max(0, Number(event.target.value))
+                  }))
+                }
+              />
+            </label>
+            <label>
+              Exploration max score gap
+              <input
+                type="number"
+                min={0}
+                step="0.1"
+                value={form.explorationMaxScoreGap}
+                onChange={(event) =>
+                  updateForm((current) => ({
+                    ...current,
+                    explorationMaxScoreGap: Math.max(0, Number(event.target.value))
+                  }))
+                }
+              />
+            </label>
+            <p className="sim-detail">
+              Default off is recommended for clean LightGBM training. Use
+              {" "}training_diversity only for separate diversity or scenario runs.
+            </p>
+            <div className="sim-seed-panel">
             <div className="sim-seed-row">
               <span className="sim-seed-label">Seed mode</span>
               <strong>{formatSeedMode(status?.active_run_seed ?? status?.last_run_seed ?? null)}</strong>
