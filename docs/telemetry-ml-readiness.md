@@ -68,6 +68,9 @@ default.
 - they are excluded from runtime feature manifests by default
 - baseline export focuses on clean chosen-decision rows for the requested
   scope, not merely raw telemetry row presence
+- scoped validate-only export defaults to `server_heuristic` unless a provider
+  is explicitly overridden, so mixed-policy DB windows are filtered or flagged
+  instead of silently exported
 - baseline export excludes `exploration_selected=true` rows unless
   `--include-exploration` is passed explicitly
 - grouped train/validation/test split reporting is by `game_id`, never random
@@ -110,6 +113,10 @@ That report is the hard gate for:
 - leakage-denylist pass/fail
 - null and NaN feature counts
 - reward distribution by chosen action type and exploration bucket
+- provider-distribution truth for the full scope versus the exported provider
+  slice
+- invalid-decision and incomplete-match rejection
+- concurrent-writer overlap warnings for the scoped run window
 
 For DB-backed result attribution and training-readiness checks, use:
 

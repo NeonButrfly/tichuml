@@ -357,17 +357,6 @@ def connect_with_fallback(
         try:
             connection = psycopg.connect(candidate, row_factory=dict_row)
             fallback_used = index > 0
-            if fallback_used:
-                print(
-                    json.dumps(
-                        {
-                            "accepted": True,
-                            "warning": "database_url_fallback_used",
-                            "database_url_source": source,
-                        }
-                    ),
-                    file=sys.stderr,
-                )
             return connection, candidate, source, fallback_used
         except psycopg.OperationalError as error:
             last_error = error
@@ -813,6 +802,164 @@ def count_matches_for_scope(
         )
         row = cursor.fetchone() or {}
     return int(row.get("row_count") or 0)
+
+
+def count_matches_by_status_for_scope(
+    connection: psycopg.Connection[Any], game_id_prefix: str | None
+) -> dict[str, int]:
+    if not game_id_prefix or not game_id_prefix.strip():
+        return {}
+    with connection.cursor(row_factory=dict_row) as cursor:
+        cursor.execute(
+            """
+            SELECT COALESCE(status, '<null>') AS status, count(*) AS row_count
+            FROM matches
+            WHERE game_id LIKE %s ESCAPE '\\'
+            GROUP BY COALESCE(status, '<null>')
+            ORDER BY COALESCE(status, '<null>') ASC
+            """,
+            (f"{escape_like_prefix(game_id_prefix.strip())}%",),
+        )
+        rows = list(cursor.fetchall())
+    return {
+        str(row.get("status", "<null>")): int(row.get("row_count") or 0)
+        for row in rows
+    }
+
+
+def count_decisions_by_provider_for_scope(
+    connection: psycopg.Connection[Any],
+    run_id: str | None,
+    game_id_prefix: str | None,
+) -> dict[str, int]:
+    clauses, params = build_scope_where(run_id, game_id_prefix)
+    where_clause = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    with connection.cursor(row_factory=dict_row) as cursor:
+        cursor.execute(
+            f"""
+            SELECT COALESCE(provider_used, policy_source, '<unknown>') AS provider,
+                   count(*) AS row_count
+            FROM decisions
+            {where_clause}
+            GROUP BY COALESCE(provider_used, policy_source, '<unknown>')
+            ORDER BY COALESCE(provider_used, policy_source, '<unknown>') ASC
+            """,
+            params,
+        )
+        rows = list(cursor.fetchall())
+    return {
+        str(row.get("provider", "<unknown>")): int(row.get("row_count") or 0)
+        for row in rows
+    }
+
+
+def count_requested_provider_for_scope(
+    connection: psycopg.Connection[Any],
+    run_id: str | None,
+    game_id_prefix: str | None,
+) -> dict[str, int]:
+    clauses, params = build_scope_where(run_id, game_id_prefix)
+    where_clause = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    with connection.cursor(row_factory=dict_row) as cursor:
+        cursor.execute(
+            f"""
+            SELECT COALESCE(requested_provider, '<null>') AS requested_provider,
+                   count(*) AS row_count
+            FROM decisions
+            {where_clause}
+            GROUP BY COALESCE(requested_provider, '<null>')
+            ORDER BY COALESCE(requested_provider, '<null>') ASC
+            """,
+            params,
+        )
+        rows = list(cursor.fetchall())
+    return {
+        str(row.get("requested_provider", "<null>")): int(row.get("row_count") or 0)
+        for row in rows
+    }
+
+
+def collect_scope_integrity_summary(
+    connection: psycopg.Connection[Any],
+    run_id: str | None,
+    game_id_prefix: str | None,
+) -> dict[str, Any]:
+    clauses, params = build_scope_where(run_id, game_id_prefix)
+    where_clause = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    with connection.cursor(row_factory=dict_row) as cursor:
+        cursor.execute(
+            f"""
+            SELECT
+              COUNT(*) FILTER (WHERE fallback_used)::INTEGER AS fallback_count,
+              COUNT(*) FILTER (WHERE NOT chosen_action_is_legal)::INTEGER AS invalid_decision_count,
+              COUNT(*) FILTER (
+                WHERE chosen_action_type = 'play_cards'
+                  AND (
+                    COALESCE((chosen_action->'combination'->>'isBomb')::BOOLEAN, FALSE)
+                    OR COALESCE((explanation->'selectedFeatures'->>'uses_bomb')::BOOLEAN, FALSE)
+                  )
+              )::INTEGER AS bomb_decision_count,
+              MIN(ts)::text AS min_ts,
+              MAX(ts)::text AS max_ts
+            FROM decisions
+            {where_clause}
+            """,
+            params,
+        )
+        summary = cursor.fetchone() or {}
+
+    completed_match_count = 0
+    non_completed_match_count = 0
+    if game_id_prefix and game_id_prefix.strip():
+        status_counts = count_matches_by_status_for_scope(connection, game_id_prefix)
+        completed_match_count = status_counts.get("completed", 0)
+        non_completed_match_count = sum(
+            count for status, count in status_counts.items() if status != "completed"
+        )
+
+    overlap: dict[str, Any] = {
+        "warning": False,
+        "overlapping_decisions": 0,
+        "overlap_first_ts": None,
+        "overlap_last_ts": None,
+    }
+    min_ts = summary.get("min_ts")
+    max_ts = summary.get("max_ts")
+    if game_id_prefix and isinstance(min_ts, str) and isinstance(max_ts, str):
+        escaped_prefix = f"{escape_like_prefix(game_id_prefix.strip())}%"
+        with connection.cursor(row_factory=dict_row) as cursor:
+            cursor.execute(
+                """
+                SELECT
+                  COUNT(*)::INTEGER AS row_count,
+                  MIN(ts)::text AS min_ts,
+                  MAX(ts)::text AS max_ts
+                FROM decisions
+                WHERE game_id NOT LIKE %s ESCAPE '\\'
+                  AND ts BETWEEN %s::timestamptz AND %s::timestamptz
+                """,
+                (escaped_prefix, min_ts, max_ts),
+            )
+            overlap_row = cursor.fetchone() or {}
+        overlap = {
+            "warning": int(overlap_row.get("row_count") or 0) > 0,
+            "overlapping_decisions": int(overlap_row.get("row_count") or 0),
+            "overlap_first_ts": overlap_row.get("min_ts"),
+            "overlap_last_ts": overlap_row.get("max_ts"),
+        }
+
+    return {
+        "fallback_count": int(summary.get("fallback_count") or 0),
+        "invalid_decision_count": int(summary.get("invalid_decision_count") or 0),
+        "bomb_decision_count": int(summary.get("bomb_decision_count") or 0),
+        "completed_match_count": completed_match_count,
+        "non_completed_match_count": non_completed_match_count,
+        "scoped_time_window": {
+            "min_ts": min_ts,
+            "max_ts": max_ts,
+        },
+        "concurrent_writer_overlap": overlap,
+    }
 
 
 def expected_training_row_count(
@@ -1646,7 +1793,17 @@ def build_validation_report(
     source_row_counts: dict[str, int],
     included_exploration: bool,
     leakage_errors: list[str],
+    scope_integrity: dict[str, Any],
+    scoped_provider_distribution: dict[str, int],
+    scoped_requested_provider_distribution: dict[str, int],
 ) -> dict[str, Any]:
+    ml_safe_accepted = (
+        len(leakage_errors) == 0
+        and stats.exported_decision_rows > 0
+        and scope_integrity["invalid_decision_count"] == 0
+        and scope_integrity["non_completed_match_count"] == 0
+        and (len(scoped_provider_distribution) <= 1 or args.provider is not None)
+    )
     reward_by_action = {
         action_type: summarize_rewards(values)
         for action_type, values in sorted(stats.reward_values_by_action_type.items())
@@ -1659,9 +1816,9 @@ def build_validation_report(
         split: len(game_ids) for split, game_ids in stats.split_game_ids.items()
     }
     return {
-        "accepted": len(leakage_errors) == 0 and stats.exported_decision_rows > 0,
+        "accepted": ml_safe_accepted,
         "validation_status": "accepted"
-        if len(leakage_errors) == 0 and stats.exported_decision_rows > 0
+        if ml_safe_accepted
         else "failed",
         "export_mode": "chosen_decision_rows",
         "phase": resolve_phase_filter(args.phase),
@@ -1672,8 +1829,16 @@ def build_validation_report(
         "total_exported_rows": stats.exported_decision_rows,
         "dropped_rows_by_reason": dict(stats.dropped_rows_by_reason),
         "provider_distribution": dict(stats.rows_by_provider),
+        "provider_distribution_all_scoped": scoped_provider_distribution,
+        "requested_provider_distribution_all_scoped": scoped_requested_provider_distribution,
         "phase_distribution": dict(stats.rows_by_phase),
         "chosen_action_type_distribution": dict(stats.rows_by_chosen_action_type),
+        "fallback_count_scoped": scope_integrity["fallback_count"],
+        "invalid_decision_count_scoped": scope_integrity["invalid_decision_count"],
+        "bomb_decision_count_scoped": scope_integrity["bomb_decision_count"],
+        "completed_match_count": scope_integrity["completed_match_count"],
+        "non_completed_match_count": scope_integrity["non_completed_match_count"],
+        "concurrent_writer_overlap": scope_integrity["concurrent_writer_overlap"],
         "reward_distribution": summarize_rewards(stats.reward_values),
         "reward_distribution_by_chosen_action_type": reward_by_action,
         "legal_chosen_action_count": stats.exported_decision_rows,
@@ -1709,6 +1874,11 @@ def build_validation_report(
         ),
         "reward_distribution_by_exploration": exploration_reward_distribution,
         "source_row_counts": source_row_counts,
+        "ml_safe": {
+            "accepted": ml_safe_accepted,
+            "leakage_denylist_pass": len(leakage_errors) == 0,
+            "uses_predecision_state_only": True,
+        },
     }
 
 
@@ -1994,7 +2164,18 @@ def build_validation_summary(
     validation_errors: list[str],
     validation_warnings: list[str],
     validation_mode_used: str,
+    scope_integrity: dict[str, Any],
+    scoped_provider_distribution: dict[str, int],
+    scoped_requested_provider_distribution: dict[str, int],
+    filtered_provider_distribution: dict[str, int],
 ) -> dict[str, Any]:
+    mixed_policy_detected = len(scoped_provider_distribution) > 1
+    filtered_provider = args.provider or None
+    filtered_provider_total = (
+        filtered_provider_distribution.get(filtered_provider, 0)
+        if filtered_provider
+        else sum(filtered_provider_distribution.values())
+    )
     return {
         "accepted": accepted,
         "validation_only": True,
@@ -2010,6 +2191,8 @@ def build_validation_summary(
         "current_run_matches_count": source_row_counts["matches"],
         "current_run_events_count": source_row_counts["events"],
         "current_run_decisions_count": source_row_counts["decisions"],
+        "completed_match_count": scope_integrity["completed_match_count"],
+        "non_completed_match_count": scope_integrity["non_completed_match_count"],
         "expected_training_row_count": expected_rows,
         "sample_training_row_count": len(sample_rows),
         "detected_feature_schema_version": manifest.get("schema_version"),
@@ -2024,8 +2207,33 @@ def build_validation_summary(
             "label_columns.json",
             "validation_report.json",
         ],
+        "provider_filter": filtered_provider,
+        "provider_distribution_all_scoped": scoped_provider_distribution,
+        "requested_provider_distribution_all_scoped": scoped_requested_provider_distribution,
+        "provider_distribution_exported": filtered_provider_distribution,
+        "filtered_provider_row_count": filtered_provider_total,
+        "mixed_policy_detected": mixed_policy_detected,
+        "mixed_policy_rows_excluded": (
+            source_row_counts["decisions"] - filtered_provider_total
+            if filtered_provider
+            else 0
+        ),
+        "fallback_count_scoped": scope_integrity["fallback_count"],
+        "invalid_decision_count_scoped": scope_integrity["invalid_decision_count"],
+        "bomb_decision_count_scoped": scope_integrity["bomb_decision_count"],
+        "concurrent_writer_overlap": scope_integrity["concurrent_writer_overlap"],
+        "scoped_time_window": scope_integrity["scoped_time_window"],
         "feature_columns": manifest.get("feature_columns", []),
         "label_columns": manifest.get("label_columns", []),
+        "excluded_rows_by_reason": dict(manifest.get("validation_dropped_rows_by_reason", {})),
+        "ml_safe": {
+            "accepted": accepted,
+            "leakage_denylist_pass": manifest.get("leakage_denylist_pass") is True,
+            "uses_predecision_state_only": True,
+            "mixed_policy_safe": not mixed_policy_detected or filtered_provider is not None,
+            "invalid_decision_count_scoped": scope_integrity["invalid_decision_count"],
+            "non_completed_match_count": scope_integrity["non_completed_match_count"],
+        },
         "validation_status": "accepted" if accepted else "failed",
         "validation_errors": validation_errors,
         "validation_warnings": validation_warnings,
@@ -2097,11 +2305,31 @@ def main() -> None:
     validation_report_output = resolved_paths["validation_report_output"]
     phase = resolve_phase_filter(args.phase)
     output_format = str(resolved_paths["output_format"])
+    default_provider_applied = False
+    if args.provider is None and (args.run_id or args.game_id_prefix):
+        args.provider = "server_heuristic"
+        default_provider_applied = True
 
     tracemalloc.start()
     stats = ExportStats()
     created_at = datetime.now(UTC).isoformat()
     source_row_counts: dict[str, int] = {"decisions": 0, "events": 0, "matches": 0}
+    scope_integrity: dict[str, Any] = {
+        "fallback_count": 0,
+        "invalid_decision_count": 0,
+        "bomb_decision_count": 0,
+        "completed_match_count": 0,
+        "non_completed_match_count": 0,
+        "scoped_time_window": {"min_ts": None, "max_ts": None},
+        "concurrent_writer_overlap": {
+            "warning": False,
+            "overlapping_decisions": 0,
+            "overlap_first_ts": None,
+            "overlap_last_ts": None,
+        },
+    }
+    scoped_provider_distribution: dict[str, int] = {}
+    scoped_requested_provider_distribution: dict[str, int] = {}
     writer = DatasetWriter(output_path, output_format)
     first_row: dict[str, Any] | None = None
     written_columns: list[str] = []
@@ -2136,6 +2364,15 @@ def main() -> None:
                 ),
                 "matches": count_matches_for_scope(connection, args.game_id_prefix),
             }
+            scope_integrity = collect_scope_integrity_summary(
+                connection, args.run_id, args.game_id_prefix
+            )
+            scoped_provider_distribution = count_decisions_by_provider_for_scope(
+                connection, args.run_id, args.game_id_prefix
+            )
+            scoped_requested_provider_distribution = count_requested_provider_for_scope(
+                connection, args.run_id, args.game_id_prefix
+            )
             with connection.cursor(
                 name="decision_export_cursor",
                 row_factory=dict_row,
@@ -2222,6 +2459,36 @@ def main() -> None:
         split: len(game_ids) for split, game_ids in stats.split_game_ids.items()
     }
     validation_warnings: list[str] = []
+    if len(scoped_provider_distribution) > 1 and not args.provider:
+        validation_errors.append(
+            "Mixed provider decisions were detected in the scoped dataset. Pass --provider to export a single canonical policy."
+        )
+    if scope_integrity["invalid_decision_count"] > 0:
+        validation_errors.append(
+            "Scoped dataset contains invalid decision contexts; export is not ML-safe."
+        )
+    if scope_integrity["non_completed_match_count"] > 0:
+        validation_errors.append(
+            "Scoped dataset contains incomplete matches; export is not ML-safe."
+        )
+    if scope_integrity["fallback_count"] > 0:
+        validation_warnings.append(
+            f"Scoped dataset includes {scope_integrity['fallback_count']} fallback_used=true decisions."
+        )
+    if scope_integrity["concurrent_writer_overlap"]["warning"]:
+        validation_warnings.append(
+            "Concurrent writer overlap was detected during the scoped run window."
+        )
+    if default_provider_applied:
+        validation_warnings.append(
+            "Defaulted scoped export provider to server_heuristic."
+        )
+    if database_url_fallback_used:
+        validation_warnings.append(
+            f"Database URL fallback was used from {database_url_source}."
+        )
+    manifest["validation_dropped_rows_by_reason"] = dict(stats.dropped_rows_by_reason)
+    manifest["leakage_denylist_pass"] = len(leakage_errors) == 0
     validation_report = build_validation_report(
         args=args,
         stats=stats,
@@ -2231,6 +2498,9 @@ def main() -> None:
         source_row_counts=source_row_counts,
         included_exploration=bool(args.include_exploration),
         leakage_errors=leakage_errors,
+        scope_integrity=scope_integrity,
+        scoped_provider_distribution=scoped_provider_distribution,
+        scoped_requested_provider_distribution=scoped_requested_provider_distribution,
     )
 
     if validation_only:
@@ -2259,8 +2529,12 @@ def main() -> None:
             validation_errors=validation_errors,
             validation_warnings=validation_warnings,
             validation_mode_used="validate_only" if args.validate_only else "dry_run",
+            scope_integrity=scope_integrity,
+            scoped_provider_distribution=scoped_provider_distribution,
+            scoped_requested_provider_distribution=scoped_requested_provider_distribution,
+            filtered_provider_distribution=dict(stats.rows_by_provider),
         )
-        print(json.dumps(summary))
+        print(json.dumps(summary, sort_keys=True))
         if not summary["accepted"]:
             sys.exit(1)
         return
@@ -2271,6 +2545,18 @@ def main() -> None:
         )
     if leakage_errors:
         raise ValueError("ml:export rejected the dataset because leakage fields appeared in feature columns.")
+    if scope_integrity["invalid_decision_count"] > 0:
+        raise ValueError(
+            "ml:export rejected the dataset because scoped invalid decision contexts were detected."
+        )
+    if scope_integrity["non_completed_match_count"] > 0:
+        raise ValueError(
+            "ml:export rejected the dataset because scoped incomplete matches were detected."
+        )
+    if len(scoped_provider_distribution) > 1 and not args.provider:
+        raise ValueError(
+            "ml:export rejected the dataset because mixed providers were detected without an explicit --provider filter."
+        )
 
     write_feature_schema(feature_schema_output)
     schema = build_schema(written_columns, first_row)
@@ -2309,7 +2595,8 @@ def main() -> None:
                 "feature_columns_output": str(feature_columns_output),
                 "label_columns_output": str(label_columns_output),
                 "validation_report_output": str(validation_report_output),
-            }
+            },
+            sort_keys=True,
         )
     )
 

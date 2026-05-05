@@ -13,7 +13,10 @@ import {
 import {
   formatTrainingSimCommandForLog,
   buildTrainingSimArgs,
-  parseSimBatchSummaryFromLines
+  parseSimBatchSummaryFromLines,
+  mergeBatchSummaries,
+  summarizePersistenceMismatch,
+  selectMlExportValidationSummaryFromOutput
 } from "../../scripts/training-data.js";
 
 describe("training run helpers", () => {
@@ -169,12 +172,132 @@ describe("training run helpers", () => {
   it("parses compact sim summaries from streaming training output", () => {
     const summary = parseSimBatchSummaryFromLines([
       "noise",
-      '{"gamesPlayed":3,"errors":0,"fallbackCount":0,"decisionProviderFailures":0,"decisionTimeoutCount":0,"providerUsage":{"server_heuristic":183},"averageLatencyByProvider":{"server_heuristic":3.12}}'
+      '{"gamesPlayed":3,"handsPlayed":12,"decisionsRecorded":183,"eventsRecorded":240,"errors":0,"fallbackCount":0,"decisionProviderFailures":0,"decisionTimeoutCount":0,"invalidDecisionCount":0,"providerUsage":{"server_heuristic":183},"averageLatencyByProvider":{"server_heuristic":3.12},"telemetryRuntime":{"status":"degraded","pending_count":4}}'
     ]);
 
     expect(summary?.gamesPlayed).toBe(3);
+    expect(summary?.handsPlayed).toBe(12);
+    expect(summary?.decisionsRecorded).toBe(183);
+    expect(summary?.eventsRecorded).toBe(240);
     expect(summary?.fallbackCount).toBe(0);
     expect(summary?.providerUsage.server_heuristic).toBe(183);
     expect(summary?.averageLatencyByProvider.server_heuristic).toBe(3.12);
+    expect(summary?.telemetryRuntime?.pending_count).toBe(4);
+  });
+
+  it("aggregates wrapper metadata across all batches instead of only the final batch", () => {
+    const aggregated = mergeBatchSummaries(
+      null,
+      {
+        gamesPlayed: 60,
+        handsPlayed: 800,
+        decisionsRecorded: 70000,
+        eventsRecorded: 88000,
+        errors: 0,
+        fallbackCount: 0,
+        decisionProviderFailures: 0,
+        decisionTimeoutCount: 0,
+        invalidDecisionCount: 0,
+        providerUsage: {
+          server_heuristic: 68000,
+          system_local: 2000
+        },
+        averageLatencyByProvider: {
+          server_heuristic: 8,
+          system_local: 0.1
+        },
+        telemetryRuntime: {
+          status: "connected",
+          pending_count: 0
+        }
+      }
+    );
+    const merged = mergeBatchSummaries(aggregated, {
+      gamesPlayed: 40,
+      handsPlayed: 589,
+      decisionsRecorded: 48114,
+      eventsRecorded: 61497,
+      errors: 0,
+      fallbackCount: 0,
+      decisionProviderFailures: 0,
+      decisionTimeoutCount: 0,
+      invalidDecisionCount: 0,
+      providerUsage: {
+        server_heuristic: 45847,
+        system_local: 2267
+      },
+      averageLatencyByProvider: {
+        server_heuristic: 7.65,
+        system_local: 0.05
+      },
+      telemetryRuntime: {
+        status: "degraded",
+        pending_count: 4
+      }
+    });
+
+    expect(merged?.gamesPlayed).toBe(100);
+    expect(merged?.handsPlayed).toBe(1389);
+    expect(merged?.decisionsRecorded).toBe(118114);
+    expect(merged?.eventsRecorded).toBe(149497);
+    expect(merged?.providerUsage.server_heuristic).toBe(113847);
+    expect(merged?.providerUsage.system_local).toBe(4267);
+    expect(merged?.telemetryRuntime?.status).toBe("degraded");
+    expect(merged?.telemetryRuntime?.pending_count).toBe(4);
+    expect(merged?.averageLatencyByProvider.server_heuristic).toBeCloseTo(
+      (68000 * 8 + 45847 * 7.65) / 113847,
+      6
+    );
+  });
+
+  it("reports requested vs executed vs persisted mismatches explicitly", () => {
+    const mismatch = summarizePersistenceMismatch({
+      requestedGames: 100,
+      executedGames: 100,
+      executedHands: 1389,
+      executedDecisions: 118014,
+      executedEvents: 149497,
+      persistedMatches: 100,
+      persistedDecisions: 118114,
+      persistedEvents: 149497
+    });
+
+    expect(mismatch.games).toEqual({
+      requested: 100,
+      executed: 100,
+      persisted: 100,
+      missing: 0,
+      extra: 0
+    });
+    expect(mismatch.decisions).toEqual({
+      executed: 118014,
+      persisted: 118114,
+      missing: 0,
+      extra: 100
+    });
+    expect(mismatch.events).toEqual({
+      executed: 149497,
+      persisted: 149497,
+      missing: 0,
+      extra: 0
+    });
+    expect(mismatch.hasMismatch).toBe(true);
+  });
+
+  it("selects the canonical ml:export validation summary when warning JSON follows it", () => {
+    const output = [
+      "> tichuml@0.1.0 ml:export",
+      '{"accepted": true, "validation_only": true, "validation_status": "accepted", "supports_validate_only": true}',
+      '{"accepted": true, "warning": "database_url_fallback_used", "database_url_source": "default_local_training_db"}'
+    ].join("\n");
+
+    const summary = selectMlExportValidationSummaryFromOutput(output);
+
+    expect(summary).toEqual({
+      accepted: true,
+      validation_only: true,
+      validation_status: "accepted",
+      supports_validate_only: true
+    });
   });
 });

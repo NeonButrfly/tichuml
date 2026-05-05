@@ -36,12 +36,47 @@ type VerificationSnapshot = {
 
 type ParsedSimBatchSummary = {
   gamesPlayed: number;
+  handsPlayed: number;
+  decisionsRecorded: number;
+  eventsRecorded: number;
   errors: number;
   fallbackCount: number;
   decisionProviderFailures: number;
   decisionTimeoutCount: number;
+  invalidDecisionCount: number;
   providerUsage: Record<string, number>;
   averageLatencyByProvider: Record<string, number>;
+  telemetryRuntime: Record<string, unknown> | null;
+};
+
+type PersistenceMismatchValue = {
+  executed: number;
+  persisted: number;
+  missing: number;
+  extra: number;
+};
+
+type PersistenceMismatchSummary = {
+  games: PersistenceMismatchValue & { requested: number };
+  hands: { executed: number };
+  decisions: PersistenceMismatchValue;
+  events: PersistenceMismatchValue;
+  hasMismatch: boolean;
+};
+
+type ScopedTimeWindow = {
+  minTs: string | null;
+  maxTs: string | null;
+};
+
+type ConcurrentWriterOverlap = {
+  warning: boolean;
+  scoped_window: ScopedTimeWindow;
+  overlapping_decisions: number;
+  overlapping_events: number;
+  overlapping_matches: number;
+  overlap_first_ts: string | null;
+  overlap_last_ts: string | null;
 };
 
 const TRAINING_CLEAR_SQL =
@@ -168,6 +203,14 @@ function isNumberRecord(value: unknown): value is Record<string, number> {
   );
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function finiteNumber(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
 function mergeNumberCounts(
   current: unknown,
   next: Record<string, number>
@@ -196,6 +239,16 @@ export function parseSimBatchSummaryFromLines(
       ) {
         return {
           gamesPlayed: parsed.gamesPlayed,
+          handsPlayed:
+            typeof parsed.handsPlayed === "number" ? parsed.handsPlayed : 0,
+          decisionsRecorded:
+            typeof parsed.decisionsRecorded === "number"
+              ? parsed.decisionsRecorded
+              : 0,
+          eventsRecorded:
+            typeof parsed.eventsRecorded === "number"
+              ? parsed.eventsRecorded
+              : 0,
           errors: parsed.errors,
           fallbackCount: parsed.fallbackCount,
           decisionProviderFailures:
@@ -206,6 +259,10 @@ export function parseSimBatchSummaryFromLines(
             typeof parsed.decisionTimeoutCount === "number"
               ? parsed.decisionTimeoutCount
               : 0,
+          invalidDecisionCount:
+            typeof parsed.invalidDecisionCount === "number"
+              ? parsed.invalidDecisionCount
+              : 0,
           providerUsage: isNumberRecord(parsed.providerUsage)
             ? parsed.providerUsage
             : {},
@@ -213,7 +270,10 @@ export function parseSimBatchSummaryFromLines(
             parsed.averageLatencyByProvider
           )
             ? parsed.averageLatencyByProvider
-            : {}
+            : {},
+          telemetryRuntime: isRecord(parsed.telemetryRuntime)
+            ? parsed.telemetryRuntime
+            : null
         };
       }
     } catch {
@@ -221,6 +281,153 @@ export function parseSimBatchSummaryFromLines(
     }
   }
   return null;
+}
+
+export function mergeBatchSummaries(
+  current: ParsedSimBatchSummary | null,
+  next: ParsedSimBatchSummary
+): ParsedSimBatchSummary {
+  if (current === null) {
+    return {
+      ...next,
+      providerUsage: { ...next.providerUsage },
+      averageLatencyByProvider: { ...next.averageLatencyByProvider },
+      telemetryRuntime: next.telemetryRuntime
+        ? { ...next.telemetryRuntime }
+        : null
+    };
+  }
+
+  const providerUsage = mergeNumberCounts(current.providerUsage, next.providerUsage);
+  const latencyProviders = new Set([
+    ...Object.keys(current.averageLatencyByProvider),
+    ...Object.keys(next.averageLatencyByProvider)
+  ]);
+  const averageLatencyByProvider: Record<string, number> = {};
+  for (const provider of latencyProviders) {
+    const currentCount = finiteNumber(current.providerUsage[provider]);
+    const nextCount = finiteNumber(next.providerUsage[provider]);
+    const totalCount = currentCount + nextCount;
+    if (totalCount <= 0) {
+      continue;
+    }
+    const currentLatency =
+      finiteNumber(current.averageLatencyByProvider[provider]) * currentCount;
+    const nextLatency =
+      finiteNumber(next.averageLatencyByProvider[provider]) * nextCount;
+    averageLatencyByProvider[provider] = Number(
+      ((currentLatency + nextLatency) / totalCount).toFixed(6)
+    );
+  }
+
+  return {
+    gamesPlayed: current.gamesPlayed + next.gamesPlayed,
+    handsPlayed: current.handsPlayed + next.handsPlayed,
+    decisionsRecorded: current.decisionsRecorded + next.decisionsRecorded,
+    eventsRecorded: current.eventsRecorded + next.eventsRecorded,
+    errors: current.errors + next.errors,
+    fallbackCount: current.fallbackCount + next.fallbackCount,
+    decisionProviderFailures:
+      current.decisionProviderFailures + next.decisionProviderFailures,
+    decisionTimeoutCount:
+      current.decisionTimeoutCount + next.decisionTimeoutCount,
+    invalidDecisionCount:
+      current.invalidDecisionCount + next.invalidDecisionCount,
+    providerUsage,
+    averageLatencyByProvider,
+    telemetryRuntime: next.telemetryRuntime
+      ? { ...next.telemetryRuntime }
+      : current.telemetryRuntime
+        ? { ...current.telemetryRuntime }
+        : null
+  };
+}
+
+export function summarizePersistenceMismatch(input: {
+  requestedGames: number;
+  executedGames: number;
+  executedHands: number;
+  executedDecisions: number;
+  executedEvents: number;
+  persistedMatches: number;
+  persistedDecisions: number;
+  persistedEvents: number;
+}): PersistenceMismatchSummary {
+  const gamesMissing = Math.max(0, input.executedGames - input.persistedMatches);
+  const gamesExtra = Math.max(0, input.persistedMatches - input.executedGames);
+  const decisionsMissing = Math.max(
+    0,
+    input.executedDecisions - input.persistedDecisions
+  );
+  const decisionsExtra = Math.max(
+    0,
+    input.persistedDecisions - input.executedDecisions
+  );
+  const eventsMissing = Math.max(0, input.executedEvents - input.persistedEvents);
+  const eventsExtra = Math.max(0, input.persistedEvents - input.executedEvents);
+
+  return {
+    games: {
+      requested: input.requestedGames,
+      executed: input.executedGames,
+      persisted: input.persistedMatches,
+      missing: gamesMissing,
+      extra: gamesExtra
+    },
+    hands: {
+      executed: input.executedHands
+    },
+    decisions: {
+      executed: input.executedDecisions,
+      persisted: input.persistedDecisions,
+      missing: decisionsMissing,
+      extra: decisionsExtra
+    },
+    events: {
+      executed: input.executedEvents,
+      persisted: input.persistedEvents,
+      missing: eventsMissing,
+      extra: eventsExtra
+    },
+    hasMismatch:
+      gamesMissing > 0 ||
+      gamesExtra > 0 ||
+      decisionsMissing > 0 ||
+      decisionsExtra > 0 ||
+      eventsMissing > 0 ||
+      eventsExtra > 0
+  };
+}
+
+export function selectMlExportValidationSummaryFromOutput(
+  output: string
+): Record<string, unknown> | null {
+  const candidates: Record<string, unknown>[] = [];
+  for (const rawLine of output.split(/\r?\n/u)) {
+    const line = rawLine.trim();
+    if (!line.startsWith("{") || !line.endsWith("}")) {
+      continue;
+    }
+    try {
+      const parsed = JSON.parse(line) as Record<string, unknown>;
+      candidates.push(parsed);
+    } catch {
+      continue;
+    }
+  }
+
+  for (let index = candidates.length - 1; index >= 0; index -= 1) {
+    const candidate = candidates[index];
+    if (
+      typeof candidate.validation_status === "string" ||
+      candidate.validation_only === true ||
+      candidate.supports_validate_only === true
+    ) {
+      return candidate;
+    }
+  }
+
+  return candidates.at(-1) ?? null;
 }
 
 function loadMetadata(metadataFile: string): TrainingMetadata {
@@ -273,6 +480,10 @@ function gitOutput(repoRoot: string, args: string[]): string {
 
 function escapeSqlLiteral(value: string): string {
   return value.replace(/'/g, "''");
+}
+
+function escapeLikePrefixForSql(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
 }
 
 function quoteShellArg(value: string): string {
@@ -373,6 +584,161 @@ async function collectScopedCounts(
     decisions: Number(decisions?.row_count ?? 0),
     events: Number(events?.row_count ?? 0),
   };
+}
+
+async function collectScopedProviderUsage(
+  sql: ReturnType<typeof createDatabaseClient>,
+  prefix: string
+): Promise<Record<string, number>> {
+  const likeValue = `${prefix}%`;
+  const rows = await sql<{
+    provider: string;
+    row_count: string;
+  }[]>`
+    SELECT COALESCE(provider_used, policy_source, '<unknown>') AS provider,
+           count(*)::text AS row_count
+    FROM decisions
+    WHERE game_id LIKE ${likeValue}
+    GROUP BY COALESCE(provider_used, policy_source, '<unknown>')
+    ORDER BY COALESCE(provider_used, policy_source, '<unknown>') ASC
+  `;
+  const distribution: Record<string, number> = {};
+  for (const row of rows) {
+    distribution[row.provider] = Number(row.row_count ?? 0);
+  }
+  return distribution;
+}
+
+async function collectScopedTimeWindow(
+  sql: ReturnType<typeof createDatabaseClient>,
+  prefix: string
+): Promise<ScopedTimeWindow> {
+  const likeValue = `${prefix}%`;
+  const [row] = await sql<{
+    min_ts: string | null;
+    max_ts: string | null;
+  }[]>`
+    SELECT MIN(ts)::text AS min_ts, MAX(ts)::text AS max_ts
+    FROM decisions
+    WHERE game_id LIKE ${likeValue}
+  `;
+  return {
+    minTs: row?.min_ts ?? null,
+    maxTs: row?.max_ts ?? null
+  };
+}
+
+async function collectConcurrentWriterOverlap(
+  sql: ReturnType<typeof createDatabaseClient>,
+  prefix: string
+): Promise<ConcurrentWriterOverlap> {
+  const scopedWindow = await collectScopedTimeWindow(sql, prefix);
+  if (!scopedWindow.minTs || !scopedWindow.maxTs) {
+    return {
+      warning: false,
+      scoped_window: scopedWindow,
+      overlapping_decisions: 0,
+      overlapping_events: 0,
+      overlapping_matches: 0,
+      overlap_first_ts: null,
+      overlap_last_ts: null
+    };
+  }
+
+  const scopedLike = `${escapeLikePrefixForSql(prefix)}%`;
+  const [decisionRow] = await sql.unsafe<{
+    row_count: string;
+    min_ts: string | null;
+    max_ts: string | null;
+  }[]>(
+    `
+      SELECT count(*)::text AS row_count,
+             MIN(ts)::text AS min_ts,
+             MAX(ts)::text AS max_ts
+      FROM decisions
+      WHERE game_id NOT LIKE '${escapeSqlLiteral(scopedLike)}' ESCAPE '\\'
+        AND ts BETWEEN '${escapeSqlLiteral(scopedWindow.minTs)}'::timestamptz
+                  AND '${escapeSqlLiteral(scopedWindow.maxTs)}'::timestamptz
+    `
+  );
+  const [eventRow] = await sql.unsafe<{ row_count: string }[]>(
+    `
+      SELECT count(*)::text AS row_count
+      FROM events
+      WHERE game_id NOT LIKE '${escapeSqlLiteral(scopedLike)}' ESCAPE '\\'
+        AND ts BETWEEN '${escapeSqlLiteral(scopedWindow.minTs)}'::timestamptz
+                  AND '${escapeSqlLiteral(scopedWindow.maxTs)}'::timestamptz
+    `
+  );
+  const [matchRow] = await sql.unsafe<{ row_count: string }[]>(
+    `
+      SELECT count(*)::text AS row_count
+      FROM matches
+      WHERE game_id NOT LIKE '${escapeSqlLiteral(scopedLike)}' ESCAPE '\\'
+        AND created_at BETWEEN '${escapeSqlLiteral(scopedWindow.minTs)}'::timestamptz
+                          AND '${escapeSqlLiteral(scopedWindow.maxTs)}'::timestamptz
+    `
+  );
+
+  const overlappingDecisions = Number(decisionRow?.row_count ?? 0);
+  const overlappingEvents = Number(eventRow?.row_count ?? 0);
+  const overlappingMatches = Number(matchRow?.row_count ?? 0);
+  return {
+    warning:
+      overlappingDecisions > 0 || overlappingEvents > 0 || overlappingMatches > 0,
+    scoped_window: scopedWindow,
+    overlapping_decisions: overlappingDecisions,
+    overlapping_events: overlappingEvents,
+    overlapping_matches: overlappingMatches,
+    overlap_first_ts: decisionRow?.min_ts ?? null,
+    overlap_last_ts: decisionRow?.max_ts ?? null
+  };
+}
+
+async function fetchTelemetryHealth(
+  backendUrl: string
+): Promise<Record<string, unknown> | null> {
+  try {
+    const response = await fetch(
+      `${backendUrl.replace(/\/$/, "")}/api/telemetry/health`
+    );
+    if (!response.ok) {
+      return {
+        accepted: false,
+        status: response.status
+      };
+    }
+    return (await response.json()) as Record<string, unknown>;
+  } catch (error) {
+    return {
+      accepted: false,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
+async function waitForTelemetryFlush(
+  backendUrl: string,
+  timeoutMs = 20000
+): Promise<Record<string, unknown> | null> {
+  const startedAt = Date.now();
+  let latest = await fetchTelemetryHealth(backendUrl);
+  while (Date.now() - startedAt < timeoutMs) {
+    const queuePending = finiteNumber(
+      isRecord(latest) ? latest.queue_pending : undefined
+    );
+    const queue = isRecord(latest) ? latest.queue : null;
+    const queueDepth = finiteNumber(isRecord(queue) ? queue.queue_depth : undefined);
+    const persistenceFailures = finiteNumber(
+      isRecord(latest) ? latest.persistence_failures : undefined
+    );
+    if (queuePending <= 0 && queueDepth <= 0 && persistenceFailures <= 0) {
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    latest = await fetchTelemetryHealth(backendUrl);
+  }
+  return latest;
 }
 
 async function buildVerificationSnapshot(
@@ -682,15 +1048,16 @@ async function runMlExportCheck(metadata: TrainingMetadata): Promise<Record<stri
   const logFile = metadataString(metadata, "ml_export_check_log");
   const summaryFile = metadataString(metadata, "ml_export_check_summary_file");
 
-  const fullArgs = [
-    "run",
-    "ml:export",
-    "--",
+  const exportArgs = [
+    "scripts/run-python.ts",
+    "ml/export_training_rows.py",
     "--validate-only",
     "--run-id",
     runId,
     "--game-id-prefix",
     gameIdPrefix,
+    "--provider",
+    metadataString(metadata, "provider"),
     "--output-dir",
     outputDir,
   ];
@@ -701,24 +1068,30 @@ async function runMlExportCheck(metadata: TrainingMetadata): Promise<Record<stri
     fs.existsSync(pgPasswordFile)
       ? buildDatabaseUrl(metadata, fs.readFileSync(pgPasswordFile, "utf8").trim())
       : null;
-  const result = spawnNpm(fullArgs, {
-    cwd: repoRoot,
-    env: databaseUrl
-      ? {
-          ...process.env,
-          TRAINING_DATABASE_URL: databaseUrl,
-        }
-      : process.env,
-  });
+  const result = spawnSync(
+    process.execPath,
+    [path.join("node_modules", "tsx", "dist", "cli.mjs"), ...exportArgs],
+    {
+      cwd: repoRoot,
+      env: databaseUrl
+        ? {
+            ...process.env,
+            TRAINING_DATABASE_URL: databaseUrl,
+          }
+        : process.env,
+      encoding: "utf8",
+      windowsHide: true,
+    }
+  );
   const combinedOutput = `${result.stdout ?? ""}${result.stderr ?? ""}`.trim();
   if (combinedOutput.length > 0) {
     appendLine(logFile, combinedOutput);
   }
-  const summaryText = (result.stdout ?? "").trim().split(/\r?\n/u).at(-1) ?? "{}";
   let parsed: Record<string, unknown>;
-  try {
-    parsed = JSON.parse(summaryText) as Record<string, unknown>;
-  } catch {
+  const selectedSummary = selectMlExportValidationSummaryFromOutput(combinedOutput);
+  if (selectedSummary) {
+    parsed = selectedSummary;
+  } else {
     parsed = {
       accepted: false,
       validation_status: "failed",
@@ -913,10 +1286,16 @@ async function prepareRun(options: CliOptions): Promise<void> {
     completed_scoped_decisions: 0,
     completed_scoped_events: 0,
     provider_used_distribution: {},
+    batch_summary_totals: null,
     fallback_count: 0,
     decision_provider_failures: 0,
     decision_timeout_count: 0,
+    invalid_decision_count: 0,
     average_latency_by_provider: {},
+    persistence_mismatch: null,
+    scoped_provider_distribution: {},
+    concurrent_writer_overlap: null,
+    telemetry_flush_status: null,
     run_complete: false,
     failure_reason: null,
     sim_exit_code: null,
@@ -1106,12 +1485,34 @@ async function finalizeRun(metadata: TrainingMetadata, pgPassword: string): Prom
   try {
     const globalCounts = await collectTableCounts(sql);
     const scopedCounts = await collectScopedCounts(sql, prefix);
+    const scopedProviderDistribution = await collectScopedProviderUsage(sql, prefix);
+    const concurrentWriterOverlap = await collectConcurrentWriterOverlap(
+      sql,
+      prefix
+    );
     const requestedGames =
       metadataOptionalNumber(metadata, "requested_games") ??
       metadataNumber(metadata, "games_per_batch");
+    const batchSummaryTotals = isRecord(metadata.batch_summary_totals)
+      ? (metadata.batch_summary_totals as ParsedSimBatchSummary)
+      : null;
+    const persistenceMismatch = summarizePersistenceMismatch({
+      requestedGames,
+      executedGames: batchSummaryTotals?.gamesPlayed ?? scopedCounts.matches,
+      executedHands: batchSummaryTotals?.handsPlayed ?? 0,
+      executedDecisions:
+        batchSummaryTotals?.decisionsRecorded ?? scopedCounts.decisions,
+      executedEvents: batchSummaryTotals?.eventsRecorded ?? scopedCounts.events,
+      persistedMatches: scopedCounts.matches,
+      persistedDecisions: scopedCounts.decisions,
+      persistedEvents: scopedCounts.events
+    });
     metadata.completed_scoped_matches = scopedCounts.matches;
     metadata.completed_scoped_decisions = scopedCounts.decisions;
     metadata.completed_scoped_events = scopedCounts.events;
+    metadata.scoped_provider_distribution = scopedProviderDistribution;
+    metadata.concurrent_writer_overlap = concurrentWriterOverlap;
+    metadata.persistence_mismatch = persistenceMismatch;
     if (metadata.run_complete !== true) {
       metadata.run_complete =
         scopedCounts.matches >= requestedGames &&
@@ -1122,8 +1523,13 @@ async function finalizeRun(metadata: TrainingMetadata, pgPassword: string): Prom
       run_id: metadataString(metadata, "run_id"),
       game_id_prefix: prefix,
       requested_games: requestedGames,
+      requested_provider: metadataString(metadata, "provider"),
       global_counts: globalCounts,
       scoped_counts: scopedCounts,
+      scoped_provider_distribution: scopedProviderDistribution,
+      batch_summary_totals: batchSummaryTotals,
+      persistence_mismatch: persistenceMismatch,
+      concurrent_writer_overlap: concurrentWriterOverlap,
       run_complete: metadata.run_complete === true,
       failure_reason: metadata.failure_reason ?? null,
       sim_exit_code: metadata.sim_exit_code ?? null,
@@ -1146,6 +1552,10 @@ async function finalizeRun(metadata: TrainingMetadata, pgPassword: string): Prom
   } finally {
     await sql.end({ timeout: 5 });
   }
+
+  metadata.telemetry_flush_status = await waitForTelemetryFlush(
+    metadataString(metadata, "backend_url")
+  );
 
   for (const tableName of ["matches", "decisions", "events"] as const) {
     runPsqlCopy({
@@ -1463,26 +1873,21 @@ async function runLoop(options: CliOptions): Promise<void> {
       );
       const parsedSummary = parseSimBatchSummaryFromLines(result.outputTail);
       if (parsedSummary) {
-        metadata.provider_used_distribution = mergeNumberCounts(
-          metadata.provider_used_distribution,
-          parsedSummary.providerUsage
+        const mergedSummary = mergeBatchSummaries(
+          isRecord(metadata.batch_summary_totals)
+            ? (metadata.batch_summary_totals as ParsedSimBatchSummary)
+            : null,
+          parsedSummary
         );
-        metadata.fallback_count =
-          metadataOptionalNumber(metadata, "fallback_count") ??
-          Number(metadata["fallback_count"] ?? 0);
-        metadata.fallback_count =
-          Number(metadata.fallback_count ?? 0) + parsedSummary.fallbackCount;
+        metadata.batch_summary_totals = mergedSummary;
+        metadata.provider_used_distribution = { ...mergedSummary.providerUsage };
+        metadata.fallback_count = mergedSummary.fallbackCount;
         metadata.decision_provider_failures =
-          Number(metadata["decision_provider_failures"] ?? 0) +
-          parsedSummary.decisionProviderFailures;
-        metadata.decision_timeout_count =
-          Number(metadata["decision_timeout_count"] ?? 0) +
-          parsedSummary.decisionTimeoutCount;
+          mergedSummary.decisionProviderFailures;
+        metadata.decision_timeout_count = mergedSummary.decisionTimeoutCount;
+        metadata.invalid_decision_count = mergedSummary.invalidDecisionCount;
         metadata.average_latency_by_provider = {
-          ...(isNumberRecord(metadata.average_latency_by_provider)
-            ? metadata.average_latency_by_provider
-            : {}),
-          ...parsedSummary.averageLatencyByProvider
+          ...mergedSummary.averageLatencyByProvider
         };
         appendLine(
           runLog,
@@ -1490,11 +1895,17 @@ async function runLoop(options: CliOptions): Promise<void> {
             ts: nowIso(),
             event: "batch_provider_summary",
             batch_id: batchId,
+            games_played: parsedSummary.gamesPlayed,
+            hands_played: parsedSummary.handsPlayed,
+            decisions_recorded: parsedSummary.decisionsRecorded,
+            events_recorded: parsedSummary.eventsRecorded,
             requested_provider: metadataString(metadata, "provider"),
             provider_used_counts: parsedSummary.providerUsage,
             fallback_count: parsedSummary.fallbackCount,
             decision_provider_failures: parsedSummary.decisionProviderFailures,
             decision_timeout_count: parsedSummary.decisionTimeoutCount,
+            invalid_decision_count: parsedSummary.invalidDecisionCount,
+            telemetry_runtime: parsedSummary.telemetryRuntime,
             average_latency_by_provider:
               parsedSummary.averageLatencyByProvider
           })

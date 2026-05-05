@@ -2,6 +2,34 @@
 
 Prompt logs here capture backend/platform prompt intent only. GitHub issue state remains authoritative.
 
+## 2026-05-05 - DB-backed training export integrity and wrapper truth reporting
+
+- Prompt signal:
+  Do not regress working telemetry or simulation behavior. Use the existing
+  database extract and telemetry evidence as source of truth. Make
+  `ml:export --validate-only` parseable and deterministic, aggregate wrapper
+  metadata across all batches, expose requested-vs-executed-vs-persisted
+  mismatches, detect mixed providers and concurrent writers, report
+  telemetry-runtime degraded or pending state explicitly, validate bomb usage,
+  and confirm the scoped dataset is ML-safe without temporal leakage.
+- Interpreted requirement:
+  Issue [#61](https://github.com/NeonButrfly/tichuml/issues/61) now also
+  governs the integrity contract for scoped training exports: validation-only
+  output must be one canonical JSON payload, scoped exports must default to
+  `server_heuristic` unless explicitly overridden, mixed-policy rows must be
+  filtered or annotated instead of silently used, and wrapper finalization must
+  record DB truth, overlap warnings, persistence mismatch math, and post-run
+  telemetry flush status.
+- Affected systems:
+  `scripts/training-data.ts`, `scripts/run-python.ts`, `ml/export_training_rows.py`,
+  training-run metadata/artifacts, telemetry validation/docs.
+- Linked GitHub issue:
+  [#61](https://github.com/NeonButrfly/tichuml/issues/61)
+- Milestone:
+  [6.5 - Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status:
+  Lives in GitHub, not here.
+
 ## 2026-05-03 - Isolated Linux and Windows training-data session workflow
 
 - Prompt signal:

@@ -56,6 +56,12 @@ Validate scoped current-run export compatibility without writing a full dataset:
 npm run ml:export -- --validate-only --run-id <run_id> --game-id-prefix <game_id_prefix> --output-dir training-runs/<run_id>/ml
 ```
 
+Scoped validation now defaults to `server_heuristic` when a run-specific scope
+is supplied and no provider override is passed. The validation JSON also
+reports full scoped provider distribution, excluded mixed-policy rows,
+concurrent-writer overlap, fallback counts, invalid decision counts, bomb
+counts, and whether the scoped dataset is ML-safe for export.
+
 Write a scoped LightGBM-ready export bundle after a training run:
 
 ```powershell
@@ -114,7 +120,8 @@ bundle such as:
 - `training-runs/<run_id>/ml/label_columns.json`
 
 `--validate-only` uses the same scoped filters and LightGBM shape checks, but
-it does not emit the full dataset.
+it does not emit the full dataset. Its single JSON payload is intended to be
+machine-parseable and deterministic under the same explicit DB/provider scope.
 
 `ml:rollouts` writes:
 
