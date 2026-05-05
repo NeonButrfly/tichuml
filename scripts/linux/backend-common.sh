@@ -81,12 +81,52 @@ ensure_env_file() {
   fi
 }
 
+ensure_repo_root() {
+  if [ ! -f "$BACKEND_REPO_ROOT/package.json" ]; then
+    log_fail "Could not find repo root at $BACKEND_REPO_ROOT"
+    exit 1
+  fi
+  export BACKEND_REPO_ROOT
+}
+
+backend_env_ready() {
+  [ -n "${POSTGRES_CONTAINER_NAME:-}" ] &&
+    [ -n "${POSTGRES_USER:-}" ] &&
+    [ -n "${POSTGRES_DB:-}" ] &&
+    [ -n "${POSTGRES_PORT:-}" ]
+}
+
 load_repo_env() {
   log_info "Loading backend environment from $BACKEND_REPO_ROOT/.env"
   ensure_env_file
 
   require_command node
   eval "$(node "$BACKEND_REPO_ROOT/scripts/runtime-config.mjs" export-shell "$BACKEND_REPO_ROOT/.env")"
+}
+
+ensure_backend_env_loaded() {
+  if ! backend_env_ready; then
+    load_repo_env
+  fi
+}
+
+assert_postgres_identity() {
+  ensure_repo_root
+  ensure_backend_env_loaded
+
+  if ! backend_env_ready; then
+    log_fail "Postgres identity is incomplete after loading .env."
+    exit 1
+  fi
+}
+
+print_identity() {
+  assert_postgres_identity
+  local backend_url="${BACKEND_LOCAL_URL:-${BACKEND_BASE_URL:-http://127.0.0.1:${PORT:-4310}}}"
+  log_info "Repo root: $BACKEND_REPO_ROOT"
+  log_info "Backend URL: $backend_url"
+  log_info "Postgres container: $POSTGRES_CONTAINER_NAME"
+  log_info "Postgres identity: user=$POSTGRES_USER db=$POSTGRES_DB port=$POSTGRES_PORT"
 }
 
 docker_info_error() {
@@ -341,6 +381,10 @@ ensure_docker_running() {
 
   log_fail "Docker did not become ready within the timeout window."
   exit 1
+}
+
+ensure_docker_ready() {
+  ensure_docker_running
 }
 
 start_postgres() {

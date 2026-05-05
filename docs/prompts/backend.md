@@ -2,6 +2,28 @@
 
 Prompt logs here capture backend/platform prompt intent only. GitHub issue state remains authoritative.
 
+## 2026-05-05 - Linux reset-db wrapper regression on backend host
+
+- Prompt signal:
+  Fix the Linux host failure from `/opt/tichuml/scripts/reset-db-linux.sh`
+  where `ensure_docker_ready`, `print_identity`, and `log_step` were missing
+  and `wait_for_postgres` reached `POSTGRES_USER: unbound variable`.
+- Interpreted requirement:
+  Issue [#63](https://github.com/NeonButrfly/tichuml/issues/63) governs the
+  operator reset contract: the Linux reset-db entrypoint must use the shared
+  backend helper surface, load `.env` before checking Postgres readiness, and
+  keep the top-level wrapper working from `/opt/tichuml/scripts` without local
+  fallback shims.
+- Affected systems:
+  `scripts/linux/backend-common.sh`, `scripts/linux/reset-db.sh`,
+  `scripts/reset-db-linux.sh`, Linux launcher regression tests.
+- Linked GitHub issue:
+  [#63](https://github.com/NeonButrfly/tichuml/issues/63)
+- Milestone:
+  None. Single bugfix.
+- Status:
+  Lives in GitHub, not here.
+
 ## 2026-05-05 - DB-backed training export integrity and wrapper truth reporting
 
 - Prompt signal:
