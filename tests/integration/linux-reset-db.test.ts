@@ -108,6 +108,7 @@ exit 0
         encoding: "utf8",
         env: {
           ...process.env,
+          BACKEND_RUNTIME_DIR: path.join(tempDir, "runtime"),
           PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}`
         }
       });
