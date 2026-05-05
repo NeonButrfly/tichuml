@@ -123,6 +123,34 @@ require_command() {
   fi
 }
 
+ensure_workspace_builds() {
+  local missing="false"
+  local required_file
+  for required_file in \
+    "$REPO_ROOT/packages/shared/dist/index.js" \
+    "$REPO_ROOT/packages/engine/dist/index.js" \
+    "$REPO_ROOT/packages/telemetry/dist/index.js" \
+    "$REPO_ROOT/packages/ai-heuristics/dist/index.js" \
+    "$REPO_ROOT/apps/sim-runner/dist/cli.js"; do
+    if [[ ! -f "$required_file" ]]; then
+      missing="true"
+      break
+    fi
+  done
+
+  if [[ "$missing" != "true" ]]; then
+    return 0
+  fi
+
+  echo "Workspace package builds are missing; building required packages before training launch."
+  echo "Underlying build command: npm run build:shared && npm run build:engine && npm run build:telemetry && npm run build:ai && npm run build:sim-runner"
+  npm run build:shared
+  npm run build:engine
+  npm run build:telemetry
+  npm run build:ai
+  npm run build:sim-runner
+}
+
 json_field() {
   node -e "const fs=require('fs'); const data=JSON.parse(fs.readFileSync(process.argv[1],'utf8')); const key=process.argv[2]; const value=data[key]; if (value===undefined||value===null) process.exit(1); process.stdout.write(String(value));" "$1" "$2"
 }
@@ -340,6 +368,7 @@ elif ! command -v tmux >/dev/null 2>&1; then
 fi
 
 cd "$REPO_ROOT"
+ensure_workspace_builds
 
 tmp_metadata="$(mktemp)"
 cleanup() {

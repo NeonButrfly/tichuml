@@ -33,6 +33,38 @@ function Convert-ToBoolString {
   }
 }
 
+function Ensure-WorkspaceBuilds {
+  param([string]$RepoRoot)
+
+  $requiredFiles = @(
+    "packages\shared\dist\index.js",
+    "packages\engine\dist\index.js",
+    "packages\telemetry\dist\index.js",
+    "packages\ai-heuristics\dist\index.js",
+    "apps\sim-runner\dist\cli.js"
+  )
+  $missing = $false
+  foreach ($relativePath in $requiredFiles) {
+    if (-not (Test-Path -LiteralPath (Join-Path $RepoRoot $relativePath))) {
+      $missing = $true
+      break
+    }
+  }
+  if (-not $missing) {
+    return
+  }
+
+  Write-Host "Workspace package builds are missing; building required packages before sim launch."
+  Write-Host "Underlying build command: npm run build:shared && npm run build:engine && npm run build:telemetry && npm run build:ai && npm run build:sim-runner"
+  $buildScripts = @("build:shared", "build:engine", "build:telemetry", "build:ai", "build:sim-runner")
+  foreach ($scriptName in $buildScripts) {
+    & npm.cmd run $scriptName
+    if ($LASTEXITCODE -ne 0) {
+      throw "Workspace build failed while running npm run $scriptName."
+    }
+  }
+}
+
 if ($Help -or $h) {
 @"
 Usage:
@@ -73,4 +105,5 @@ Write-Host ("Underlying command: npm.cmd " + ($cmd -join " "))
 if ($DryRun) {
   exit 0
 }
+Ensure-WorkspaceBuilds -RepoRoot $repo
 npm.cmd @cmd

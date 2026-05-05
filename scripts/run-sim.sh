@@ -58,6 +58,34 @@ REPO_ROOT="$(common_resolve_repo_root "$SCRIPT_DIR")"
 common_require_repo_root "$REPO_ROOT"
 require_command npm
 
+ensure_workspace_builds() {
+  local missing="false"
+  local required_file
+  for required_file in \
+    "$REPO_ROOT/packages/shared/dist/index.js" \
+    "$REPO_ROOT/packages/engine/dist/index.js" \
+    "$REPO_ROOT/packages/telemetry/dist/index.js" \
+    "$REPO_ROOT/packages/ai-heuristics/dist/index.js" \
+    "$REPO_ROOT/apps/sim-runner/dist/cli.js"; do
+    if [[ ! -f "$required_file" ]]; then
+      missing="true"
+      break
+    fi
+  done
+
+  if [[ "$missing" != "true" ]]; then
+    return 0
+  fi
+
+  printf 'Workspace package builds are missing; building required packages before sim launch.\n'
+  printf 'Underlying build command: npm run build:shared && npm run build:engine && npm run build:telemetry && npm run build:ai && npm run build:sim-runner\n'
+  npm run build:shared
+  npm run build:engine
+  npm run build:telemetry
+  npm run build:ai
+  npm run build:sim-runner
+}
+
 cmd=(npm run sim -- --games "$GAMES" --provider "$PROVIDER" --backend-url "$BACKEND_URL" --telemetry "$TELEMETRY" --strict-telemetry "$STRICT_TELEMETRY")
 if [[ -n "$SEED" ]]; then
   cmd+=(--seed "$SEED")
@@ -70,4 +98,5 @@ if [[ "$DRY_RUN" == "true" ]]; then
 fi
 
 cd "$REPO_ROOT"
+ensure_workspace_builds
 "${cmd[@]}"
