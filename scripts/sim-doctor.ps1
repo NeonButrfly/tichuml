@@ -1,7 +1,34 @@
-$ErrorActionPreference = "Stop"
-. (Join-Path $PSScriptRoot "windows\\common.ps1")
+[CmdletBinding()]
+param(
+  [Alias("?")]
+  [switch]$Help,
+  [Parameter(ValueFromRemainingArguments = $true)]
+  [string[]]$RemainingArgs
+)
 
-$repoRoot = Enter-RepoRoot -BaseDir $PSScriptRoot
-$target = Assert-RepoPath -RepoRoot $repoRoot -RelativePath "scripts\\windows\\sim-doctor.ps1" -Description "Simulator doctor launcher"
-& $target @args
-exit $LASTEXITCODE
+$ErrorActionPreference = "Stop"
+
+if ($Help) {
+@"
+Usage:
+  scripts\sim-doctor.ps1 [sim:doctor options]
+
+Runs the simulator diagnostics and then validates backend telemetry truth.
+
+Examples:
+  scripts\sim-doctor.ps1
+  scripts\sim-doctor.ps1 --backend-url http://127.0.0.1:4310
+"@ | Write-Host
+  exit 0
+}
+
+$repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
+Push-Location $repoRoot
+try {
+  & npm.cmd run sim:doctor -- @RemainingArgs
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+  & npm.cmd run telemetry:truth -- --backend-url "http://127.0.0.1:4310" --require-rows
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+} finally {
+  Pop-Location
+}

@@ -18,25 +18,25 @@ PG_BOOTSTRAP_URL=postgres://tichu:tichu_dev_password@localhost:54329/postgres
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass -Force
-powershell -ExecutionPolicy Bypass -File scripts\install_backend_windows.ps1
+powershell -ExecutionPolicy Bypass -File scripts\install-backend.ps1
 ```
 
 ## Daily start/update
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\start_backend_windows.ps1
+powershell -ExecutionPolicy Bypass -File scripts\start-backend.ps1
 ```
 
 ## Status
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\status_backend_windows.ps1
+powershell -ExecutionPolicy Bypass -File scripts\status-backend.ps1
 ```
 
 ## Stop
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\stop_backend_windows.ps1
+powershell -ExecutionPolicy Bypass -File scripts\stop-backend.ps1
 ```
 
 ## Reset mismatched Postgres
@@ -46,13 +46,13 @@ If `tichu-postgres` was created with the old identity
 Reset the local container and volume:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\reset_postgres_windows.ps1
+powershell -ExecutionPolicy Bypass -File scripts\reset-db.ps1
 ```
 
 ## One-game telemetry diagnostic
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\verify-sim-one-game-fixed.ps1 -ClearDatabase
+powershell -ExecutionPolicy Bypass -File scripts\verify-sim-one-game.ps1 -ClearDatabase
 ```
 
 This creates `verify-one-game-<timestamp>.zip`, runs exactly one strict
@@ -81,13 +81,13 @@ docker exec tichu-postgres psql -U tichu -d tichu -c "SELECT COUNT(*) FROM match
 ## Sim
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\start_sim_windows.ps1 -Games 100 -Provider server_heuristic -BackendUrl http://127.0.0.1:4310 -Telemetry
+powershell -ExecutionPolicy Bypass -File scripts\run-sim.ps1 -Games 100 -Provider server_heuristic -BackendUrl http://127.0.0.1:4310 -Telemetry
 ```
 
 ## Controller sim
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\start_sim_controller_windows.ps1 -GamesPerBatch 100 -WorkerCount 1 -Provider server_heuristic -BackendUrl http://127.0.0.1:4310
+powershell -ExecutionPolicy Bypass -File scripts\start-sim-controller.ps1 -GamesPerBatch 100 -WorkerCount 1 -Provider server_heuristic -BackendUrl http://127.0.0.1:4310
 ```
 
 ## Notes

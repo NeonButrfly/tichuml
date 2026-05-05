@@ -1,150 +1,93 @@
 #!/usr/bin/env bash
-set -Eeuo pipefail
 
-script_dir() {
-  CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd
-}
+set -euo pipefail
 
-repo_root() {
-  CDPATH= cd -- "$(script_dir)/.." && pwd
-}
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+START_REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
 
-print_help() {
+usage() {
   cat <<'EOF'
-Usage:
-  scripts/start-backend.sh [options]
+Usage: scripts/start-backend.sh [--help|-h]
 
-Starts the backend using the repo's canonical Linux backend workflow.
-
-Options:
-  --host <host>          Override HOST for the backend process.
-  --port <port>          Override PORT for the backend process.
-  --backend-url <url>    Override BACKEND_BASE_URL for the backend process.
-  --pg-host <host>       Override PostgreSQL host in DATABASE_URL.
-  --pg-port <port>       Override PostgreSQL port in DATABASE_URL.
-  --pg-user <user>       Override PostgreSQL user in DATABASE_URL.
-  --pg-db <db>           Override PostgreSQL database in DATABASE_URL.
-  --pg-password <pass>   Override PostgreSQL password in DATABASE_URL.
-  --docker               Use the default Docker-backed backend workflow.
-  --no-docker            Not supported by the current backend host flow.
-  --logs                 Tail backend logs after startup.
-  --follow               Alias for --logs.
-  --dry-run              Print the resolved command without starting the backend.
-  --help, -h             Show this help text and exit.
-
-Examples:
-  scripts/start-backend.sh
-  scripts/start-backend.sh --backend-url http://127.0.0.1:4310 --logs
-  scripts/start-backend.sh --pg-host 127.0.0.1 --pg-port 54329 --pg-user tichu --pg-db tichu
+Starts the canonical Linux backend host flow.
+If the host is Linux, this workflow force-syncs the repo to the live remote
+before startup and can overwrite local source changes.
 EOF
 }
 
-HOST_VALUE=""
-PORT_VALUE=""
-BACKEND_URL_VALUE=""
-PG_HOST_VALUE="127.0.0.1"
-PG_PORT_VALUE="54329"
-PG_USER_VALUE="tichu"
-PG_DB_VALUE="tichu"
-PG_PASSWORD_VALUE="tichu_dev_password"
-TAIL_LOGS="false"
-DRY_RUN="false"
-
-while (($#)); do
-  case "$1" in
-    --host)
-      HOST_VALUE="${2:?missing value for --host}"
-      shift 2
-      ;;
-    --port)
-      PORT_VALUE="${2:?missing value for --port}"
-      shift 2
-      ;;
-    --backend-url)
-      BACKEND_URL_VALUE="${2:?missing value for --backend-url}"
-      shift 2
-      ;;
-    --pg-host)
-      PG_HOST_VALUE="${2:?missing value for --pg-host}"
-      shift 2
-      ;;
-    --pg-port)
-      PG_PORT_VALUE="${2:?missing value for --pg-port}"
-      shift 2
-      ;;
-    --pg-user)
-      PG_USER_VALUE="${2:?missing value for --pg-user}"
-      shift 2
-      ;;
-    --pg-db)
-      PG_DB_VALUE="${2:?missing value for --pg-db}"
-      shift 2
-      ;;
-    --pg-password)
-      PG_PASSWORD_VALUE="${2:?missing value for --pg-password}"
-      shift 2
-      ;;
-    --docker)
-      shift
-      ;;
-    --no-docker)
-      echo "The current backend host workflow requires Docker for Postgres; --no-docker is not supported." >&2
-      exit 2
-      ;;
-    --logs|--follow)
-      TAIL_LOGS="true"
-      shift
-      ;;
-    --dry-run)
-      DRY_RUN="true"
-      shift
-      ;;
-    --help|-h)
-      print_help
-      exit 0
-      ;;
-    *)
-      echo "Unknown argument: $1" >&2
-      print_help >&2
-      exit 2
-      ;;
-  esac
-done
-
-ROOT="$(repo_root)"
-DB_URL="postgres://${PG_USER_VALUE}:${PG_PASSWORD_VALUE}@${PG_HOST_VALUE}:${PG_PORT_VALUE}/${PG_DB_VALUE}"
-BOOTSTRAP_URL="postgres://${PG_USER_VALUE}:${PG_PASSWORD_VALUE}@${PG_HOST_VALUE}:${PG_PORT_VALUE}/postgres"
-
-echo "Repo root: $ROOT"
-echo "Backend command: scripts/linux/start-backend.sh"
-echo "Backend URL: ${BACKEND_URL_VALUE:-http://127.0.0.1:${PORT_VALUE:-4310}}"
-echo "Health endpoint: ${BACKEND_URL_VALUE:-http://127.0.0.1:${PORT_VALUE:-4310}}/health"
-echo "Database target: postgres://${PG_USER_VALUE}:***@${PG_HOST_VALUE}:${PG_PORT_VALUE}/${PG_DB_VALUE}"
-
-if [[ "$DRY_RUN" == "true" ]]; then
+if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+  usage
   exit 0
 fi
 
-cd "$ROOT"
-START_ENV=(
-  "DATABASE_URL=$DB_URL"
-  "PG_BOOTSTRAP_URL=$BOOTSTRAP_URL"
-  "POSTGRES_USER=$PG_USER_VALUE"
-  "POSTGRES_PASSWORD=$PG_PASSWORD_VALUE"
-  "POSTGRES_DB=$PG_DB_VALUE"
-  "POSTGRES_PORT=$PG_PORT_VALUE"
-)
-if [[ -n "$HOST_VALUE" ]]; then
-  START_ENV+=("HOST=$HOST_VALUE")
+if [ -f "$START_REPO_ROOT/.env" ] && command -v node >/dev/null 2>&1; then
+  eval "$(node "$START_REPO_ROOT/scripts/runtime-config.mjs" export-shell "$START_REPO_ROOT/.env")"
 fi
-if [[ -n "$PORT_VALUE" ]]; then
-  START_ENV+=("PORT=$PORT_VALUE")
-fi
-if [[ -n "$BACKEND_URL_VALUE" ]]; then
-  START_ENV+=("BACKEND_BASE_URL=$BACKEND_URL_VALUE" "BACKEND_URL=$BACKEND_URL_VALUE")
-fi
-env "${START_ENV[@]}" bash scripts/linux/start-backend.sh
 
-if [[ "$TAIL_LOGS" == "true" ]]; then
-  exec bash scripts/backend-logs.sh --follow
+if [ "$(uname -s)" = "Linux" ]; then
+  printf '\n==> Force-syncing repository before backend startup\n'
+  REPO_DIR="${REPO_DIR:-$START_REPO_ROOT}" \
+    REPO_URL="${REPO_URL:-https://github.com/NeonButrfly/tichuml.git}" \
+    BRANCH="${BRANCH:-${GIT_BRANCH:-main}}" \
+    "$SCRIPT_DIR/force-sync.sh"
 fi
+
+# shellcheck disable=SC1091
+. "$SCRIPT_DIR/backend-common.sh"
+
+main() {
+  log_step "Starting Linux backend host flow"
+  load_repo_env
+  ensure_runtime_dirs
+
+  log_step "Startup checklist"
+  log_info "1. Loading env from $BACKEND_REPO_ROOT/.env"
+  log_info "2. Force-syncing repo to origin/$GIT_BRANCH"
+  log_info "3. Verifying runtime prerequisites"
+  log_info "4. Verifying Docker and Docker Compose"
+  log_info "5. Starting Postgres and waiting for readiness"
+  log_info "6. Ensuring Python venv and ML requirements"
+  log_info "7. Ensuring Node workspace dependencies"
+  log_info "8. Building workspace packages before migrations"
+  log_info "9. Running database migrations"
+  log_info "10. Starting backend and verifying HTTP endpoints"
+
+  prepare_runtime_stack
+  build_runtime_artifacts
+  verify_runtime_artifacts
+  run_migrations
+
+  if backend_running; then
+    log_warn "Backend is already running with pid $(backend_pid)"
+    verify_backend_http_endpoints
+    return
+  fi
+
+  start_backend_background
+  verify_backend_http_endpoints
+
+  local local_commit remote_commit ahead behind
+  local_commit="$(git_local_commit)"
+  log_info "Refreshing remote commit metadata for status output"
+  remote_commit="$(git_remote_commit 2>/dev/null || printf '%s\n' unknown)"
+  set -- $(git_ahead_behind 2>/dev/null || printf '0 0')
+  ahead="$1"
+  behind="$2"
+
+  cat <<EOF
+[OK] Backend started successfully.
+Branch: $GIT_BRANCH
+Local commit: $local_commit
+Remote commit: $remote_commit
+Ahead/behind: $ahead/$behind
+Backend URLs:
+- $BACKEND_PUBLIC_URL
+- $BACKEND_LOCAL_URL
+Control panel:
+- $BACKEND_PUBLIC_URL/admin/control
+Log file: $BACKEND_LOG_FILE
+Runtime dir: $BACKEND_RUNTIME_DIR
+EOF
+}
+
+main "$@"

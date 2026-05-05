@@ -20,17 +20,17 @@ http://<backend-host>:4310/admin/control
 Lifecycle entrypoints:
 
 ```sh
-bash scripts/linux/install-backend.sh
-bash scripts/linux/start-backend.sh
-bash scripts/linux/status-backend.sh
-bash scripts/linux/update-backend.sh
-bash scripts/linux/stop-backend.sh --backend-only
-bash scripts/linux/stop-backend.sh --full
+bash scripts/install-backend.sh
+bash scripts/start-backend.sh
+bash scripts/status-backend.sh
+bash scripts/update-backend.sh
+bash scripts/stop-backend.sh --backend-only
+bash scripts/stop-backend.sh --full
 ```
 
-`scripts/linux/stop-backend.sh --backend-only` stops the backend process and
+`scripts/stop-backend.sh --backend-only` stops the backend process and
 backend-owned simulator controller processes, leaving Postgres running.
-`scripts/linux/stop-backend.sh --full` also stops the Postgres container through the
+`scripts/stop-backend.sh --full` also stops the Postgres container through the
 shared Docker Compose helper.
 
 The stop script is idempotent: already-stopped components are treated as

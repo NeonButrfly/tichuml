@@ -1023,22 +1023,6 @@ function runPsqlCopy(config: {
   }
 }
 
-function spawnNpm(
-  args: string[],
-  options: {
-    cwd: string;
-    env?: NodeJS.ProcessEnv;
-  }
-) {
-  const command = process.platform === "win32" ? "npm.cmd" : "npm";
-  return spawnSync(command, args, {
-    cwd: options.cwd,
-    env: options.env ?? process.env,
-    encoding: "utf8",
-    windowsHide: true,
-  });
-}
-
 async function runMlExportCheck(metadata: TrainingMetadata): Promise<Record<string, unknown>> {
   const repoRoot = metadataString(metadata, "repo_root");
   const mlExportCommand = metadataString(metadata, "ml_export_command");
@@ -1113,6 +1097,7 @@ async function prepareRun(options: CliOptions): Promise<void> {
   const repoRoot = path.resolve(optionString(options, "repo-root"));
   const startedAt = new Date();
   const sessionNameInput = optionOptionalString(options, "session-name");
+  const seedOverride = optionOptionalString(options, "seed");
   let seed = "";
   let seedHash = "";
   let providerFallback = false;
@@ -1129,22 +1114,40 @@ async function prepareRun(options: CliOptions): Promise<void> {
 
   try {
     try {
-      const entropy = await generateEntropySeed({ roundIndex: 0 });
-      seed = entropy.shuffleSeedHex;
-      seedHash = buildTrainingSeedHash(seed);
-      runSeedInfo = {
-        mode: "automatic_entropy",
-        resolved_run_seed: entropy.shuffleSeedHex,
-        derivation_namespace: "training-data",
-        manual_override_enabled: false,
-        manual_override_seed: null,
-        generated_at: startedAt.toISOString(),
-        entropy_game_id: entropy.gameId,
-        audit_hash_hex: entropy.auditHashHex,
-        primary_provider: entropy.provenance.primaryProvider,
-        local_fallback_used: entropy.provenance.localFallbackUsed,
-        source_summary: entropy.sourceSummary,
-      };
+      if (seedOverride) {
+        seed = seedOverride;
+        seedHash = buildTrainingSeedHash(seed);
+        runSeedInfo = {
+          mode: "manual_override",
+          resolved_run_seed: seed,
+          derivation_namespace: "training-data",
+          manual_override_enabled: true,
+          manual_override_seed: seed,
+          generated_at: startedAt.toISOString(),
+          entropy_game_id: null,
+          audit_hash_hex: null,
+          primary_provider: "manual",
+          local_fallback_used: false,
+          source_summary: "Manual seed override supplied to start-training.",
+        };
+      } else {
+        const entropy = await generateEntropySeed({ roundIndex: 0 });
+        seed = entropy.shuffleSeedHex;
+        seedHash = buildTrainingSeedHash(seed);
+        runSeedInfo = {
+          mode: "automatic_entropy",
+          resolved_run_seed: entropy.shuffleSeedHex,
+          derivation_namespace: "training-data",
+          manual_override_enabled: false,
+          manual_override_seed: null,
+          generated_at: startedAt.toISOString(),
+          entropy_game_id: entropy.gameId,
+          audit_hash_hex: entropy.auditHashHex,
+          primary_provider: entropy.provenance.primaryProvider,
+          local_fallback_used: entropy.provenance.localFallbackUsed,
+          source_summary: entropy.sourceSummary,
+        };
+      }
     } catch (error) {
       providerFallback = true;
       providerFallbackReason = error instanceof Error ? error.message : String(error);
@@ -2001,6 +2004,8 @@ async function runLoop(options: CliOptions): Promise<void> {
     try {
       await finalizeRun(metadata, pgPassword);
     } catch (error) {
+      fatalError =
+        error instanceof Error ? error : new Error(String(error));
       appendLine(
         runLog,
         JSON.stringify({
@@ -2009,7 +2014,6 @@ async function runLoop(options: CliOptions): Promise<void> {
           error: error instanceof Error ? error.message : String(error),
         })
       );
-      throw error;
     }
   }
   if (fatalError) {

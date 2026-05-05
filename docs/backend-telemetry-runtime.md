@@ -185,13 +185,13 @@ failures are named by layer:
 On Windows, use the diagnostic ZIP script for operator evidence:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\windows\verify-sim-one-game-fixed.ps1 -ClearDatabase
+powershell -ExecutionPolicy Bypass -File scripts\verify-sim-one-game.ps1 -ClearDatabase
 ```
 
 If PowerShell blocks downloaded repo scripts, unblock them first:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\windows\unblock-scripts.ps1
+powershell -ExecutionPolicy Bypass -File scripts\unblock-scripts.ps1
 ```
 
 The script kills stale simulator/controller processes, clears
@@ -206,13 +206,13 @@ process remains.
 The legacy path remains as a compatibility alias:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\verify-sim-one-game-fixed.ps1 -ClearDatabase
+powershell -ExecutionPolicy Bypass -File scripts\verify-sim-one-game.ps1 -ClearDatabase
 ```
 
 On Linux, use the equivalent bounded diagnostic from any working directory:
 
 ```bash
-/opt/tichuml/scripts/linux/verify-sim-one-game-fixed.sh --clear-database --timeout-seconds 90 --backend-url http://127.0.0.1:4310
+/opt/tichuml/scripts/verify-sim-one-game.sh --clear-database --timeout-seconds 90 --backend-url http://127.0.0.1:4310
 ```
 
 The Linux script writes artifacts under `diagnostics/verify-one-game-linux-*`
@@ -304,14 +304,14 @@ Canonical local environment shared by Windows and Linux:
 
 | Task                  | Windows                                                                                                                                                                                    | Linux                                                                                                                                                                                              |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Start backend         | `powershell -ExecutionPolicy Bypass -File scripts\windows\start-backend.ps1`                                                                                                               | `./scripts/linux/start-backend.sh`                                                                                                                                                                 |
-| Stop backend          | `powershell -ExecutionPolicy Bypass -File scripts\windows\stop-backend.ps1`                                                                                                                | `./scripts/linux/stop-backend.sh`                                                                                                                                                                  |
-| Restart backend       | `powershell -ExecutionPolicy Bypass -File scripts\windows\restart-backend.ps1`                                                                                                             | `./scripts/linux/restart-backend.sh`                                                                                                                                                               |
-| Check status          | `powershell -ExecutionPolicy Bypass -File scripts\windows\status-backend.ps1`                                                                                                              | `./scripts/linux/status-backend.sh`                                                                                                                                                                |
-| Reset DB              | `powershell -ExecutionPolicy Bypass -File scripts\windows\reset-db.ps1`                                                                                                                    | `./scripts/linux/reset-db.sh --yes`                                                                                                                                                                |
-| One-game verification | `powershell -ExecutionPolicy Bypass -File scripts\windows\verify-sim-one-game-fixed.ps1 -ClearDatabase -TimeoutSeconds 90`                                                                 | `./scripts/linux/verify-sim-one-game-fixed.sh --clear-database --timeout-seconds 90`                                                                                                               |
-| Sim doctor            | `powershell -ExecutionPolicy Bypass -File scripts\windows\sim-doctor.ps1 --backend-url http://127.0.0.1:4310 --timeout-ms 30000`                                                           | `./scripts/linux/sim-doctor.sh --backend-url http://127.0.0.1:4310 --timeout-ms 30000`                                                                                                             |
-| Training simulator    | `powershell -ExecutionPolicy Bypass -File scripts\windows\start-training-data.ps1 -Games 1000 -Provider server_heuristic -BackendUrl http://127.0.0.1:4310` | `./scripts/linux/start-training-data-tmux.sh --games 1000 --provider server_heuristic --backend-url http://127.0.0.1:4310` |
+| Start backend         | `powershell -ExecutionPolicy Bypass -File scripts\start-backend.ps1`                                                                                                               | `./scripts/start-backend.sh`                                                                                                                                                                 |
+| Stop backend          | `powershell -ExecutionPolicy Bypass -File scripts\stop-backend.ps1`                                                                                                                | `./scripts/stop-backend.sh`                                                                                                                                                                  |
+| Restart backend       | `powershell -ExecutionPolicy Bypass -File scripts\restart-backend.ps1`                                                                                                             | `./scripts/restart-backend.sh`                                                                                                                                                               |
+| Check status          | `powershell -ExecutionPolicy Bypass -File scripts\status-backend.ps1`                                                                                                              | `./scripts/status-backend.sh`                                                                                                                                                                |
+| Reset DB              | `powershell -ExecutionPolicy Bypass -File scripts\reset-db.ps1`                                                                                                                    | `./scripts/reset-db.sh --yes`                                                                                                                                                                |
+| One-game verification | `powershell -ExecutionPolicy Bypass -File scripts\verify-sim-one-game.ps1 -ClearDatabase -TimeoutSeconds 90`                                                                 | `./scripts/verify-sim-one-game.sh --clear-database --timeout-seconds 90`                                                                                                               |
+| Sim doctor            | `powershell -ExecutionPolicy Bypass -File scripts\sim-doctor.ps1 --backend-url http://127.0.0.1:4310 --timeout-ms 30000`                                                           | `./scripts/sim-doctor.sh --backend-url http://127.0.0.1:4310 --timeout-ms 30000`                                                                                                             |
+| Training simulator    | `powershell -ExecutionPolicy Bypass -File scripts\start-training.ps1 -Games 1000 -Provider server_heuristic -BackendUrl http://127.0.0.1:4310` | `./scripts/start-training.sh --games 1000 --provider server_heuristic --backend-url http://127.0.0.1:4310` |
 
 Logs:
 

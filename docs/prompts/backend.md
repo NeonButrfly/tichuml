@@ -5,7 +5,7 @@ Prompt logs here capture backend/platform prompt intent only. GitHub issue state
 ## 2026-05-05 - Linux reset-db wrapper regression on backend host
 
 - Prompt signal:
-  Fix the Linux host failure from `/opt/tichuml/scripts/reset-db-linux.sh`
+  Fix the Linux host failure from `/opt/tichuml/scripts/reset-db.sh`
   where `ensure_docker_ready`, `print_identity`, and `log_step` were missing
   and `wait_for_postgres` reached `POSTGRES_USER: unbound variable`.
 - Interpreted requirement:
@@ -15,8 +15,8 @@ Prompt logs here capture backend/platform prompt intent only. GitHub issue state
   keep the top-level wrapper working from `/opt/tichuml/scripts` without local
   fallback shims.
 - Affected systems:
-  `scripts/linux/backend-common.sh`, `scripts/linux/reset-db.sh`,
-  `scripts/reset-db-linux.sh`, Linux launcher regression tests.
+  `scripts/backend-common.sh`, `scripts/reset-db.sh`,
+  `scripts/reset-db.sh`, Linux launcher regression tests.
 - Linked GitHub issue:
   [#63](https://github.com/NeonButrfly/tichuml/issues/63)
 - Milestone:
@@ -69,9 +69,9 @@ Prompt logs here capture backend/platform prompt intent only. GitHub issue state
   reporting, and validation-only `ml:export` checks against the latest
   telemetry shape.
 - Affected systems:
-  `scripts/linux/start-training-data-tmux.sh`,
-  `scripts/windows/start-training-data.ps1`,
-  `scripts/windows/stop-training-data.ps1`, `scripts/training-data.ts`,
+  `scripts/start-training.sh`,
+  `scripts/start-training.ps1`,
+  `scripts/stop-training.ps1`, `scripts/training-data.ts`,
   `apps/sim-runner`, `packages/shared`, `ml/export_training_rows.py`,
   training/telemetry docs.
 - Linked GitHub issue:
@@ -228,7 +228,7 @@ Prompt logs here capture backend/platform prompt intent only. GitHub issue state
 - Interpreted requirement:
   The Linux-host scripts must stop failing silently during `apt-get update` / `apt-get install`, must classify common Ubuntu host failures clearly, must keep dirty repos safe, and must surface incomplete Docker/Node/npm/Compose prerequisites honestly in both install and status flows.
 - Affected systems:
-  `scripts/linux/install-backend.sh`, `scripts/linux/backend-common.sh`, `scripts/linux/start-backend.sh`, `scripts/linux/update-backend.sh`, `scripts/linux/status-backend.sh`, `README.md`.
+  `scripts/install-backend.sh`, `scripts/backend-common.sh`, `scripts/start-backend.sh`, `scripts/update-backend.sh`, `scripts/status-backend.sh`, `README.md`.
 - Linked GitHub issue:
   [#33](https://github.com/NeonButrfly/tichuml/issues/33)
 - Milestone:
@@ -243,7 +243,7 @@ Prompt logs here capture backend/platform prompt intent only. GitHub issue state
 - Interpreted requirement:
   Linux backend startup must destructively synchronize `/opt/tichuml` with `origin/main` before the backend starts, while simulator/backend decision routing must share one canonical active actor helper, pre-send validation, backend validation diagnostics, and regression tests that prevent seat rotation or stale actor leakage.
 - Affected systems:
-  `scripts/linux/force-sync.sh`, `scripts/linux/start-backend.sh`, `packages/engine/src/seat-identity.ts`, `apps/sim-runner/src/self-play-batch.ts`, `apps/server/src/providers/*`, `apps/server/src/routes/router.ts`, tests, docs.
+  `scripts/force-sync.sh`, `scripts/start-backend.sh`, `packages/engine/src/seat-identity.ts`, `apps/sim-runner/src/self-play-batch.ts`, `apps/server/src/providers/*`, `apps/server/src/routes/router.ts`, tests, docs.
 - Linked GitHub issues:
   [#33](https://github.com/NeonButrfly/tichuml/issues/33), [#34](https://github.com/NeonButrfly/tichuml/issues/34)
 - Milestone:
@@ -258,7 +258,7 @@ Prompt logs here capture backend/platform prompt intent only. GitHub issue state
 - Interpreted requirement:
   Add package-manager detection for `apt-get`, `dnf`, and `yum`; ensure Docker Compose through `docker compose`, `docker-compose`, distro packages, or a manual CLI plugin; force-sync repo state during install/start/update; write shell-safe update status env files; and keep the current Ubuntu backend flow working.
 - Affected systems:
-  `scripts/linux/install-backend.sh`, `scripts/linux/backend-common.sh`, `scripts/linux/start-backend.sh`, `scripts/linux/update-backend.sh`, `scripts/linux/status-backend.sh`, `scripts/linux/force-sync.sh`, `README.md`.
+  `scripts/install-backend.sh`, `scripts/backend-common.sh`, `scripts/start-backend.sh`, `scripts/update-backend.sh`, `scripts/status-backend.sh`, `scripts/force-sync.sh`, `README.md`.
 - Linked GitHub issue:
   [#33](https://github.com/NeonButrfly/tichuml/issues/33)
 - Milestone:
@@ -434,7 +434,7 @@ supported size limit.`, leaving the control UI stuck at `Batches=0`,
   the backend host, and should recover from a stale saved localhost URL after a
   network failure.
 - Affected systems:
-  `apps/server`, `apps/web`, `scripts/linux/backend-common.sh`, simulator
+  `apps/server`, `apps/web`, `scripts/backend-common.sh`, simulator
   dashboard docs, backend integration tests, Linux status/start scripts.
 - Linked GitHub issue:
   [#39](https://github.com/NeonButrfly/tichuml/issues/39)
@@ -458,9 +458,9 @@ supported size limit.`, leaving the control UI stuck at `Batches=0`,
   editing, and dynamic apply/restart workflow while preserving Ubuntu/Debian and
   Oracle/RHEL compatibility.
 - Affected systems:
-  `scripts/linux/backend-common.sh`, `scripts/linux/install-backend.sh`,
-  `scripts/linux/start-backend.sh`, `scripts/linux/status-backend.sh`,
-  `scripts/linux/update-backend.sh`, `scripts/linux/stop-backend.sh`,
+  `scripts/backend-common.sh`, `scripts/install-backend.sh`,
+  `scripts/start-backend.sh`, `scripts/status-backend.sh`,
+  `scripts/update-backend.sh`, `scripts/stop-backend.sh`,
   `apps/server`, `.env.example`, docs, backend integration tests.
 - Linked GitHub issue:
   [#40](https://github.com/NeonButrfly/tichuml/issues/40)
@@ -488,9 +488,9 @@ supported size limit.`, leaving the control UI stuck at `Batches=0`,
 - Affected systems:
   `apps/server/src/config`, `apps/server/src/services/runtime-admin-service.ts`,
   `apps/server/src/services/runtime-control-panel.ts`,
-  `apps/server/src/routes/router.ts`, `scripts/linux/backend-common.sh`,
-  `scripts/linux/start-backend.sh`, `scripts/runtime-config.mjs`,
-  `scripts/linux/runtime-action.sh`, `.env.example`, docs, backend integration
+  `apps/server/src/routes/router.ts`, `scripts/backend-common.sh`,
+  `scripts/start-backend.sh`, `scripts/runtime-config.mjs`,
+  `scripts/runtime-action.sh`, `.env.example`, docs, backend integration
   tests.
 - Linked GitHub issue:
   [#40](https://github.com/NeonButrfly/tichuml/issues/40)
@@ -651,7 +651,7 @@ supported size limit.`, leaving the control UI stuck at `Batches=0`,
 - Affected systems:
   `apps/server/src/services/sim-controller-service.ts`,
   `apps/sim-runner/src/cli.ts`, `apps/web/src/SimControlDashboard.tsx`,
-  `packages/shared/src/backend.ts`, `scripts/linux/sim-controller.sh`,
+  `packages/shared/src/backend.ts`, `scripts/sim-controller.sh`,
   simulator/controller docs, integration tests.
 - Linked GitHub issue:
   [#44](https://github.com/NeonButrfly/tichuml/issues/44)
@@ -818,7 +818,7 @@ supported size limit.`, leaving the control UI stuck at `Batches=0`,
   `apps/sim-runner/src/telemetry/async-telemetry.ts`,
   `scripts/sim-doctor.ts`,
   `scripts/*windows*.ps1`,
-  `scripts/windows/verify-sim-one-game-fixed.ps1`,
+  `scripts/verify-sim-one-game.ps1`,
   `packages/shared/src/backend.ts`,
   telemetry/backend docs, and integration tests.
 - Linked GitHub issue:
@@ -843,7 +843,7 @@ supported size limit.`, leaving the control UI stuck at `Batches=0`,
 - Affected systems:
   `infra/db/migrations`, `apps/server/src/services/telemetry-repository.ts`,
   `apps/sim-runner/src/self-play-batch.ts`, `packages/telemetry`,
-  `packages/shared`, `scripts/linux`, `scripts/windows`, telemetry docs, and
+  `packages/shared`, top-level `scripts/`, telemetry docs, and
   integration tests.
 - Linked GitHub issue:
   [#51](https://github.com/NeonButrfly/tichuml/issues/51)

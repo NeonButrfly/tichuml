@@ -62,12 +62,12 @@ const windowsDescribe = shouldRunPowerShellLaunchers ? describe : describe.skip;
 
 windowsDescribe("training-data PowerShell launchers", () => {
   it(
-    "supports the top-level start-training-data launcher from repo root",
+    "supports the top-level start-training launcher from repo root",
     () => {
       const root = repoRoot();
       const result = runPowerShellScript(
         root,
-        path.join(root, "scripts", "start-training-data.ps1")
+        path.join(root, "scripts", "start-training.ps1")
       );
 
       expect(result.status).toBe(0);
@@ -78,12 +78,12 @@ windowsDescribe("training-data PowerShell launchers", () => {
   );
 
   it(
-    "supports the canonical Windows launcher from scripts/windows",
+    "supports the canonical Windows launcher from scripts",
     () => {
       const root = repoRoot();
       const result = runPowerShellScript(
-        path.join(root, "scripts", "windows"),
-        ".\\start-training-data.ps1"
+        path.join(root, "scripts"),
+        ".\\start-training.ps1"
       );
 
       expect(result.status).toBe(0);
@@ -92,7 +92,7 @@ windowsDescribe("training-data PowerShell launchers", () => {
         "ML export validation command: npm run ml:export"
       );
       expect(result.stderr).not.toContain(
-        "scripts\\windows\\scripts\\training-data.ts"
+        "scripts\\scripts\\training-data.ts"
       );
       expect(result.stderr).not.toContain("Get-Content : Cannot find path");
     },
@@ -109,7 +109,7 @@ windowsDescribe("training-data PowerShell launchers", () => {
           "-ExecutionPolicy",
           "Bypass",
           "-File",
-          path.join(root, "scripts", "start-training-data.ps1"),
+          path.join(root, "scripts", "start-training.ps1"),
           "-DryRun",
           "-Games",
           "1",
@@ -127,7 +127,7 @@ windowsDescribe("training-data PowerShell launchers", () => {
           "-ExecutionPolicy",
           "Bypass",
           "-File",
-          path.join(root, "scripts", "start-training-data.ps1"),
+          path.join(root, "scripts", "start-training.ps1"),
           "-DryRun",
           "-Games",
           "1",
@@ -154,11 +154,11 @@ windowsDescribe("training-data PowerShell launchers", () => {
       const root = repoRoot();
       const result = runPowerShellHelp(
         root,
-        path.join(root, "scripts", "status-training-data.ps1")
+        path.join(root, "scripts", "status-training.ps1")
       );
 
       expect(result.status).toBe(0);
-      expect(result.stdout).toContain("status-training-data.ps1");
+      expect(result.stdout).toContain("status-training.ps1");
       expect(result.stdout).toContain("SessionName");
     },
     30000
@@ -230,7 +230,7 @@ windowsDescribe("training-data PowerShell launchers", () => {
             "-ExecutionPolicy",
             "Bypass",
             "-File",
-            path.join(root, "scripts", "status-training-data.ps1"),
+            path.join(root, "scripts", "status-training.ps1"),
             "-SessionName",
             sessionName,
             "-TailLines",

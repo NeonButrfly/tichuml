@@ -1,15 +1,25 @@
 #!/usr/bin/env bash
-set -Eeuo pipefail
+set -euo pipefail
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+. "$SCRIPT_DIR/backend-common.sh"
 
-script_dir() {
-  CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd
+usage() {
+  cat <<'EOF'
+Usage: scripts/sim-doctor.sh [sim:doctor options]
+
+Runs simulator diagnostics and then validates backend telemetry truth.
+EOF
 }
 
-# shellcheck disable=SC1091
-. "$(script_dir)/linux/common.sh"
+if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+  usage
+  exit 0
+fi
 
-repo_root="$(common_resolve_repo_root "$(script_dir)")"
-common_require_repo_root "$repo_root"
-target="$(common_require_repo_file "$repo_root" "scripts/linux/sim-doctor.sh" "Simulator doctor launcher")"
-cd "$repo_root"
-exec bash "$target" "$@"
+ensure_repo_root
+ensure_runtime_dirs
+assert_postgres_identity
+wait_for_postgres
+(cd "$BACKEND_REPO_ROOT" && npm run sim:doctor -- "$@")
+(cd "$BACKEND_REPO_ROOT" && npm run telemetry:truth -- --backend-url "$BACKEND_BASE_URL" --require-rows)

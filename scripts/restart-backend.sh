@@ -1,33 +1,28 @@
 #!/usr/bin/env bash
-set -Eeuo pipefail
+set -euo pipefail
 
-print_help() {
+usage() {
   cat <<'EOF'
-Usage:
-  scripts/restart-backend.sh [options]
+Usage: scripts/restart-backend.sh [--help|-h]
 
-Restarts the backend using the canonical Linux backend workflow.
-
-Options:
-  --help, -h             Show this help text and exit.
-
-Examples:
-  scripts/restart-backend.sh
+Restarts the canonical Linux backend host flow.
 EOF
 }
 
-while (($#)); do
+while [ "$#" -gt 0 ]; do
   case "$1" in
     --help|-h)
-      print_help
+      usage
       exit 0
       ;;
     *)
-      echo "Unknown argument: $1" >&2
-      print_help >&2
+      printf 'Unknown argument: %s\n' "$1" >&2
+      usage >&2
       exit 2
       ;;
   esac
 done
 
-exec bash "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/linux/restart-backend.sh"
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+"$SCRIPT_DIR/stop-backend.sh" --backend-only
+"$SCRIPT_DIR/start-backend.sh"

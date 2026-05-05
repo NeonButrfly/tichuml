@@ -1,7 +1,0 @@
-$ErrorActionPreference = "Stop"
-. (Join-Path $PSScriptRoot "windows\\common.ps1")
-
-$repoRoot = Enter-RepoRoot -BaseDir $PSScriptRoot
-$target = Assert-RepoPath -RepoRoot $repoRoot -RelativePath "scripts\\windows\\status-backend.ps1" -Description "Backend status launcher"
-& $target @args
-exit $LASTEXITCODE

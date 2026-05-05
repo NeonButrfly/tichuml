@@ -103,7 +103,7 @@ exit 0
 `
       );
 
-      const result = spawnSync(bashPath!, ["./reset-db-linux.sh", "--yes"], {
+      const result = spawnSync(bashPath!, ["./reset-db.sh", "--yes"], {
         cwd: path.join(root, "scripts"),
         encoding: "utf8",
         env: {

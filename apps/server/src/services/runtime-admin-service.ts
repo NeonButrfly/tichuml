@@ -1072,7 +1072,7 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
 
     fs.mkdirSync(this.runtimeDir(), { recursive: true });
     const logPath = this.actionLogPath();
-    const scriptPath = path.join(this.config.repoRoot, "scripts", "runtime_action_linux.sh");
+    const scriptPath = path.join(this.config.repoRoot, "scripts", "runtime-action.sh");
     const commandText = `printf '%s\\n' '${nowIso()} action=${action} start' >> ${formatEnvValue(logPath)}; bash ${formatEnvValue(scriptPath)} ${formatEnvValue(action)} >> ${formatEnvValue(logPath)} 2>&1; status=$?; printf '%s\\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ) action=${action} exit=$status" >> ${formatEnvValue(logPath)}`;
     const child = spawn("bash", ["-lc", commandText], {
       cwd: this.config.repoRoot,

@@ -247,10 +247,10 @@ Use integration tests for replay-adjacent verification until dedicated replay su
 Canonical verifier entrypoints live under the platform folders:
 
 - Windows one-game diagnostic:
-  `powershell -ExecutionPolicy Bypass -File scripts\windows\verify-sim-one-game-fixed.ps1 -ClearDatabase`
+  `powershell -ExecutionPolicy Bypass -File scripts\verify-sim-one-game.ps1 -ClearDatabase`
 - Linux one-game diagnostic:
-  `./scripts/linux/verify-sim-one-game-fixed.sh --clear-database --timeout-seconds 90`
+  `./scripts/verify-sim-one-game.sh --clear-database --timeout-seconds 90`
 - Linux full backend/simulator verification:
-  `./scripts/linux/verify-full-sim-backend.sh --clear-database --games 100 --provider local --telemetry-mode minimal`
+  `./scripts/verify-full-sim-backend.sh --clear-database --games 100 --provider local --telemetry-mode minimal`
 
-Top-level script paths under `scripts/` remain compatibility wrappers only.
+Canonical operator scripts live directly under `scripts/`.
