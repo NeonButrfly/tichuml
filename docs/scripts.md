@@ -2,6 +2,8 @@
 
 Issue [#61](https://github.com/NeonButrfly/tichuml/issues/61) tracks the
 current script normalization, training startup, and scoped telemetry workflow.
+Issue [#65](https://github.com/NeonButrfly/tichuml/issues/65) tracks the
+canonical in-place `clear-db` operator pair.
 
 Canonical human-runnable scripts live directly under `scripts/`. The only
 platform filename difference is the extension: `.ps1` for Windows and `.sh` for
@@ -26,6 +28,7 @@ scripts/check-scripts.sh
 | Bootstrap/install forwarder | `scripts/bootstrap.ps1` | `scripts/bootstrap.sh` |
 | Shared helpers | `scripts/common.ps1` | `scripts/common.sh` |
 | Backend helpers | `scripts/backend-common.ps1` | `scripts/backend-common.sh` |
+| Clear database data | `scripts/clear-db.ps1` | `scripts/clear-db.sh` |
 | Install backend | `scripts/install-backend.ps1` | `scripts/install-backend.sh` |
 | Monitor database | `scripts/monitor-db.ps1` | `scripts/monitor-db.sh` |
 | Reset database | `scripts/reset-db.ps1` | `scripts/reset-db.sh` |
@@ -69,7 +72,8 @@ scripts/start-training.sh --help
 
 Destructive scripts refuse to run unless explicitly confirmed. Use
 `-Yes`/`-ClearDatabase` on PowerShell and `--yes`/`--clear-database` on shell
-where applicable.
+where applicable. The canonical `clear-db` pair uses `--yes` on both Windows
+and Linux so the destructive confirmation text matches exactly across shells.
 
 ## Training Startup
 

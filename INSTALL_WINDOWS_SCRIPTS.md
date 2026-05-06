@@ -49,6 +49,17 @@ Reset the local container and volume:
 powershell -ExecutionPolicy Bypass -File scripts\reset-db.ps1
 ```
 
+## Clear app data without recreating Postgres
+
+Issue [#65](https://github.com/NeonButrfly/tichuml/issues/65) tracks the
+canonical in-place data clear flow. This keeps the existing database, container,
+schema, roles, extensions, and migration bookkeeping intact while truncating
+application data tables only:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\clear-db.ps1 --yes
+```
+
 ## One-game telemetry diagnostic
 
 ```powershell

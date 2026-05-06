@@ -4,7 +4,9 @@ GitHub issues [#41](https://github.com/NeonButrfly/tichuml/issues/41) and
 [#50](https://github.com/NeonButrfly/tichuml/issues/50) track the simulator,
 gameplay, backend persistence, and health-truth telemetry work. Issue
 [#51](https://github.com/NeonButrfly/tichuml/issues/51) tracks durable match
-lifecycle rows and Linux/Windows diagnostic parity.
+lifecycle rows and Linux/Windows diagnostic parity. Issue
+[#65](https://github.com/NeonButrfly/tichuml/issues/65) tracks the canonical
+`clear-db` scripts that truncate app data in place without recreating Postgres.
 
 ## Current Architecture
 
@@ -353,6 +355,7 @@ Canonical local environment shared by Windows and Linux:
 | Stop backend          | `powershell -ExecutionPolicy Bypass -File scripts\stop-backend.ps1`                                                                                                                | `./scripts/stop-backend.sh`                                                                                                                                                                  |
 | Restart backend       | `powershell -ExecutionPolicy Bypass -File scripts\restart-backend.ps1`                                                                                                             | `./scripts/restart-backend.sh`                                                                                                                                                               |
 | Check status          | `powershell -ExecutionPolicy Bypass -File scripts\status-backend.ps1`                                                                                                              | `./scripts/status-backend.sh`                                                                                                                                                                |
+| Clear app data        | `powershell -ExecutionPolicy Bypass -File scripts\clear-db.ps1 --yes`                                                                                                             | `./scripts/clear-db.sh --yes`                                                                                                                                                                |
 | Reset DB              | `powershell -ExecutionPolicy Bypass -File scripts\reset-db.ps1`                                                                                                                    | `./scripts/reset-db.sh --yes`                                                                                                                                                                |
 | One-game verification | `powershell -ExecutionPolicy Bypass -File scripts\verify-sim-one-game.ps1 -ClearDatabase -TimeoutSeconds 90`                                                                 | `./scripts/verify-sim-one-game.sh --clear-database --timeout-seconds 90`                                                                                                               |
 | Sim doctor            | `powershell -ExecutionPolicy Bypass -File scripts\sim-doctor.ps1 --backend-url http://127.0.0.1:4310 --timeout-ms 30000`                                                           | `./scripts/sim-doctor.sh --backend-url http://127.0.0.1:4310 --timeout-ms 30000`                                                                                                             |

@@ -2,6 +2,33 @@
 
 Prompt logs here capture backend/platform prompt intent only. GitHub issue state remains authoritative.
 
+## 2026-05-05 - Canonical in-place clear-db scripts
+
+- Prompt signal:
+  Revise the prior script request so only `scripts/clear-db.sh` and
+  `scripts/clear-db.ps1` are created. The scripts must clear all application
+  data from the existing Postgres database without dropping the database or
+  container, without rerunning migrations, while preserving schema, roles,
+  extensions, and migration bookkeeping. They must require explicit `--yes`,
+  support `--help` / `-help`, print the tables being cleared, use
+  `TRUNCATE ... RESTART IDENTITY CASCADE`, and print post-clear row counts.
+- Interpreted requirement:
+  Issue [#65](https://github.com/NeonButrfly/tichuml/issues/65) governs a new
+  operator contract distinct from `reset-db`: the canonical `clear-db`
+  entrypoints must truncate application tables in place using `DATABASE_URL`
+  from `.env` unless the environment explicitly overrides it, preserve
+  `schema_migrations` plus other migration bookkeeping tables, and keep Bash and
+  PowerShell naming/confirmation behavior aligned.
+- Affected systems:
+  `scripts/clear-db.sh`, `scripts/clear-db.ps1`,
+  `tests/integration/clear-db-scripts.test.ts`, script/operator docs.
+- Linked GitHub issue:
+  [#65](https://github.com/NeonButrfly/tichuml/issues/65)
+- Milestone:
+  None. Focused operator script addition.
+- Status:
+  Lives in GitHub, not here.
+
 ## 2026-05-05 - Linux reset-db wrapper regression on backend host
 
 - Prompt signal:
