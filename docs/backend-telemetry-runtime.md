@@ -64,6 +64,51 @@ Database row counts are the ML source of truth:
   `game_started`, `hand_started`, `exchange_completed`, `trick_resolved`,
   `match_completed`, and `game_completed` when the simulator emits them.
 
+## Write Amplification
+
+Issue [#64](https://github.com/NeonButrfly/tichuml/issues/64) tracks the
+current self-play ingest throughput bottleneck. The primary risk is Postgres
+write amplification and WAL sync pressure, not a default assumption that Docker
+itself is the bottleneck.
+
+The backend now keeps an in-process match cache keyed by `game_id` so normal
+decision and event rows can reuse the known `match_id` without rewriting the
+`matches` row on every telemetry record. Match lifecycle writes should happen
+only when lifecycle-relevant fields change, such as completion state, failure
+state, final scores, winner, provider mixing, or hand-count progress.
+
+Outcome attribution also skips non-outcome events and avoids rewriting decision
+rows when the computed attribution fields are unchanged. This protects replay,
+export shape, and ML training columns while materially lowering `decisions`
+update churn.
+
+Run the compact diagnostic with:
+
+```powershell
+npm run telemetry:write-amplification
+```
+
+Optional flags:
+
+```powershell
+npm run telemetry:write-amplification -- --backend-url http://127.0.0.1:4310
+npm run telemetry:write-amplification -- --json-output artifacts/telemetry/write-amplification.json
+```
+
+The diagnostic prints:
+
+- `matches`, `decisions`, and `events` live rows / inserts / updates / dead rows
+- completed games and hands
+- average seconds per game and hand
+- WAL sync/write counters when `pg_stat_wal` is available
+- update-ratio summaries such as `matches_updates_per_completed_game`
+- backend `persistence_profile` counters from `/api/telemetry/health` when a
+  backend URL is supplied
+
+When comparing `telemetry=true` against `telemetry=false`, use the same bounded
+run shape first and compare table churn plus WAL counters before concluding that
+native Postgres or different hardware is the primary fix.
+
 `npm run telemetry:truth -- --backend-url http://127.0.0.1:4310 --require-rows`
 queries Postgres directly and fails if decisions, events, or matches are empty,
 or if any decision/event row cannot join back to its match row by `match_id` and

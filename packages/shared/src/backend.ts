@@ -573,6 +573,7 @@ export type TelemetryHealthStats = {
   decisions_by_seat: Record<string, number>;
   events_by_type: Record<string, number>;
   events_by_phase: Record<string, number>;
+  persistence_profile?: JsonObject;
 };
 
 type ValidatorContext = {

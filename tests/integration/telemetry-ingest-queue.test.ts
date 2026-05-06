@@ -16,6 +16,8 @@ class QueueTestRepository implements TelemetryRepository {
   decisions: StoredTelemetryDecisionRecord[] = [];
   failWrites = false;
   thrownValue: unknown = new Error("postgres unavailable");
+  batchWriteCalls = 0;
+  useBatchWriter = false;
   private decisionId = 1;
 
   async ping(): Promise<void> {}
@@ -41,6 +43,25 @@ class QueueTestRepository implements TelemetryRepository {
       throw this.thrownValue;
     }
     return 1;
+  }
+
+  async persistBatch(
+    items: Array<
+      | { kind: "decision"; payload: TelemetryDecisionPayload; acceptedAt: string }
+      | { kind: "event"; payload: TelemetryEventPayload; acceptedAt: string }
+    >
+  ): Promise<void> {
+    this.batchWriteCalls += 1;
+    if (this.failWrites) {
+      throw this.thrownValue;
+    }
+    for (const item of items) {
+      if (item.kind === "decision") {
+        await this.insertDecision(item.payload);
+      } else {
+        await this.insertEvent(item.payload);
+      }
+    }
   }
 
   async listDecisions(_gameId: string): Promise<StoredTelemetryDecisionRecord[]> {
@@ -224,5 +245,22 @@ describe("telemetry ingest queue", () => {
       expect(queue.stats().last_failure_message).toBeTruthy();
       expect(queue.stats().last_failure_message).not.toBe("");
     }
+  });
+
+  it("uses repository batch persistence when the repository supports it", async () => {
+    const repository = new QueueTestRepository();
+    repository.useBatchWriter = true;
+    const queue = new TelemetryIngestQueue(repository, {
+      maxDepth: 10,
+      batchSize: 2,
+      concurrency: 1
+    });
+
+    queue.enqueueDecision(decisionPayload(5));
+    queue.enqueueDecision(decisionPayload(6));
+    await queue.drain();
+
+    expect(repository.batchWriteCalls).toBe(1);
+    expect(repository.decisions).toHaveLength(2);
   });
 });

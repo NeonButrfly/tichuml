@@ -49,6 +49,9 @@ function createMockSql(config: {
         }
       ];
     }
+    if (text.includes("UPDATE decisions") && text.includes("RETURNING id")) {
+      return [{ id: 1 }];
+    }
     return [];
   }) as unknown as {
     (strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown[]>;
@@ -228,5 +231,65 @@ describe("outcome telemetry helpers", () => {
 
     expect(second).toEqual(first);
     expect(mock.unsafe).toHaveBeenCalled();
+  });
+
+  it("skips reward recomputation when outcome attribution would not change any decisions", async () => {
+    const calls: SqlCall[] = [];
+    const unsafe = vi.fn(async () => []);
+    const sql = (async (
+      strings: TemplateStringsArray,
+      ...values: unknown[]
+    ): Promise<unknown[]> => {
+      const text = strings.join("__VALUE__");
+      calls.push({ text, values });
+      return [];
+    }) as unknown as {
+      (strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown[]>;
+      unsafe: typeof unsafe;
+      json: <T>(value: T) => T;
+    };
+    sql.unsafe = unsafe;
+    sql.json = <T>(value: T) => value;
+
+    const payload: TelemetryEventPayload = {
+      ts: new Date().toISOString(),
+      game_id: "game-outcome",
+      hand_id: "game-outcome-hand-1",
+      phase: "finished",
+      event_type: "hand_completed",
+      actor_seat: "system",
+      event_index: 11,
+      schema_version: 2,
+      engine_version: "test-engine",
+      sim_version: "test-sim",
+      requested_provider: "system_local",
+      provider_used: "system_local",
+      fallback_used: false,
+      state_norm: null,
+      payload: { event_type: "hand_completed" },
+      metadata: {
+        hand_index: 1,
+        hand_ns_score_delta: 35,
+        hand_ew_score_delta: -35,
+        final_hand_winner_team: "NS",
+        hand_result: {
+          version: "outcome_hand_v1",
+          hand_index: 1,
+          out_order: ["seat-0", "seat-2", "seat-1", "seat-3"],
+          tichu_bonuses: []
+        }
+      }
+    };
+
+    await applyOutcomeAttributionForDecisionEvent(sql as never, payload);
+
+    expect(
+      calls.some(
+        (call) =>
+          call.text.includes("UPDATE decisions") &&
+          call.text.includes("hand_ns_score_delta")
+      )
+    ).toBe(true);
+    expect(unsafe).not.toHaveBeenCalled();
   });
 });

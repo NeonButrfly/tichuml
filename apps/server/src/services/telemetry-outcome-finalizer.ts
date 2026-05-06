@@ -81,8 +81,28 @@ export type TrainingDataValidationSummary = {
   warnings: string[];
 };
 
+export type OutcomeAttributionUpdateStats = {
+  decisionUpdateCount: number;
+  outcomeAttributionUpdateCount: number;
+  unchangedUpdateCount: number;
+  skippedEventCount: number;
+};
+
 const RETRYABLE_POSTGRES_CODES = new Set(["40P01", "40001"]);
 const MAX_FINALIZER_RETRIES = 3;
+const TRICK_OUTCOME_EVENT_TYPES = new Set([
+  "trick_resolved",
+  "dragon_trick_assigned",
+  "phase_changed"
+]);
+const HAND_OUTCOME_EVENT_TYPES = new Set([
+  "hand_completed",
+  "match_completed"
+]);
+const GAME_OUTCOME_EVENT_TYPES = new Set([
+  "game_completed",
+  "match_completed"
+]);
 
 function readJsonObject(
   value: unknown
@@ -251,8 +271,8 @@ async function recomputeRewardForWhere(
   sql: DatabaseClient,
   whereSql: string,
   params: Array<string | number>
-): Promise<void> {
-  await sql.unsafe(
+): Promise<number> {
+  const rows = await sql.unsafe<Array<{ id: number }>>(
     `
       UPDATE decisions
       SET
@@ -348,9 +368,19 @@ async function recomputeRewardForWhere(
         ) reward_payload
       ) AS computed
       WHERE decisions.id = computed.id
+        AND (
+          decisions.outcome_reward IS DISTINCT FROM computed.reward
+          OR decisions.outcome_components IS DISTINCT FROM computed.components
+          OR decisions.outcome_version IS DISTINCT FROM CASE
+            WHEN computed.reward IS NULL THEN decisions.outcome_version
+            ELSE 'outcome_reward_v1'
+          END
+        )
+      RETURNING decisions.id
     `,
     params
   );
+  return rows.length;
 }
 
 function isRetryablePostgresError(error: unknown): error is { code: string; message?: string } {
@@ -379,101 +409,203 @@ function retryDelayMs(config: { attempt: number; payload: TelemetryEventPayload 
   return config.attempt * 40 + jitterMs;
 }
 
+function eventHasOutcomeMetadata(payload: TelemetryEventPayload): boolean {
+  const metadata = payload.metadata as Record<string, unknown>;
+  return (
+    readMetadataString(metadata, "trick_id") !== null ||
+    readMetadataObject(metadata, "hand_result") !== null ||
+    readMetadataObject(metadata, "game_result") !== null
+  );
+}
+
 async function applyOutcomeAttributionForDecisionEventOnce(
   sql: DatabaseClient,
   payload: TelemetryEventPayload
-): Promise<void> {
-  const trickOutcome = parseTrickOutcomeMetadata(payload);
-  if (trickOutcome) {
-    const creditedTeam =
-      trickOutcome.trickPointRecipientTeam ?? trickOutcome.trickWinnerTeam;
-    await sql`
-      UPDATE decisions
-      SET
-        trick_id = ${trickOutcome.trickId},
-        trick_index = COALESCE(${trickOutcome.trickIndex}, trick_index),
-        trick_winner_seat = ${trickOutcome.trickWinnerSeat},
-        trick_winner_team = ${trickOutcome.trickWinnerTeam},
-        trick_points = CAST(${trickOutcome.trickPoints} AS INTEGER),
-        actor_team_won_trick =
-          CASE
-            WHEN actor_team IS NULL THEN NULL
-            WHEN CAST(${creditedTeam} AS TEXT) IS NULL THEN NULL
-            ELSE actor_team = CAST(${creditedTeam} AS TEXT)
-          END
-      WHERE game_id = ${payload.game_id}
-        AND hand_id = ${payload.hand_id}
-        AND trick_id = ${trickOutcome.trickId}
-    `;
-    await recomputeRewardForWhere(
-      sql,
-      "game_id = $1 AND hand_id = $2 AND trick_id = $3",
-      [payload.game_id, payload.hand_id, trickOutcome.trickId]
-    );
+): Promise<OutcomeAttributionUpdateStats> {
+  const stats: OutcomeAttributionUpdateStats = {
+    decisionUpdateCount: 0,
+    outcomeAttributionUpdateCount: 0,
+    unchangedUpdateCount: 0,
+    skippedEventCount: 0
+  };
+
+  if (
+    !eventHasOutcomeMetadata(payload) &&
+    !TRICK_OUTCOME_EVENT_TYPES.has(payload.event_type) &&
+    !HAND_OUTCOME_EVENT_TYPES.has(payload.event_type) &&
+    !GAME_OUTCOME_EVENT_TYPES.has(payload.event_type) &&
+    payload.phase !== "finished"
+  ) {
+    stats.skippedEventCount = 1;
+    return stats;
   }
 
-  const handOutcome = parseHandOutcomeMetadata(payload);
-  if (handOutcome) {
-    await sql`
-      UPDATE decisions
-      SET
-        hand_index = COALESCE(${handOutcome.handIndex}, hand_index),
-        hand_ns_score_delta = CAST(${handOutcome.handNsScoreDelta} AS INTEGER),
-        hand_ew_score_delta = CAST(${handOutcome.handEwScoreDelta} AS INTEGER),
-        actor_team_hand_score_delta =
-          CASE
-            WHEN actor_team = 'NS' THEN CAST(${handOutcome.handNsScoreDelta} AS INTEGER)
-            WHEN actor_team = 'EW' THEN CAST(${handOutcome.handEwScoreDelta} AS INTEGER)
-            ELSE NULL
-          END,
-        actor_team_won_hand =
-          CASE
-            WHEN actor_team IS NULL THEN NULL
-            WHEN CAST(${handOutcome.finalHandWinnerTeam} AS TEXT) IS NULL THEN NULL
-            ELSE actor_team = CAST(${handOutcome.finalHandWinnerTeam} AS TEXT)
-          END,
-        final_hand_winner_team = ${handOutcome.finalHandWinnerTeam},
-        hand_result = ${sql.json(handOutcome.handResult as never)}
-      WHERE game_id = ${payload.game_id}
-        AND hand_id = ${payload.hand_id}
-    `;
-    await recomputeRewardForWhere(
-      sql,
-      "game_id = $1 AND hand_id = $2",
-      [payload.game_id, payload.hand_id]
-    );
+  if (TRICK_OUTCOME_EVENT_TYPES.has(payload.event_type) || payload.phase === "finished") {
+    const trickOutcome = parseTrickOutcomeMetadata(payload);
+    if (trickOutcome) {
+      const creditedTeam =
+        trickOutcome.trickPointRecipientTeam ?? trickOutcome.trickWinnerTeam;
+      const trickRows = await sql<Array<{ id: number }>>`
+        UPDATE decisions
+        SET
+          trick_id = ${trickOutcome.trickId},
+          trick_index = COALESCE(${trickOutcome.trickIndex}, trick_index),
+          trick_winner_seat = ${trickOutcome.trickWinnerSeat},
+          trick_winner_team = ${trickOutcome.trickWinnerTeam},
+          trick_points = CAST(${trickOutcome.trickPoints} AS INTEGER),
+          actor_team_won_trick =
+            CASE
+              WHEN actor_team IS NULL THEN NULL
+              WHEN CAST(${creditedTeam} AS TEXT) IS NULL THEN NULL
+              ELSE actor_team = CAST(${creditedTeam} AS TEXT)
+            END
+        WHERE game_id = ${payload.game_id}
+          AND hand_id = ${payload.hand_id}
+          AND trick_id = ${trickOutcome.trickId}
+          AND (
+            trick_index IS DISTINCT FROM COALESCE(${trickOutcome.trickIndex}, trick_index)
+            OR trick_winner_seat IS DISTINCT FROM ${trickOutcome.trickWinnerSeat}
+            OR trick_winner_team IS DISTINCT FROM ${trickOutcome.trickWinnerTeam}
+            OR trick_points IS DISTINCT FROM CAST(${trickOutcome.trickPoints} AS INTEGER)
+            OR actor_team_won_trick IS DISTINCT FROM CASE
+              WHEN actor_team IS NULL THEN NULL
+              WHEN CAST(${creditedTeam} AS TEXT) IS NULL THEN NULL
+              ELSE actor_team = CAST(${creditedTeam} AS TEXT)
+            END
+          )
+        RETURNING id
+      `;
+      if (trickRows.length > 0) {
+        stats.decisionUpdateCount += trickRows.length;
+        stats.outcomeAttributionUpdateCount += trickRows.length;
+        stats.decisionUpdateCount += await recomputeRewardForWhere(
+          sql,
+          "game_id = $1 AND hand_id = $2 AND trick_id = $3",
+          [payload.game_id, payload.hand_id, trickOutcome.trickId]
+        );
+      } else {
+        stats.unchangedUpdateCount += 1;
+      }
+    }
   }
 
-  const gameOutcome = parseGameOutcomeMetadata(payload);
-  if (gameOutcome) {
-    await sql`
-      UPDATE decisions
-      SET
-        game_index = COALESCE(${gameOutcome.gameIndex}, game_index),
-        game_ns_final_score = CAST(${gameOutcome.gameNsFinalScore} AS INTEGER),
-        game_ew_final_score = CAST(${gameOutcome.gameEwFinalScore} AS INTEGER),
-        actor_team_won_game =
-          CASE
-            WHEN actor_team IS NULL THEN NULL
-            WHEN CAST(${gameOutcome.finalGameWinnerTeam} AS TEXT) IS NULL THEN NULL
-            ELSE actor_team = CAST(${gameOutcome.finalGameWinnerTeam} AS TEXT)
-          END,
-        final_game_winner_team = ${gameOutcome.finalGameWinnerTeam},
-        game_result = ${sql.json(gameOutcome.gameResult as never)}
-      WHERE game_id = ${payload.game_id}
-    `;
-    await recomputeRewardForWhere(sql, "game_id = $1", [payload.game_id]);
+  if (HAND_OUTCOME_EVENT_TYPES.has(payload.event_type) || payload.phase === "finished") {
+    const handOutcome = parseHandOutcomeMetadata(payload);
+    if (handOutcome) {
+      const handRows = await sql<Array<{ id: number }>>`
+        UPDATE decisions
+        SET
+          hand_index = COALESCE(${handOutcome.handIndex}, hand_index),
+          hand_ns_score_delta = CAST(${handOutcome.handNsScoreDelta} AS INTEGER),
+          hand_ew_score_delta = CAST(${handOutcome.handEwScoreDelta} AS INTEGER),
+          actor_team_hand_score_delta =
+            CASE
+              WHEN actor_team = 'NS' THEN CAST(${handOutcome.handNsScoreDelta} AS INTEGER)
+              WHEN actor_team = 'EW' THEN CAST(${handOutcome.handEwScoreDelta} AS INTEGER)
+              ELSE NULL
+            END,
+          actor_team_won_hand =
+            CASE
+              WHEN actor_team IS NULL THEN NULL
+              WHEN CAST(${handOutcome.finalHandWinnerTeam} AS TEXT) IS NULL THEN NULL
+              ELSE actor_team = CAST(${handOutcome.finalHandWinnerTeam} AS TEXT)
+            END,
+          final_hand_winner_team = ${handOutcome.finalHandWinnerTeam},
+          hand_result = ${sql.json(handOutcome.handResult as never)}
+        WHERE game_id = ${payload.game_id}
+          AND hand_id = ${payload.hand_id}
+          AND (
+            hand_index IS DISTINCT FROM COALESCE(${handOutcome.handIndex}, hand_index)
+            OR hand_ns_score_delta IS DISTINCT FROM CAST(${handOutcome.handNsScoreDelta} AS INTEGER)
+            OR hand_ew_score_delta IS DISTINCT FROM CAST(${handOutcome.handEwScoreDelta} AS INTEGER)
+            OR actor_team_hand_score_delta IS DISTINCT FROM CASE
+              WHEN actor_team = 'NS' THEN CAST(${handOutcome.handNsScoreDelta} AS INTEGER)
+              WHEN actor_team = 'EW' THEN CAST(${handOutcome.handEwScoreDelta} AS INTEGER)
+              ELSE NULL
+            END
+            OR actor_team_won_hand IS DISTINCT FROM CASE
+              WHEN actor_team IS NULL THEN NULL
+              WHEN CAST(${handOutcome.finalHandWinnerTeam} AS TEXT) IS NULL THEN NULL
+              ELSE actor_team = CAST(${handOutcome.finalHandWinnerTeam} AS TEXT)
+            END
+            OR final_hand_winner_team IS DISTINCT FROM ${handOutcome.finalHandWinnerTeam}
+            OR hand_result IS DISTINCT FROM ${sql.json(handOutcome.handResult as never)}
+          )
+        RETURNING id
+      `;
+      if (handRows.length > 0) {
+        stats.decisionUpdateCount += handRows.length;
+        stats.outcomeAttributionUpdateCount += handRows.length;
+        stats.decisionUpdateCount += await recomputeRewardForWhere(
+          sql,
+          "game_id = $1 AND hand_id = $2",
+          [payload.game_id, payload.hand_id]
+        );
+      } else {
+        stats.unchangedUpdateCount += 1;
+      }
+    }
   }
+
+  if (GAME_OUTCOME_EVENT_TYPES.has(payload.event_type) || payload.phase === "finished") {
+    const gameOutcome = parseGameOutcomeMetadata(payload);
+    if (gameOutcome) {
+      const gameRows = await sql<Array<{ id: number }>>`
+        UPDATE decisions
+        SET
+          game_index = COALESCE(${gameOutcome.gameIndex}, game_index),
+          game_ns_final_score = CAST(${gameOutcome.gameNsFinalScore} AS INTEGER),
+          game_ew_final_score = CAST(${gameOutcome.gameEwFinalScore} AS INTEGER),
+          actor_team_won_game =
+            CASE
+              WHEN actor_team IS NULL THEN NULL
+              WHEN CAST(${gameOutcome.finalGameWinnerTeam} AS TEXT) IS NULL THEN NULL
+              ELSE actor_team = CAST(${gameOutcome.finalGameWinnerTeam} AS TEXT)
+            END,
+          final_game_winner_team = ${gameOutcome.finalGameWinnerTeam},
+          game_result = ${sql.json(gameOutcome.gameResult as never)}
+        WHERE game_id = ${payload.game_id}
+          AND (
+            game_index IS DISTINCT FROM COALESCE(${gameOutcome.gameIndex}, game_index)
+            OR game_ns_final_score IS DISTINCT FROM CAST(${gameOutcome.gameNsFinalScore} AS INTEGER)
+            OR game_ew_final_score IS DISTINCT FROM CAST(${gameOutcome.gameEwFinalScore} AS INTEGER)
+            OR actor_team_won_game IS DISTINCT FROM CASE
+              WHEN actor_team IS NULL THEN NULL
+              WHEN CAST(${gameOutcome.finalGameWinnerTeam} AS TEXT) IS NULL THEN NULL
+              ELSE actor_team = CAST(${gameOutcome.finalGameWinnerTeam} AS TEXT)
+            END
+            OR final_game_winner_team IS DISTINCT FROM ${gameOutcome.finalGameWinnerTeam}
+            OR game_result IS DISTINCT FROM ${sql.json(gameOutcome.gameResult as never)}
+          )
+        RETURNING id
+      `;
+      if (gameRows.length > 0) {
+        stats.decisionUpdateCount += gameRows.length;
+        stats.outcomeAttributionUpdateCount += gameRows.length;
+        stats.decisionUpdateCount += await recomputeRewardForWhere(sql, "game_id = $1", [
+          payload.game_id
+        ]);
+      } else {
+        stats.unchangedUpdateCount += 1;
+      }
+    }
+  }
+
+  if (stats.decisionUpdateCount === 0 && stats.unchangedUpdateCount === 0) {
+    stats.skippedEventCount = 1;
+  }
+
+  return stats;
 }
 
 export async function applyOutcomeAttributionForDecisionEvent(
   sql: DatabaseClient,
   payload: TelemetryEventPayload
-): Promise<void> {
+): Promise<OutcomeAttributionUpdateStats> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= MAX_FINALIZER_RETRIES; attempt += 1) {
     try {
-      await applyOutcomeAttributionForDecisionEventOnce(sql, payload);
+      const stats = await applyOutcomeAttributionForDecisionEventOnce(sql, payload);
       if (attempt > 1) {
         console.warn(
           JSON.stringify({
@@ -488,7 +620,7 @@ export async function applyOutcomeAttributionForDecisionEvent(
           })
         );
       }
-      return;
+      return stats;
     } catch (error) {
       lastError = error;
       if (!isRetryablePostgresError(error) || attempt >= MAX_FINALIZER_RETRIES) {
@@ -510,6 +642,12 @@ export async function applyOutcomeAttributionForDecisionEvent(
       await sleep(retryDelayMs({ attempt, payload }));
     }
   }
+  return {
+    decisionUpdateCount: 0,
+    outcomeAttributionUpdateCount: 0,
+    unchangedUpdateCount: 0,
+    skippedEventCount: 0
+  };
 }
 
 export async function finalizeTelemetryResults(

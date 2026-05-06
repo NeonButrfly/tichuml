@@ -15,13 +15,15 @@ import {
 import type { DatabaseClient } from "../db/postgres.js";
 import {
   applyOutcomeAttributionForDecisionEvent,
-  deriveDecisionOutcomeContext
+  deriveDecisionOutcomeContext,
+  type OutcomeAttributionUpdateStats
 } from "./telemetry-outcome-finalizer.js";
 
 export interface TelemetryRepository {
   ping(): Promise<void>;
   insertDecision(payload: TelemetryDecisionPayload): Promise<number>;
   insertEvent(payload: TelemetryEventPayload): Promise<number>;
+  persistBatch?(items: TelemetryPersistBatchItem[]): Promise<void>;
   listDecisions(gameId: string): Promise<StoredTelemetryDecisionRecord[]>;
   listEvents(gameId: string): Promise<StoredTelemetryEventRecord[]>;
   getReplay(gameId: string): Promise<ReplayPayload>;
@@ -34,6 +36,84 @@ export interface TelemetryRepository {
 type DecisionRow = StoredTelemetryDecisionRecord;
 type EventRow = StoredTelemetryEventRecord;
 type TelemetryPayload = TelemetryDecisionPayload | TelemetryEventPayload;
+type MatchLifecycleStatus = "created" | "running" | "completed" | "failed";
+type MatchCacheEntry = {
+  matchId: string;
+  summary: MatchLifecycleSummary;
+};
+type MatchLifecycleSummary = {
+  gameId: string;
+  lastHandId: string | null;
+  provider: string | null;
+  requestedProvider: string | null;
+  telemetryMode: string | null;
+  strictTelemetry: boolean | null;
+  simVersion: string | null;
+  engineVersion: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  status: MatchLifecycleStatus;
+  finalTeam0Score: number | null;
+  finalTeam1Score: number | null;
+  winnerTeam: string | null;
+  handsPlayed: number | null;
+  failureReason: string | null;
+};
+type MatchRow = {
+  id: string;
+  game_id: string;
+  last_hand_id: string | null;
+  provider: string | null;
+  requested_provider: string | null;
+  telemetry_mode: string | null;
+  strict_telemetry: boolean | null;
+  sim_version: string | null;
+  engine_version: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  status: string;
+  final_team_0_score: number | null;
+  final_team_1_score: number | null;
+  winner_team: string | null;
+  hands_played: number | null;
+  failure_reason: string | null;
+};
+type PersistenceProfileAccumulator = {
+  match_upsert_count: number;
+  match_insert_count: number;
+  match_update_count: number;
+  match_cache_hit_count: number;
+  decision_insert_count: number;
+  decision_update_count: number;
+  event_insert_count: number;
+  outcome_attribution_update_count: number;
+  outcome_attribution_skipped_event_count: number;
+  outcome_attribution_unchanged_update_count: number;
+  match_lifecycle_write_total_ms: number;
+  decision_insert_total_ms: number;
+  event_insert_total_ms: number;
+  outcome_finalization_total_ms: number;
+  match_lifecycle_write_count: number;
+  decision_insert_timed_count: number;
+  event_insert_timed_count: number;
+  outcome_finalization_count: number;
+};
+type BatchState = {
+  cacheOverlay: Map<string, MatchCacheEntry>;
+  profile: PersistenceProfileAccumulator;
+};
+
+export type TelemetryPersistBatchItem =
+  | {
+      kind: "decision";
+      payload: TelemetryDecisionPayload;
+      acceptedAt: string;
+    }
+  | {
+      kind: "event";
+      payload: TelemetryEventPayload;
+      acceptedAt: string;
+    };
 
 type MatchLifecycleFields = {
   gameId: string;
@@ -53,6 +133,256 @@ type MatchLifecycleFields = {
   handsPlayed: number | null;
   failureReason: string | null;
 };
+
+const MATCH_CACHE_LIMIT = 20000;
+const MATCH_HAND_BOUNDARY_EVENT_TYPES = new Set([
+  "game_started",
+  "hand_started",
+  "hand_completed",
+  "game_completed",
+  "match_completed"
+]);
+
+function createEmptyPersistenceProfile(): PersistenceProfileAccumulator {
+  return {
+    match_upsert_count: 0,
+    match_insert_count: 0,
+    match_update_count: 0,
+    match_cache_hit_count: 0,
+    decision_insert_count: 0,
+    decision_update_count: 0,
+    event_insert_count: 0,
+    outcome_attribution_update_count: 0,
+    outcome_attribution_skipped_event_count: 0,
+    outcome_attribution_unchanged_update_count: 0,
+    match_lifecycle_write_total_ms: 0,
+    decision_insert_total_ms: 0,
+    event_insert_total_ms: 0,
+    outcome_finalization_total_ms: 0,
+    match_lifecycle_write_count: 0,
+    decision_insert_timed_count: 0,
+    event_insert_timed_count: 0,
+    outcome_finalization_count: 0
+  };
+}
+
+function summarizePersistenceProfile(
+  profile: PersistenceProfileAccumulator
+): JsonObject {
+  const average = (total: number, count: number): number =>
+    count > 0 ? Number((total / count).toFixed(3)) : 0;
+  return {
+    match_upsert_count: profile.match_upsert_count,
+    match_insert_count: profile.match_insert_count,
+    match_update_count: profile.match_update_count,
+    match_cache_hit_count: profile.match_cache_hit_count,
+    decision_insert_count: profile.decision_insert_count,
+    decision_update_count: profile.decision_update_count,
+    event_insert_count: profile.event_insert_count,
+    outcome_attribution_update_count:
+      profile.outcome_attribution_update_count,
+    outcome_attribution_skipped_event_count:
+      profile.outcome_attribution_skipped_event_count,
+    outcome_attribution_unchanged_update_count:
+      profile.outcome_attribution_unchanged_update_count,
+    match_lifecycle_write_total_ms: Number(
+      profile.match_lifecycle_write_total_ms.toFixed(3)
+    ),
+    decision_insert_total_ms: Number(profile.decision_insert_total_ms.toFixed(3)),
+    event_insert_total_ms: Number(profile.event_insert_total_ms.toFixed(3)),
+    outcome_finalization_total_ms: Number(
+      profile.outcome_finalization_total_ms.toFixed(3)
+    ),
+    match_lifecycle_write_avg_ms: average(
+      profile.match_lifecycle_write_total_ms,
+      profile.match_lifecycle_write_count
+    ),
+    decision_insert_avg_ms: average(
+      profile.decision_insert_total_ms,
+      profile.decision_insert_timed_count
+    ),
+    event_insert_avg_ms: average(
+      profile.event_insert_total_ms,
+      profile.event_insert_timed_count
+    ),
+    outcome_finalization_avg_ms: average(
+      profile.outcome_finalization_total_ms,
+      profile.outcome_finalization_count
+    )
+  };
+}
+
+function mergeProfileInto(
+  target: PersistenceProfileAccumulator,
+  source: PersistenceProfileAccumulator
+): void {
+  for (const [key, value] of Object.entries(source)) {
+    target[key as keyof PersistenceProfileAccumulator] += value;
+  }
+}
+
+function toMatchLifecycleSummary(fields: MatchLifecycleFields): MatchLifecycleSummary {
+  return {
+    gameId: fields.gameId,
+    lastHandId: fields.handId,
+    provider: fields.provider,
+    requestedProvider: fields.requestedProvider,
+    telemetryMode: fields.telemetryMode,
+    strictTelemetry: fields.strictTelemetry,
+    simVersion: fields.simVersion,
+    engineVersion: fields.engineVersion,
+    startedAt: fields.observedAt,
+    completedAt: fields.completedAt,
+    status: fields.failureReason
+      ? "failed"
+      : fields.completedAt
+        ? "completed"
+        : "running",
+    finalTeam0Score: fields.finalTeam0Score,
+    finalTeam1Score: fields.finalTeam1Score,
+    winnerTeam: fields.winnerTeam,
+    handsPlayed: fields.handsPlayed,
+    failureReason: fields.failureReason
+  };
+}
+
+function mergeProviderValue(
+  current: string | null,
+  incoming: string | null
+): string | null {
+  if (incoming === null) {
+    return current;
+  }
+  if (current === null) {
+    return incoming;
+  }
+  if (current === incoming || current === "mixed") {
+    return current;
+  }
+  return "mixed";
+}
+
+function earlierIso(left: string | null, right: string | null): string | null {
+  if (!left) {
+    return right;
+  }
+  if (!right) {
+    return left;
+  }
+  return new Date(left).getTime() <= new Date(right).getTime() ? left : right;
+}
+
+function shouldUpdateLastHandId(
+  payload: TelemetryPayload,
+  currentLastHandId: string | null,
+  incomingHandId: string
+): boolean {
+  if (currentLastHandId === null) {
+    return true;
+  }
+  if (currentLastHandId === incomingHandId) {
+    return false;
+  }
+  if (!("event_type" in payload)) {
+    return false;
+  }
+  return (
+    MATCH_HAND_BOUNDARY_EVENT_TYPES.has(payload.event_type) ||
+    payload.phase === "finished"
+  );
+}
+
+function mergeMatchLifecycleSummary(
+  current: MatchLifecycleSummary,
+  fields: MatchLifecycleFields,
+  payload: TelemetryPayload
+): MatchLifecycleSummary {
+  const nextCompletedAt = current.completedAt ?? fields.completedAt;
+  const nextFailureReason = current.failureReason ?? fields.failureReason;
+  const nextStatus: MatchLifecycleStatus = nextFailureReason
+    ? "failed"
+    : nextCompletedAt
+      ? "completed"
+      : current.status === "created"
+        ? "running"
+        : current.status;
+  return {
+    gameId: current.gameId,
+    lastHandId: shouldUpdateLastHandId(payload, current.lastHandId, fields.handId)
+      ? fields.handId
+      : current.lastHandId,
+    provider: mergeProviderValue(current.provider, fields.provider),
+    requestedProvider: mergeProviderValue(
+      current.requestedProvider,
+      fields.requestedProvider
+    ),
+    telemetryMode: current.telemetryMode ?? fields.telemetryMode,
+    strictTelemetry: current.strictTelemetry ?? fields.strictTelemetry,
+    simVersion: current.simVersion ?? fields.simVersion,
+    engineVersion: current.engineVersion ?? fields.engineVersion,
+    startedAt: earlierIso(current.startedAt, fields.observedAt),
+    completedAt: nextCompletedAt,
+    status: nextStatus,
+    finalTeam0Score: current.finalTeam0Score ?? fields.finalTeam0Score,
+    finalTeam1Score: current.finalTeam1Score ?? fields.finalTeam1Score,
+    winnerTeam: current.winnerTeam ?? fields.winnerTeam,
+    handsPlayed:
+      current.handsPlayed === null
+        ? fields.handsPlayed
+        : fields.handsPlayed === null
+          ? current.handsPlayed
+          : Math.max(current.handsPlayed, fields.handsPlayed),
+    failureReason: nextFailureReason
+  };
+}
+
+function sameLifecycleSummary(
+  left: MatchLifecycleSummary,
+  right: MatchLifecycleSummary
+): boolean {
+  return (
+    left.lastHandId === right.lastHandId &&
+    left.provider === right.provider &&
+    left.requestedProvider === right.requestedProvider &&
+    left.telemetryMode === right.telemetryMode &&
+    left.strictTelemetry === right.strictTelemetry &&
+    left.simVersion === right.simVersion &&
+    left.engineVersion === right.engineVersion &&
+    left.startedAt === right.startedAt &&
+    left.completedAt === right.completedAt &&
+    left.status === right.status &&
+    left.finalTeam0Score === right.finalTeam0Score &&
+    left.finalTeam1Score === right.finalTeam1Score &&
+    left.winnerTeam === right.winnerTeam &&
+    left.handsPlayed === right.handsPlayed &&
+    left.failureReason === right.failureReason
+  );
+}
+
+function matchSummaryFromRow(row: MatchRow): MatchLifecycleSummary {
+  const status =
+    row.status === "completed" || row.status === "failed" || row.status === "running"
+      ? row.status
+      : "created";
+  return {
+    gameId: row.game_id,
+    lastHandId: row.last_hand_id,
+    provider: row.provider,
+    requestedProvider: row.requested_provider,
+    telemetryMode: row.telemetry_mode,
+    strictTelemetry: row.strict_telemetry,
+    simVersion: row.sim_version,
+    engineVersion: row.engine_version,
+    startedAt: row.started_at,
+    completedAt: row.completed_at,
+    status,
+    finalTeam0Score: row.final_team_0_score,
+    finalTeam1Score: row.final_team_1_score,
+    winnerTeam: row.winner_team,
+    handsPlayed: row.hands_played,
+    failureReason: row.failure_reason
+  };
+}
 
 function readMetadataString(metadata: JsonObject, key: string): string | null {
   const value = metadata[key];
@@ -196,7 +526,11 @@ function matchLifecycleFields(payload: TelemetryPayload): MatchLifecycleFields {
     engineVersion: payload.engine_version,
     observedAt: payload.ts,
     completedAt,
-    status: completedAt ? "completed" : "running",
+    status: readMetadataString(payload.metadata, "failure_reason")
+      ? "failed"
+      : completedAt
+        ? "completed"
+        : "running",
     finalTeam0Score: readPayloadScore(payload, "team-0"),
     finalTeam1Score: readPayloadScore(payload, "team-1"),
     winnerTeam,
@@ -206,6 +540,9 @@ function matchLifecycleFields(payload: TelemetryPayload): MatchLifecycleFields {
 }
 
 export class PostgresTelemetryRepository implements TelemetryRepository {
+  private readonly matchCache = new Map<string, MatchCacheEntry>();
+  private readonly persistenceProfile = createEmptyPersistenceProfile();
+
   constructor(private readonly sql: DatabaseClient) {}
 
   async ping(): Promise<void> {
@@ -213,24 +550,47 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
   }
 
   async insertDecision(payload: TelemetryDecisionPayload): Promise<number> {
-    const fallbackUsed = inferTelemetryFallbackUsed({
-      requestedProvider: payload.requested_provider,
-      providerUsed: payload.provider_used,
-      explicitFallbackUsed: payload.fallback_used,
-      fallbackReason: payload.metadata.fallback_reason
-    });
-    payload = {
-      ...payload,
-      fallback_used: fallbackUsed,
-      metadata: {
-        ...payload.metadata,
-        fallback_used: fallbackUsed
-      }
+    return this.insertDecisionInternal(this.sql, payload);
+  }
+
+  async insertEvent(payload: TelemetryEventPayload): Promise<number> {
+    return this.insertEventInternal(this.sql, payload);
+  }
+
+  async persistBatch(items: TelemetryPersistBatchItem[]): Promise<void> {
+    const batchState: BatchState = {
+      cacheOverlay: new Map<string, MatchCacheEntry>(),
+      profile: createEmptyPersistenceProfile()
     };
-    const derived = deriveTelemetryDecisionFields(payload);
-    const outcomeContext = deriveDecisionOutcomeContext(payload);
-    const matchId = await this.ensureMatchForTelemetry(payload);
-    const [row] = await this.sql<{ id: number }[]>`
+
+    await this.sql.begin(async (transaction) => {
+      const client = transaction as unknown as DatabaseClient;
+      for (const item of items) {
+        if (item.kind === "decision") {
+          await this.insertDecisionInternal(client, item.payload, batchState);
+        } else {
+          await this.insertEventInternal(client, item.payload, batchState);
+        }
+      }
+    });
+
+    for (const [gameId, entry] of batchState.cacheOverlay.entries()) {
+      this.setCacheEntry(gameId, entry);
+    }
+    mergeProfileInto(this.persistenceProfile, batchState.profile);
+  }
+
+  private async insertDecisionInternal(
+    sqlClient: DatabaseClient,
+    payload: TelemetryDecisionPayload,
+    batchState?: BatchState
+  ): Promise<number> {
+    const normalized = this.normalizeDecisionPayload(payload);
+    const derived = deriveTelemetryDecisionFields(normalized);
+    const outcomeContext = deriveDecisionOutcomeContext(normalized);
+    const matchId = await this.ensureMatchForTelemetry(sqlClient, normalized, batchState);
+    const startedAt = performance.now();
+    const [row] = await sqlClient<{ id: number }[]>`
       INSERT INTO decisions (
         match_id,
         ts,
@@ -278,35 +638,35 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
       )
       VALUES (
         ${matchId},
-        ${payload.ts},
-        ${payload.game_id},
-        ${payload.hand_id},
-        ${payload.phase},
-        ${payload.actor_seat},
-        ${payload.decision_index},
-        ${payload.schema_version},
-        ${payload.engine_version},
-        ${payload.sim_version},
-        ${payload.requested_provider},
-        ${payload.provider_used},
-        ${payload.fallback_used},
-        ${payload.policy_name},
-        ${payload.policy_source},
-        ${typeof payload.metadata.worker_id === "string" ? payload.metadata.worker_id : null},
+        ${normalized.ts},
+        ${normalized.game_id},
+        ${normalized.hand_id},
+        ${normalized.phase},
+        ${normalized.actor_seat},
+        ${normalized.decision_index},
+        ${normalized.schema_version},
+        ${normalized.engine_version},
+        ${normalized.sim_version},
+        ${normalized.requested_provider},
+        ${normalized.provider_used},
+        ${normalized.fallback_used},
+        ${normalized.policy_name},
+        ${normalized.policy_source},
+        ${typeof normalized.metadata.worker_id === "string" ? normalized.metadata.worker_id : null},
         ${outcomeContext.actorTeam},
         ${outcomeContext.trickId},
         ${outcomeContext.trickIndex},
         ${outcomeContext.handIndex},
         ${outcomeContext.gameIndex},
-        ${this.sql.json(payload.state_raw)},
-        ${payload.state_norm === null ? null : this.sql.json(payload.state_norm)},
-        ${this.sql.json(payload.legal_actions)},
-        ${this.sql.json(payload.chosen_action)},
-        ${payload.explanation === null ? null : this.sql.json(payload.explanation)},
-        ${payload.candidateScores === null ? null : this.sql.json(payload.candidateScores)},
-        ${payload.stateFeatures === null ? null : this.sql.json(payload.stateFeatures)},
-        ${this.sql.json(payload.metadata)},
-        ${this.sql.json(payload.antipattern_tags)},
+        ${sqlClient.json(normalized.state_raw)},
+        ${normalized.state_norm === null ? null : sqlClient.json(normalized.state_norm)},
+        ${sqlClient.json(normalized.legal_actions)},
+        ${sqlClient.json(normalized.chosen_action)},
+        ${normalized.explanation === null ? null : sqlClient.json(normalized.explanation)},
+        ${normalized.candidateScores === null ? null : sqlClient.json(normalized.candidateScores)},
+        ${normalized.stateFeatures === null ? null : sqlClient.json(normalized.stateFeatures)},
+        ${sqlClient.json(normalized.metadata)},
+        ${sqlClient.json(normalized.antipattern_tags)},
         ${derived.chosen_action_type},
         ${derived.legal_action_count},
         ${derived.chosen_action_is_legal},
@@ -323,28 +683,21 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
       )
       RETURNING id
     `;
-
+    this.bumpProfile("decision_insert_count", 1, batchState);
+    this.bumpDuration("decision_insert_total_ms", "decision_insert_timed_count", performance.now() - startedAt, batchState);
     return row?.id ?? 0;
   }
 
-  async insertEvent(payload: TelemetryEventPayload): Promise<number> {
-    const fallbackUsed = inferTelemetryFallbackUsed({
-      requestedProvider: payload.requested_provider,
-      providerUsed: payload.provider_used,
-      explicitFallbackUsed: payload.fallback_used,
-      fallbackReason: payload.metadata.fallback_reason
-    });
-    payload = {
-      ...payload,
-      fallback_used: fallbackUsed,
-      metadata: {
-        ...payload.metadata,
-        fallback_used: fallbackUsed
-      }
-    };
-    const derived = deriveTelemetryEventFields(payload);
-    const matchId = await this.ensureMatchForTelemetry(payload);
-    const [row] = await this.sql<{ id: number }[]>`
+  private async insertEventInternal(
+    sqlClient: DatabaseClient,
+    payload: TelemetryEventPayload,
+    batchState?: BatchState
+  ): Promise<number> {
+    const normalized = this.normalizeEventPayload(payload);
+    const derived = deriveTelemetryEventFields(normalized);
+    const matchId = await this.ensureMatchForTelemetry(sqlClient, normalized, batchState);
+    const startedAt = performance.now();
+    const [row] = await sqlClient<{ id: number }[]>`
       INSERT INTO events (
         match_id,
         ts,
@@ -369,30 +722,34 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
       )
       VALUES (
         ${matchId},
-        ${payload.ts},
-        ${payload.game_id},
-        ${payload.hand_id},
-        ${payload.phase},
-        ${payload.event_type},
-        ${payload.actor_seat},
-        ${payload.event_index},
-        ${payload.schema_version},
-        ${payload.engine_version},
-        ${payload.sim_version},
-        ${payload.requested_provider},
-        ${payload.provider_used},
-        ${typeof payload.metadata.worker_id === "string" ? payload.metadata.worker_id : null},
-        ${payload.fallback_used},
-        ${payload.state_norm === null ? null : this.sql.json(payload.state_norm)},
-        ${this.sql.json(payload.payload)},
-        ${this.sql.json(payload.metadata)},
+        ${normalized.ts},
+        ${normalized.game_id},
+        ${normalized.hand_id},
+        ${normalized.phase},
+        ${normalized.event_type},
+        ${normalized.actor_seat},
+        ${normalized.event_index},
+        ${normalized.schema_version},
+        ${normalized.engine_version},
+        ${normalized.sim_version},
+        ${normalized.requested_provider},
+        ${normalized.provider_used},
+        ${typeof normalized.metadata.worker_id === "string" ? normalized.metadata.worker_id : null},
+        ${normalized.fallback_used},
+        ${normalized.state_norm === null ? null : sqlClient.json(normalized.state_norm)},
+        ${sqlClient.json(normalized.payload)},
+        ${sqlClient.json(normalized.metadata)},
         ${derived.state_hash},
         ${derived.event_hash}
       )
       RETURNING id
     `;
+    this.bumpProfile("event_insert_count", 1, batchState);
+    this.bumpDuration("event_insert_total_ms", "event_insert_timed_count", performance.now() - startedAt, batchState);
 
-    await applyOutcomeAttributionForDecisionEvent(this.sql, payload);
+    const finalizerStartedAt = performance.now();
+    const attribution = await applyOutcomeAttributionForDecisionEvent(sqlClient, normalized);
+    this.recordOutcomeAttribution(attribution, performance.now() - finalizerStartedAt, batchState);
     return row?.id ?? 0;
   }
 
@@ -668,13 +1025,15 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
       decisions_by_phase: decisionsByPhase,
       decisions_by_seat: decisionsBySeat,
       events_by_type: eventsByType,
-      events_by_phase: eventsByPhase
+      events_by_phase: eventsByPhase,
+      persistence_profile: summarizePersistenceProfile(this.persistenceProfile)
     };
   }
 
   async clearTelemetry(): Promise<AdminClearResult> {
     const rowCounts = await this.countTables(["decisions", "events"]);
     await this.sql`TRUNCATE TABLE decisions, events RESTART IDENTITY`;
+    this.resetPersistenceProfile();
     console.warn("[admin] cleared telemetry tables", rowCounts);
     return {
       accepted: true,
@@ -693,6 +1052,8 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
     ]);
     await this
       .sql`TRUNCATE TABLE decisions, events, matches RESTART IDENTITY CASCADE`;
+    this.matchCache.clear();
+    this.resetPersistenceProfile();
     console.warn("[admin] cleared app-owned database tables", rowCounts);
     return {
       accepted: true,
@@ -729,11 +1090,205 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
     return counts;
   }
 
+  private normalizeDecisionPayload(
+    payload: TelemetryDecisionPayload
+  ): TelemetryDecisionPayload {
+    const fallbackUsed = inferTelemetryFallbackUsed({
+      requestedProvider: payload.requested_provider,
+      providerUsed: payload.provider_used,
+      explicitFallbackUsed: payload.fallback_used,
+      fallbackReason: payload.metadata.fallback_reason
+    });
+    return {
+      ...payload,
+      fallback_used: fallbackUsed,
+      metadata: {
+        ...payload.metadata,
+        fallback_used: fallbackUsed
+      }
+    };
+  }
+
+  private normalizeEventPayload(
+    payload: TelemetryEventPayload
+  ): TelemetryEventPayload {
+    const fallbackUsed = inferTelemetryFallbackUsed({
+      requestedProvider: payload.requested_provider,
+      providerUsed: payload.provider_used,
+      explicitFallbackUsed: payload.fallback_used,
+      fallbackReason: payload.metadata.fallback_reason
+    });
+    return {
+      ...payload,
+      fallback_used: fallbackUsed,
+      metadata: {
+        ...payload.metadata,
+        fallback_used: fallbackUsed
+      }
+    };
+  }
+
+  private bumpProfile(
+    key: keyof PersistenceProfileAccumulator,
+    amount: number,
+    batchState?: BatchState
+  ): void {
+    const target = batchState?.profile ?? this.persistenceProfile;
+    target[key] += amount;
+  }
+
+  private bumpDuration(
+    totalKey:
+      | "match_lifecycle_write_total_ms"
+      | "decision_insert_total_ms"
+      | "event_insert_total_ms"
+      | "outcome_finalization_total_ms",
+    countKey:
+      | "match_lifecycle_write_count"
+      | "decision_insert_timed_count"
+      | "event_insert_timed_count"
+      | "outcome_finalization_count",
+    durationMs: number,
+    batchState?: BatchState
+  ): void {
+    const target = batchState?.profile ?? this.persistenceProfile;
+    target[totalKey] += durationMs;
+    target[countKey] += 1;
+  }
+
+  private recordOutcomeAttribution(
+    stats: OutcomeAttributionUpdateStats,
+    durationMs: number,
+    batchState?: BatchState
+  ): void {
+    this.bumpProfile("decision_update_count", stats.decisionUpdateCount, batchState);
+    this.bumpProfile(
+      "outcome_attribution_update_count",
+      stats.outcomeAttributionUpdateCount,
+      batchState
+    );
+    this.bumpProfile(
+      "outcome_attribution_skipped_event_count",
+      stats.skippedEventCount,
+      batchState
+    );
+    this.bumpProfile(
+      "outcome_attribution_unchanged_update_count",
+      stats.unchangedUpdateCount,
+      batchState
+    );
+    this.bumpDuration(
+      "outcome_finalization_total_ms",
+      "outcome_finalization_count",
+      durationMs,
+      batchState
+    );
+  }
+
+  private resetPersistenceProfile(): void {
+    const empty = createEmptyPersistenceProfile();
+    for (const [key, value] of Object.entries(empty)) {
+      this.persistenceProfile[key as keyof PersistenceProfileAccumulator] = value;
+    }
+  }
+
+  private getCacheEntry(
+    gameId: string,
+    batchState?: BatchState
+  ): MatchCacheEntry | null {
+    return (
+      batchState?.cacheOverlay.get(gameId) ??
+      this.matchCache.get(gameId) ??
+      null
+    );
+  }
+
+  private setCacheEntry(gameId: string, entry: MatchCacheEntry): void {
+    if (this.matchCache.has(gameId)) {
+      this.matchCache.delete(gameId);
+    }
+    this.matchCache.set(gameId, entry);
+    while (this.matchCache.size > MATCH_CACHE_LIMIT) {
+      const oldestKey = this.matchCache.keys().next().value;
+      if (!oldestKey) {
+        break;
+      }
+      this.matchCache.delete(oldestKey);
+    }
+  }
+
+  private writeCacheEntry(
+    gameId: string,
+    entry: MatchCacheEntry,
+    batchState?: BatchState
+  ): void {
+    if (batchState) {
+      batchState.cacheOverlay.set(gameId, entry);
+      return;
+    }
+    this.setCacheEntry(gameId, entry);
+  }
+
   private async ensureMatchForTelemetry(
-    payload: TelemetryPayload
+    sqlClient: DatabaseClient,
+    payload: TelemetryPayload,
+    batchState?: BatchState
   ): Promise<string> {
     const fields = matchLifecycleFields(payload);
-    const [row] = await this.sql<Array<{ id: string }>>`
+    const cached = this.getCacheEntry(fields.gameId, batchState);
+    if (cached) {
+      const merged = mergeMatchLifecycleSummary(cached.summary, fields, payload);
+      if (sameLifecycleSummary(cached.summary, merged)) {
+        this.bumpProfile("match_cache_hit_count", 1, batchState);
+        return cached.matchId;
+      }
+
+      const updated = await this.updateExistingMatch(
+        sqlClient,
+        cached.matchId,
+        merged,
+        batchState
+      );
+      this.writeCacheEntry(fields.gameId, updated, batchState);
+      return updated.matchId;
+    }
+
+    const inserted = await this.insertMatchIfMissing(sqlClient, fields, batchState);
+    if (inserted) {
+      this.writeCacheEntry(fields.gameId, inserted, batchState);
+      return inserted.matchId;
+    }
+
+    const existing = await this.loadMatchByGameId(sqlClient, fields.gameId);
+    if (!existing) {
+      throw new Error(
+        `Unable to resolve match lifecycle row for game_id=${fields.gameId}`
+      );
+    }
+
+    const merged = mergeMatchLifecycleSummary(existing.summary, fields, payload);
+    if (sameLifecycleSummary(existing.summary, merged)) {
+      this.writeCacheEntry(fields.gameId, existing, batchState);
+      return existing.matchId;
+    }
+
+    const updated = await this.updateExistingMatch(
+      sqlClient,
+      existing.matchId,
+      merged,
+      batchState
+    );
+    this.writeCacheEntry(fields.gameId, updated, batchState);
+    return updated.matchId;
+  }
+
+  private async insertMatchIfMissing(
+    sqlClient: DatabaseClient,
+    fields: MatchLifecycleFields,
+    batchState?: BatchState
+  ): Promise<MatchCacheEntry | null> {
+    const startedAt = performance.now();
+    const [row] = await sqlClient<MatchRow[]>`
       INSERT INTO matches (
         game_id,
         last_hand_id,
@@ -772,54 +1327,138 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
         ${fields.status},
         NOW()
       )
-      ON CONFLICT (game_id) WHERE game_id IS NOT NULL DO UPDATE SET
-        last_hand_id = EXCLUDED.last_hand_id,
-        provider = CASE
-          WHEN EXCLUDED.provider IS NULL THEN matches.provider
-          WHEN matches.provider IS NULL THEN EXCLUDED.provider
-          WHEN matches.provider = EXCLUDED.provider THEN matches.provider
-          ELSE 'mixed'
-        END,
-        requested_provider = CASE
-          WHEN EXCLUDED.requested_provider IS NULL THEN matches.requested_provider
-          WHEN matches.requested_provider IS NULL THEN EXCLUDED.requested_provider
-          WHEN matches.requested_provider = EXCLUDED.requested_provider THEN matches.requested_provider
-          ELSE 'mixed'
-        END,
-        telemetry_mode = COALESCE(EXCLUDED.telemetry_mode, matches.telemetry_mode),
-        strict_telemetry = COALESCE(EXCLUDED.strict_telemetry, matches.strict_telemetry),
-        sim_version = COALESCE(EXCLUDED.sim_version, matches.sim_version),
-        engine_version = COALESCE(EXCLUDED.engine_version, matches.engine_version),
-        final_team_0_score = COALESCE(EXCLUDED.final_team_0_score, matches.final_team_0_score),
-        final_team_1_score = COALESCE(EXCLUDED.final_team_1_score, matches.final_team_1_score),
-        winner_team = COALESCE(EXCLUDED.winner_team, matches.winner_team),
-        hands_played = CASE
-          WHEN matches.hands_played IS NULL THEN EXCLUDED.hands_played
-          WHEN EXCLUDED.hands_played IS NULL THEN matches.hands_played
-          ELSE GREATEST(matches.hands_played, EXCLUDED.hands_played)
-        END,
-        failure_reason = COALESCE(EXCLUDED.failure_reason, matches.failure_reason),
-        started_at = LEAST(
-          COALESCE(matches.started_at, EXCLUDED.started_at),
-          EXCLUDED.started_at
-        ),
-        completed_at = COALESCE(EXCLUDED.completed_at, matches.completed_at),
-        status = CASE
-          WHEN EXCLUDED.failure_reason IS NOT NULL THEN 'failed'
-          WHEN EXCLUDED.completed_at IS NOT NULL THEN EXCLUDED.status
-          WHEN matches.status = 'created' THEN 'running'
-          ELSE matches.status
-        END,
-        updated_at = NOW()
-      RETURNING id
+      ON CONFLICT (game_id) WHERE game_id IS NOT NULL DO NOTHING
+      RETURNING
+        id,
+        game_id,
+        last_hand_id,
+        provider,
+        requested_provider,
+        telemetry_mode,
+        strict_telemetry,
+        sim_version,
+        engine_version,
+        started_at,
+        completed_at,
+        status,
+        final_team_0_score,
+        final_team_1_score,
+        winner_team,
+        hands_played,
+        failure_reason
     `;
-
     if (!row?.id) {
-      throw new Error(
-        `Unable to upsert match lifecycle row for game_id=${fields.gameId}`
-      );
+      return null;
     }
-    return row.id;
+    this.bumpProfile("match_upsert_count", 1, batchState);
+    this.bumpProfile("match_insert_count", 1, batchState);
+    this.bumpDuration(
+      "match_lifecycle_write_total_ms",
+      "match_lifecycle_write_count",
+      performance.now() - startedAt,
+      batchState
+    );
+    return {
+      matchId: row.id,
+      summary: matchSummaryFromRow(row)
+    };
+  }
+
+  private async loadMatchByGameId(
+    sqlClient: DatabaseClient,
+    gameId: string
+  ): Promise<MatchCacheEntry | null> {
+    const [row] = await sqlClient<MatchRow[]>`
+      SELECT
+        id,
+        game_id,
+        last_hand_id,
+        provider,
+        requested_provider,
+        telemetry_mode,
+        strict_telemetry,
+        sim_version,
+        engine_version,
+        started_at,
+        completed_at,
+        status,
+        final_team_0_score,
+        final_team_1_score,
+        winner_team,
+        hands_played,
+        failure_reason
+      FROM matches
+      WHERE game_id = ${gameId}
+    `;
+    return row
+      ? {
+          matchId: row.id,
+          summary: matchSummaryFromRow(row)
+        }
+      : null;
+  }
+
+  private async updateExistingMatch(
+    sqlClient: DatabaseClient,
+    matchId: string,
+    summary: MatchLifecycleSummary,
+    batchState?: BatchState
+  ): Promise<MatchCacheEntry> {
+    const startedAt = performance.now();
+    const [row] = await sqlClient<MatchRow[]>`
+      UPDATE matches
+      SET
+        last_hand_id = ${summary.lastHandId},
+        provider = ${summary.provider},
+        requested_provider = ${summary.requestedProvider},
+        telemetry_mode = ${summary.telemetryMode},
+        strict_telemetry = ${summary.strictTelemetry},
+        sim_version = ${summary.simVersion},
+        engine_version = ${summary.engineVersion},
+        started_at = ${summary.startedAt},
+        completed_at = ${summary.completedAt},
+        status = ${summary.status},
+        final_team_0_score = ${summary.finalTeam0Score},
+        final_team_1_score = ${summary.finalTeam1Score},
+        winner_team = ${summary.winnerTeam},
+        hands_played = ${summary.handsPlayed},
+        failure_reason = ${summary.failureReason},
+        updated_at = NOW()
+      WHERE id = ${matchId}
+      RETURNING
+        id,
+        game_id,
+        last_hand_id,
+        provider,
+        requested_provider,
+        telemetry_mode,
+        strict_telemetry,
+        sim_version,
+        engine_version,
+        started_at,
+        completed_at,
+        status,
+        final_team_0_score,
+        final_team_1_score,
+        winner_team,
+        hands_played,
+        failure_reason
+    `;
+    if (!row?.id) {
+      throw new Error(`Unable to update match lifecycle row id=${matchId}`);
+    }
+    this.bumpProfile("match_upsert_count", 1, batchState);
+    this.bumpProfile("match_update_count", 1, batchState);
+    this.bumpDuration(
+      "match_lifecycle_write_total_ms",
+      "match_lifecycle_write_count",
+      performance.now() - startedAt,
+      batchState
+    );
+    return {
+      matchId: row.id,
+      summary: matchSummaryFromRow(row)
+    };
   }
 
   private async countGrouped(

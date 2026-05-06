@@ -2,7 +2,10 @@ import type {
   TelemetryDecisionPayload,
   TelemetryEventPayload
 } from "@tichuml/shared";
-import type { TelemetryRepository } from "./telemetry-repository.js";
+import type {
+  TelemetryPersistBatchItem,
+  TelemetryRepository
+} from "./telemetry-repository.js";
 import {
   serializeErrorDetail,
   type SerializedErrorDetail
@@ -83,6 +86,7 @@ function logTelemetryQueue(
 export class TelemetryIngestQueue {
   private readonly queue: TelemetryQueueItem[] = [];
   private inFlightBatches = 0;
+  private pumpScheduled = false;
   private accepted = 0;
   private persisted = 0;
   private droppedQueuePressure = 0;
@@ -160,7 +164,7 @@ export class TelemetryIngestQueue {
 
     this.queue.push(item);
     this.accepted += 1;
-    this.pump();
+    this.schedulePump();
     return {
       accepted: true,
       queued: true,
@@ -184,47 +188,80 @@ export class TelemetryIngestQueue {
   }
 
   private async persistBatch(batch: TelemetryQueueItem[]): Promise<void> {
-    await Promise.all(
-      batch.map(async (item) => {
-        try {
-          if (item.kind === "decision") {
-            await this.repository.insertDecision(item.payload);
-          } else {
-            await this.repository.insertEvent(item.payload);
-          }
-          this.persisted += 1;
-          this.lastPersistedAt = nowIso();
-        } catch (error) {
-          const detail = serializeErrorDetail(
-            error,
-            "Telemetry persistence failed."
-          );
-          this.persistenceFailures += 1;
-          this.lastFailureAt = nowIso();
-          this.lastFailureMessage = detail.message;
-          this.lastFailureDetail = detail;
-          logTelemetryQueue("error", "telemetry_persistence_failed", {
-            request_kind:
-              item.kind === "decision" ? "telemetry_decision" : "telemetry_event",
-            game_id: item.payload.game_id,
-            hand_id: item.payload.hand_id,
-            phase: item.payload.phase,
-            accepted_at: item.acceptedAt,
-            message: detail.message,
-            error: detail,
-            failure_kind: "persistence_failure",
-            payload_shape: summarizePayloadShape(item.payload),
-            sql_context: {
-              operation:
-                item.kind === "decision"
-                  ? "insert_decision"
-                  : "insert_event",
-              table: item.kind === "decision" ? "decisions" : "events"
-            }
-          });
+    const persistBatch =
+      "persistBatch" in this.repository &&
+      typeof this.repository.persistBatch === "function"
+        ? this.repository.persistBatch.bind(this.repository)
+        : null;
+
+    if (persistBatch && batch.length > 1) {
+      try {
+        await persistBatch(batch as TelemetryPersistBatchItem[]);
+        this.persisted += batch.length;
+        this.lastPersistedAt = nowIso();
+        return;
+      } catch (error) {
+        logTelemetryQueue("warn", "telemetry_batch_persistence_fallback", {
+          batch_size: batch.length,
+          message: error instanceof Error ? error.message : String(error)
+        });
+      }
+    }
+
+    for (const item of batch) {
+      await this.persistOne(item);
+    }
+  }
+
+  private schedulePump(): void {
+    if (this.pumpScheduled) {
+      return;
+    }
+    this.pumpScheduled = true;
+    queueMicrotask(() => {
+      this.pumpScheduled = false;
+      this.pump();
+    });
+  }
+
+  private async persistOne(item: TelemetryQueueItem): Promise<void> {
+    try {
+      if (item.kind === "decision") {
+        await this.repository.insertDecision(item.payload);
+      } else {
+        await this.repository.insertEvent(item.payload);
+      }
+      this.persisted += 1;
+      this.lastPersistedAt = nowIso();
+    } catch (error) {
+      const detail = serializeErrorDetail(
+        error,
+        "Telemetry persistence failed."
+      );
+      this.persistenceFailures += 1;
+      this.lastFailureAt = nowIso();
+      this.lastFailureMessage = detail.message;
+      this.lastFailureDetail = detail;
+      logTelemetryQueue("error", "telemetry_persistence_failed", {
+        request_kind:
+          item.kind === "decision" ? "telemetry_decision" : "telemetry_event",
+        game_id: item.payload.game_id,
+        hand_id: item.payload.hand_id,
+        phase: item.payload.phase,
+        accepted_at: item.acceptedAt,
+        message: detail.message,
+        error: detail,
+        failure_kind: "persistence_failure",
+        payload_shape: summarizePayloadShape(item.payload),
+        sql_context: {
+          operation:
+            item.kind === "decision"
+              ? "insert_decision"
+              : "insert_event",
+          table: item.kind === "decision" ? "decisions" : "events"
         }
-      })
-    );
+      });
+    }
   }
 }
 

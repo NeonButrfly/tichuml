@@ -37,6 +37,7 @@
     "sim:training:linux": "bash scripts/run-training-sim.sh",
     "telemetry:truth": "tsx scripts/telemetry-truth.ts",
     "telemetry:sanity": "tsx scripts/telemetry-sanity.ts",
+    "telemetry:write-amplification": "tsx scripts/telemetry-write-amplification.ts",
     "telemetry:finalize-results": "tsx scripts/telemetry-finalize-results.ts",
     "telemetry:validate-training-data": "tsx scripts/telemetry-validate-training-data.ts",
     "telemetry:validate-run": "tsx scripts/telemetry-validate-run.ts",
