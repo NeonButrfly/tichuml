@@ -2,6 +2,33 @@
 
 Prompt logs here capture backend/platform prompt intent only. GitHub issue state remains authoritative.
 
+## 2026-05-06 - Canonical restoreable capture-db scripts with redacted diagnostics
+
+- Prompt signal:
+  Add a production-useful database capture workflow that creates canonical
+  `scripts/capture-db.sh` and `scripts/capture-db.ps1` without platform suffixes,
+  loads `DATABASE_URL` from the repo-root `.env` unless the shell explicitly
+  overrides it, produces restoreable PostgreSQL dumps plus redacted diagnostics,
+  archives the staging directory with split 7z volumes by default, and stays
+  safe during active telemetry ingestion.
+- Interpreted requirement:
+  Issue [#67](https://github.com/NeonButrfly/tichuml/issues/67) governs a new
+  cross-platform operator contract distinct from `clear-db` and `reset-db`: the
+  canonical `capture-db` entrypoints must produce restoreable dumps plus enough
+  metadata, table/index/stats/activity summaries, lifecycle anomaly reporting,
+  git/env/docker context, checksums, and restore instructions for developers or
+  ChatGPT to analyze the run without restoring first, while preserving the repo
+  naming convention of `scripts/<name>.sh` and `scripts/<name>.ps1`.
+- Affected systems:
+  `scripts/capture-db.sh`, `scripts/capture-db.ps1`,
+  `scripts/capture-db-core.mjs`, focused script tests, script/operator docs.
+- Linked GitHub issue:
+  [#67](https://github.com/NeonButrfly/tichuml/issues/67)
+- Milestone:
+  [6.5 - Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status:
+  Lives in GitHub, not here.
+
 ## 2026-05-06 - Restore Linux simulator cleanup helper for verify-one-game and training scripts
 
 - Prompt signal:

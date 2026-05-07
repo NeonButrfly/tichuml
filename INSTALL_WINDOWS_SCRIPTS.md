@@ -60,6 +60,22 @@ application data tables only:
 powershell -ExecutionPolicy Bypass -File scripts\clear-db.ps1 --yes
 ```
 
+## Capture a restoreable DB snapshot plus diagnostics
+
+Issue [#67](https://github.com/NeonButrfly/tichuml/issues/67) tracks the
+canonical capture flow. This creates a restoreable `pg_dump` custom-format dump
+plus redacted diagnostics, git metadata, checksums, and a restore guide without
+modifying the database:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\capture-db.ps1 -Label post-fix-clean-run -Reason "after telemetry verification"
+```
+
+The default output directory is `.runtime\db-captures`. The script keeps the
+unarchived staging directory by default, splits the 7z archive into 500 MB
+parts unless `-NoSplit` is used, and warns that active writers may make the
+capture non-quiescent.
+
 ## One-game telemetry diagnostic
 
 ```powershell

@@ -4,6 +4,8 @@ Issue [#61](https://github.com/NeonButrfly/tichuml/issues/61) tracks the
 current script normalization, training startup, and scoped telemetry workflow.
 Issue [#65](https://github.com/NeonButrfly/tichuml/issues/65) tracks the
 canonical in-place `clear-db` operator pair.
+Issue [#67](https://github.com/NeonButrfly/tichuml/issues/67) tracks the
+canonical restoreable `capture-db` operator pair.
 
 Canonical human-runnable scripts live directly under `scripts/`. The only
 platform filename difference is the extension: `.ps1` for Windows and `.sh` for
@@ -27,6 +29,7 @@ scripts/check-scripts.sh
 | Backend logs | `scripts/backend-logs.ps1` | `scripts/backend-logs.sh` |
 | Bootstrap/install forwarder | `scripts/bootstrap.ps1` | `scripts/bootstrap.sh` |
 | Shared helpers | `scripts/common.ps1` | `scripts/common.sh` |
+| Capture database snapshot | `scripts/capture-db.ps1` | `scripts/capture-db.sh` |
 | Backend helpers | `scripts/backend-common.ps1` | `scripts/backend-common.sh` |
 | Clear database data | `scripts/clear-db.ps1` | `scripts/clear-db.sh` |
 | Install backend | `scripts/install-backend.ps1` | `scripts/install-backend.sh` |
@@ -74,6 +77,12 @@ Destructive scripts refuse to run unless explicitly confirmed. Use
 `-Yes`/`-ClearDatabase` on PowerShell and `--yes`/`--clear-database` on shell
 where applicable. The canonical `clear-db` pair uses `--yes` on both Windows
 and Linux so the destructive confirmation text matches exactly across shells.
+
+`capture-db` is intentionally non-destructive. It reads `DATABASE_URL` from the
+current environment when explicitly set, otherwise from the repo-root `.env`,
+creates a restoreable custom-format `pg_dump`, writes redacted diagnostics and
+git/environment metadata into a staging directory, archives that directory with
+7-Zip, and warns that active writers may make the capture non-quiescent.
 
 ## Training Startup
 
