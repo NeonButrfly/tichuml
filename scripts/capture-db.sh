@@ -100,6 +100,11 @@ build_command_line() {
   printf '%s\n' "$text"
 }
 
+file_size_bytes() {
+  local file_path="$1"
+  wc -c <"$file_path" | tr -d '[:space:]'
+}
+
 database_url_field() {
   local database_url="$1"
   local field="$2"
@@ -165,15 +170,23 @@ should_use_docker_pg_dump() {
 run_pg_dump_via_container() {
   local output_path="$1"
   shift
-  local temp_name temp_path
-  temp_name="${CAPTURE_BASENAME}-$(basename "$output_path")"
-  temp_path="/tmp/$temp_name"
+  local partial_path status
+  partial_path="${output_path}.partial"
 
-  MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' docker exec "$POSTGRES_CONTAINER_NAME_VALUE" rm -f "$temp_path" >/dev/null 2>&1 || true
-  MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' docker exec "$POSTGRES_CONTAINER_NAME_VALUE" \
-    pg_dump -U "$DATABASE_USER_VALUE" -d "$DATABASE_NAME_VALUE" "$@" -f "$temp_path"
-  docker cp "${POSTGRES_CONTAINER_NAME_VALUE}:$temp_path" "$output_path" >/dev/null
-  MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' docker exec "$POSTGRES_CONTAINER_NAME_VALUE" rm -f "$temp_path" >/dev/null 2>&1 || true
+  rm -f "$partial_path"
+  if MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' docker exec "$POSTGRES_CONTAINER_NAME_VALUE" \
+    pg_dump -U "$DATABASE_USER_VALUE" -d "$DATABASE_NAME_VALUE" "$@" >"$partial_path"; then
+    if mv "$partial_path" "$output_path"; then
+      return 0
+    fi
+    status=$?
+    rm -f "$partial_path"
+    return "$status"
+  fi
+
+  status=$?
+  rm -f "$partial_path"
+  return "$status"
 }
 
 dump_database_custom() {
@@ -350,27 +363,48 @@ if should_use_docker_pg_dump; then
     "$(server_major_version)"
 fi
 
+printf '[INFO] Custom dump starting: %s\n' "$STAGING_DIR/db.dump"
 dump_database_custom "$STAGING_DIR/db.dump"
-dump_database_schema "$STAGING_DIR/db-schema.sql"
+printf '[INFO] Custom dump complete: %s (%s bytes)\n' \
+  "$STAGING_DIR/db.dump" \
+  "$(file_size_bytes "$STAGING_DIR/db.dump")"
 
-node "$CORE_SCRIPT" collect \
-  --repo-root "$REPO_ROOT" \
-  --staging-dir "$STAGING_DIR" \
-  --database-url "$DATABASE_URL_VALUE" \
-  --created-utc "$CREATED_UTC" \
-  --created-local "$CREATED_LOCAL" \
-  --capture-id "$CAPTURE_BASENAME" \
-  --label "$LABEL" \
-  --reason "$REASON" \
-  --notes "$NOTES" \
-  --split-size "$MANIFEST_SPLIT_SIZE" \
-  --command-line "$COMMAND_LINE" \
-  --script-version "$SCRIPT_VERSION" \
-  --archive-base-name "$CAPTURE_BASENAME.7z" \
-  --archive-path "$ARCHIVE_PATH"
+printf '[INFO] Schema dump starting: %s\n' "$STAGING_DIR/db-schema.sql"
+dump_database_schema "$STAGING_DIR/db-schema.sql"
+printf '[INFO] Schema dump complete: %s (%s bytes)\n' \
+  "$STAGING_DIR/db-schema.sql" \
+  "$(file_size_bytes "$STAGING_DIR/db-schema.sql")"
+
+printf '[INFO] Diagnostics collection starting.\n'
+collect_args=(
+  "$CORE_SCRIPT"
+  "collect"
+  "--repo-root" "$REPO_ROOT"
+  "--staging-dir" "$STAGING_DIR"
+  "--database-url" "$DATABASE_URL_VALUE"
+  "--created-utc" "$CREATED_UTC"
+  "--created-local" "$CREATED_LOCAL"
+  "--capture-id" "$CAPTURE_BASENAME"
+  "--split-size" "$MANIFEST_SPLIT_SIZE"
+  "--command-line" "$COMMAND_LINE"
+  "--script-version" "$SCRIPT_VERSION"
+  "--archive-base-name" "$CAPTURE_BASENAME.7z"
+  "--archive-path" "$ARCHIVE_PATH"
+)
+if [ -n "$LABEL" ]; then
+  collect_args+=("--label" "$LABEL")
+fi
+if [ -n "$REASON" ]; then
+  collect_args+=("--reason" "$REASON")
+fi
+if [ -n "$NOTES" ]; then
+  collect_args+=("--notes" "$NOTES")
+fi
+node "${collect_args[@]}"
 
 write_stage_checksums "$STAGING_DIR"
 
+printf '[INFO] Archive creation starting.\n'
 pushd "$OUT_DIR_ABS" >/dev/null
 if [ "$NO_SPLIT" = "true" ]; then
   "$SEVENZ_COMMAND" a -t7z "$ARCHIVE_PATH" "$CAPTURE_BASENAME" >/dev/null
@@ -392,6 +426,8 @@ if ((${#archive_files[@]} == 0)); then
   printf 'Archive creation succeeded but no archive files were found for %s\n' "$ARCHIVE_PATH" >&2
   exit 1
 fi
+
+printf '[INFO] Archive creation complete: %s archive file(s).\n' "${#archive_files[@]}"
 
 finalize_args=(
   "$CORE_SCRIPT"

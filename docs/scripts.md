@@ -6,6 +6,8 @@ Issue [#65](https://github.com/NeonButrfly/tichuml/issues/65) tracks the
 canonical in-place `clear-db` operator pair.
 Issue [#67](https://github.com/NeonButrfly/tichuml/issues/67) tracks the
 canonical restoreable `capture-db` operator pair.
+Issue [#68](https://github.com/NeonButrfly/tichuml/issues/68) tracks the
+dockerized `capture-db` streaming fix that avoids container temp dump files.
 
 Canonical human-runnable scripts live directly under `scripts/`. The only
 platform filename difference is the extension: `.ps1` for Windows and `.sh` for
@@ -83,8 +85,10 @@ current environment when explicitly set, otherwise from the repo-root `.env`,
 creates a restoreable custom-format `pg_dump`, writes redacted diagnostics and
 git/environment metadata into a staging directory, archives that directory with
 7-Zip, prefers the Docker PostgreSQL client when the local dev DB server major
-differs from the workstation `pg_dump` major, and warns that active writers may
-make the capture non-quiescent.
+differs from the workstation `pg_dump` major, streams dockerized dump output
+directly into host-side `.partial` files before atomically renaming them into
+place, never uses `docker cp` for dump retrieval, and warns that active writers
+may make the capture non-quiescent.
 
 ## Training Startup
 

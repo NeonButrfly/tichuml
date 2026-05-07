@@ -194,6 +194,22 @@ function Build-CommandLine {
   return ($parts -join " ")
 }
 
+function Get-FileSizeBytes {
+  param([string]$Path)
+
+  return (Get-Item -LiteralPath $Path).Length
+}
+
+function Format-ProcessArgument {
+  param([string]$Value)
+
+  if ($Value -match '[\s"]') {
+    return '"' + $Value.Replace('"', '\"') + '"'
+  }
+
+  return $Value
+}
+
 function Get-DatabaseUrlField {
   param(
     [string]$DatabaseUrl,
@@ -271,27 +287,74 @@ function Test-DockerPgDumpUsable {
   return ($LASTEXITCODE -eq 0)
 }
 
-function Invoke-ContainerPgDump {
+function Get-DockerCommandPath {
+  $dockerCommand = Get-Command docker -ErrorAction SilentlyContinue
+  if (-not $dockerCommand) {
+    throw "Required command missing: docker"
+  }
+
+  return $dockerCommand.Source
+}
+
+function Invoke-DockerPgDumpToFile {
   param(
-    [string]$ContainerName,
-    [string]$DatabaseUser,
-    [string]$DatabaseName,
-    [string]$OutputPath,
-    [string[]]$ExtraArguments = @()
+    [Parameter(Mandatory = $true)][string]$ContainerName,
+    [Parameter(Mandatory = $true)][string]$DatabaseUser,
+    [Parameter(Mandatory = $true)][string]$DatabaseName,
+    [Parameter(Mandatory = $true)][string]$OutputPath,
+    [Parameter(Mandatory = $true)][string[]]$PgDumpArgs
   )
 
-  $tempName = "{0}-{1}" -f $captureBaseName, [System.IO.Path]::GetFileName($OutputPath)
-  $tempPath = "/tmp/$tempName"
-  & docker exec $ContainerName rm -f $tempPath *> $null
-  & docker exec $ContainerName pg_dump "-U" $DatabaseUser "-d" $DatabaseName @ExtraArguments "-f" $tempPath
-  if ($LASTEXITCODE -ne 0) {
-    throw "dockerized pg_dump failed for $OutputPath"
+  $partialPath = "${OutputPath}.partial"
+  if (Test-Path -LiteralPath $partialPath) {
+    Remove-Item -LiteralPath $partialPath -Force
   }
-  & docker cp "${ContainerName}:${tempPath}" $OutputPath *> $null
-  if ($LASTEXITCODE -ne 0) {
-    throw "docker cp failed while retrieving $OutputPath"
+
+  $dockerArgs = @("exec", $ContainerName, "pg_dump", "-U", $DatabaseUser, "-d", $DatabaseName) + @($PgDumpArgs)
+  $psi = [System.Diagnostics.ProcessStartInfo]::new()
+  $psi.FileName = Get-DockerCommandPath
+  $psi.Arguments = (($dockerArgs | ForEach-Object { Format-ProcessArgument -Value $_ }) -join " ")
+  $psi.RedirectStandardOutput = $true
+  $psi.RedirectStandardError = $true
+  $psi.UseShellExecute = $false
+
+  $process = [System.Diagnostics.Process]::new()
+  $process.StartInfo = $psi
+  $fileStream = $null
+  $stderrTask = $null
+  try {
+    $fileStream = [System.IO.File]::Open($partialPath, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+    [void]$process.Start()
+    $stderrTask = $process.StandardError.ReadToEndAsync()
+    $process.StandardOutput.BaseStream.CopyTo($fileStream)
+    $fileStream.Dispose()
+    $fileStream = $null
+    $process.WaitForExit()
+    $stderr = if ($stderrTask -ne $null) { $stderrTask.GetAwaiter().GetResult() } else { "" }
+
+    if ($process.ExitCode -ne 0) {
+      if (Test-Path -LiteralPath $partialPath) {
+        Remove-Item -LiteralPath $partialPath -Force
+      }
+      throw "docker pg_dump failed with exit code $($process.ExitCode): ${stderr}"
+    }
+
+    Move-Item -LiteralPath $partialPath -Destination $OutputPath -Force
   }
-  & docker exec $ContainerName rm -f $tempPath *> $null
+  catch {
+    if ($fileStream -ne $null) {
+      $fileStream.Dispose()
+    }
+    if (Test-Path -LiteralPath $partialPath) {
+      Remove-Item -LiteralPath $partialPath -Force
+    }
+    throw
+  }
+  finally {
+    if ($process -ne $null) {
+      $process.Dispose()
+    }
+  }
 }
 
 $label = ""
@@ -421,16 +484,30 @@ $useDockerPgDump =
 
 if ($useDockerPgDump) {
   Write-Host ("[INFO] Using dockerized pg_dump from {0} because local pg_dump major {1} differs from server major {2}." -f $postgresContainerName, $localPgDumpMajor, $serverMajor)
-  Invoke-ContainerPgDump -ContainerName $postgresContainerName -DatabaseUser $databaseUser -DatabaseName $databaseName -OutputPath (Join-Path $stagingDir "db.dump") -ExtraArguments @("-Fc")
-  Invoke-ContainerPgDump -ContainerName $postgresContainerName -DatabaseUser $databaseUser -DatabaseName $databaseName -OutputPath (Join-Path $stagingDir "db-schema.sql") -ExtraArguments @("--schema-only")
-} else {
-  & pg_dump $databaseUrl "-Fc" "-f" (Join-Path $stagingDir "db.dump")
-  if ($LASTEXITCODE -ne 0) { throw "pg_dump custom-format dump failed with exit code $LASTEXITCODE" }
-
-  & pg_dump $databaseUrl "--schema-only" "-f" (Join-Path $stagingDir "db-schema.sql")
-  if ($LASTEXITCODE -ne 0) { throw "pg_dump schema-only dump failed with exit code $LASTEXITCODE" }
 }
 
+$customDumpPath = Join-Path $stagingDir "db.dump"
+$schemaDumpPath = Join-Path $stagingDir "db-schema.sql"
+
+Write-Host ("[INFO] Custom dump starting: {0}" -f $customDumpPath)
+if ($useDockerPgDump) {
+  Invoke-DockerPgDumpToFile -ContainerName $postgresContainerName -DatabaseUser $databaseUser -DatabaseName $databaseName -OutputPath $customDumpPath -PgDumpArgs @("-Fc")
+} else {
+  & pg_dump $databaseUrl "-Fc" "-f" $customDumpPath
+  if ($LASTEXITCODE -ne 0) { throw "pg_dump custom-format dump failed with exit code $LASTEXITCODE" }
+}
+Write-Host ("[INFO] Custom dump complete: {0} ({1} bytes)" -f $customDumpPath, (Get-FileSizeBytes -Path $customDumpPath))
+
+Write-Host ("[INFO] Schema dump starting: {0}" -f $schemaDumpPath)
+if ($useDockerPgDump) {
+  Invoke-DockerPgDumpToFile -ContainerName $postgresContainerName -DatabaseUser $databaseUser -DatabaseName $databaseName -OutputPath $schemaDumpPath -PgDumpArgs @("--schema-only")
+} else {
+  & pg_dump $databaseUrl "--schema-only" "-f" $schemaDumpPath
+  if ($LASTEXITCODE -ne 0) { throw "pg_dump schema-only dump failed with exit code $LASTEXITCODE" }
+}
+Write-Host ("[INFO] Schema dump complete: {0} ({1} bytes)" -f $schemaDumpPath, (Get-FileSizeBytes -Path $schemaDumpPath))
+
+Write-Host "[INFO] Diagnostics collection starting."
 $collectArgs = @(
   $coreScript,
   "collect",
@@ -440,20 +517,27 @@ $collectArgs = @(
   "--created-utc", $createdUtc,
   "--created-local", $createdLocal,
   "--capture-id", $captureBaseName,
-  "--label", $label,
-  "--reason", $reason,
-  "--notes", $notes,
   "--split-size", $manifestSplitSize,
   "--command-line", $commandLine,
   "--script-version", $ScriptVersion,
   "--archive-base-name", ("{0}.7z" -f $captureBaseName),
   "--archive-path", $archivePath
 )
+if (-not [string]::IsNullOrWhiteSpace($label)) {
+  $collectArgs += @("--label", $label)
+}
+if (-not [string]::IsNullOrWhiteSpace($reason)) {
+  $collectArgs += @("--reason", $reason)
+}
+if (-not [string]::IsNullOrWhiteSpace($notes)) {
+  $collectArgs += @("--notes", $notes)
+}
 & node @collectArgs
 if ($LASTEXITCODE -ne 0) { throw "capture-db core collect step failed with exit code $LASTEXITCODE" }
 
 Write-StageChecksums -StagingDir $stagingDir
 
+Write-Host "[INFO] Archive creation starting."
 Push-Location $outDirFull
 try {
   $archiveArgs = @("a", "-t7z")
@@ -469,16 +553,20 @@ try {
   Pop-Location
 }
 
-$archiveFiles =
+$archiveFiles = @(
   if ($noSplit) {
-    @($archivePath)
+    $archivePath
   } else {
-    @(Get-ChildItem -LiteralPath $outDirFull -Filter ("{0}.7z.*" -f $captureBaseName) | Sort-Object Name | Select-Object -ExpandProperty FullName)
+    Get-ChildItem -LiteralPath $outDirFull -Filter ("{0}.7z.*" -f $captureBaseName) |
+      Sort-Object Name |
+      Select-Object -ExpandProperty FullName
   }
+)
 
-if ($archiveFiles.Count -eq 0) {
+if (@($archiveFiles).Count -eq 0) {
   throw "Archive creation succeeded but no archive files were found for $archivePath"
 }
+Write-Host ("[INFO] Archive creation complete: {0} archive file(s)." -f @($archiveFiles).Count)
 
 $finalizeArgs = @(
   $coreScript,

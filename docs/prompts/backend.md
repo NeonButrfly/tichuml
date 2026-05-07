@@ -2,6 +2,35 @@
 
 Prompt logs here capture backend/platform prompt intent only. GitHub issue state remains authoritative.
 
+## 2026-05-07 - Stream dockerized capture-db dumps directly to host files
+
+- Prompt signal:
+  Fix the Linux and Windows `capture-db` scripts so dockerized `pg_dump` no
+  longer writes dump files under `/tmp` in the container and copies them back
+  with `docker cp`; instead stream stdout directly to host-side partial files,
+  keep version-mismatch detection, preserve custom/schema dumps and archive
+  behavior, and add visible progress logging around dump, diagnostics, and
+  archive phases.
+- Interpreted requirement:
+  Issue [#68](https://github.com/NeonButrfly/tichuml/issues/68) governs a
+  focused operator regression fix on top of issue
+  [#67](https://github.com/NeonButrfly/tichuml/issues/67): both
+  `scripts/capture-db.sh` and `scripts/capture-db.ps1` must keep selecting the
+  containerized PostgreSQL client when local and server major versions differ,
+  but the dump transport itself must stream straight to host-side `.partial`
+  files, delete partials on failure, avoid `docker cp`, avoid container temp
+  dump residue, and stay visibly active during long-running capture steps.
+- Affected systems:
+  `scripts/capture-db.sh`, `scripts/capture-db.ps1`,
+  `tests/integration/capture-db-scripts.test.ts`, script/operator docs.
+- Linked GitHub issues:
+  [#68](https://github.com/NeonButrfly/tichuml/issues/68),
+  [#67](https://github.com/NeonButrfly/tichuml/issues/67)
+- Milestone:
+  None. Focused capture-script bugfix.
+- Status:
+  Lives in GitHub, not here.
+
 ## 2026-05-06 - Canonical restoreable capture-db scripts with redacted diagnostics
 
 - Prompt signal:

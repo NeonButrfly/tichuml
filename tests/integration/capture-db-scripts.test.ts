@@ -72,6 +72,14 @@ function parseNodeLog(logFile: string) {
     .map((line) => JSON.parse(line) as { argv: string[]; command?: string; values?: Record<string, string> });
 }
 
+function parseJsonLog(logFile: string) {
+  return fs
+    .readFileSync(logFile, "utf8")
+    .split(/\r?\n/gu)
+    .filter((line) => line.trim().length > 0)
+    .map((line) => JSON.parse(line) as { argv: string[] });
+}
+
 function createMockNode(binDir: string, logFile: string) {
   const mockScript = path.join(binDir, "mock-node.mjs");
   fs.writeFileSync(
@@ -90,12 +98,20 @@ function parseArgs(values) {
   for (let index = 2; index < values.length; index += 1) {
     const token = values[index];
     if (token === "--archive-file") {
-      parsed.archiveFiles.push(values[index + 1]);
+      const value = values[index + 1];
+      if (!value) {
+        throw new Error("Missing value for --archive-file");
+      }
+      parsed.archiveFiles.push(value);
       index += 1;
       continue;
     }
     if (token.startsWith("--")) {
-      parsed.values[token.slice(2)] = values[index + 1] ?? "";
+      const value = values[index + 1];
+      if (!value) {
+        throw new Error("Missing value for " + token);
+      }
+      parsed.values[token.slice(2)] = value;
       index += 1;
     }
   }
@@ -188,11 +204,16 @@ function createMockPgDump(binDir: string) {
     mockScript,
     `import fs from "node:fs";
 const argv = process.argv.slice(2);
+if (argv.includes("--version")) {
+  process.stdout.write(process.env.MOCK_PG_DUMP_VERSION ?? "pg_dump (PostgreSQL) 17.4\\n");
+  process.exit(0);
+}
 const fileIndex = argv.indexOf("-f");
 if (fileIndex < 0 || fileIndex + 1 >= argv.length) {
   throw new Error("pg_dump mock missing -f");
 }
-fs.writeFileSync(argv[fileIndex + 1], "mock dump\\n", "utf8");
+const fileContents = process.env.MOCK_PG_DUMP_FILE_CONTENT ?? "mock dump\\n";
+fs.writeFileSync(argv[fileIndex + 1], fileContents, "utf8");
 `,
     "utf8"
   );
@@ -212,14 +233,86 @@ set -euo pipefail
 }
 
 function createMockPsql(binDir: string) {
+  const mockScript = path.join(binDir, "mock-psql.mjs");
+  fs.writeFileSync(
+    mockScript,
+    `const argv = process.argv.slice(2);
+if (argv.includes("SHOW server_version;")) {
+  process.stdout.write(process.env.MOCK_PSQL_SERVER_VERSION ?? "17.4\\n");
+}
+`,
+    "utf8"
+  );
   writeExecutable(
     path.join(binDir, "psql"),
     `#!/usr/bin/env bash
 set -euo pipefail
-exit 0
+"${toShellPath(process.execPath)}" "${toShellPath(mockScript)}" "$@"
 `
   );
-  fs.writeFileSync(path.join(binDir, "psql.cmd"), "@echo off\r\nexit /b 0\r\n", "utf8");
+  fs.writeFileSync(
+    path.join(binDir, "psql.cmd"),
+    `@echo off\r\n"${process.execPath}" "${mockScript}" %*\r\n`,
+    "utf8"
+  );
+}
+
+function createMockDocker(binDir: string, logFile: string) {
+  const mockScript = path.join(binDir, "mock-docker.mjs");
+  fs.writeFileSync(
+    mockScript,
+    `import fs from "node:fs";
+
+const argv = process.argv.slice(2);
+const logFile = process.env.MOCK_DOCKER_LOG;
+if (!logFile) {
+  throw new Error("MOCK_DOCKER_LOG is required");
+}
+fs.appendFileSync(logFile, JSON.stringify({ argv }) + "\\n", "utf8");
+
+if (argv[0] === "cp") {
+  process.stderr.write("docker cp must not be used by capture-db\\n");
+  process.exit(42);
+}
+
+if (argv[0] === "exec" && argv[2] === "pg_dump" && argv.includes("--version")) {
+  process.stdout.write(process.env.MOCK_DOCKER_PG_DUMP_VERSION ?? "pg_dump (PostgreSQL) 16.3\\n");
+  process.exit(0);
+}
+
+if (argv[0] === "exec" && argv[2] === "pg_dump") {
+  if (argv.includes("-f")) {
+    process.stderr.write("dockerized pg_dump must stream to stdout instead of using -f\\n");
+    process.exit(41);
+  }
+
+  const isSchemaOnly = argv.includes("--schema-only");
+  const payloadBase64 =
+    process.env[
+      isSchemaOnly ? "MOCK_DOCKER_PG_DUMP_SCHEMA_STDOUT_B64" : "MOCK_DOCKER_PG_DUMP_CUSTOM_STDOUT_B64"
+    ];
+  const payload = payloadBase64
+    ? Buffer.from(payloadBase64, "base64")
+    : Buffer.from(isSchemaOnly ? "-- schema dump\\n" : "custom dump\\n", "utf8");
+  process.stdout.write(payload);
+  process.exit(0);
+}
+`,
+    "utf8"
+  );
+
+  writeExecutable(
+    path.join(binDir, "docker"),
+    `#!/usr/bin/env bash
+set -euo pipefail
+"${toShellPath(process.execPath)}" "${toShellPath(mockScript)}" "$@"
+`
+  );
+  fs.writeFileSync(
+    path.join(binDir, "docker.cmd"),
+    `@echo off\r\n"${process.execPath}" "${mockScript}" %*\r\n`,
+    "utf8"
+  );
 }
 
 function createMockSha256(binDir: string) {
@@ -287,6 +380,7 @@ function createFixtureRepo() {
   const scriptsDir = path.join(tempDir, "scripts");
   const binDir = path.join(tempDir, "bin");
   const logFile = path.join(tempDir, "capture-node.jsonl");
+  const dockerLogFile = path.join(tempDir, "docker.jsonl");
   fs.mkdirSync(scriptsDir, { recursive: true });
   fs.mkdirSync(binDir, { recursive: true });
   fs.writeFileSync(path.join(tempDir, "package.json"), '{ "name": "fixture" }\n');
@@ -306,10 +400,11 @@ function createFixtureRepo() {
   createMockNode(binDir, logFile);
   createMockPgDump(binDir);
   createMockPsql(binDir);
+  createMockDocker(binDir, dockerLogFile);
   createMockSha256(binDir);
   createMockSevenZip(binDir);
 
-  return { tempDir, scriptsDir, binDir, logFile };
+  return { tempDir, scriptsDir, binDir, logFile, dockerLogFile };
 }
 
 const cleanupPaths: string[] = [];
@@ -409,6 +504,55 @@ bashDescribe("capture-db bash launcher", () => {
       .filter((name) => name.endsWith(".7z.001") || name.endsWith(".7z.002"));
     expect(archiveParts.length).toBe(2);
   });
+
+  it("streams dockerized pg_dump output to host files without docker cp or container temp files", () => {
+    const fixture = createFixtureRepo();
+    cleanupPaths.push(fixture.tempDir);
+    const expectedCustomDump = Buffer.from([0x00, 0x01, 0x02, 0xff, 0x41, 0x42, 0x43]);
+    const expectedSchemaDump = Buffer.from("-- streamed schema\n", "utf8");
+
+    const result = spawnSync(
+      bashPath!,
+      ["./capture-db.sh", "--label", "docker stream", "--no-split"],
+      {
+        cwd: fixture.scriptsDir,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          DATABASE_URL: "",
+          MOCK_CAPTURE_NODE_LOG: fixture.logFile,
+          MOCK_DOCKER_LOG: fixture.dockerLogFile,
+          MOCK_PG_DUMP_VERSION: "pg_dump (PostgreSQL) 17.4",
+          MOCK_PSQL_SERVER_VERSION: "16.3",
+          MOCK_DOCKER_PG_DUMP_VERSION: "pg_dump (PostgreSQL) 16.3",
+          MOCK_DOCKER_PG_DUMP_CUSTOM_STDOUT_B64: expectedCustomDump.toString("base64"),
+          MOCK_DOCKER_PG_DUMP_SCHEMA_STDOUT_B64: expectedSchemaDump.toString("base64"),
+          PATH: `${fixture.binDir}${path.delimiter}${process.env.PATH ?? ""}`
+        }
+      }
+    );
+
+    expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+
+    const outDir = path.join(fixture.tempDir, ".runtime", "db-captures");
+    const stagingDir = fs
+      .readdirSync(outDir)
+      .map((name) => path.join(outDir, name))
+      .find((candidate) => fs.statSync(candidate).isDirectory());
+    expect(stagingDir).toBeTruthy();
+    expect(fs.readFileSync(path.join(stagingDir!, "db.dump"))).toEqual(expectedCustomDump);
+    expect(fs.readFileSync(path.join(stagingDir!, "db-schema.sql"))).toEqual(expectedSchemaDump);
+    expect(fs.existsSync(path.join(stagingDir!, "db.dump.partial"))).toBe(false);
+    expect(fs.existsSync(path.join(stagingDir!, "db-schema.sql.partial"))).toBe(false);
+
+    const dockerEntries = parseJsonLog(fixture.dockerLogFile);
+    expect(dockerEntries.some((entry) => entry.argv[0] === "cp")).toBe(false);
+    expect(
+      dockerEntries.some(
+        (entry) => entry.argv[0] === "exec" && entry.argv[2] === "pg_dump" && entry.argv.includes("-f")
+      )
+    ).toBe(false);
+  });
 });
 
 windowsDescribe("capture-db PowerShell launcher", () => {
@@ -482,5 +626,62 @@ windowsDescribe("capture-db PowerShell launcher", () => {
       .readdirSync(outDir)
       .filter((name) => name.endsWith(".7z.001") || name.endsWith(".7z.002"));
     expect(archiveParts.length).toBe(2);
+  });
+
+  it("streams dockerized pg_dump bytes to host files without docker cp or container temp files", () => {
+    const fixture = createFixtureRepo();
+    cleanupPaths.push(fixture.tempDir);
+    const expectedCustomDump = Buffer.from([0x00, 0x01, 0x02, 0xff, 0x51, 0x52, 0x53]);
+    const expectedSchemaDump = Buffer.from("-- streamed schema from powershell\n", "utf8");
+
+    const result = spawnSync(
+      "powershell",
+      [
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        ".\\capture-db.ps1",
+        "-Label",
+        "docker stream",
+        "-NoSplit"
+      ],
+      {
+        cwd: fixture.scriptsDir,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          DATABASE_URL: "",
+          MOCK_CAPTURE_NODE_LOG: fixture.logFile,
+          MOCK_DOCKER_LOG: fixture.dockerLogFile,
+          MOCK_PG_DUMP_VERSION: "pg_dump (PostgreSQL) 17.4",
+          MOCK_PSQL_SERVER_VERSION: "16.3",
+          MOCK_DOCKER_PG_DUMP_VERSION: "pg_dump (PostgreSQL) 16.3",
+          MOCK_DOCKER_PG_DUMP_CUSTOM_STDOUT_B64: expectedCustomDump.toString("base64"),
+          MOCK_DOCKER_PG_DUMP_SCHEMA_STDOUT_B64: expectedSchemaDump.toString("base64"),
+          PATH: `${fixture.binDir}${path.delimiter}${process.env.PATH ?? ""}`
+        }
+      }
+    );
+
+    expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+
+    const outDir = path.join(fixture.tempDir, ".runtime", "db-captures");
+    const stagingDir = fs
+      .readdirSync(outDir)
+      .map((name) => path.join(outDir, name))
+      .find((candidate) => fs.statSync(candidate).isDirectory());
+    expect(stagingDir).toBeTruthy();
+    expect(fs.readFileSync(path.join(stagingDir!, "db.dump"))).toEqual(expectedCustomDump);
+    expect(fs.readFileSync(path.join(stagingDir!, "db-schema.sql"))).toEqual(expectedSchemaDump);
+    expect(fs.existsSync(path.join(stagingDir!, "db.dump.partial"))).toBe(false);
+    expect(fs.existsSync(path.join(stagingDir!, "db-schema.sql.partial"))).toBe(false);
+
+    const dockerEntries = parseJsonLog(fixture.dockerLogFile);
+    expect(dockerEntries.some((entry) => entry.argv[0] === "cp")).toBe(false);
+    expect(
+      dockerEntries.some(
+        (entry) => entry.argv[0] === "exec" && entry.argv[2] === "pg_dump" && entry.argv.includes("-f")
+      )
+    ).toBe(false);
   });
 });
