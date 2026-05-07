@@ -2,6 +2,28 @@
 
 Prompt logs here capture backend/platform prompt intent only. GitHub issue state remains authoritative.
 
+## 2026-05-06 - Restore Linux simulator cleanup helper for verify-one-game and training scripts
+
+- Prompt signal:
+  The Linux one-game simulator verification script on `/opt/tichuml/scripts`
+  reached backend/Postgres readiness and then failed with
+  `kill_sim_processes: command not found`.
+- Interpreted requirement:
+  Issue [#66](https://github.com/NeonButrfly/tichuml/issues/66) governs a
+  shared Linux launcher-contract repair: `verify-sim-one-game.sh` and
+  `run-training-sim.sh` still rely on a simulator cleanup helper named
+  `kill_sim_processes`, so `scripts/backend-common.sh` must expose that helper
+  again or both operator paths can regress on stale-process cleanup.
+- Affected systems:
+  `scripts/backend-common.sh`, `scripts/verify-sim-one-game.sh`,
+  `scripts/run-training-sim.sh`, focused Linux launcher tests.
+- Linked GitHub issue:
+  [#66](https://github.com/NeonButrfly/tichuml/issues/66)
+- Milestone:
+  None. Focused launcher regression fix.
+- Status:
+  Lives in GitHub, not here.
+
 ## 2026-05-05 - Canonical in-place clear-db scripts
 
 - Prompt signal:

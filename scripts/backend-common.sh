@@ -688,6 +688,28 @@ sim_controller_pids() {
   ' "$state_file" 2>/dev/null || true
 }
 
+kill_sim_processes() {
+  local tracked_pids extra_pids pid
+  tracked_pids="$(sim_controller_pids)"
+  extra_pids=""
+
+  if has_command pgrep; then
+    extra_pids="$(pgrep -f 'sim-runner|npm run sim|sim-controller' 2>/dev/null || true)"
+  fi
+
+  if [ -z "$tracked_pids$extra_pids" ]; then
+    log_info "No stale simulator processes detected"
+    return 0
+  fi
+
+  for pid in $tracked_pids $extra_pids; do
+    if [ -n "$pid" ] && kill -0 "$pid" >/dev/null 2>&1; then
+      log_info "Stopping stale simulator process $pid"
+      kill -9 "$pid" >/dev/null 2>&1 || true
+    fi
+  done
+}
+
 stop_sim_controller_runtime() {
   local runtime_dir pids pid
   runtime_dir="$(sim_controller_runtime_dir)"
