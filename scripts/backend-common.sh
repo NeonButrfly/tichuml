@@ -53,6 +53,27 @@ log_fail() {
   backend_log "[FAIL]" "$1" >&2
 }
 
+function log-info {
+  log_info "$*"
+}
+
+function log-ok {
+  log_ok "$*"
+}
+
+function log-warn {
+  log_warn "$*"
+}
+
+function log-fail {
+  log_fail "$*"
+}
+
+die() {
+  log_fail "$*"
+  exit 1
+}
+
 has_command() {
   command -v "$1" >/dev/null 2>&1
 }
@@ -120,6 +141,112 @@ assert_postgres_identity() {
     log_fail "Postgres identity is incomplete after loading .env."
     exit 1
   fi
+}
+
+require_database_url() {
+  ensure_backend_env_loaded
+  if [ -z "${DATABASE_URL:-}" ]; then
+    log_fail "DATABASE_URL is not configured after loading $BACKEND_REPO_ROOT/.env."
+    return 1
+  fi
+}
+
+db_exec() {
+  local sql="$1"
+  require_command psql
+  require_database_url || return 1
+  psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -t -A -c "$sql"
+}
+
+db_scalar() {
+  local sql="$1"
+  local raw
+  if ! raw="$(db_exec "$sql" 2>&1)"; then
+    log_fail "Database scalar query failed."
+    printf '%s\n' "$raw" >&2
+    return 1
+  fi
+
+  raw="${raw//$'\r'/}"
+  raw="$(printf '%s' "$raw" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+  printf '%s\n' "$raw"
+}
+
+db_count() {
+  local table_name="$1"
+  local raw
+
+  if ! [[ "$table_name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+    log_fail "Invalid table name for db_count: $table_name"
+    return 1
+  fi
+
+  if ! raw="$(db_scalar "SELECT COUNT(*) FROM public.\"$table_name\";")"; then
+    log_fail "Unable to count rows for table '$table_name'."
+    return 1
+  fi
+
+  if ! [[ "$raw" =~ ^[0-9]+$ ]]; then
+    log_fail "db_count expected an integer for table '$table_name' but received: ${raw:-<empty>}"
+    return 1
+  fi
+
+  printf '%s\n' "$raw"
+}
+
+db_table_exists() {
+  local table_name="$1"
+  local exists
+
+  if ! [[ "$table_name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+    log_fail "Invalid table name for db_table_exists: $table_name"
+    return 1
+  fi
+
+  exists="$(db_scalar "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '$table_name')::text;")" || return 1
+  [ "$exists" = "t" ] || [ "$exists" = "true" ]
+}
+
+db_column_exists() {
+  local table_name="$1"
+  local column_name="$2"
+  local exists
+
+  if ! [[ "$table_name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+    log_fail "Invalid table name for db_column_exists: $table_name"
+    return 1
+  fi
+  if ! [[ "$column_name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+    log_fail "Invalid column name for db_column_exists: $column_name"
+    return 1
+  fi
+
+  exists="$(db_scalar "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '$table_name' AND column_name = '$column_name')::text;")" || return 1
+  [ "$exists" = "t" ] || [ "$exists" = "true" ]
+}
+
+function db-exec {
+  db_exec "$@"
+}
+
+function db-scalar {
+  db_scalar "$@"
+}
+
+function db-count {
+  db_count "$@"
+}
+
+function db-table-exists {
+  db_table_exists "$@"
+}
+
+function db-column-exists {
+  db_column_exists "$@"
+}
+
+function wait-for-postgres {
+  wait_for_postgres "$@"
 }
 
 print_identity() {
@@ -461,8 +588,12 @@ verify_node_workspace_dependencies() {
 ensure_python_venv() {
   if [ ! -d "$BACKEND_REPO_ROOT/.venv" ]; then
     log_step "Creating Python virtual environment"
-    if python3 -m venv --help >/dev/null 2>&1; then
+    if has_command python3 && python3 -m venv --help >/dev/null 2>&1; then
       python3 -m venv "$BACKEND_REPO_ROOT/.venv"
+    elif has_command py; then
+      py -3 -m venv "$BACKEND_REPO_ROOT/.venv"
+    elif has_command python && python -m venv --help >/dev/null 2>&1; then
+      python -m venv "$BACKEND_REPO_ROOT/.venv"
     elif has_command virtualenv; then
       virtualenv -p python3 "$BACKEND_REPO_ROOT/.venv"
     else
@@ -503,6 +634,16 @@ ensure_python_venv() {
 }
 
 python_bin() {
+  if [ -x "$BACKEND_REPO_ROOT/.venv/bin/python" ]; then
+    printf '%s\n' "$BACKEND_REPO_ROOT/.venv/bin/python"
+    return
+  fi
+
+  if [ -x "$BACKEND_REPO_ROOT/.venv/Scripts/python.exe" ]; then
+    printf '%s\n' "$BACKEND_REPO_ROOT/.venv/Scripts/python.exe"
+    return
+  fi
+
   printf '%s\n' "$BACKEND_REPO_ROOT/.venv/bin/python"
 }
 

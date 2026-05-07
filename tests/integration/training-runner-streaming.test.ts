@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { runStreamingProcess } from "../../scripts/lib/training-runner.js";
+import { runStreamingProcess } from "../../scripts/training-runner.js";
 
 const tempRoots: string[] = [];
 

@@ -116,6 +116,8 @@ if (parsed.command === "collect") {
     "db-settings.txt": "settings ok\\n",
     "db-indexes.sql": "-- indexes ok\\n",
     "db-columns.txt": "columns ok\\n",
+    "ml-export-status.txt": "ml export ok\\n",
+    "decision-provider-summary.txt": "provider summary ok\\n",
     "git-status.txt": "git ok\\n",
     "env-redacted.txt": "DATABASE_URL=postgres://fixture-user:***@localhost:5544/from_env_file\\n",
     "docker-status.txt": "docker unavailable\\n",
@@ -385,6 +387,8 @@ bashDescribe("capture-db bash launcher", () => {
       "manifest.json",
       "checksums.txt",
       "db-status.txt",
+      "ml-export-status.txt",
+      "decision-provider-summary.txt",
       "git-status.txt",
       "env-redacted.txt",
       "RESTORE.md"

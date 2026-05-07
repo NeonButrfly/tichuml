@@ -124,6 +124,94 @@ function Get-RepoUrl { if ($env:REPO_URL) { return $env:REPO_URL } return $scrip
 function Get-GitBranch { if ($env:GIT_BRANCH) { return $env:GIT_BRANCH } return $script:DefaultBranch }
 function Get-BackendUrl { if ($env:BACKEND_BASE_URL) { return $env:BACKEND_BASE_URL } return "http://localhost:4310" }
 
+function Assert-DatabaseUrl {
+  if (-not $env:DATABASE_URL -or [string]::IsNullOrWhiteSpace($env:DATABASE_URL)) {
+    throw "DATABASE_URL is not configured after loading $($script:RepoRoot)\.env."
+  }
+}
+
+function Invoke-DbExec {
+  param(
+    [string]$Sql,
+    [string[]]$AdditionalArgs = @()
+  )
+
+  Assert-DatabaseUrl
+  if (-not (Test-CommandExists "psql")) {
+    throw "Required command missing: psql"
+  }
+
+  $argsList = @(
+    $env:DATABASE_URL,
+    "-X",
+    "-v",
+    "ON_ERROR_STOP=1",
+    "-t",
+    "-A"
+  ) + @($AdditionalArgs) + @("-c", $Sql)
+
+  $output = & psql @argsList
+  if ($LASTEXITCODE -ne 0) {
+    throw "psql failed with exit code $LASTEXITCODE"
+  }
+
+  return @($output)
+}
+
+function Get-DbScalar {
+  param([string]$Sql)
+
+  $output = @(Invoke-DbExec -Sql $Sql)
+  if ($output.Count -eq 0) {
+    return ""
+  }
+
+  return ($output[0].ToString().Trim())
+}
+
+function Get-DbCount {
+  param([string]$TableName)
+
+  if ($TableName -notmatch '^[A-Za-z_][A-Za-z0-9_]*$') {
+    throw "Invalid table name for Get-DbCount: $TableName"
+  }
+
+  $value = Get-DbScalar -Sql ("SELECT COUNT(*) FROM public.""{0}"";" -f $TableName)
+  if ($value -notmatch '^\d+$') {
+    throw "Get-DbCount expected an integer for table '$TableName' but received: $value"
+  }
+
+  return [int]$value
+}
+
+function Test-DbTableExists {
+  param([string]$TableName)
+
+  if ($TableName -notmatch '^[A-Za-z_][A-Za-z0-9_]*$') {
+    throw "Invalid table name for Test-DbTableExists: $TableName"
+  }
+
+  $value = Get-DbScalar -Sql ("SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '{0}')::text;" -f $TableName)
+  return $value -in @("t", "true")
+}
+
+function Test-DbColumnExists {
+  param(
+    [string]$TableName,
+    [string]$ColumnName
+  )
+
+  if ($TableName -notmatch '^[A-Za-z_][A-Za-z0-9_]*$') {
+    throw "Invalid table name for Test-DbColumnExists: $TableName"
+  }
+  if ($ColumnName -notmatch '^[A-Za-z_][A-Za-z0-9_]*$') {
+    throw "Invalid column name for Test-DbColumnExists: $ColumnName"
+  }
+
+  $value = Get-DbScalar -Sql ("SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '{0}' AND column_name = '{1}')::text;" -f $TableName, $ColumnName)
+  return $value -in @("t", "true")
+}
+
 function Read-LsRemoteCommit {
   param([object[]]$Output, [string]$Branch)
   $line = @($Output | Where-Object { "$_" -match "^[0-9a-fA-F]{40}\s+" } | Select-Object -First 1)
@@ -341,6 +429,8 @@ function Wait-Postgres {
   }
   throw "Postgres did not become ready"
 }
+
+Set-Alias -Name Wait-ForPostgres -Value Wait-Postgres
 
 function Run-Migrations {
   Write-Step "Running database migrations"

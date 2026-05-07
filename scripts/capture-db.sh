@@ -50,12 +50,19 @@ EOF
 read_database_url_from_env_file() {
   local env_file="$1"
   require_file "$env_file" ".env file"
+  read_env_value_from_file DATABASE_URL "$env_file"
+}
+
+read_env_value_from_file() {
+  local key="$1"
+  local env_file="$2"
+  require_file "$env_file" ".env file"
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
       ''|\#*) continue ;;
     esac
-    if [[ "$line" == DATABASE_URL=* ]]; then
-      local value="${line#DATABASE_URL=}"
+    if [[ "$line" == "$key="* ]]; then
+      local value="${line#"$key="}"
       value="${value%\"}"
       value="${value#\"}"
       printf '%s\n' "$value"
@@ -63,7 +70,7 @@ read_database_url_from_env_file() {
     fi
   done <"$env_file"
 
-  printf 'DATABASE_URL is missing from %s\n' "$env_file" >&2
+  printf '%s is missing from %s\n' "$key" "$env_file" >&2
   return 1
 }
 
@@ -93,6 +100,100 @@ build_command_line() {
   printf '%s\n' "$text"
 }
 
+database_url_field() {
+  local database_url="$1"
+  local field="$2"
+  local stripped userinfo host_and_path host_part
+  stripped="${database_url#*://}"
+  userinfo="${stripped%@*}"
+  host_and_path="${stripped#*@}"
+  host_part="${host_and_path%%/*}"
+
+  case "$field" in
+    host)
+      if [[ "$host_part" == \[*\]*:* ]]; then
+        printf '%s\n' "${host_part%%]:*}" | sed 's/^\[//'
+      else
+        printf '%s\n' "${host_part%%:*}"
+      fi
+      ;;
+    user)
+      printf '%s\n' "${userinfo%%:*}"
+      ;;
+    database)
+      printf '%s\n' "${host_and_path#*/}" | sed 's/[?].*$//'
+      ;;
+    *)
+      return 2
+      ;;
+  esac
+}
+
+pg_dump_major_version() {
+  local command_name="$1"
+  "$command_name" --version 2>/dev/null | sed -n 's/.*(PostgreSQL) \([0-9][0-9]*\).*/\1/p' | head -n 1
+}
+
+server_major_version() {
+  psql "$DATABASE_URL_VALUE" --no-psqlrc -At -c 'SHOW server_version;' 2>/dev/null |
+    sed -n 's/^\([0-9][0-9]*\).*/\1/p' | head -n 1
+}
+
+docker_pg_dump_usable() {
+  [ -n "${POSTGRES_CONTAINER_NAME_VALUE:-}" ] || return 1
+  command -v docker >/dev/null 2>&1 || return 1
+  docker exec "$POSTGRES_CONTAINER_NAME_VALUE" pg_dump --version >/dev/null 2>&1
+}
+
+should_use_docker_pg_dump() {
+  local database_host server_major local_major
+  database_host="${DATABASE_HOST_VALUE:-}"
+  case "$database_host" in
+    localhost|127.0.0.1|::1) ;;
+    *) return 1 ;;
+  esac
+
+  server_major="$(server_major_version || true)"
+  local_major="$(pg_dump_major_version pg_dump || true)"
+  [ -n "$server_major" ] || return 1
+  [ -n "$local_major" ] || return 1
+  [ "$server_major" != "$local_major" ] || return 1
+  docker_pg_dump_usable || return 1
+  return 0
+}
+
+run_pg_dump_via_container() {
+  local output_path="$1"
+  shift
+  local temp_name temp_path
+  temp_name="${CAPTURE_BASENAME}-$(basename "$output_path")"
+  temp_path="/tmp/$temp_name"
+
+  MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' docker exec "$POSTGRES_CONTAINER_NAME_VALUE" rm -f "$temp_path" >/dev/null 2>&1 || true
+  MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' docker exec "$POSTGRES_CONTAINER_NAME_VALUE" \
+    pg_dump -U "$DATABASE_USER_VALUE" -d "$DATABASE_NAME_VALUE" "$@" -f "$temp_path"
+  docker cp "${POSTGRES_CONTAINER_NAME_VALUE}:$temp_path" "$output_path" >/dev/null
+  MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' docker exec "$POSTGRES_CONTAINER_NAME_VALUE" rm -f "$temp_path" >/dev/null 2>&1 || true
+}
+
+dump_database_custom() {
+  local output_path="$1"
+  if [ "$USE_DOCKER_PG_DUMP" = "true" ]; then
+    run_pg_dump_via_container "$output_path" -Fc
+  else
+    pg_dump "$DATABASE_URL_VALUE" -Fc -f "$output_path"
+  fi
+}
+
+dump_database_schema() {
+  local output_path="$1"
+  if [ "$USE_DOCKER_PG_DUMP" = "true" ]; then
+    run_pg_dump_via_container "$output_path" --schema-only
+  else
+    pg_dump "$DATABASE_URL_VALUE" --schema-only -f "$output_path"
+  fi
+}
+
 find_sevenz_command() {
   if command -v 7z >/dev/null 2>&1; then
     printf '7z\n'
@@ -102,6 +203,15 @@ find_sevenz_command() {
     printf '7zz\n'
     return 0
   fi
+  local candidate
+  for candidate in \
+    "/c/Program Files/7-Zip/7z.exe" \
+    "/c/Program Files (x86)/7-Zip/7z.exe"; do
+    if [ -x "$candidate" ]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
   return 1
 }
 
@@ -182,6 +292,10 @@ if [ -n "${DATABASE_URL:-}" ]; then
 else
   DATABASE_URL_VALUE="$(read_database_url_from_env_file "$ENV_FILE")"
 fi
+POSTGRES_CONTAINER_NAME_VALUE="${POSTGRES_CONTAINER_NAME:-$(read_env_value_from_file POSTGRES_CONTAINER_NAME "$ENV_FILE" 2>/dev/null || printf 'tichu-postgres')}"
+DATABASE_HOST_VALUE="$(database_url_field "$DATABASE_URL_VALUE" host)"
+DATABASE_USER_VALUE="$(database_url_field "$DATABASE_URL_VALUE" user)"
+DATABASE_NAME_VALUE="$(database_url_field "$DATABASE_URL_VALUE" database)"
 
 if [[ "$OUT_DIR" = /* ]] || [[ "$OUT_DIR" =~ ^[A-Za-z]:[\\/].* ]]; then
   OUT_TARGET="$OUT_DIR"
@@ -227,8 +341,17 @@ printf '[INFO] Capture staging directory: %s\n' "$STAGING_DIR"
 printf '[INFO] Archive path: %s\n' "$ARCHIVE_PATH"
 printf '[INFO] Snapshot note: active writers may make the capture non-quiescent.\n'
 
-pg_dump "$DATABASE_URL_VALUE" -Fc -f "$STAGING_DIR/db.dump"
-pg_dump "$DATABASE_URL_VALUE" --schema-only -f "$STAGING_DIR/db-schema.sql"
+USE_DOCKER_PG_DUMP="false"
+if should_use_docker_pg_dump; then
+  USE_DOCKER_PG_DUMP="true"
+  printf '[INFO] Using dockerized pg_dump from %s because local pg_dump major %s differs from server major %s.\n' \
+    "$POSTGRES_CONTAINER_NAME_VALUE" \
+    "$(pg_dump_major_version pg_dump)" \
+    "$(server_major_version)"
+fi
+
+dump_database_custom "$STAGING_DIR/db.dump"
+dump_database_schema "$STAGING_DIR/db-schema.sql"
 
 node "$CORE_SCRIPT" collect \
   --repo-root "$REPO_ROOT" \

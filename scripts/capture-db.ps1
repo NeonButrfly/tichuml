@@ -48,6 +48,15 @@ Examples:
 function Get-DatabaseUrlFromDotEnv {
   param([string]$RepoRoot)
 
+  return Get-DotEnvValue -RepoRoot $RepoRoot -Key "DATABASE_URL"
+}
+
+function Get-DotEnvValue {
+  param(
+    [string]$RepoRoot,
+    [string]$Key
+  )
+
   $envPath = Join-Path $RepoRoot ".env"
   if (-not (Test-Path -LiteralPath $envPath)) {
     throw ".env file is missing: $envPath"
@@ -58,13 +67,13 @@ function Get-DatabaseUrlFromDotEnv {
     if (-not $trimmed -or $trimmed.StartsWith("#")) {
       continue
     }
-    if ($trimmed.StartsWith("DATABASE_URL=")) {
-      $value = $trimmed.Substring("DATABASE_URL=".Length).Trim()
+    if ($trimmed.StartsWith("${Key}=")) {
+      $value = $trimmed.Substring($Key.Length + 1).Trim()
       return $value.Trim('"')
     }
   }
 
-  throw "DATABASE_URL is missing from $envPath"
+  throw "$Key is missing from $envPath"
 }
 
 function Get-SafeLabel {
@@ -185,6 +194,106 @@ function Build-CommandLine {
   return ($parts -join " ")
 }
 
+function Get-DatabaseUrlField {
+  param(
+    [string]$DatabaseUrl,
+    [string]$Field
+  )
+
+  $uri = [System.Uri]$DatabaseUrl
+  switch ($Field) {
+    "host" { return $uri.Host }
+    "user" {
+      $userInfo = $uri.UserInfo
+      if ([string]::IsNullOrWhiteSpace($userInfo)) { return "" }
+      return [System.Uri]::UnescapeDataString(($userInfo -split ":", 2)[0])
+    }
+    "database" {
+      return [System.Uri]::UnescapeDataString($uri.AbsolutePath.TrimStart("/"))
+    }
+    default { throw "Unsupported database URL field: $Field" }
+  }
+}
+
+function Get-PgDumpMajorVersion {
+  param([string]$CommandPath = "pg_dump")
+
+  try {
+    $versionOutput = & $CommandPath --version 2>$null
+  } catch {
+    return $null
+  }
+  if ($LASTEXITCODE -ne 0) {
+    return $null
+  }
+
+  $text = (($versionOutput -join " ").Trim())
+  $match = [regex]::Match($text, "PostgreSQL\)\s+(?<major>\d+)")
+  if (-not $match.Success) {
+    return $null
+  }
+
+  return $match.Groups["major"].Value
+}
+
+function Get-ServerMajorVersion {
+  param([string]$DatabaseUrl)
+
+  try {
+    $versionOutput = & psql $DatabaseUrl "--no-psqlrc" "-At" "-c" "SHOW server_version;" 2>$null
+  } catch {
+    return $null
+  }
+  if ($LASTEXITCODE -ne 0) {
+    return $null
+  }
+
+  $text = (($versionOutput -join " ").Trim())
+  $match = [regex]::Match($text, "^(?<major>\d+)")
+  if (-not $match.Success) {
+    return $null
+  }
+
+  return $match.Groups["major"].Value
+}
+
+function Test-DockerPgDumpUsable {
+  param([string]$ContainerName)
+
+  if ([string]::IsNullOrWhiteSpace($ContainerName)) {
+    return $false
+  }
+  if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+    return $false
+  }
+
+  & docker exec $ContainerName pg_dump --version *> $null
+  return ($LASTEXITCODE -eq 0)
+}
+
+function Invoke-ContainerPgDump {
+  param(
+    [string]$ContainerName,
+    [string]$DatabaseUser,
+    [string]$DatabaseName,
+    [string]$OutputPath,
+    [string[]]$ExtraArguments = @()
+  )
+
+  $tempName = "{0}-{1}" -f $captureBaseName, [System.IO.Path]::GetFileName($OutputPath)
+  $tempPath = "/tmp/$tempName"
+  & docker exec $ContainerName rm -f $tempPath *> $null
+  & docker exec $ContainerName pg_dump "-U" $DatabaseUser "-d" $DatabaseName @ExtraArguments "-f" $tempPath
+  if ($LASTEXITCODE -ne 0) {
+    throw "dockerized pg_dump failed for $OutputPath"
+  }
+  & docker cp "${ContainerName}:${tempPath}" $OutputPath *> $null
+  if ($LASTEXITCODE -ne 0) {
+    throw "docker cp failed while retrieving $OutputPath"
+  }
+  & docker exec $ContainerName rm -f $tempPath *> $null
+}
+
 $label = ""
 $outDir = $DefaultOutRel
 $splitSize = $DefaultSplitSize
@@ -245,6 +354,19 @@ $databaseUrl =
   } else {
     Get-DatabaseUrlFromDotEnv -RepoRoot $repoRoot
   }
+$postgresContainerName =
+  if (-not [string]::IsNullOrWhiteSpace($env:POSTGRES_CONTAINER_NAME)) {
+    $env:POSTGRES_CONTAINER_NAME
+  } else {
+    try {
+      Get-DotEnvValue -RepoRoot $repoRoot -Key "POSTGRES_CONTAINER_NAME"
+    } catch {
+      "tichu-postgres"
+    }
+  }
+$databaseHost = Get-DatabaseUrlField -DatabaseUrl $databaseUrl -Field "host"
+$databaseUser = Get-DatabaseUrlField -DatabaseUrl $databaseUrl -Field "user"
+$databaseName = Get-DatabaseUrlField -DatabaseUrl $databaseUrl -Field "database"
 
 $outTarget =
   if ([System.IO.Path]::IsPathRooted($outDir)) {
@@ -288,11 +410,26 @@ Write-Host ("[INFO] Capture staging directory: {0}" -f $stagingDir)
 Write-Host ("[INFO] Archive path: {0}" -f $archivePath)
 Write-Host "[INFO] Snapshot note: active writers may make the capture non-quiescent."
 
-& pg_dump $databaseUrl "-Fc" "-f" (Join-Path $stagingDir "db.dump")
-if ($LASTEXITCODE -ne 0) { throw "pg_dump custom-format dump failed with exit code $LASTEXITCODE" }
+$serverMajor = Get-ServerMajorVersion -DatabaseUrl $databaseUrl
+$localPgDumpMajor = Get-PgDumpMajorVersion
+$useDockerPgDump =
+  $databaseHost -in @("localhost", "127.0.0.1", "::1") -and
+  -not [string]::IsNullOrWhiteSpace($serverMajor) -and
+  -not [string]::IsNullOrWhiteSpace($localPgDumpMajor) -and
+  $serverMajor -ne $localPgDumpMajor -and
+  (Test-DockerPgDumpUsable -ContainerName $postgresContainerName)
 
-& pg_dump $databaseUrl "--schema-only" "-f" (Join-Path $stagingDir "db-schema.sql")
-if ($LASTEXITCODE -ne 0) { throw "pg_dump schema-only dump failed with exit code $LASTEXITCODE" }
+if ($useDockerPgDump) {
+  Write-Host ("[INFO] Using dockerized pg_dump from {0} because local pg_dump major {1} differs from server major {2}." -f $postgresContainerName, $localPgDumpMajor, $serverMajor)
+  Invoke-ContainerPgDump -ContainerName $postgresContainerName -DatabaseUser $databaseUser -DatabaseName $databaseName -OutputPath (Join-Path $stagingDir "db.dump") -ExtraArguments @("-Fc")
+  Invoke-ContainerPgDump -ContainerName $postgresContainerName -DatabaseUser $databaseUser -DatabaseName $databaseName -OutputPath (Join-Path $stagingDir "db-schema.sql") -ExtraArguments @("--schema-only")
+} else {
+  & pg_dump $databaseUrl "-Fc" "-f" (Join-Path $stagingDir "db.dump")
+  if ($LASTEXITCODE -ne 0) { throw "pg_dump custom-format dump failed with exit code $LASTEXITCODE" }
+
+  & pg_dump $databaseUrl "--schema-only" "-f" (Join-Path $stagingDir "db-schema.sql")
+  if ($LASTEXITCODE -ne 0) { throw "pg_dump schema-only dump failed with exit code $LASTEXITCODE" }
+}
 
 $collectArgs = @(
   $coreScript,

@@ -29,6 +29,37 @@ Prompt logs here capture backend/platform prompt intent only. GitHub issue state
 - Status:
   Lives in GitHub, not here.
 
+## 2026-05-06 - Canonical verify-scripts pair, shared DB helpers, and capture analysis summaries
+
+- Prompt signal:
+  Repair the entire top-level `scripts/` system without partial fixes: keep all
+  scripts directly under `scripts/`, remove stale validator aliases, restore
+  missing shared helpers such as `db_count`, normalize Bash/PowerShell verifier
+  behavior, and extend `capture-db` so captures also include ML/export/provider
+  analysis summaries.
+- Interpreted requirement:
+  Issue [#61](https://github.com/NeonButrfly/tichuml/issues/61) remains the
+  canonical script-system tracker and issue
+  [#67](https://github.com/NeonButrfly/tichuml/issues/67) remains the canonical
+  database-capture tracker. The repo must expose one canonical validator pair
+  at `scripts/verify-scripts.sh` and `scripts/verify-scripts.ps1`, keep shared
+  helper truth in `backend-common.*`, remove obsolete nested `scripts/lib`
+  script placement and stale `check-scripts` references, and make the capture
+  workflow emit ML/telemetry analysis files without regressing restoreability.
+- Affected systems:
+  `scripts/verify-scripts.sh`, `scripts/verify-scripts.ps1`,
+  `scripts/verify-scripts-core.mjs`, `scripts/backend-common.sh`,
+  `scripts/backend-common.ps1`, `scripts/verify-sim-one-game.sh`,
+  `scripts/verify-sim-one-game.ps1`, `scripts/capture-db-core.mjs`,
+  `scripts/training-runner.ts`, script tests, and operator docs.
+- Linked GitHub issues:
+  [#61](https://github.com/NeonButrfly/tichuml/issues/61),
+  [#67](https://github.com/NeonButrfly/tichuml/issues/67)
+- Milestone:
+  [6.5 - Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status:
+  Lives in GitHub, not here.
+
 ## 2026-05-06 - Restore Linux simulator cleanup helper for verify-one-game and training scripts
 
 - Prompt signal:

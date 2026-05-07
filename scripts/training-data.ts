@@ -18,7 +18,7 @@ import { generateEntropySeed } from "../apps/server/src/entropy/index.js";
 import {
   computeRemainingRequestedGames,
   runStreamingProcess,
-} from "./lib/training-runner.js";
+} from "./training-runner.js";
 
 type CliOptions = Record<string, string | boolean>;
 type TrainingMetadata = Record<string, unknown>;

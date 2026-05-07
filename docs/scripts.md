@@ -14,11 +14,11 @@ Linux. Shared helpers also live directly under `scripts/`.
 Run the sanity checkers after script changes:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\check-scripts.ps1
+powershell -ExecutionPolicy Bypass -File scripts\verify-scripts.ps1
 ```
 
 ```bash
-scripts/check-scripts.sh
+scripts/verify-scripts.sh
 ```
 
 ## Canonical Pairs
@@ -39,7 +39,7 @@ scripts/check-scripts.sh
 | Restart backend | `scripts/restart-backend.ps1` | `scripts/restart-backend.sh` |
 | Run finite sim | `scripts/run-sim.ps1` | `scripts/run-sim.sh` |
 | Continuous training sim loop | `scripts/run-training-sim.ps1` | `scripts/run-training-sim.sh` |
-| Script sanity check | `scripts/check-scripts.ps1` | `scripts/check-scripts.sh` |
+| Script sanity check | `scripts/verify-scripts.ps1` | `scripts/verify-scripts.sh` |
 | Sim doctor | `scripts/sim-doctor.ps1` | `scripts/sim-doctor.sh` |
 | Start backend | `scripts/start-backend.ps1` | `scripts/start-backend.sh` |
 | Start frontend | `scripts/start-frontend.ps1` | `scripts/start-frontend.sh` |
@@ -82,7 +82,9 @@ and Linux so the destructive confirmation text matches exactly across shells.
 current environment when explicitly set, otherwise from the repo-root `.env`,
 creates a restoreable custom-format `pg_dump`, writes redacted diagnostics and
 git/environment metadata into a staging directory, archives that directory with
-7-Zip, and warns that active writers may make the capture non-quiescent.
+7-Zip, prefers the Docker PostgreSQL client when the local dev DB server major
+differs from the workstation `pg_dump` major, and warns that active writers may
+make the capture non-quiescent.
 
 ## Training Startup
 

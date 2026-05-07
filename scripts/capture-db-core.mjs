@@ -650,6 +650,354 @@ function queryWriteAmplification(context) {
   );
 }
 
+function tableHasColumns(schemaInfo, tableName, columns) {
+  const available = schemaInfo.columnMap.get(tableName) ?? [];
+  return columns.every((column) => available.includes(column));
+}
+
+function queryCountWhere(context, tableName, expression) {
+  return scalarValue(
+    runOptionalPsql(
+      context.databaseUrl,
+      `SELECT COUNT(*)::text FROM public.${quoteIdentifier(tableName)} WHERE ${expression};`,
+      context.warnings,
+      `${tableName} count query`
+    )
+  );
+}
+
+function formatCoverage(numerator, denominator) {
+  const num = Number(numerator);
+  const den = Number(denominator);
+  if (!Number.isFinite(num) || !Number.isFinite(den) || den <= 0) {
+    return "<na>";
+  }
+  return `${((num / den) * 100).toFixed(2)}%`;
+}
+
+function writeMlExportStatusReport(context, schemaInfo) {
+  const lines = [
+    "TichuML ML/export status",
+    "========================",
+    `Created UTC: ${context.createdUtc}`,
+    `Created local: ${context.createdLocal}`,
+    ""
+  ];
+
+  if (!schemaInfo.tables.includes("decisions")) {
+    context.warnings.push("decisions table is missing; ml-export-status.txt is limited.");
+    pushSection(lines, "Warnings", ["- decisions table is missing."]);
+    fs.writeFileSync(path.join(context.stagingDir, "ml-export-status.txt"), lines.join("\n"), "utf8");
+    return;
+  }
+
+  const totalDecisions = countTable(context, "decisions", schemaInfo) ?? "0";
+  const summaryRows = [["total_decisions", totalDecisions]];
+  if ((schemaInfo.columnMap.get("decisions") ?? []).includes("state_norm")) {
+    const present = queryCountWhere(context, "decisions", "state_norm IS NOT NULL") ?? "0";
+    summaryRows.push(["state_norm_present", present]);
+    summaryRows.push(["state_norm_coverage", formatCoverage(present, totalDecisions)]);
+  }
+  if ((schemaInfo.columnMap.get("decisions") ?? []).includes("has_candidate_scores")) {
+    const present =
+      queryCountWhere(context, "decisions", "COALESCE(has_candidate_scores, FALSE)") ?? "0";
+    summaryRows.push(["has_candidate_scores", present]);
+    summaryRows.push(["candidate_scores_coverage", formatCoverage(present, totalDecisions)]);
+  }
+  if ((schemaInfo.columnMap.get("decisions") ?? []).includes("fallback_used")) {
+    summaryRows.push([
+      "fallback_used_true",
+      queryCountWhere(context, "decisions", "COALESCE(fallback_used, FALSE)") ?? "0"
+    ]);
+  }
+  if ((schemaInfo.columnMap.get("decisions") ?? []).includes("chosen_action_is_legal")) {
+    const legal =
+      queryCountWhere(
+        context,
+        "decisions",
+        "COALESCE(chosen_action_is_legal, TRUE)"
+      ) ?? "0";
+    const illegal =
+      queryCountWhere(
+        context,
+        "decisions",
+        "NOT COALESCE(chosen_action_is_legal, TRUE)"
+      ) ?? "0";
+    summaryRows.push(["chosen_action_is_legal_true", legal]);
+    summaryRows.push(["chosen_action_is_legal_false", illegal]);
+  }
+  if ((schemaInfo.columnMap.get("decisions") ?? []).includes("outcome_reward")) {
+    const attributed =
+      queryCountWhere(context, "decisions", "outcome_reward IS NOT NULL") ?? "0";
+    summaryRows.push(["outcome_reward_present", attributed]);
+    summaryRows.push(["outcome_reward_coverage", formatCoverage(attributed, totalDecisions)]);
+  }
+  if ((schemaInfo.columnMap.get("decisions") ?? []).includes("outcome_components")) {
+    const attributed =
+      queryCountWhere(context, "decisions", "outcome_components IS NOT NULL") ?? "0";
+    summaryRows.push(["outcome_components_present", attributed]);
+    summaryRows.push([
+      "outcome_components_coverage",
+      formatCoverage(attributed, totalDecisions)
+    ]);
+  }
+  if ((schemaInfo.columnMap.get("decisions") ?? []).includes("outcome_version")) {
+    summaryRows.push([
+      "outcome_version_present",
+      queryCountWhere(
+        context,
+        "decisions",
+        "outcome_version IS NOT NULL AND outcome_version <> ''"
+      ) ?? "0"
+    ]);
+  }
+  pushSection(
+    lines,
+    "Decision export readiness summary",
+    formatTable(["metric", "value"], summaryRows)
+  );
+
+  if (
+    tableHasColumns(schemaInfo, "decisions", [
+      "state_norm",
+      "chosen_action_is_legal",
+      "outcome_reward"
+    ])
+  ) {
+    const acceptanceRows =
+      runOptionalPsql(
+        context.databaseUrl,
+        `SELECT
+          COUNT(*) FILTER (WHERE state_norm IS NOT NULL AND COALESCE(chosen_action_is_legal, TRUE) AND outcome_reward IS NOT NULL)::text,
+          COUNT(*) FILTER (WHERE state_norm IS NULL)::text,
+          COUNT(*) FILTER (WHERE NOT COALESCE(chosen_action_is_legal, TRUE))::text,
+          COUNT(*) FILTER (WHERE outcome_reward IS NULL)::text
+        FROM public."decisions";`,
+        context.warnings,
+        "estimated export acceptance query"
+      ) ?? [];
+    pushSection(
+      lines,
+      "Estimated ml:export acceptance and rejection counts",
+      formatTable(
+        ["accepted_minimum_fields", "missing_state_norm", "illegal_choice", "missing_outcome_reward"],
+        acceptanceRows
+      )
+    );
+  } else {
+    context.warnings.push(
+      "decisions state_norm/chosen_action_is_legal/outcome_reward coverage is incomplete; estimated export acceptance counts skipped."
+    );
+  }
+
+  const replayRows = [];
+  if (
+    tableHasColumns(schemaInfo, "matches", ["game_id"]) &&
+    tableHasColumns(schemaInfo, "decisions", ["game_id"])
+  ) {
+    replayRows.push([
+      "decisions_without_matching_match",
+      scalarValue(
+        runOptionalPsql(
+          context.databaseUrl,
+          `SELECT COUNT(*)::text FROM public."decisions" AS d LEFT JOIN public."matches" AS m ON m.game_id::text = d.game_id::text WHERE m.game_id IS NULL;`,
+          context.warnings,
+          "decisions without matching match query"
+        )
+      ) ?? "0"
+    ]);
+  }
+  if (
+    tableHasColumns(schemaInfo, "matches", ["game_id"]) &&
+    tableHasColumns(schemaInfo, "events", ["game_id"])
+  ) {
+    replayRows.push([
+      "events_without_matching_match",
+      scalarValue(
+        runOptionalPsql(
+          context.databaseUrl,
+          `SELECT COUNT(*)::text FROM public."events" AS e LEFT JOIN public."matches" AS m ON m.game_id::text = e.game_id::text WHERE m.game_id IS NULL;`,
+          context.warnings,
+          "events without matching match query"
+        )
+      ) ?? "0"
+    ]);
+  }
+  if (
+    tableHasColumns(schemaInfo, "decisions", ["game_id", "hand_id"]) &&
+    tableHasColumns(schemaInfo, "events", ["game_id", "hand_id"])
+  ) {
+    replayRows.push([
+      "decision_hand_pairs_without_event_pair",
+      scalarValue(
+        runOptionalPsql(
+          context.databaseUrl,
+          `WITH event_pairs AS (SELECT DISTINCT game_id::text AS game_id, hand_id::text AS hand_id FROM public."events")
+           SELECT COUNT(*)::text
+           FROM (
+             SELECT DISTINCT d.game_id::text AS game_id, d.hand_id::text AS hand_id
+             FROM public."decisions" AS d
+             LEFT JOIN event_pairs AS ep
+               ON ep.game_id = d.game_id::text AND ep.hand_id = d.hand_id::text
+             WHERE ep.game_id IS NULL
+           ) AS unmatched;`,
+          context.warnings,
+          "decision/event hand pair consistency query"
+        )
+      ) ?? "0"
+    ]);
+  }
+  pushSection(
+    lines,
+    "Replay consistency stats",
+    formatTable(["metric", "count"], replayRows)
+  );
+
+  const metadataSections = [];
+  for (const tableName of ["matches", "decisions", "events"]) {
+    if (!tableHasColumns(schemaInfo, tableName, ["metadata"])) {
+      continue;
+    }
+    const rows =
+      runOptionalPsql(
+        context.databaseUrl,
+        `SELECT key_name, COUNT(*)::text
+         FROM (
+           SELECT 'seed'::text AS key_name FROM public.${quoteIdentifier(tableName)} WHERE metadata ? 'seed'
+           UNION ALL
+           SELECT 'resolved_run_seed'::text FROM public.${quoteIdentifier(tableName)} WHERE metadata ? 'resolved_run_seed'
+           UNION ALL
+           SELECT 'rollout_seed'::text FROM public.${quoteIdentifier(tableName)} WHERE metadata ? 'rollout_seed'
+           UNION ALL
+           SELECT 'entropy_game_id'::text FROM public.${quoteIdentifier(tableName)} WHERE metadata ? 'entropy_game_id'
+           UNION ALL
+           SELECT 'primary_provider'::text FROM public.${quoteIdentifier(tableName)} WHERE metadata ? 'primary_provider'
+           UNION ALL
+           SELECT 'local_fallback_used'::text FROM public.${quoteIdentifier(tableName)} WHERE metadata ? 'local_fallback_used'
+         ) AS keys
+         GROUP BY key_name
+         ORDER BY key_name ASC;`,
+        context.warnings,
+        `${tableName} metadata seed info query`
+      ) ?? [];
+    if (rows.length > 0) {
+      metadataSections.push({
+        title: `${tableName} metadata seed info`,
+        headers: ["metadata_key", "rows_with_key"],
+        rows
+      });
+    }
+  }
+  if (metadataSections.length === 0) {
+    pushSection(lines, "Entropy seed info", "(no metadata seed keys were found)");
+  } else {
+    for (const section of metadataSections) {
+      pushSection(lines, section.title, formatTable(section.headers, section.rows));
+    }
+  }
+
+  if (context.warnings.length > 0) {
+    pushSection(
+      lines,
+      "Warnings",
+      context.warnings.map((warning) => `- ${warning}`)
+    );
+  }
+
+  fs.writeFileSync(path.join(context.stagingDir, "ml-export-status.txt"), lines.join("\n"), "utf8");
+}
+
+function writeDecisionProviderSummaryReport(context, schemaInfo) {
+  const lines = [
+    "TichuML decision/provider summary",
+    "=================================",
+    `Created UTC: ${context.createdUtc}`,
+    `Created local: ${context.createdLocal}`,
+    ""
+  ];
+
+  const sections = [];
+  for (const tableName of ["decisions", "events", "matches"]) {
+    for (const columnName of ["provider_used", "requested_provider", "provider"]) {
+      const grouped = queryGroupedCounts(
+        context,
+        tableName,
+        columnName,
+        `${tableName}.${columnName} counts`,
+        schemaInfo
+      );
+      if (grouped) {
+        sections.push(grouped);
+      }
+    }
+  }
+  for (const tableName of ["decisions", "events", "matches"]) {
+    const fallback = queryGroupedCounts(
+      context,
+      tableName,
+      "fallback_used",
+      `${tableName}.fallback_used counts`,
+      schemaInfo
+    );
+    if (fallback) {
+      sections.push(fallback);
+    }
+  }
+  for (const tableName of ["decisions", "events"]) {
+    const legal = queryGroupedCounts(
+      context,
+      tableName,
+      "chosen_action_is_legal",
+      `${tableName}.chosen_action_is_legal counts`,
+      schemaInfo
+    );
+    if (legal) {
+      sections.push(legal);
+    }
+  }
+
+  if (
+    tableHasColumns(schemaInfo, "decisions", ["phase", "provider_used"])
+  ) {
+    sections.push({
+      title: "decisions phase/provider matrix",
+      headers: ["phase", "provider_used", "count"],
+      rows:
+        runOptionalPsql(
+          context.databaseUrl,
+          `SELECT COALESCE(phase::text, '<null>'), COALESCE(provider_used::text, '<null>'), COUNT(*)::text
+           FROM public."decisions"
+           GROUP BY 1, 2
+           ORDER BY COUNT(*) DESC, 1 ASC, 2 ASC
+           LIMIT 100;`,
+          context.warnings,
+          "decisions phase/provider matrix query"
+        ) ?? []
+    });
+  }
+
+  const mixedProviderSections = queryLifecycleAnomalies(context, schemaInfo).filter((section) =>
+    /mixed provider\/requested_provider/u.test(section.title)
+  );
+  if (mixedProviderSections.length === 0) {
+    pushSection(lines, "Mixed-provider matches", "(analysis unavailable)");
+  } else {
+    for (const section of mixedProviderSections) {
+      pushSection(lines, section.title, formatTable(section.headers, section.rows));
+    }
+  }
+
+  for (const section of sections) {
+    pushSection(lines, section.title, formatTable(section.headers, section.rows));
+  }
+
+  fs.writeFileSync(
+    path.join(context.stagingDir, "decision-provider-summary.txt"),
+    lines.join("\n"),
+    "utf8"
+  );
+}
+
 function buildStatusReport(context, schemaInfo) {
   const lines = [];
   const tableCounts = {};
@@ -1412,11 +1760,14 @@ function writeRestoreReadme(context) {
     "# Restore",
     "",
     "Restore into a new database unless you intentionally want to overwrite an existing target.",
+    "Use a PostgreSQL client version compatible with the target server.",
     "",
     "```bash",
     "createdb tichu_restore",
     'pg_restore --clean --if-exists --no-owner --dbname "$RESTORE_DATABASE_URL" db.dump',
     "```",
+    "",
+    "For the local Docker dev database, running pg_restore from the postgres container avoids local client/server version drift.",
     "",
     `Capture created UTC: ${context.createdUtc}`,
     `Capture created local: ${context.createdLocal}`,
@@ -1471,6 +1822,8 @@ function runCollect(values) {
   const gitMetadata = writeGitStatus(context);
   writeEnvRedacted(context);
   writeDockerStatus(context);
+  writeMlExportStatusReport(context, schemaInfo);
+  writeDecisionProviderSummaryReport(context, schemaInfo);
   writeRunNotes(context);
   writeRestoreReadme(context);
   writeManifest(context, buildManifest(context, gitMetadata, statusReport.tableCounts));
