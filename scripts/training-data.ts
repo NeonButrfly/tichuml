@@ -79,9 +79,50 @@ type ConcurrentWriterOverlap = {
   overlap_last_ts: string | null;
 };
 
+type TrainingRunLookupFilters = {
+  sessionName?: string;
+  gameIdPrefix?: string;
+  runId?: string;
+};
+
+type TrainingStartAssessmentInput = {
+  processRunning: boolean;
+  runComplete: boolean;
+  logShowsBatchStart: boolean;
+  backendHealthy: boolean;
+  telemetryAccepted: boolean;
+  telemetryReady: boolean;
+  scopedCounts: TableCounts;
+  fallbackCount: number;
+  decisionProviderFailures: number;
+  decisionTimeoutCount: number;
+  telemetryPending: number;
+  persistenceFailures: number;
+  simExitCode: number | null;
+};
+
+type TrainingStartAssessmentResult = {
+  kind: "pending" | "success" | "failure";
+  message: string;
+};
+
 const TRAINING_CLEAR_SQL =
   "TRUNCATE TABLE events, decisions, matches RESTART IDENTITY CASCADE;";
 const REQUIRED_TABLES = ["events", "decisions", "matches"] as const;
+const TRAINING_METADATA_REQUIRED_FIELDS = [
+  "run_id",
+  "session_name",
+  "game_id_prefix",
+  "metadata_file",
+  "run_directory",
+  "started_at"
+] as const;
+const TRAINING_METADATA_IGNORED_ROOTS = new Set([
+  ".git",
+  "coverage",
+  "dist",
+  "node_modules"
+]);
 
 function parseCliOptions(argv: string[]): {
   command: string;
@@ -205,6 +246,16 @@ function isNumberRecord(value: unknown): value is Record<string, number> {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isTrainingMetadataRecord(
+  value: unknown
+): value is Record<(typeof TRAINING_METADATA_REQUIRED_FIELDS)[number], unknown> &
+  Record<string, unknown> {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return TRAINING_METADATA_REQUIRED_FIELDS.every((field) => field in value);
 }
 
 function finiteNumber(value: unknown): number {
@@ -739,6 +790,199 @@ async function waitForTelemetryFlush(
     latest = await fetchTelemetryHealth(backendUrl);
   }
   return latest;
+}
+
+function listTrainingRunMetadataFiles(repoRoot: string): string[] {
+  const resolvedRoot = path.resolve(repoRoot);
+  const results: string[] = [];
+  const queue = [resolvedRoot];
+
+  while (queue.length > 0) {
+    const currentDir = queue.pop();
+    if (!currentDir) {
+      continue;
+    }
+    for (const entry of fs.readdirSync(currentDir, { withFileTypes: true })) {
+      if (entry.name === "." || entry.name === "..") {
+        continue;
+      }
+      const fullPath = path.join(currentDir, entry.name);
+      const relativePath = toForwardSlashes(path.relative(resolvedRoot, fullPath));
+      if (entry.isDirectory()) {
+        if (TRAINING_METADATA_IGNORED_ROOTS.has(entry.name)) {
+          continue;
+        }
+        if (
+          relativePath === ".runtime/telemetry" ||
+          relativePath.startsWith(".runtime/telemetry/")
+        ) {
+          continue;
+        }
+        queue.push(fullPath);
+        continue;
+      }
+      if (entry.isFile() && entry.name === "metadata.json") {
+        results.push(fullPath);
+      }
+    }
+  }
+
+  return results.sort((left, right) => left.localeCompare(right));
+}
+
+export function findTrainingRunMetadataFile(
+  repoRoot: string,
+  filters: TrainingRunLookupFilters
+): string | null {
+  const candidates: Array<{
+    metadataPath: string;
+    startedAt: string;
+  }> = [];
+
+  for (const metadataPath of listTrainingRunMetadataFiles(repoRoot)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(metadataPath, "utf8")) as unknown;
+      if (!isTrainingMetadataRecord(parsed)) {
+        continue;
+      }
+      if (
+        filters.sessionName &&
+        String(parsed.session_name) !== filters.sessionName
+      ) {
+        continue;
+      }
+      if (
+        filters.gameIdPrefix &&
+        String(parsed.game_id_prefix) !== filters.gameIdPrefix
+      ) {
+        continue;
+      }
+      if (filters.runId && String(parsed.run_id) !== filters.runId) {
+        continue;
+      }
+      candidates.push({
+        metadataPath,
+        startedAt: String(parsed.started_at ?? "")
+      });
+    } catch {
+      continue;
+    }
+  }
+
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  candidates.sort((left, right) => right.startedAt.localeCompare(left.startedAt));
+  return candidates[0]?.metadataPath ?? null;
+}
+
+export function assessTrainingStartStatus(
+  input: TrainingStartAssessmentInput
+): TrainingStartAssessmentResult {
+  if (!input.backendHealthy) {
+    return {
+      kind: "failure",
+      message: "backend health endpoint is not ready"
+    };
+  }
+  if (!input.telemetryAccepted || !input.telemetryReady) {
+    return {
+      kind: "failure",
+      message: "telemetry ingest health endpoint is not ready"
+    };
+  }
+  if (input.persistenceFailures > 0) {
+    return {
+      kind: "failure",
+      message: `telemetry persistence failures detected: ${input.persistenceFailures}`
+    };
+  }
+  if (input.fallbackCount > 0) {
+    return {
+      kind: "failure",
+      message: `telemetry fallback activity detected: ${input.fallbackCount}`
+    };
+  }
+  if (input.decisionProviderFailures > 0) {
+    return {
+      kind: "failure",
+      message: `decision provider failures detected: ${input.decisionProviderFailures}`
+    };
+  }
+  if (input.decisionTimeoutCount > 0) {
+    return {
+      kind: "failure",
+      message: `decision timeouts detected: ${input.decisionTimeoutCount}`
+    };
+  }
+  if (!input.logShowsBatchStart) {
+    if (input.simExitCode !== null) {
+      return {
+        kind: "failure",
+        message: `runner exited with code ${input.simExitCode} before batch start was observed`
+      };
+    }
+    return {
+      kind: "pending",
+      message: "waiting for run log to confirm batch start"
+    };
+  }
+  const hasScopedRows =
+    input.scopedCounts.matches > 0 &&
+    input.scopedCounts.decisions > 0 &&
+    input.scopedCounts.events > 0;
+  if (!hasScopedRows) {
+    if (input.simExitCode !== null && !input.runComplete) {
+      return {
+        kind: "failure",
+        message: `runner exited with code ${input.simExitCode} before scoped rows were produced`
+      };
+    }
+    return {
+      kind: "pending",
+      message: "waiting for scoped matches, decisions, and events"
+    };
+  }
+  if (input.processRunning || input.runComplete || input.simExitCode === 0) {
+    const queueSuffix =
+      input.telemetryPending > 0
+        ? `; telemetry queue still has ${input.telemetryPending} pending item(s)`
+        : "";
+    return {
+      kind: "success",
+      message: `training start verified with scoped matches=${input.scopedCounts.matches}, decisions=${input.scopedCounts.decisions}, events=${input.scopedCounts.events}${queueSuffix}`
+    };
+  }
+  return {
+    kind: "pending",
+    message: "waiting for runner process to remain alive long enough to confirm startup"
+  };
+}
+
+function latestBatchCommandFromLogLines(lines: string[]): string | null {
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const line = lines[index]?.trim();
+    if (!line || !line.startsWith("{") || !line.endsWith("}")) {
+      continue;
+    }
+    try {
+      const parsed = JSON.parse(line) as Record<string, unknown>;
+      if (parsed.event === "batch_start" && typeof parsed.command === "string") {
+        return parsed.command;
+      }
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+function hasBatchStartLog(lines: string[]): boolean {
+  return lines.some(
+    (line) =>
+      line.includes('"event":"batch_start"') || line.includes("COMMAND npm")
+  );
 }
 
 async function buildVerificationSnapshot(
@@ -1315,14 +1559,110 @@ async function prepareRun(options: CliOptions): Promise<void> {
   process.stdout.write(`${JSON.stringify(metadata, null, 2)}\n`);
 }
 
+function verifySimCommandHelp(repoRoot: string): void {
+  const packageJsonPath = path.join(repoRoot, "package.json");
+  if (!fs.existsSync(packageJsonPath)) {
+    throw new Error(`Simulator command preflight failed: missing ${packageJsonPath}.`);
+  }
+  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8")) as {
+    scripts?: Record<string, unknown>;
+  };
+  const simScript = typeof packageJson.scripts?.sim === "string" ? packageJson.scripts.sim : "";
+  if (!simScript.trim()) {
+    throw new Error("Simulator command preflight failed: package.json scripts.sim is not defined.");
+  }
+  const cliEntry = path.join(repoRoot, "apps", "sim-runner", "src", "cli.ts");
+  if (!fs.existsSync(cliEntry)) {
+    throw new Error(`Simulator command preflight failed: missing ${cliEntry}.`);
+  }
+  const tsxBinary = process.platform === "win32" ? "tsx.cmd" : "tsx";
+  const tsxPath = path.join(repoRoot, "node_modules", ".bin", tsxBinary);
+  if (!fs.existsSync(tsxPath)) {
+    throw new Error(`Simulator command preflight failed: missing ${tsxPath}. Run npm install first.`);
+  }
+}
+
+function collectConflictingTrainingRuns(
+  repoRoot: string,
+  currentMetadataPath: string,
+  metadata: TrainingMetadata
+): Array<Record<string, unknown>> {
+  const conflicts: Array<Record<string, unknown>> = [];
+  for (const candidatePath of listTrainingRunMetadataFiles(repoRoot)) {
+    const resolvedCandidate = path.resolve(candidatePath);
+    if (resolvedCandidate === path.resolve(currentMetadataPath)) {
+      continue;
+    }
+    try {
+      const parsed = JSON.parse(fs.readFileSync(resolvedCandidate, "utf8")) as unknown;
+      if (!isTrainingMetadataRecord(parsed)) {
+        continue;
+      }
+      const candidatePid = readPidValue(String(parsed.pid_file ?? ""));
+      const candidateRunning = isPidAlive(candidatePid);
+      if (!candidateRunning) {
+        continue;
+      }
+      if (
+        String(parsed.backend_url ?? "") !== metadataString(metadata, "backend_url") ||
+        String(parsed.pg_host ?? "") !== metadataString(metadata, "pg_host") ||
+        String(parsed.pg_port ?? "") !== metadataString(metadata, "pg_port") ||
+        String(parsed.pg_db ?? "") !== metadataString(metadata, "pg_db")
+      ) {
+        continue;
+      }
+      conflicts.push({
+        run_id: String(parsed.run_id),
+        session_name: String(parsed.session_name),
+        pid: candidatePid,
+        metadata_file: resolvedCandidate
+      });
+    } catch {
+      continue;
+    }
+  }
+  return conflicts;
+}
+
 async function prepareDatabase(options: CliOptions): Promise<void> {
   const metadataFile = path.resolve(optionString(options, "metadata-file"));
   const metadata = loadMetadata(metadataFile);
   const verificationLog = metadataString(metadata, "verification_log");
+  verifySimCommandHelp(metadataString(metadata, "repo_root"));
   const healthy = await backendHealthy(metadataString(metadata, "backend_url"));
   if (!healthy && !optionBoolean(options, "allow-unhealthy-backend", false)) {
     throw new Error(
       "Backend health check failed. Pass --allow-unhealthy-backend true to continue."
+    );
+  }
+  const telemetryHealth = await fetchTelemetryHealth(
+    metadataString(metadata, "backend_url")
+  );
+  const telemetryAccepted = isRecord(telemetryHealth)
+    ? telemetryHealth.accepted === true
+    : false;
+  const telemetryReady = isRecord(telemetryHealth)
+    ? telemetryHealth.ready === true
+    : false;
+  if (
+    (!telemetryAccepted || !telemetryReady) &&
+    !optionBoolean(options, "allow-unhealthy-backend", false)
+  ) {
+    throw new Error(
+      `Telemetry ingest health check failed: ${JSON.stringify(telemetryHealth)}`
+    );
+  }
+  const conflicts = collectConflictingTrainingRuns(
+    metadataString(metadata, "repo_root"),
+    metadataFile,
+    metadata
+  );
+  if (
+    conflicts.length > 0 &&
+    !optionBoolean(options, "allow-conflicting-writers", false)
+  ) {
+    throw new Error(
+      `Conflicting active training writers detected: ${JSON.stringify(conflicts)}`
     );
   }
   const sql = createDatabaseClient({
@@ -1346,6 +1686,9 @@ async function prepareDatabase(options: CliOptions): Promise<void> {
     logVerification(verificationLog, {
       event: "database_prepare",
       clear_mode: metadata["clear_mode"],
+      backend_healthy: healthy,
+      telemetry_health: telemetryHealth,
+      conflicting_writers: conflicts,
       pre_clear_counts: preCounts,
       sql: TRAINING_CLEAR_SQL,
     });
@@ -1468,6 +1811,149 @@ async function statusRun(options: CliOptions): Promise<void> {
   };
 
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+}
+
+async function waitForStart(options: CliOptions): Promise<void> {
+  const metadataFile = path.resolve(optionString(options, "metadata-file"));
+  const tailLines = optionNumber(options, "tail-lines", 80);
+  const timeoutSeconds = optionNumber(options, "timeout-seconds", 120);
+  const pollIntervalMs = optionNumber(options, "poll-interval-ms", 1000);
+  const startedAtMs = Date.now();
+  let lastReport: Record<string, unknown> | null = null;
+
+  while (Date.now() - startedAtMs <= timeoutSeconds * 1000) {
+    const metadata = loadMetadata(metadataFile);
+    const pid = readPidValue(metadataString(metadata, "pid_file"));
+    const processRunning = isPidAlive(pid);
+    const backendHealthyNow = await backendHealthy(
+      metadataString(metadata, "backend_url")
+    );
+    const telemetryHealth = await fetchTelemetryHealth(
+      metadataString(metadata, "backend_url")
+    );
+    let dbConnected = false;
+    let snapshot: VerificationSnapshot | null = null;
+    let dbError: string | null = null;
+
+    const sql = createDatabaseClient({
+      host: metadataString(metadata, "pg_host"),
+      port: Number(metadataString(metadata, "pg_port")),
+      user: metadataString(metadata, "pg_user"),
+      password: resolvePassword(options),
+      database: metadataString(metadata, "pg_db"),
+    });
+    try {
+      snapshot = await buildVerificationSnapshot(metadata, sql);
+      dbConnected = true;
+    } catch (error) {
+      dbError = error instanceof Error ? error.message : String(error);
+    } finally {
+      await sql.end({ timeout: 5 }).catch(() => undefined);
+    }
+
+    const latestLogLines = readLogTail(
+      metadataString(metadata, "run_log"),
+      tailLines
+    );
+    const latestVerificationLines = readLogTail(
+      metadataString(metadata, "verification_log"),
+      Math.min(40, tailLines)
+    );
+    const latestBatchCommand =
+      typeof metadata.sim_command === "string" && metadata.sim_command.length > 0
+        ? metadata.sim_command
+        : latestBatchCommandFromLogLines(latestLogLines);
+    const logShowsBatchStart =
+      hasBatchStartLog(latestLogLines) || hasBatchStartLog(latestVerificationLines);
+
+    const assessment =
+      dbConnected && snapshot
+        ? assessTrainingStartStatus({
+            processRunning,
+            runComplete: metadata.run_complete === true,
+            logShowsBatchStart,
+            backendHealthy: backendHealthyNow,
+            telemetryAccepted:
+              isRecord(telemetryHealth) && telemetryHealth.accepted === true,
+            telemetryReady:
+              isRecord(telemetryHealth) && telemetryHealth.ready === true,
+            scopedCounts: snapshot.scoped_counts,
+            fallbackCount:
+              metadataOptionalNumber(metadata, "fallback_count") ?? 0,
+            decisionProviderFailures:
+              metadataOptionalNumber(metadata, "decision_provider_failures") ?? 0,
+            decisionTimeoutCount:
+              metadataOptionalNumber(metadata, "decision_timeout_count") ?? 0,
+            telemetryPending: finiteNumber(
+              isRecord(telemetryHealth) ? telemetryHealth.queue_pending : 0
+            ),
+            persistenceFailures: finiteNumber(
+              isRecord(telemetryHealth) ? telemetryHealth.persistence_failures : 0
+            ),
+            simExitCode: metadataOptionalNumber(metadata, "sim_exit_code")
+          })
+        : ({
+            kind:
+              metadataOptionalNumber(metadata, "sim_exit_code") !== null
+                ? "failure"
+                : "pending",
+            message: dbError
+              ? `database verification failed: ${dbError}`
+              : "waiting for database verification to succeed"
+          } satisfies TrainingStartAssessmentResult);
+
+    lastReport = {
+      kind: assessment.kind,
+      message: assessment.message,
+      wait_elapsed_ms: Date.now() - startedAtMs,
+      timeout_seconds: timeoutSeconds,
+      poll_interval_ms: pollIntervalMs,
+      run_id: metadataString(metadata, "run_id"),
+      session_name: metadataString(metadata, "session_name"),
+      process_id: pid,
+      process_running: processRunning,
+      run_complete: metadata.run_complete === true,
+      sim_exit_code: metadataOptionalNumber(metadata, "sim_exit_code"),
+      sim_exit_signal: metadata["sim_exit_signal"] ?? null,
+      game_id_prefix: scopePrefix(metadata),
+      backend_url: metadataString(metadata, "backend_url"),
+      backend_healthy: backendHealthyNow,
+      telemetry_health: telemetryHealth,
+      db_target: {
+        host: metadataString(metadata, "pg_host"),
+        port: metadataString(metadata, "pg_port"),
+        database: metadataString(metadata, "pg_db"),
+        user: metadataString(metadata, "pg_user")
+      },
+      db_connected: dbConnected,
+      db_error: dbError,
+      scoped_snapshot: snapshot,
+      latest_batch_command: latestBatchCommand,
+      latest_log_lines: latestLogLines,
+      latest_verification_lines: latestVerificationLines,
+      failure_reason: metadata.failure_reason ?? null,
+      output_tail: metadata.output_tail ?? [],
+      suggested_debug_command:
+        `npx tsx scripts/training-data.ts status-run --metadata-file "${metadataFile}" --pg-password-file "${path.join(path.dirname(metadataString(metadata, "stop_file")), "pg-password.txt")}" --tail-lines 80`
+    };
+
+    if (assessment.kind === "success") {
+      process.stdout.write(`${JSON.stringify(lastReport, null, 2)}\n`);
+      return;
+    }
+    if (assessment.kind === "failure") {
+      break;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+  }
+
+  process.stdout.write(`${JSON.stringify(lastReport, null, 2)}\n`);
+  const reason =
+    typeof lastReport?.message === "string"
+      ? lastReport.message
+      : "training start verification failed";
+  throw new Error(reason);
 }
 
 async function finalizeRun(metadata: TrainingMetadata, pgPassword: string): Promise<void> {
@@ -2023,6 +2509,22 @@ async function runLoop(options: CliOptions): Promise<void> {
 
 async function main(): Promise<void> {
   const { command, options } = parseCliOptions(process.argv.slice(2));
+  if (command === "locate-run") {
+    const metadataFile = findTrainingRunMetadataFile(
+      optionString(options, "repo-root"),
+      {
+        sessionName: optionOptionalString(options, "session-name") ?? undefined,
+        gameIdPrefix:
+          optionOptionalString(options, "game-id-prefix") ?? undefined,
+        runId: optionOptionalString(options, "run-id") ?? undefined,
+      }
+    );
+    if (!metadataFile) {
+      throw new Error("No training metadata matched the requested filters.");
+    }
+    process.stdout.write(`${metadataFile}\n`);
+    return;
+  }
   if (command === "prepare-run") {
     await prepareRun(options);
     return;
@@ -2037,6 +2539,10 @@ async function main(): Promise<void> {
   }
   if (command === "status-run") {
     await statusRun(options);
+    return;
+  }
+  if (command === "wait-for-start") {
+    await waitForStart(options);
     return;
   }
   if (command === "run-loop") {

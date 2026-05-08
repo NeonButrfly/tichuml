@@ -47,39 +47,18 @@ REPO_ROOT="$(common_resolve_repo_root "$SCRIPT_DIR")"
 common_require_repo_root "$REPO_ROOT"
 TRAINING_DATA_SCRIPT="$(common_require_repo_file "$REPO_ROOT" "scripts/training-data.ts" "Training data entrypoint")"
 
-metadata_file="$(node - "$REPO_ROOT" "$SESSION_NAME" "$GAME_ID_PREFIX" <<'NODE'
-const fs = require('fs');
-const path = require('path');
-const repoRoot = process.argv[2];
-const sessionName = process.argv[3];
-const gameIdPrefix = process.argv[4];
-const trainingRoot = path.join(repoRoot, 'training-runs');
-if (!fs.existsSync(trainingRoot)) {
-  process.exit(2);
-}
-const candidates = [];
-function walk(dir) {
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      walk(full);
-      continue;
-    }
-    if (entry.isFile() && entry.name === 'metadata.json') {
-      const json = JSON.parse(fs.readFileSync(full, 'utf8'));
-      if (sessionName && json.session_name !== sessionName) continue;
-      if (gameIdPrefix && json.game_id_prefix !== gameIdPrefix) continue;
-      candidates.push({ path: full, startedAt: String(json.started_at || '') });
-    }
-  }
-}
-walk(trainingRoot);
-if (candidates.length === 0) {
-  process.exit(3);
-}
-candidates.sort((left, right) => right.startedAt.localeCompare(left.startedAt));
-process.stdout.write(candidates[0].path);
-NODE
+metadata_file="$(
+  (
+    cd "$REPO_ROOT" &&
+      locate_args=(tsx "$TRAINING_DATA_SCRIPT" locate-run --repo-root "$REPO_ROOT")
+      if [[ -n "$SESSION_NAME" ]]; then
+        locate_args+=(--session-name "$SESSION_NAME")
+      fi
+      if [[ -n "$GAME_ID_PREFIX" ]]; then
+        locate_args+=(--game-id-prefix "$GAME_ID_PREFIX")
+      fi
+      npx "${locate_args[@]}"
+  ) 2>/dev/null || true
 )"
 
 if [[ -z "$metadata_file" ]]; then

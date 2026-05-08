@@ -51,33 +51,11 @@ fi
 REPO_ROOT="$(common_resolve_repo_root "$SCRIPT_DIR")"
 common_require_repo_root "$REPO_ROOT"
 
-metadata_file="$(node - "$REPO_ROOT" "$SESSION_NAME" <<'NODE'
-const fs = require('fs');
-const path = require('path');
-const repoRoot = process.argv[2];
-const sessionName = process.argv[3];
-const trainingRoot = path.join(repoRoot, 'training-runs');
-if (!fs.existsSync(trainingRoot)) process.exit(2);
-let found = null;
-function walk(dir) {
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      walk(full);
-      continue;
-    }
-    if (entry.isFile() && entry.name === 'metadata.json') {
-      const json = JSON.parse(fs.readFileSync(full, 'utf8'));
-      if (json.session_name === sessionName) {
-        found = full;
-      }
-    }
-  }
-}
-walk(trainingRoot);
-if (!found) process.exit(3);
-process.stdout.write(found);
-NODE
+metadata_file="$(
+  (
+    cd "$REPO_ROOT" &&
+      npx tsx "$REPO_ROOT/scripts/training-data.ts" locate-run --repo-root "$REPO_ROOT" --session-name "$SESSION_NAME"
+  ) 2>/dev/null || true
 )"
 
 if [[ -z "$metadata_file" ]]; then

@@ -12,12 +12,17 @@ import {
 } from "@tichuml/shared";
 import {
   formatTrainingSimCommandForLog,
+  findTrainingRunMetadataFile,
+  assessTrainingStartStatus,
   buildTrainingSimArgs,
   parseSimBatchSummaryFromLines,
   mergeBatchSummaries,
   summarizePersistenceMismatch,
   selectMlExportValidationSummaryFromOutput
 } from "../../scripts/training-data.js";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 describe("training run helpers", () => {
   it("builds stable run ids, session names, and scoped game id prefixes", () => {
@@ -299,5 +304,121 @@ describe("training run helpers", () => {
       validation_status: "accepted",
       supports_validate_only: true
     });
+  });
+
+  it("does not treat a spawned process as started before scoped rows exist", () => {
+    const status = assessTrainingStartStatus({
+      processRunning: true,
+      runComplete: false,
+      logShowsBatchStart: true,
+      backendHealthy: true,
+      telemetryAccepted: true,
+      telemetryReady: true,
+      scopedCounts: {
+        matches: 0,
+        decisions: 0,
+        events: 0
+      },
+      fallbackCount: 0,
+      decisionProviderFailures: 0,
+      decisionTimeoutCount: 0,
+      telemetryPending: 0,
+      persistenceFailures: 0,
+      simExitCode: null
+    });
+
+    expect(status.kind).toBe("pending");
+    expect(status.message).toContain("scoped");
+  });
+
+  it("fails startup readiness when telemetry/provider failures are already present", () => {
+    const status = assessTrainingStartStatus({
+      processRunning: true,
+      runComplete: false,
+      logShowsBatchStart: true,
+      backendHealthy: true,
+      telemetryAccepted: true,
+      telemetryReady: true,
+      scopedCounts: {
+        matches: 1,
+        decisions: 15,
+        events: 18
+      },
+      fallbackCount: 1,
+      decisionProviderFailures: 0,
+      decisionTimeoutCount: 0,
+      telemetryPending: 0,
+      persistenceFailures: 0,
+      simExitCode: null
+    });
+
+    expect(status.kind).toBe("failure");
+    expect(status.message).toContain("fallback");
+  });
+
+  it("reports verified startup only after scoped matches, decisions, and events exist", () => {
+    const status = assessTrainingStartStatus({
+      processRunning: true,
+      runComplete: false,
+      logShowsBatchStart: true,
+      backendHealthy: true,
+      telemetryAccepted: true,
+      telemetryReady: true,
+      scopedCounts: {
+        matches: 1,
+        decisions: 24,
+        events: 31
+      },
+      fallbackCount: 0,
+      decisionProviderFailures: 0,
+      decisionTimeoutCount: 0,
+      telemetryPending: 0,
+      persistenceFailures: 0,
+      simExitCode: null
+    });
+
+    expect(status.kind).toBe("success");
+    expect(status.message).toContain("verified");
+  });
+
+  it("finds run metadata outside the default training-runs directory", () => {
+    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), "tichuml-run-locate-"));
+    try {
+      fs.mkdirSync(path.join(repoRoot, ".git"));
+      fs.mkdirSync(path.join(repoRoot, ".runtime", "custom-run", "training-123"), {
+        recursive: true
+      });
+      const metadataPath = path.join(
+        repoRoot,
+        ".runtime",
+        "custom-run",
+        "training-123",
+        "metadata.json"
+      );
+      fs.writeFileSync(
+        metadataPath,
+        JSON.stringify(
+          {
+            run_id: "training-123",
+            session_name: "custom-session",
+            game_id_prefix: "selfplay-training-123",
+            metadata_file: metadataPath,
+            run_directory: path.dirname(metadataPath),
+            started_at: "2026-05-08T18:29:25.775Z"
+          },
+          null,
+          2
+        ),
+        "utf8"
+      );
+
+      const resolved = findTrainingRunMetadataFile(repoRoot, {
+        sessionName: "custom-session"
+      });
+
+      expect(resolved).toBe(metadataPath);
+    } finally {
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+    }
   });
 });

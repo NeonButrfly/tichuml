@@ -94,9 +94,11 @@ may make the capture non-quiescent.
 
 `scripts/start-training.ps1` and `scripts/start-training.sh` are the canonical
 training start scripts. Both auto-detect repo root, verify required commands,
-print the underlying workflow command, and support the core operator options:
-games, provider, telemetry strictness, backend URL, seed, run name, output
-directory, batch size, and validate-only/dry-run mode.
+check backend and Postgres reachability, confirm telemetry health and required
+tables, reject conflicting active writers unless explicitly allowed, and only
+print success after the current run is still alive and has produced scoped
+`matches`, `events`, and `decisions` rows in Postgres. Use `scripts/verify-scripts.ps1`
+or `scripts/verify-scripts.sh` to audit the whole top-level script surface.
 
 Examples:
 
@@ -107,6 +109,25 @@ powershell -ExecutionPolicy Bypass -File scripts\start-training.ps1 -ValidateOnl
 ```bash
 scripts/start-training.sh --validate-only --games 1 --provider local --allow-unhealthy-backend --skip-ml-export-check
 ```
+
+Verified one-game start examples:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\start-training.ps1 -SessionName tichuml-training-smoke-win -Games 1 -Provider server_heuristic -BackendUrl http://127.0.0.1:4310 -NoClear -ReplaceSession -SkipMlExportCheck
+```
+
+```bash
+scripts/start-training.sh --session tichuml-training-smoke-linux --games 1 --provider server_heuristic --backend-url http://127.0.0.1:4310 --no-clear --replace-session --skip-ml-export-check
+```
+
+Both launchers print the run id, game-id prefix, log path, scoped row counts,
+backend URL, process state, status command, stop command, and export archive
+path after startup verification succeeds. Failure output includes the attempted
+command, working directory, backend/db target, PID state, last log lines, and
+before/after scoped counts.
+
+For a short repair summary and the exact verified operator flow, see
+[`training-start-verification.md`](./training-start-verification.md).
 
 For a finite one-game simulator smoke that does not require backend telemetry:
 

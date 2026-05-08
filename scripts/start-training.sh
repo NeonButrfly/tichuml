@@ -4,7 +4,8 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 . "$SCRIPT_DIR/common.sh"
 
-# Starts an isolated training-data self-play session inside tmux.
+# Starts an isolated training-data self-play session with detached background
+# runner semantics shared with the Windows launcher.
 # Default mode clears events/decisions/matches in the training database,
 # runs repeated full-telemetry self-play batches, verifies scoped Postgres
 # growth, validates ml:export compatibility without running a full export,
@@ -15,7 +16,8 @@ print_help() {
 Usage:
   scripts/start-training.sh [options]
 
-Starts an isolated training-data self-play session inside tmux.
+Starts an isolated training-data self-play session with detached background
+runner semantics shared with the Windows launcher.
 
 Modes:
   Default: CLEAR DATABASE MODE
@@ -27,16 +29,16 @@ Help:
 
 Session control:
   --session <name>
-      Use an explicit tmux session name instead of the auto-generated
-      tichuml-<run_id> value.
+      Use an explicit session name instead of the auto-generated
+      tichuml-training-<run_id> value.
   --run-name <name>
       Alias for --session.
   --replace-session
-      Kill and recreate an existing tmux session with the same name.
+      Stop and replace an existing session with the same name.
   --attach
-      Attach to the tmux session after launch.
+      Tail the run log after launch.
   --detach-only
-      Start the tmux session without attaching. This is the default.
+      Start the background runner without attaching. This is the default.
 
 Simulation:
   --games <count>
@@ -80,16 +82,24 @@ Database:
       Default expected name is tichu.
   --allow-unhealthy-backend
       Continue even if the backend health check fails.
+  --allow-conflicting-writers
+      Permit startup even when another live training writer is already targeting
+      the same backend/database.
   -noclear, --no-clear
       Preserve existing rows and append new scoped training data.
 
 Validation and export:
   --dry-run
-      Print the resolved run/session/export plan without launching tmux.
+      Print the resolved run/session/export plan without launching the runner.
   --validate-only
-      Alias for --dry-run; validates parsing and prerequisites without launching tmux.
+      Alias for --dry-run; validates parsing and prerequisites without launching the runner.
   --output-dir <path>
       Training run artifact root. Default: training-runs under the repo root.
+  --startup-timeout-seconds <seconds>
+      Maximum time to wait for verified scoped row production before reporting
+      startup success. Default: 120
+  --startup-poll-milliseconds <ms>
+      Poll interval for startup verification. Default: 1000
   --skip-ml-export-check
       Skip the validation-only ml:export compatibility check.
   --ml-export-command <command>
@@ -164,23 +174,20 @@ write_commands_file() {
   local run_dir="$5"
   local archive_path="$6"
   cat >"$file" <<EOF
-Attach:
-tmux attach -t $session_name
-
 Stop:
-tmux kill-session -t $session_name
+scripts/stop-training.sh --session $session_name
 
 Watch runner:
-tail -f training-runs/$run_id/run.log
+tail -f "$run_dir/run.log"
 
 Watch verifier:
-tail -f training-runs/$run_id/verification.log
+tail -f "$run_dir/verification.log"
 
 Watch ML export compatibility check:
-tail -f training-runs/$run_id/ml_export_check.log
+tail -f "$run_dir/ml_export_check.log"
 
 Suggested manual ml:export command:
-npm run ml:export -- --run-id $run_id --game-id-prefix $game_id_prefix --output-dir training-runs/$run_id/ml
+npm run ml:export -- --run-id $run_id --game-id-prefix $game_id_prefix --output-dir "$run_dir/ml"
 
 Expected export:
 ls -lh $archive_path
@@ -214,10 +221,13 @@ ALLOW_UNHEALTHY_BACKEND="false"
 ALLOW_CLEAR_DB_NAME=""
 CLEAR_DATABASE="true"
 ML_EXPORT_CHECK_ENABLED="true"
+ALLOW_CONFLICTING_WRITERS="false"
 ML_EXPORT_COMMAND="npm run ml:export"
 SESSION_NAME=""
 OUTPUT_DIR=""
 SEED_OVERRIDE=""
+STARTUP_TIMEOUT_SECONDS=120
+STARTUP_POLL_MILLISECONDS=1000
 
 while (($#)); do
   case "$1" in
@@ -243,6 +253,14 @@ while (($#)); do
       ;;
     --output-dir)
       OUTPUT_DIR="${2:?missing value for --output-dir}"
+      shift 2
+      ;;
+    --startup-timeout-seconds)
+      STARTUP_TIMEOUT_SECONDS="${2:?missing value for --startup-timeout-seconds}"
+      shift 2
+      ;;
+    --startup-poll-milliseconds)
+      STARTUP_POLL_MILLISECONDS="${2:?missing value for --startup-poll-milliseconds}"
       shift 2
       ;;
     --validate-only)
@@ -331,6 +349,10 @@ while (($#)); do
       ALLOW_UNHEALTHY_BACKEND="true"
       shift
       ;;
+    --allow-conflicting-writers)
+      ALLOW_CONFLICTING_WRITERS="true"
+      shift
+      ;;
     --allow-clear-db-name)
       ALLOW_CLEAR_DB_NAME="${2:?missing value for --allow-clear-db-name}"
       shift 2
@@ -362,11 +384,6 @@ require_command curl
 require_command tar
 require_command git
 require_command npx
-if [[ "$DRY_RUN" != "true" ]]; then
-  require_command tmux
-elif ! command -v tmux >/dev/null 2>&1; then
-  echo "Warning: tmux is not installed in this environment; live Linux launch would currently fail." >&2
-fi
 
 cd "$REPO_ROOT"
 ensure_workspace_builds
@@ -427,13 +444,18 @@ if [[ "$CLEAR_DATABASE" != "true" ]]; then
   MODE_LABEL="NO-CLEAR APPEND MODE"
 fi
 
-if [[ "$DRY_RUN" != "true" ]] && tmux has-session -t "$SESSION_NAME_RESOLVED" 2>/dev/null; then
+existing_metadata_file="$(
+  (
+    cd "$REPO_ROOT" &&
+      npx tsx "$TRAINING_DATA_SCRIPT" locate-run --repo-root "$REPO_ROOT" --session-name "$SESSION_NAME_RESOLVED"
+  ) 2>/dev/null || true
+)"
+if [[ -n "$existing_metadata_file" ]]; then
   if [[ "$REPLACE_SESSION" == "true" ]]; then
-    tmux kill-session -t "$SESSION_NAME_RESOLVED"
+    "$SCRIPT_DIR/stop-training.sh" --session "$SESSION_NAME_RESOLVED" --force >/dev/null 2>&1 || true
   else
     echo "Session already exists: $SESSION_NAME_RESOLVED" >&2
-    echo "Attach: tmux attach -t $SESSION_NAME_RESOLVED" >&2
-    echo "Stop: tmux kill-session -t $SESSION_NAME_RESOLVED" >&2
+    echo "Stop: scripts/stop-training.sh --session $SESSION_NAME_RESOLVED" >&2
     exit 1
   fi
 fi
@@ -454,12 +476,12 @@ if [[ "$DRY_RUN" == "true" ]]; then
   echo "Decision request mode: fast_path_default"
   echo "Clear SQL: $TRAINING_CLEAR_SQL"
   echo "Scoped export filter: game_id LIKE '${GAME_ID_PREFIX}%'"
-  echo "ML export validation command: npm run ml:export -- --validate-only --run-id $RUN_ID --game-id-prefix $GAME_ID_PREFIX --output-dir training-runs/$RUN_ID/ml"
-  echo "Suggested manual ml:export command: npm run ml:export -- --run-id $RUN_ID --game-id-prefix $GAME_ID_PREFIX --output-dir training-runs/$RUN_ID/ml"
+  echo "ML export validation command: npm run ml:export -- --validate-only --run-id $RUN_ID --game-id-prefix $GAME_ID_PREFIX --output-dir \"$RUN_DIR/ml\""
+  echo "Suggested manual ml:export command: npm run ml:export -- --run-id $RUN_ID --game-id-prefix $GAME_ID_PREFIX --output-dir \"$RUN_DIR/ml\""
   echo "Expected LightGBM files: train.parquet|train.csv.gz, dataset_metadata.json, feature_schema.json, feature_columns.json, label_columns.json"
-  echo "Attach command: tmux attach -t $SESSION_NAME_RESOLVED"
-  echo "Stop command: tmux kill-session -t $SESSION_NAME_RESOLVED"
-  if ! (
+  echo "Watch runner: tail -f \"$RUN_DIR/run.log\""
+  echo "Stop command: scripts/stop-training.sh --session $SESSION_NAME_RESOLVED"
+  (
     cd "$REPO_ROOT" &&
       prepare_db_args=(
         tsx "$TRAINING_DATA_SCRIPT" prepare-database
@@ -467,14 +489,13 @@ if [[ "$DRY_RUN" == "true" ]]; then
         --pg-password "$PG_PASSWORD"
         --dry-run
         --allow-unhealthy-backend "$ALLOW_UNHEALTHY_BACKEND"
+        --allow-conflicting-writers "$ALLOW_CONFLICTING_WRITERS"
       )
       if [[ -n "$ALLOW_CLEAR_DB_NAME" ]]; then
         prepare_db_args+=(--allow-clear-db-name "$ALLOW_CLEAR_DB_NAME")
       fi
       npx "${prepare_db_args[@]}"
-  ); then
-    echo "Warning: dry-run database validation could not complete with current backend/Postgres state." >&2
-  fi
+  )
   exit 0
 fi
 
@@ -492,6 +513,7 @@ prepare_db_args=(
   --metadata-file "$METADATA_FILE"
   --pg-password-file "$(dirname "$STOP_FILE")/pg-password.txt"
   --allow-unhealthy-backend "$ALLOW_UNHEALTHY_BACKEND"
+  --allow-conflicting-writers "$ALLOW_CONFLICTING_WRITERS"
 )
 if [[ -n "$ALLOW_CLEAR_DB_NAME" ]]; then
   prepare_db_args+=(--allow-clear-db-name "$ALLOW_CLEAR_DB_NAME")
@@ -507,24 +529,144 @@ TRAINING_DATA_SCRIPT_ESCAPED="$(printf '%q' "$TRAINING_DATA_SCRIPT")"
 METADATA_FILE_ESCAPED="$(printf '%q' "$METADATA_FILE")"
 RUNNER_PASSWORD_FILE_ESCAPED="$(printf '%q' "$RUNNER_PASSWORD_FILE")"
 RUNNER_CMD="cd \"$REPO_ROOT\" && bash -lc 'trap \"npx tsx $TRAINING_DATA_SCRIPT_ESCAPED finalize-run --metadata-file $METADATA_FILE_ESCAPED --pg-password-file $RUNNER_PASSWORD_FILE_ESCAPED >/dev/null 2>&1 || true\" EXIT HUP INT TERM; npx tsx $TRAINING_DATA_SCRIPT_ESCAPED run-loop --metadata-file $METADATA_FILE_ESCAPED --pg-password-file $RUNNER_PASSWORD_FILE_ESCAPED'"
-VERIFIER_CMD="cd \"$REPO_ROOT\" && bash -lc 'while true; do npx tsx $TRAINING_DATA_SCRIPT_ESCAPED verify-run --metadata-file $METADATA_FILE_ESCAPED --pg-password-file $RUNNER_PASSWORD_FILE_ESCAPED || true; sleep $INTERVAL_SECONDS; done'"
-MONITOR_CMD="cd \"$REPO_ROOT\" && bash -lc 'echo Session: $SESSION_NAME_RESOLVED; echo Run: $RUN_ID; tail -n 20 -f \"$RUN_DIR/run.log\" \"$RUN_DIR/verification.log\" \"$RUN_DIR/ml_export_check.log\"'"
+nohup bash -lc "$RUNNER_CMD" >/dev/null 2>&1 &
+runner_pid="$!"
+printf '%s\n' "$runner_pid" >"$PID_FILE"
 
-tmux new-session -d -s "$SESSION_NAME_RESOLVED" -n runner "$RUNNER_CMD"
-tmux new-window -t "$SESSION_NAME_RESOLVED" -n verifier "$VERIFIER_CMD"
-tmux new-window -t "$SESSION_NAME_RESOLVED" -n monitor "$MONITOR_CMD"
+wait_output_file="$(mktemp)"
+wait_error_file="$(mktemp)"
+if ! (
+  cd "$REPO_ROOT" &&
+    npx tsx "$TRAINING_DATA_SCRIPT" wait-for-start \
+      --metadata-file "$METADATA_FILE" \
+      --pg-password-file "$RUNNER_PASSWORD_FILE" \
+      --timeout-seconds "$STARTUP_TIMEOUT_SECONDS" \
+      --poll-interval-ms "$STARTUP_POLL_MILLISECONDS" \
+      --tail-lines 80
+) >"$wait_output_file" 2>"$wait_error_file"; then
+  date -Iseconds >"$STOP_FILE"
+  if [[ -n "$runner_pid" ]] && kill -0 "$runner_pid" >/dev/null 2>&1; then
+    kill "$runner_pid" >/dev/null 2>&1 || true
+    wait "$runner_pid" >/dev/null 2>&1 || true
+  fi
+  wait_stdout="$(cat "$wait_output_file" 2>/dev/null || true)"
+  wait_stderr="$(cat "$wait_error_file" 2>/dev/null || true)"
+  report_file="$(mktemp)"
+  printf '%s' "$wait_stdout" >"$report_file"
+  reason="$(
+    node - "$report_file" <<'NODE'
+const fs = require('fs');
+try {
+  const parsed = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+  process.stdout.write(String(parsed.message || 'training start verification failed'));
+} catch {
+  process.stdout.write('training start verification failed');
+}
+NODE
+  )"
+  global_counts="$(
+    node - "$report_file" <<'NODE'
+const fs = require('fs');
+try {
+  const parsed = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+  const global = parsed.scoped_snapshot?.global_counts;
+  process.stdout.write(global ? `matches=${global.matches} decisions=${global.decisions} events=${global.events}` : 'unavailable');
+} catch {
+  process.stdout.write('unavailable');
+}
+NODE
+  )"
+  scoped_counts="$(
+    node - "$report_file" <<'NODE'
+const fs = require('fs');
+try {
+  const parsed = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+  const scoped = parsed.scoped_snapshot?.scoped_counts;
+  process.stdout.write(scoped ? `matches=${scoped.matches} decisions=${scoped.decisions} events=${scoped.events}` : 'unavailable');
+} catch {
+  process.stdout.write('unavailable');
+}
+NODE
+  )"
+  attempted_command="$(
+    node - "$report_file" <<'NODE'
+const fs = require('fs');
+try {
+  const parsed = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+  process.stdout.write(String(parsed.latest_batch_command || 'nohup bash -lc <training run-loop>'));
+} catch {
+  process.stdout.write('nohup bash -lc <training run-loop>');
+}
+NODE
+  )"
+  suggested_debug_command="$(
+    node - "$report_file" <<'NODE'
+const fs = require('fs');
+try {
+  const parsed = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+  process.stdout.write(String(parsed.suggested_debug_command || 'npx tsx scripts/training-data.ts status-run'));
+} catch {
+  process.stdout.write('npx tsx scripts/training-data.ts status-run');
+}
+NODE
+  )"
+  echo "Training start verification failed." >&2
+  echo "Reason: $reason" >&2
+  echo "Exact command attempted: $attempted_command" >&2
+  echo "Working directory: $REPO_ROOT" >&2
+  echo "Backend URL: $BACKEND_URL" >&2
+  echo "Database target: $PG_HOST:$PG_PORT/$PG_DB" >&2
+  echo "PID/process status: pid=$runner_pid running=$(kill -0 "$runner_pid" >/dev/null 2>&1 && echo true || echo false)" >&2
+  echo "Global counts: $global_counts" >&2
+  echo "Scoped counts: $scoped_counts" >&2
+  echo "Suggested next command: $suggested_debug_command" >&2
+  echo "Last 80 log lines:" >&2
+  node - "$report_file" <<'NODE'
+const fs = require('fs');
+try {
+  const parsed = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+  for (const line of parsed.latest_log_lines || ['(no run log output captured)']) {
+    process.stderr.write(`${line}\n`);
+  }
+  process.stderr.write('Last verification lines:\n');
+  for (const line of parsed.latest_verification_lines || ['(no verification log output captured)']) {
+    process.stderr.write(`${line}\n`);
+  }
+} catch {
+  process.stderr.write('(unable to parse wait-for-start report)\n');
+}
+NODE
+  if [[ -n "$wait_stderr" ]]; then
+    printf '%s\n' "$wait_stderr" >&2
+  fi
+  rm -f "$report_file" "$wait_output_file" "$wait_error_file"
+  exit 1
+fi
 
+wait_report_file="$(mktemp)"
+cat "$wait_output_file" >"$wait_report_file"
 echo "$MODE_LABEL"
-echo "Training session started: $SESSION_NAME_RESOLVED"
+echo "Training job verified: $SESSION_NAME_RESOLVED"
 echo "Run ID: $RUN_ID"
 echo "Game ID prefix: $GAME_ID_PREFIX"
-echo "Attach: tmux attach -t $SESSION_NAME_RESOLVED"
-echo "Stop: tmux kill-session -t $SESSION_NAME_RESOLVED"
-echo "Watch runner: tail -f training-runs/$RUN_ID/run.log"
-echo "Watch verifier: tail -f training-runs/$RUN_ID/verification.log"
-echo "Watch ML export compatibility check: tail -f training-runs/$RUN_ID/ml_export_check.log"
+echo "Run directory: $RUN_DIR"
+node - "$wait_report_file" <<'NODE'
+const fs = require('fs');
+const parsed = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+const scoped = parsed.scoped_snapshot?.scoped_counts;
+if (scoped) {
+  console.log(`Scoped rows: matches=${scoped.matches} decisions=${scoped.decisions} events=${scoped.events}`);
+}
+console.log(`Backend URL: ${parsed.backend_url}`);
+console.log(`Process state: pid=${parsed.process_id} running=${parsed.process_running} exit_code=${parsed.sim_exit_code}`);
+NODE
+echo "Watch runner: tail -f \"$RUN_DIR/run.log\""
+echo "Watch verifier: tail -f \"$RUN_DIR/verification.log\""
+echo "Watch ML export compatibility check: tail -f \"$RUN_DIR/ml_export_check.log\""
+echo "Stop: scripts/stop-training.sh --session $SESSION_NAME_RESOLVED"
 echo "Export path: $ARCHIVE_PATH"
+rm -f "$wait_report_file" "$wait_output_file" "$wait_error_file"
 
 if [[ "$ATTACH_AFTER" == "true" ]]; then
-  exec tmux attach -t "$SESSION_NAME_RESOLVED"
+  exec tail -f "$RUN_DIR/run.log"
 fi

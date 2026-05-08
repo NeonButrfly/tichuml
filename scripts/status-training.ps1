@@ -27,41 +27,6 @@ the newest training metadata under training-runs is used.
 "@ | Write-Host
 }
 
-function Get-TrainingMetadataFile {
-  param(
-    [string]$RepoRoot,
-    [string]$SessionNameValue,
-    [string]$GameIdPrefixValue
-  )
-
-  $trainingRoot = Join-Path $RepoRoot "training-runs"
-  if (-not (Test-Path $trainingRoot)) {
-    throw "Training runs directory does not exist: $trainingRoot"
-  }
-
-  $candidates = @()
-  foreach ($file in Get-ChildItem -Path $trainingRoot -Filter metadata.json -Recurse -File) {
-    $json = Get-Content -Path $file.FullName -Raw | ConvertFrom-Json
-    if (-not [string]::IsNullOrWhiteSpace($SessionNameValue) -and $json.session_name -ne $SessionNameValue) {
-      continue
-    }
-    if (-not [string]::IsNullOrWhiteSpace($GameIdPrefixValue) -and $json.game_id_prefix -ne $GameIdPrefixValue) {
-      continue
-    }
-    $candidates += [pscustomobject]@{
-      Path = $file.FullName
-      RunId = "$($json.run_id)"
-      StartedAt = "$($json.started_at)"
-    }
-  }
-
-  if ($candidates.Count -eq 0) {
-    throw "No training metadata matched the requested session or game-id prefix."
-  }
-
-  return ($candidates | Sort-Object StartedAt -Descending | Select-Object -First 1).Path
-}
-
 if ($Help) {
   Show-HelpText
   exit 0
@@ -69,7 +34,27 @@ if ($Help) {
 
 $repoRoot = Enter-RepoRoot -BaseDir $PSScriptRoot
 $trainingDataScript = Assert-RepoPath -RepoRoot $repoRoot -RelativePath "scripts\\training-data.ts" -Description "Training data entrypoint"
-$metadataFile = Get-TrainingMetadataFile -RepoRoot $repoRoot -SessionNameValue $SessionName -GameIdPrefixValue $GameIdPrefix
+$locateArgs = @(
+  "tsx", $trainingDataScript, "locate-run",
+  "--repo-root", $repoRoot
+)
+if (-not [string]::IsNullOrWhiteSpace($SessionName)) {
+  $locateArgs += @("--session-name", $SessionName)
+}
+if (-not [string]::IsNullOrWhiteSpace($GameIdPrefix)) {
+  $locateArgs += @("--game-id-prefix", $GameIdPrefix)
+}
+$metadataFile = $null
+$locateResult = & npx.cmd @locateArgs 2>$null
+if ($LASTEXITCODE -eq 0) {
+  $candidate = (($locateResult | ForEach-Object { "$_" }) -join [Environment]::NewLine).Trim()
+  if (-not [string]::IsNullOrWhiteSpace($candidate)) {
+    $metadataFile = $candidate
+  }
+}
+if (-not $metadataFile) {
+  throw "No training metadata matched the requested session or game-id prefix."
+}
 $metadata = Get-Content -Path $metadataFile -Raw | ConvertFrom-Json
 $passwordFile = Join-Path (Split-Path "$($metadata.stop_file)" -Parent) "pg-password.txt"
 

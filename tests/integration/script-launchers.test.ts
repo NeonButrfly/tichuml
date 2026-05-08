@@ -252,4 +252,93 @@ windowsDescribe("training-data PowerShell launchers", () => {
     },
     30000
   );
+
+  it(
+    "finds Windows training status metadata in a custom output directory",
+    () => {
+      const root = repoRoot();
+      const runId = "status-launcher-custom-run";
+      const sessionName = "status-launcher-custom-session";
+      const runDirectory = path.join(
+        root,
+        ".runtime",
+        "status-launcher-custom",
+        runId
+      );
+      const controlDirectory = path.join(runDirectory, "control");
+      const metadataFile = path.join(runDirectory, "metadata.json");
+      const runLog = path.join(runDirectory, "run.log");
+      const verificationLog = path.join(runDirectory, "verification.log");
+      const passwordFile = path.join(controlDirectory, "pg-password.txt");
+      const pidFile = path.join(controlDirectory, "runner.pid");
+      const stopFile = path.join(controlDirectory, "stop.signal");
+
+      fs.mkdirSync(controlDirectory, { recursive: true });
+      fs.writeFileSync(runLog, "custom-run-log-line\n", "utf8");
+      fs.writeFileSync(verificationLog, "custom-verification-line\n", "utf8");
+      fs.writeFileSync(passwordFile, "tichu_dev_password\n", "utf8");
+      fs.writeFileSync(
+        metadataFile,
+        `${JSON.stringify(
+          {
+            run_id: runId,
+            session_name: sessionName,
+            started_at: "2026-05-08T18:29:25.775Z",
+            game_id_prefix: "selfplay-status-launcher-custom",
+            run_directory: runDirectory,
+            metadata_file: metadataFile,
+            run_log: runLog,
+            verification_log: verificationLog,
+            pid_file: pidFile,
+            stop_file: stopFile,
+            backend_url: "http://127.0.0.1:9",
+            pg_host: "127.0.0.1",
+            pg_port: "9",
+            pg_user: "tichu",
+            pg_db: "tichu",
+            completed_scoped_matches: 0,
+            completed_scoped_decisions: 0,
+            completed_scoped_events: 0,
+            failure_reason: null,
+            sim_exit_code: null,
+            sim_exit_signal: null,
+            output_tail: []
+          },
+          null,
+          2
+        )}\n`,
+        "utf8"
+      );
+
+      try {
+        const result = spawnSync(
+          "powershell",
+          [
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            path.join(root, "scripts", "status-training.ps1"),
+            "-SessionName",
+            sessionName,
+            "-TailLines",
+            "5"
+          ],
+          {
+            cwd: root,
+            encoding: "utf8"
+          }
+        );
+
+        expect(result.status).toBe(0);
+        expect(result.stdout).toContain(`"session_name": "${sessionName}"`);
+        expect(result.stdout).toContain(runDirectory.replace(/\\/g, "\\\\"));
+      } finally {
+        fs.rmSync(path.join(root, ".runtime", "status-launcher-custom"), {
+          recursive: true,
+          force: true
+        });
+      }
+    },
+    30000
+  );
 });

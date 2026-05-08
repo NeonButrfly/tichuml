@@ -20,9 +20,12 @@ param(
   [switch]$Attach,
   [switch]$DetachOnly,
   [switch]$SkipMlExportCheck,
+  [switch]$AllowConflictingWriters,
   [string]$MlExportCommand = "npm run ml:export",
   [string]$RunName,
   [string]$OutputDir,
+  [int]$StartupTimeoutSeconds = 120,
+  [int]$StartupPollMilliseconds = 1000,
   [int]$BatchSize = 0,
   [string]$Seed,
   [switch]$ValidateOnly,
@@ -116,6 +119,9 @@ Database:
       Continue even if the backend health check fails.
   -NoClear
       Preserve existing rows and append new scoped training data.
+  -AllowConflictingWriters
+      Permit startup even when another live training writer is already targeting
+      the same backend/database.
 
 Validation and export:
   -DryRun
@@ -124,6 +130,11 @@ Validation and export:
       Alias for -DryRun; validates argument parsing and prerequisites without launching.
   -OutputDir <path>
       Training run artifact root. Default: training-runs under the repo root.
+  -StartupTimeoutSeconds <seconds>
+      Maximum time to wait for verified scoped row production before reporting
+      startup success. Default: 120
+  -StartupPollMilliseconds <milliseconds>
+      Poll interval for startup verification. Default: 1000
   -SkipMlExportCheck
       Skip the validation-only ml:export compatibility check.
   -MlExportCommand <command>
@@ -275,38 +286,26 @@ function Get-HelperJsonValue {
   return "$value"
 }
 
-function Find-TrainingMetadataBySession {
-  param([string]$RepoRoot, [string]$Name)
-  $trainingRoot = Join-Path $RepoRoot "training-runs"
-  if (-not (Test-Path $trainingRoot)) { return $null }
-  foreach ($file in Get-ChildItem -Path $trainingRoot -Filter metadata.json -Recurse -File) {
-    $json = Get-Content -Path $file.FullName -Raw | ConvertFrom-Json
-    if ($json.session_name -eq $Name) {
-      return $file.FullName
-    }
-  }
-  return $null
-}
-
 function Write-CommandsFile {
   param(
     [string]$FilePath,
     [string]$RunId,
     [string]$GameIdPrefix,
-    [string]$SessionNameValue
+    [string]$SessionNameValue,
+    [string]$RunDirectory
   )
   @"
 Watch runner:
-Get-Content -Path "training-runs\$RunId\run.log" -Wait
+Get-Content -Path "$RunDirectory\run.log" -Wait
 
 Watch verifier:
-Get-Content -Path "training-runs\$RunId\verification.log" -Wait
+Get-Content -Path "$RunDirectory\verification.log" -Wait
 
 Watch ML export compatibility check:
-Get-Content -Path "training-runs\$RunId\ml_export_check.log" -Wait
+Get-Content -Path "$RunDirectory\ml_export_check.log" -Wait
 
 Suggested manual ml:export command:
-npm run ml:export -- --run-id $RunId --game-id-prefix $GameIdPrefix --output-dir training-runs\$RunId\ml
+npm run ml:export -- --run-id $RunId --game-id-prefix $GameIdPrefix --output-dir "$RunDirectory\ml"
 
 Stop:
 scripts\stop-training.ps1 -SessionName $SessionNameValue
@@ -314,6 +313,40 @@ scripts\stop-training.ps1 -SessionName $SessionNameValue
 Expected export:
 Get-ChildItem "`$env:TEMP\tichuml-training-export-$RunId.tar.gz"
 "@ | Set-Content -Path $FilePath -Encoding UTF8
+}
+
+function Invoke-LocateTrainingMetadata {
+  param(
+    [string]$RepoRoot,
+    [string]$TrainingDataScriptPath,
+    [string]$SessionNameValue = "",
+    [string]$GameIdPrefixValue = "",
+    [string]$RunIdValue = ""
+  )
+
+  $args = @(
+    "tsx", $TrainingDataScriptPath, "locate-run",
+    "--repo-root", $RepoRoot
+  )
+  if (-not [string]::IsNullOrWhiteSpace($SessionNameValue)) {
+    $args += @("--session-name", $SessionNameValue)
+  }
+  if (-not [string]::IsNullOrWhiteSpace($GameIdPrefixValue)) {
+    $args += @("--game-id-prefix", $GameIdPrefixValue)
+  }
+  if (-not [string]::IsNullOrWhiteSpace($RunIdValue)) {
+    $args += @("--run-id", $RunIdValue)
+  }
+
+  $result = Invoke-ProcessCapture -FilePath "npx.cmd" -ArgumentList $args
+  if ($result.ExitCode -ne 0) {
+    return $null
+  }
+  $stdout = Normalize-CommandOutput -Value $result.Stdout
+  if ([string]::IsNullOrWhiteSpace($stdout)) {
+    return $null
+  }
+  return $stdout
 }
 
 $repoRoot = Enter-RepoRoot -BaseDir $PSScriptRoot
@@ -418,7 +451,7 @@ try {
   $passwordFile = Join-Path (Split-Path $stopFile -Parent) "pg-password.txt"
   $modeLabel = if ($NoClear) { "NO-CLEAR APPEND MODE" } else { "CLEAR DATABASE MODE" }
 
-  $existing = Find-TrainingMetadataBySession -RepoRoot $repoRoot -Name $sessionNameResolved
+  $existing = Invoke-LocateTrainingMetadata -RepoRoot $repoRoot -TrainingDataScriptPath $trainingDataScript -SessionNameValue $sessionNameResolved
   if ($existing) {
     if ($ReplaceSession) {
       & powershell -ExecutionPolicy Bypass -File $stopTrainingScript -SessionName $sessionNameResolved -Force | Out-Host
@@ -443,25 +476,25 @@ try {
     Write-Host "Decision request mode: fast_path_default"
     Write-Host "Clear SQL: TRUNCATE TABLE events, decisions, matches RESTART IDENTITY CASCADE;"
     Write-Host "Scoped export filter: game_id LIKE '$gameIdPrefix%'"
-    Write-Host "ML export validation command: npm run ml:export -- --validate-only --run-id $runId --game-id-prefix $gameIdPrefix --output-dir training-runs\$runId\ml"
-    Write-Host "Suggested manual ml:export command: npm run ml:export -- --run-id $runId --game-id-prefix $gameIdPrefix --output-dir training-runs\$runId\ml"
+    Write-Host "ML export validation command: npm run ml:export -- --validate-only --run-id $runId --game-id-prefix $gameIdPrefix --output-dir ""$runDir\ml"""
+    Write-Host "Suggested manual ml:export command: npm run ml:export -- --run-id $runId --game-id-prefix $gameIdPrefix --output-dir ""$runDir\ml"""
     Write-Host "Expected LightGBM files: train.parquet|train.csv.gz, dataset_metadata.json, feature_schema.json, feature_columns.json, label_columns.json"
-    Write-Host "Watch runner: Get-Content -Path ""training-runs\$runId\run.log"" -Wait"
+    Write-Host "Watch runner: Get-Content -Path ""$runDir\run.log"" -Wait"
     Write-Host "Stop command: scripts\stop-training.ps1 -SessionName $sessionNameResolved"
-    try {
-      $dryDbArgs = @(
-        "tsx", $trainingDataScript, "prepare-database",
-        "--metadata-file", $tmpMetadata,
-        "--pg-password", $PgPassword,
-        "--dry-run",
-        "--allow-unhealthy-backend", "$AllowUnhealthyBackend"
-      )
-      if ($AllowClearDbName) {
-        $dryDbArgs += @("--allow-clear-db-name", $AllowClearDbName)
-      }
-      & npx @dryDbArgs | Out-Host
-    } catch {
-      Write-Warning "Dry-run database validation could not complete with current backend/Postgres state."
+    $dryDbArgs = @(
+      "tsx", $trainingDataScript, "prepare-database",
+      "--metadata-file", $tmpMetadata,
+      "--pg-password", $PgPassword,
+      "--dry-run",
+      "--allow-unhealthy-backend", "$AllowUnhealthyBackend",
+      "--allow-conflicting-writers", "$AllowConflictingWriters"
+    )
+    if ($AllowClearDbName) {
+      $dryDbArgs += @("--allow-clear-db-name", $AllowClearDbName)
+    }
+    & npx @dryDbArgs | Out-Host
+    if ($LASTEXITCODE -ne 0) {
+      throw "Dry-run database validation failed."
     }
     return
   }
@@ -470,13 +503,14 @@ try {
   $prepareStdout | Set-Content -Path $metadataPath -Encoding UTF8
   $PgPassword | Set-Content -Path $passwordFile -Encoding UTF8
   New-Item -ItemType File -Force -Path (Join-Path $runDir "run.log"), (Join-Path $runDir "verification.log"), (Join-Path $runDir "ml_export_check.log") | Out-Null
-  Write-CommandsFile -FilePath $commandsFile -RunId $runId -GameIdPrefix $gameIdPrefix -SessionNameValue $sessionNameResolved
+  Write-CommandsFile -FilePath $commandsFile -RunId $runId -GameIdPrefix $gameIdPrefix -SessionNameValue $sessionNameResolved -RunDirectory $runDir
 
   $dbArgs = @(
     "tsx", $trainingDataScript, "prepare-database",
     "--metadata-file", $metadataPath,
     "--pg-password-file", $passwordFile,
-    "--allow-unhealthy-backend", "$AllowUnhealthyBackend"
+    "--allow-unhealthy-backend", "$AllowUnhealthyBackend",
+    "--allow-conflicting-writers", "$AllowConflictingWriters"
   )
   if ($AllowClearDbName) {
     $dbArgs += @("--allow-clear-db-name", $AllowClearDbName)
@@ -496,13 +530,83 @@ try {
   $process = Start-Process -FilePath $hostExe -ArgumentList $runnerArgs -WorkingDirectory $repoRoot -WindowStyle Hidden -PassThru
   $process.Id | Set-Content -Path $pidFile -Encoding UTF8
 
+  $waitArgs = @(
+    "tsx", $trainingDataScript, "wait-for-start",
+    "--metadata-file", $metadataPath,
+    "--pg-password-file", $passwordFile,
+    "--timeout-seconds", "$StartupTimeoutSeconds",
+    "--poll-interval-ms", "$StartupPollMilliseconds",
+    "--tail-lines", "80"
+  )
+  $waitResult = Invoke-ProcessCapture -FilePath "npx.cmd" -ArgumentList $waitArgs
+  $waitStdout = Normalize-CommandOutput -Value $waitResult.Stdout
+  $waitStderr = Normalize-CommandOutput -Value $waitResult.Stderr
+  $waitReport = $null
+  if (-not [string]::IsNullOrWhiteSpace($waitStdout)) {
+    try {
+      $waitReport = $waitStdout | ConvertFrom-Json
+    } catch {
+      $waitReport = $null
+    }
+  }
+  if ($waitResult.ExitCode -ne 0) {
+    (Get-Date).ToString("o") | Set-Content -Path $stopFile -Encoding UTF8
+    $pidText = if (Test-Path $pidFile) { (Get-Content -Path $pidFile -Raw).Trim() } else { "" }
+    if (-not [string]::IsNullOrWhiteSpace($pidText)) {
+      $runnerProcess = Get-Process -Id ([int]$pidText) -ErrorAction SilentlyContinue
+      if ($runnerProcess) {
+        Stop-Process -Id $runnerProcess.Id -Force -ErrorAction SilentlyContinue
+      }
+    }
+    $logLines = if ($waitReport -and $waitReport.latest_log_lines) { @($waitReport.latest_log_lines) } else { @() }
+    $verificationLines = if ($waitReport -and $waitReport.latest_verification_lines) { @($waitReport.latest_verification_lines) } else { @() }
+    $scopedCounts = if ($waitReport -and $waitReport.scoped_snapshot -and $waitReport.scoped_snapshot.scoped_counts) { $waitReport.scoped_snapshot.scoped_counts } else { $null }
+    $globalCounts = if ($waitReport -and $waitReport.scoped_snapshot -and $waitReport.scoped_snapshot.global_counts) { $waitReport.scoped_snapshot.global_counts } else { $null }
+    $attemptedCommand = if ($waitReport -and $waitReport.latest_batch_command) { "$($waitReport.latest_batch_command)" } else { "$hostExe $($runnerArgs -join ' ')" }
+    $fallbackDebugCommand = "npx tsx scripts/training-data.ts status-run --metadata-file `"$metadataPath`" --pg-password-file `"$passwordFile`" --tail-lines 80"
+    $failureLines = @(
+      "Training start verification failed.",
+      "Reason: $(if ($waitReport -and $waitReport.message) { $waitReport.message } elseif (-not [string]::IsNullOrWhiteSpace($waitStderr)) { $waitStderr } else { "wait-for-start exited with code $($waitResult.ExitCode)" })",
+      "Exact command attempted: $attemptedCommand",
+      "Working directory: $repoRoot",
+      "Backend URL: $BackendUrl",
+      "Database target: ${PgHost}:${PgPort}/${PgDb}",
+      "PID/process status: $(if ($waitReport) { "pid=$($waitReport.process_id) running=$($waitReport.process_running) exit_code=$($waitReport.sim_exit_code)" } else { "pid=$($process.Id) running=unknown" })",
+      "Global counts: $(if ($globalCounts) { "matches=$($globalCounts.matches) decisions=$($globalCounts.decisions) events=$($globalCounts.events)" } else { "unavailable" })",
+      "Scoped counts: $(if ($scopedCounts) { "matches=$($scopedCounts.matches) decisions=$($scopedCounts.decisions) events=$($scopedCounts.events)" } else { "unavailable" })",
+      "Suggested next command: $(if ($waitReport -and $waitReport.suggested_debug_command) { $waitReport.suggested_debug_command } else { $fallbackDebugCommand })",
+      "Last 80 run log lines:"
+    )
+    if ($logLines.Count -gt 0) {
+      $failureLines += $logLines
+    } else {
+      $failureLines += "(no run log output captured)"
+    }
+    $failureLines += "Last verification lines:"
+    if ($verificationLines.Count -gt 0) {
+      $failureLines += $verificationLines
+    } else {
+      $failureLines += "(no verification log output captured)"
+    }
+    throw ($failureLines -join [Environment]::NewLine)
+  }
+
   Write-Host $modeLabel
-  Write-Host "Training job started: $sessionNameResolved"
+  Write-Host "Training job verified: $sessionNameResolved"
   Write-Host "Run ID: $runId"
   Write-Host "Game ID prefix: $gameIdPrefix"
-  Write-Host "Watch runner: Get-Content -Path ""training-runs\$runId\run.log"" -Wait"
-  Write-Host "Watch verifier: Get-Content -Path ""training-runs\$runId\verification.log"" -Wait"
-  Write-Host "Watch ML export compatibility check: Get-Content -Path ""training-runs\$runId\ml_export_check.log"" -Wait"
+  Write-Host "Run directory: $runDir"
+  if ($waitReport -and $waitReport.scoped_snapshot -and $waitReport.scoped_snapshot.scoped_counts) {
+    $counts = $waitReport.scoped_snapshot.scoped_counts
+    Write-Host "Scoped rows: matches=$($counts.matches) decisions=$($counts.decisions) events=$($counts.events)"
+  }
+  if ($waitReport) {
+    Write-Host "Backend URL: $($waitReport.backend_url)"
+    Write-Host "Process state: pid=$($waitReport.process_id) running=$($waitReport.process_running) exit_code=$($waitReport.sim_exit_code)"
+  }
+  Write-Host "Watch runner: Get-Content -Path ""$runDir\run.log"" -Wait"
+  Write-Host "Watch verifier: Get-Content -Path ""$runDir\verification.log"" -Wait"
+  Write-Host "Watch ML export compatibility check: Get-Content -Path ""$runDir\ml_export_check.log"" -Wait"
   Write-Host "Stop: scripts\stop-training.ps1 -SessionName $sessionNameResolved"
   Write-Host "Export path: $archivePath"
 

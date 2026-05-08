@@ -2,6 +2,34 @@
 
 Prompt logs here capture backend/platform prompt intent only. GitHub issue state remains authoritative.
 
+## 2026-05-08 - Training start scripts must prove live scoped DB production before success
+
+- Prompt signal:
+  Repair the top-level `scripts/` surface so every script works, keep only the
+  canonical `scripts/<name>.ps1` and `scripts/<name>.sh` entrypoints, and
+  especially make the Windows/Linux `start-training` launchers fail unless the
+  current run is still alive, backend/db/telemetry are reachable, and scoped
+  `matches`, `events`, and `decisions` rows tied to the current run are already
+  appearing in Postgres.
+- Interpreted requirement:
+  Issue [#61](https://github.com/NeonButrfly/tichuml/issues/61) remains the
+  governing tracker for the cross-platform training workflow. This prompt adds a
+  strict reliability pass: startup preflight, live row-production verification,
+  repo-wide metadata discovery for status/stop commands, shared helper
+  correctness, canonical `verify-scripts` auditing, and opt-in real smoke tests
+  that prove one-game startup writes scoped training data.
+- Affected systems:
+  `scripts/start-training.ps1`, `scripts/start-training.sh`,
+  `scripts/status-training.ps1`, `scripts/status-training.sh`,
+  `scripts/stop-training.ps1`, `scripts/stop-training.sh`,
+  `scripts/training-data.ts`, script audit/tests, operator docs.
+- Linked GitHub issue:
+  [#61](https://github.com/NeonButrfly/tichuml/issues/61)
+- Milestone:
+  [6.5 - Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status:
+  Lives in GitHub, not here.
+
 ## 2026-05-07 - Stream dockerized capture-db dumps directly to host files
 
 - Prompt signal:

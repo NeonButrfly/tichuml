@@ -32,31 +32,14 @@ if ([string]::IsNullOrWhiteSpace($SessionName)) {
   throw "SessionName is required unless -Help or -? is used."
 }
 
-function Find-TrainingMetadataBySession {
-  param([string]$RepoRoot, [string]$Name)
-  $trainingRoot = Join-Path $RepoRoot "training-runs"
-  if (-not (Test-Path $trainingRoot)) { return $null }
-  foreach ($file in Get-ChildItem -Path $trainingRoot -Filter metadata.json -Recurse -File) {
-    $json = Get-Content -Path $file.FullName -Raw | ConvertFrom-Json
-    if ($json.session_name -eq $Name) {
-      return [pscustomobject]@{
-        Path = $file.FullName
-        Metadata = $json
-      }
-    }
-  }
-  return $null
-}
-
 $repoRoot = Enter-RepoRoot -BaseDir $PSScriptRoot
 $trainingDataScript = Assert-RepoPath -RepoRoot $repoRoot -RelativePath "scripts\\training-data.ts" -Description "Training data entrypoint"
-$found = Find-TrainingMetadataBySession -RepoRoot $repoRoot -Name $SessionName
-if (-not $found) {
+$locateResult = & npx.cmd "tsx" $trainingDataScript "locate-run" "--repo-root" $repoRoot "--session-name" $SessionName 2>$null
+$metadataPath = if ($LASTEXITCODE -eq 0) { ((@($locateResult | ForEach-Object { "$_" }) -join [Environment]::NewLine).Trim()) } else { "" }
+if ([string]::IsNullOrWhiteSpace($metadataPath)) {
   throw "No training session metadata found for $SessionName"
 }
-
-$metadataPath = $found.Path
-$metadata = $found.Metadata
+$metadata = Get-Content -Path $metadataPath -Raw | ConvertFrom-Json
 $stopFile = "$($metadata.stop_file)"
 $pidFile = "$($metadata.pid_file)"
 $passwordFile = Join-Path (Split-Path $stopFile -Parent) "pg-password.txt"
