@@ -286,7 +286,7 @@ Those scripts:
 Linux-host recovery:
 
 - `apt` lock held by unattended-upgrades:
-  Wait for the lock to clear or inspect the holder with `ps -ef | grep -E 'apt|dpkg|unattended'`. If you intentionally need to stop unattended upgrades first, run `sudo systemctl stop unattended-upgrades`, then rerun `bash scripts/install-backend.sh`.
+  Wait for the lock to clear or inspect the holder with `ps -eo pid,comm,args | awk '$2 == "apt" || $2 == "apt-get" || $2 == "dpkg" || $2 == "unattended-upgrade" || index($0, "/usr/share/unattended-upgrades/unattended-upgrade-shutdown") > 0'`. If you intentionally need to stop unattended upgrades first, run `sudo systemctl stop unattended-upgrades`, then rerun `bash scripts/install-backend.sh`.
 - Missing Docker repo / partial Docker CE family:
   If the host has `containerd.io`, `docker-ce`, or `docker-ce-cli` but no working `docker` command, either finish configuring Docker's apt repository and install `docker-ce docker-ce-cli docker-compose-plugin`, or remove the partial Docker CE packages before rerunning the installer. The script will not force Ubuntu `docker.io` over that partial state.
 - Dirty repo:

@@ -127,11 +127,30 @@ yum_package_available() {
 }
 
 package_manager_process_snapshot() {
+  local snapshot=""
   if has_command pgrep; then
-    pgrep -a -f 'apt|dpkg|unattended-upgrade' 2>/dev/null || true
+    snapshot="$(
+      {
+        pgrep -a -x apt 2>/dev/null || true
+        pgrep -a -x apt-get 2>/dev/null || true
+        pgrep -a -x dpkg 2>/dev/null || true
+        pgrep -a -x unattended-upgrade 2>/dev/null || true
+        pgrep -a -f '/usr/share/unattended-upgrades/unattended-upgrade-shutdown' 2>/dev/null || true
+      } | sed '/^[[:space:]]*$/d'
+    )"
   else
-    ps -ef 2>/dev/null | grep -E 'apt|dpkg|unattended-upgrade' | grep -v grep || true
+    snapshot="$(
+      ps -eo pid=,comm=,args= 2>/dev/null | awk '
+        $2 == "apt" ||
+        $2 == "apt-get" ||
+        $2 == "dpkg" ||
+        $2 == "unattended-upgrade" ||
+        index($0, "/usr/share/unattended-upgrades/unattended-upgrade-shutdown") > 0
+      '
+    )"
   fi
+
+  [ -n "$snapshot" ] && printf '%s\n' "$snapshot"
 }
 
 apt_lock_busy() {
@@ -168,7 +187,7 @@ wait_for_apt_locks() {
 [FAIL] Recovery steps:
 - If unattended upgrades are in progress, wait for them to complete and rerun the installer.
 - To inspect the active package-manager processes:
-  ps -ef | grep -E 'apt|dpkg|unattended'
+  ps -eo pid,comm,args | awk '$2 == "apt" || $2 == "apt-get" || $2 == "dpkg" || $2 == "unattended-upgrade" || index($0, "/usr/share/unattended-upgrades/unattended-upgrade-shutdown") > 0'
 - If you intentionally need to stop unattended upgrades first:
   sudo systemctl stop unattended-upgrades
 EOF
@@ -211,7 +230,7 @@ EOF
 [FAIL] Recovery steps:
 - Wait for unattended upgrades or any other apt/dpkg session to finish.
 - Inspect active package-manager processes:
-  ps -ef | grep -E 'apt|dpkg|unattended'
+  ps -eo pid,comm,args | awk '$2 == "apt" || $2 == "apt-get" || $2 == "dpkg" || $2 == "unattended-upgrade" || index($0, "/usr/share/unattended-upgrades/unattended-upgrade-shutdown") > 0'
 EOF
   elif grep -Eq 'Unable to locate package|Package .* has no installation candidate|Package .* is not available' "$logfile"; then
     log_fail "apt-get ${phase} failed because one or more packages are unavailable from the configured apt repositories."
