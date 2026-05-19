@@ -3188,7 +3188,9 @@ async function runSingleGame(
       const flushTimeoutMs =
         options.strictTelemetry === true
           ? Math.max(options.telemetryTimeoutMs ?? 10_000, 1_000)
-          : 0;
+          : stopReason === "terminal_game_finished"
+            ? 250
+            : 0;
       await telemetryManager.flush(flushTimeoutMs);
       const telemetrySnapshot = telemetryManager.snapshot();
       mergeTelemetryFailureStats(

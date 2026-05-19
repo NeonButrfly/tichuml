@@ -38,18 +38,16 @@ async function main(): Promise<void> {
   });
 }
 
-if (import.meta.main) {
-  main().catch((error) => {
-    console.error(
-      JSON.stringify(
-        {
-          accepted: false,
-          error: error instanceof Error ? error.message : String(error)
-        },
-        null,
-        2
-      )
-    );
-    process.exitCode = 1;
-  });
-}
+main().catch((error) => {
+  console.error(
+    JSON.stringify(
+      {
+        accepted: false,
+        error: error instanceof Error ? error.message : String(error)
+      },
+      null,
+      2
+    )
+  );
+  process.exitCode = 1;
+});

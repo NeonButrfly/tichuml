@@ -16,6 +16,8 @@ function createMockSql() {
   const calls: SqlCall[] = [];
   let decisionId = 1;
   let eventId = 1;
+  const decisionIds = new Map<string, number>();
+  const eventIds = new Map<string, number>();
   const matchRow = {
     id: "match-1",
     game_id: "game-cache",
@@ -49,10 +51,24 @@ function createMockSql() {
       return [matchRow];
     }
     if (text.includes("INSERT INTO decisions")) {
-      return [{ id: decisionId++ }];
+      const key = `${String(values[2])}|${String(values[6])}`;
+      const existing = decisionIds.get(key);
+      if (existing !== undefined && text.includes("ON CONFLICT (game_id, decision_index)")) {
+        return [{ id: existing }];
+      }
+      const id = decisionId++;
+      decisionIds.set(key, id);
+      return [{ id }];
     }
     if (text.includes("INSERT INTO events")) {
-      return [{ id: eventId++ }];
+      const key = `${String(values[2])}|${String(values[7])}`;
+      const existing = eventIds.get(key);
+      if (existing !== undefined && text.includes("ON CONFLICT (game_id, event_index)")) {
+        return [{ id: existing }];
+      }
+      const id = eventId++;
+      eventIds.set(key, id);
+      return [{ id }];
     }
     return [];
   }) as unknown as {
@@ -154,5 +170,35 @@ describe("telemetry repository match lifecycle persistence", () => {
     expect(
       calls.filter((call) => call.text.includes("INSERT INTO matches"))
     ).toHaveLength(1);
+  });
+
+  it("treats duplicate decision indexes for one game as idempotent", async () => {
+    const { sql, calls } = createMockSql();
+    const repository = new PostgresTelemetryRepository(sql as never);
+
+    const firstId = await repository.insertDecision(buildDecisionPayload(17));
+    const secondId = await repository.insertDecision(buildDecisionPayload(17));
+
+    expect(firstId).toBe(secondId);
+    expect(
+      calls.some((call) =>
+        call.text.includes("ON CONFLICT (game_id, decision_index)")
+      )
+    ).toBe(true);
+  });
+
+  it("treats duplicate event indexes for one game as idempotent", async () => {
+    const { sql, calls } = createMockSql();
+    const repository = new PostgresTelemetryRepository(sql as never);
+
+    const firstId = await repository.insertEvent(buildEventPayload());
+    const secondId = await repository.insertEvent(buildEventPayload());
+
+    expect(firstId).toBe(secondId);
+    expect(
+      calls.some((call) =>
+        call.text.includes("ON CONFLICT (game_id, event_index)")
+      )
+    ).toBe(true);
   });
 });

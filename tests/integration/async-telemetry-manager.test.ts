@@ -1,7 +1,9 @@
 import fs from "node:fs";
 import fsp from "node:fs/promises";
+import http from "node:http";
 import os from "node:os";
 import path from "node:path";
+import { spawn } from "node:child_process";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { JsonObject } from "@tichuml/shared";
 import {
@@ -32,6 +34,65 @@ async function createTempDir(): Promise<string> {
   );
   tempRoots.push(root);
   return root;
+}
+
+function runReplayCli(
+  args: string[],
+  timeoutMs: number
+): Promise<{ exitCode: number | null; stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      process.execPath,
+      [
+        path.join(process.cwd(), "node_modules", "tsx", "dist", "cli.mjs"),
+        path.join(
+          process.cwd(),
+          "apps",
+          "sim-runner",
+          "src",
+          "telemetry",
+          "replay.ts"
+        ),
+        ...args
+      ],
+      {
+        cwd: process.cwd(),
+        stdio: ["ignore", "pipe", "pipe"],
+        env: {
+          ...process.env,
+          FORCE_COLOR: "0"
+        }
+      }
+    );
+
+    let stdout = "";
+    let stderr = "";
+    const timeout = setTimeout(() => {
+      child.kill("SIGKILL");
+      reject(
+        new Error(
+          `replay CLI timed out after ${timeoutMs}ms.\nstdout=${stdout}\nstderr=${stderr}`
+        )
+      );
+    }, timeoutMs);
+
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    child.on("error", (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+    child.on("close", (exitCode) => {
+      clearTimeout(timeout);
+      resolve({ exitCode, stdout, stderr });
+    });
+  });
 }
 
 function buildDecisionPayloads() {
@@ -294,4 +355,90 @@ describe("async telemetry pipeline resilience", () => {
     expect(snapshot.runtimeState.pending_count).toBe(0);
     expect(snapshot.runtimeState.persisted_pending_file_count).toBe(1);
   });
+
+  it(
+    "runs the replay CLI through tsx and prints a replay summary",
+    async () => {
+      const replaySource = fs.readFileSync(
+        path.join(
+          process.cwd(),
+          "apps",
+          "sim-runner",
+          "src",
+          "telemetry",
+          "replay.ts"
+        ),
+        "utf8"
+      );
+      expect(replaySource).toContain("main().catch");
+      expect(replaySource).not.toContain("import.meta.main");
+
+      const root = await createTempDir();
+      const pendingDir = path.join(root, "pending");
+      const replayedDir = path.join(root, "replayed");
+      const server = http.createServer((request, response) => {
+        if (request.method === "POST") {
+          response.writeHead(202, { "Content-Type": "application/json" });
+          response.end(JSON.stringify({ accepted: true, telemetry_id: 1 }));
+          return;
+        }
+        response.writeHead(404);
+        response.end();
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      const address = server.address();
+      if (!address || typeof address === "string") {
+        server.close();
+        throw new Error("Unable to resolve replay test server address.");
+      }
+
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => {
+          throw new Error("network down");
+        })
+      );
+
+      const manager = new AsyncTelemetryManager({
+        enabled: true,
+        storageRoot: root,
+        quiet: true,
+        maxConcurrency: 1
+      });
+      await manager.enqueueDecision({
+        telemetry: {
+          enabled: true,
+          strictTelemetry: false,
+          backendBaseUrl: `http://127.0.0.1:${address.port}`,
+          source: "selfplay",
+          mode: "minimal"
+        },
+        payloads: buildDecisionPayloads(),
+        context: { phase: "play" },
+        strictTelemetry: false
+      });
+      await manager.flush(500);
+      vi.unstubAllGlobals();
+
+      const result = await runReplayCli(["--dir", root], 30_000);
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve()))
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr.trim()).toBe("");
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        scanned_files: 1,
+        replayed_files: 1,
+        failed_files: 0
+      });
+      expect(
+        (await fsp.readdir(pendingDir)).filter((entry) => entry.endsWith(".ndjson"))
+      ).toHaveLength(0);
+      expect(
+        (await fsp.readdir(replayedDir)).filter((entry) => entry.endsWith(".ndjson"))
+      ).toHaveLength(1);
+    },
+    30_000
+  );
 });

@@ -681,6 +681,9 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
         ${derived.legal_actions_hash},
         ${derived.chosen_action_hash}
       )
+      ON CONFLICT (game_id, decision_index) WHERE game_id <> 'legacy'
+      DO UPDATE SET
+        match_id = COALESCE(decisions.match_id, EXCLUDED.match_id)
       RETURNING id
     `;
     this.bumpProfile("decision_insert_count", 1, batchState);
@@ -742,6 +745,9 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
         ${derived.state_hash},
         ${derived.event_hash}
       )
+      ON CONFLICT (game_id, event_index) WHERE game_id <> 'legacy'
+      DO UPDATE SET
+        match_id = COALESCE(events.match_id, EXCLUDED.match_id)
       RETURNING id
     `;
     this.bumpProfile("event_insert_count", 1, batchState);
