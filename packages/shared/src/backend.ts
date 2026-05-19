@@ -8,6 +8,7 @@ export const DEFAULT_SERVER_PORT = 4310;
 export const DEFAULT_BACKEND_BASE_URL = `http://localhost:${DEFAULT_SERVER_PORT}`;
 export const BACKEND_SETTINGS_STORAGE_KEY = "tichuml.backend-settings.v1";
 export const BACKEND_HEALTH_PATH = "/health";
+export const ENTROPY_GENERATE_PATH = "/api/entropy/generate";
 export const TELEMETRY_DECISION_PATH = "/api/telemetry/decision";
 export const TELEMETRY_EVENT_PATH = "/api/telemetry/event";
 export const DECISION_REQUEST_PATH = "/api/decision/request";

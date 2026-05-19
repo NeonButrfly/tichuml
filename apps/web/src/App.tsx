@@ -699,7 +699,10 @@ export function App() {
       roundIndex: number,
       carryState?: RoundCarryState
     ): Promise<RoundSession> => {
-      const generatedSeed = await generateSeedWithEntropy({ roundIndex });
+      const generatedSeed = await generateSeedWithEntropy({
+        roundIndex,
+        backendBaseUrl: loadBackendSettings().backendBaseUrl
+      });
       return {
         roundIndex,
         entropyDebug: generatedSeed.debug,

@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   BACKEND_HEALTH_PATH,
+  ENTROPY_GENERATE_PATH,
   DECISION_REQUEST_PATH,
   ADMIN_CONFIRMATION_VALUE,
   ADMIN_DATABASE_CLEAR_PATH,
@@ -172,7 +173,7 @@ function createServerManifest(config: ServerConfig) {
   return {
     service: "server",
     databaseUrl: config.databaseUrl,
-    entropyEndpoint: "/api/entropy/generate",
+    entropyEndpoint: ENTROPY_GENERATE_PATH,
     healthEndpoint: BACKEND_HEALTH_PATH,
     telemetryDecisionEndpoint: TELEMETRY_DECISION_PATH,
     telemetryEventEndpoint: TELEMETRY_EVENT_PATH,
@@ -492,7 +493,7 @@ export function createRouter({
         return;
       }
 
-      if (request.method === "POST" && url.pathname === "/api/entropy/generate") {
+      if (request.method === "POST" && url.pathname === ENTROPY_GENERATE_PATH) {
         const body = (await readJsonBody(request)) as Record<string, unknown>;
         const roundIndex =
           typeof body.roundIndex === "number" && Number.isFinite(body.roundIndex)

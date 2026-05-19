@@ -1,4 +1,9 @@
-import type { SeedDebugSnapshot, SeedProvenance } from "@tichuml/shared";
+import {
+  ENTROPY_GENERATE_PATH,
+  normalizeBackendBaseUrl,
+  type SeedDebugSnapshot,
+  type SeedProvenance
+} from "@tichuml/shared";
 
 export type SeedGenerationClientResult = {
   finalSeedHex: string;
@@ -27,6 +32,7 @@ function isSeedDebugSnapshot(value: unknown): value is SeedDebugSnapshot {
 
 export async function generateSeedWithEntropy(config: {
   roundIndex: number;
+  backendBaseUrl?: string;
   endpoint?: string;
   fetchImpl?: typeof fetch;
 }): Promise<SeedGenerationClientResult> {
@@ -35,7 +41,13 @@ export async function generateSeedWithEntropy(config: {
     throw new Error("The entropy API client requires fetch.");
   }
 
-  const response = await fetchImpl(config.endpoint ?? "/api/entropy/generate", {
+  const endpoint =
+    config.endpoint ??
+    (config.backendBaseUrl
+      ? `${normalizeBackendBaseUrl(config.backendBaseUrl)}${ENTROPY_GENERATE_PATH}`
+      : ENTROPY_GENERATE_PATH);
+
+  const response = await fetchImpl(endpoint, {
     method: "POST",
     headers: {
       "Content-Type": "application/json"

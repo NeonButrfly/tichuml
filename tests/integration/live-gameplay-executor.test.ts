@@ -340,6 +340,9 @@ describe("live gameplay executor", () => {
       const telemetryUrls = fetchLog
         .map((entry) => entry.url)
         .filter((url) => url.includes("/api/telemetry/"));
+      const entropyUrls = fetchLog
+        .map((entry) => entry.url)
+        .filter((url) => url.endsWith("/api/entropy/generate"));
       const decisionTelemetryUrls = telemetryUrls.filter((url) =>
         url.endsWith("/api/telemetry/decision")
       );
@@ -348,6 +351,10 @@ describe("live gameplay executor", () => {
       );
       expect(decisionTelemetryUrls.length).toBeGreaterThanOrEqual(4);
       expect(eventTelemetryUrls.length).toBeGreaterThanOrEqual(4);
+      expect(entropyUrls.length).toBeGreaterThanOrEqual(1);
+      expect(
+        entropyUrls.every((url) => url.startsWith("http://192.168.50.36:4310"))
+      ).toBe(true);
       expect(
         telemetryUrls.every((url) => url.startsWith("http://192.168.50.36:4310"))
       ).toBe(true);
