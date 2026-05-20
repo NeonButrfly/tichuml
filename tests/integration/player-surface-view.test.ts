@@ -253,14 +253,33 @@ function createDecisionProps(): GameTableViewProps {
   };
 }
 
+function createResolutionProps(): GameTableViewProps {
+  const props = createWaitingProps();
+
+  return {
+    ...props,
+    controlHint: "Resolving trick.",
+    surfacePresentation: {
+      tableMode: "resolution",
+      handMode: "simplified",
+      controlsVisible: false,
+      dramaticTurnCue: true
+    }
+  };
+}
+
 describe("NormalGameTableView", () => {
-  it("keeps the local hand positioned on the seat ring and hides the action band while waiting", () => {
+  it("keeps the local hand positioned on the seat ring and renders calm immersive density while waiting", () => {
     const view = render(
       createElement(NormalGameTableView, createWaitingProps())
     );
 
     try {
-      expect(view.container.querySelector(".player-surface__table")).not.toBeNull();
+      const table = view.container.querySelector(".player-surface__table");
+      expect(table).not.toBeNull();
+      expect(table?.classList.contains("player-surface__table--calm")).toBe(true);
+      expect(table?.classList.contains("player-surface__hand--immersive")).toBe(true);
+      expect(table?.classList.contains("player-surface__table--dramatic-turn")).toBe(false);
       expect(view.container.querySelector(".player-surface__action-band")).toBeNull();
       expect(
         view.container.querySelector(".player-surface__seat-ring > [data-seat-region='bottom']")
@@ -271,14 +290,42 @@ describe("NormalGameTableView", () => {
     }
   });
 
-  it("shows the action band when the delegated gameplay surface exposes controls", () => {
+  it("switches to decision density and reveals the action band when controls are exposed", () => {
     const view = render(
       createElement(NormalGameTableView, createDecisionProps())
     );
 
     try {
-      expect(view.container.querySelector(".player-surface__table")).not.toBeNull();
+      const table = view.container.querySelector(".player-surface__table");
+      expect(table).not.toBeNull();
+      expect(table?.classList.contains("player-surface__table--decision")).toBe(true);
+      expect(table?.classList.contains("player-surface__hand--simplified")).toBe(true);
+      expect(table?.classList.contains("player-surface__table--dramatic-turn")).toBe(true);
       expect(view.container.querySelector(".player-surface__action-band")).not.toBeNull();
+    } finally {
+      view.unmount();
+    }
+  });
+
+  it("renders the resolution shell and felt treatment during transient drama", () => {
+    const view = render(
+      createElement(NormalGameTableView, createResolutionProps())
+    );
+
+    try {
+      const table = view.container.querySelector(".player-surface__table");
+      expect(table).not.toBeNull();
+      expect(table?.classList.contains("player-surface__table--resolution")).toBe(
+        true
+      );
+      expect(table?.classList.contains("player-surface__hand--simplified")).toBe(
+        true
+      );
+      expect(table?.classList.contains("player-surface__table--dramatic-turn")).toBe(
+        true
+      );
+      expect(view.container.querySelector(".player-surface__felt")).not.toBeNull();
+      expect(view.container.querySelector(".player-surface__action-band")).toBeNull();
     } finally {
       view.unmount();
     }
