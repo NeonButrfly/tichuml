@@ -13,6 +13,7 @@ import {
   NORMAL_PASS_STAGE_MAP,
   resolveNormalActionRowRegionStyle,
   resolveNormalBoardAnchorPoint,
+  resolveNormalPlaySurfaceRegionStyle,
   resolveNormalSeatAnchorGeometry,
   resolveNormalSeatRegionStyle,
   resolveNormalPassLaneGeometry
@@ -54,6 +55,27 @@ function centeredRect(config: {
     bottom: config.centerY + config.height / 2,
     width: config.width,
     height: config.height
+  };
+}
+
+function styleRect(style: {
+  left?: unknown;
+  top?: unknown;
+  width?: unknown;
+  height?: unknown;
+}): TestRect {
+  const left = parseFloat(String(style.left));
+  const top = parseFloat(String(style.top));
+  const width = parseFloat(String(style.width));
+  const height = parseFloat(String(style.height));
+
+  return {
+    left,
+    top,
+    right: left + width,
+    bottom: top + height,
+    width,
+    height
   };
 }
 
@@ -125,6 +147,79 @@ describe("normal viewport table layout", () => {
       expect(metrics.cardWidth).toBeGreaterThan(58);
       expect(metrics.centerBandHeight).toBeGreaterThanOrEqual(
         metrics.minimumMiddleHeight
+      );
+    }
+  );
+
+  it.each([
+    { width: 1920, height: 1080 },
+    { width: 1600, height: 900 },
+    { width: 1366, height: 768 }
+  ])(
+    "keeps the over-hand composition vertically separated at %sx%s",
+    ({ width, height }) => {
+      const metrics = computeNormalViewportLayoutMetrics({
+        viewportWidth: width,
+        viewportHeight: height,
+        topCount: 8,
+        bottomCount: 14,
+        leftCount: 8,
+        rightCount: 8,
+        hasVariantPicker: true,
+        hasWishPicker: true
+      });
+      const spacing = getNormalTableSpacing(metrics);
+      const northAnchor = resolveNormalSeatAnchorGeometry({
+        position: "top",
+        normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+        layoutMetrics: metrics,
+        handCardCount: 8
+      });
+      const southAnchor = resolveNormalSeatAnchorGeometry({
+        position: "bottom",
+        normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+        layoutMetrics: metrics,
+        handCardCount: 14
+      });
+      const southLayout = getNormalSeatLayout({
+        position: "bottom",
+        normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+        layoutMetrics: metrics,
+        handCardCount: 14
+      });
+      const playSurfaceRect = styleRect(
+        resolveNormalPlaySurfaceRegionStyle({
+          normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+          layoutMetrics: metrics
+        })
+      );
+      const safePlaySurfaceRect = {
+        ...playSurfaceRect,
+        top: playSurfaceRect.top + metrics.centerInset,
+        bottom: playSurfaceRect.bottom - metrics.centerInset
+      };
+      const actionRowRect = styleRect(
+        resolveNormalActionRowRegionStyle({
+          normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+          layoutMetrics: metrics
+        })
+      );
+
+      expect(safePlaySurfaceRect.top).toBeGreaterThanOrEqual(
+        northAnchor.handBounds.bottom
+      );
+      expect(
+        southAnchor.handBounds.top - safePlaySurfaceRect.bottom
+      ).toBeGreaterThanOrEqual(
+        Math.max(24, spacing.handToLaneGap)
+      );
+      expect(
+        parseFloat(String(southLayout.pickupZone.top))
+      ).toBeLessThanOrEqual(parseFloat(String(southLayout.trickZone.top)));
+      expect(
+        actionRowRect.top - safePlaySurfaceRect.bottom
+      ).toBeGreaterThanOrEqual(
+        metrics.cardHeight + spacing.handToLabelGap - 2
       );
     }
   );

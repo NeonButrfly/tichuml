@@ -24,6 +24,7 @@ import {
 } from "../../apps/web/src/game-table-views";
 import {
   getBoardBounds,
+  getNormalTableSpacing,
   getNormalSeatLayout,
   resolveNormalActionRowRegionStyle
 } from "../../apps/web/src/table-layout";
@@ -964,12 +965,19 @@ describe("trick UI cleanup", () => {
         }).top
       )
     );
+    const spacing = getNormalTableSpacing(metrics);
 
     expect(trickY).toBeGreaterThan(pickupY);
     expect(pickupY).toBeLessThan(southHandY);
     expect(trickY).toBeLessThan(southHandY);
+    expect(southHandY - trickY).toBeGreaterThanOrEqual(
+      spacing.handToStageGap + metrics.cardHeight / 2 - 4
+    );
     expect(nameY).toBeGreaterThan(southHandY);
     expect(actionTop).toBeGreaterThan(nameY);
+    expect(actionTop - trickY).toBeGreaterThan(
+      metrics.cardHeight + spacing.handToLabelGap
+    );
   });
 
   it("renders Dog lead transfer using the engine-resolved target seat", () => {
