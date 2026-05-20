@@ -14,6 +14,35 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 
 ## Entries
 
+### 2026-05-20 - Live South-player Tichu table must become more spatially anchored without breaking gameplay
+
+- Prompt Signal: The follow-up gameplay table request rejected both a generic
+  flat table and a purely decorative redesign. The user explicitly required a
+  cleaner South-player Tichu surface with more usable table space, stronger
+  seat anchoring, safer South-hand and button separation, less edge-clipped
+  East/West seating, reserved room for trick and pass/wish UI, better
+  seat-associated Tichu state, and generated graphic assets where needed. The
+  user also asked for a hybrid route that can use a graphics-oriented layer
+  without replacing the authoritative gameplay runtime.
+- Interpreted Requirement: Issue
+  [#76](https://github.com/NeonButrfly/tichuml/issues/76) tracks a live table
+  refinement requirement: the current gameplay table must keep the existing
+  Tichu rules, controls, hotkeys, telemetry, backend contracts, and layout
+  editor authoritative while tightening the safe-table geometry, improving seat
+  labels and hand anchoring, protecting South from bottom UI overlap, pulling
+  East and West inward from the viewport edges, reserving stable trick/wish/pass
+  regions, and supporting richer generated table/card assets through a bounded
+  hybrid rendering approach rather than a competing second coordinate system.
+- Affected Systems: `apps/web/src/game-table-views.tsx`,
+  `apps/web/src/player-surface-view.tsx`,
+  `apps/web/src/table-layout.ts`,
+  `apps/web/src/styles.css`,
+  table/card asset generation paths, viewport/layout tests, and any bounded
+  presentation-layer integration required for the hybrid graphics pass.
+- Linked GitHub Issue: [#76](https://github.com/NeonButrfly/tichuml/issues/76)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.
+
 ### 2026-05-19 - Live gameplay table should become a player-first adaptive dual-surface over-hand view
 
 - Prompt Signal: The gameplay redesign request converged on a very specific
