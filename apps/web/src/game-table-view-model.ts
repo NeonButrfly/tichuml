@@ -107,8 +107,8 @@ export const GAME_MENU_ITEMS: readonly GameMenuItemDefinition[] = [
   },
   {
     id: "debug_mode",
-    label: "Debug Mode",
-    description: "Toggle the debug table view on or off.",
+    label: "Operator View",
+    description: "Open or close the gameplay analysis operator surface.",
     commandId: "toggle_debug_mode"
   },
   {
@@ -152,8 +152,8 @@ export const UI_HOTKEYS: readonly HotkeyDefinition[] = [
     combo: { key: "d", ctrl: true },
     comboLabel: "Ctrl+D",
     context: "global",
-    actionLabel: "Debug Mode",
-    description: "Switch between the gameplay table and debug mode.",
+    actionLabel: "Operator View",
+    description: "Switch between the player table and operator view.",
     commandId: "toggle_debug_mode"
   },
   {

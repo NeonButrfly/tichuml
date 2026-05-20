@@ -1386,6 +1386,93 @@ input {
   gap: 18px;
 }
 
+.tabletop-app--control {
+  position: relative;
+}
+
+.tabletop-app--control::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      circle at 14% 16%,
+      rgba(243, 190, 120, 0.08),
+      transparent 24%
+    ),
+    radial-gradient(
+      circle at 86% 18%,
+      rgba(121, 201, 166, 0.08),
+      transparent 22%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(8, 16, 18, 0),
+      rgba(8, 16, 18, 0.34) 48%,
+      rgba(8, 16, 18, 0.56)
+    );
+  z-index: 0;
+}
+
+.tabletop-app--control > * {
+  position: relative;
+  z-index: 1;
+}
+
+.tabletop-app--control .workspace--control {
+  gap: 22px;
+}
+
+.tabletop-app--control .action-dock,
+.tabletop-app--control .debug-sidebar {
+  border: 1px solid rgba(171, 214, 196, 0.12);
+}
+
+.tabletop-app--control .action-dock {
+  background:
+    radial-gradient(
+      circle at top,
+      rgba(243, 190, 120, 0.08),
+      transparent 42%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(16, 27, 32, 0.96),
+      rgba(9, 17, 21, 0.9)
+    );
+}
+
+.tabletop-app--control .action-dock__header,
+.tabletop-app--control .debug-sidebar__section:first-child,
+.tabletop-app--control .master-panel__header {
+  position: relative;
+}
+
+.tabletop-app--control .action-dock__header::after,
+.tabletop-app--control .debug-sidebar__section:first-child::after,
+.tabletop-app--control .master-panel__header::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -10px;
+  width: 72px;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(243, 190, 120, 0.5), transparent);
+}
+
+.tabletop-app--control .pass-lane {
+  border-color: rgba(171, 214, 196, 0.14);
+  background:
+    linear-gradient(180deg, rgba(18, 33, 37, 0.82), rgba(12, 23, 27, 0.68));
+}
+
+.tabletop-app--control .pass-lane.is-selected {
+  box-shadow:
+    0 0 0 1px rgba(243, 190, 120, 0.22),
+    0 14px 28px rgba(0, 0, 0, 0.18);
+}
+
 .topbar__status-grid {
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
@@ -2717,6 +2804,11 @@ input {
 
 .debug-sidebar__title {
   font-size: 1rem;
+}
+
+.tabletop-app--control .debug-sidebar__title,
+.tabletop-app--control .action-dock__title {
+  letter-spacing: 0.02em;
 }
 
 .debug-panel__copy--compact {

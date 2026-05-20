@@ -5,7 +5,8 @@ import {
   findMatchingHotkey,
   GAME_MENU_ITEMS,
   getHotkeysForContext,
-  isDebugToggleShortcut
+  isDebugToggleShortcut,
+  UI_HOTKEYS
 } from "../../apps/web/src/game-table-view-model";
 import {
   DEFAULT_NORMAL_TABLE_LAYOUT,
@@ -53,12 +54,27 @@ describe("game-table view-model helpers", () => {
     expect(GAME_MENU_ITEMS.map((item) => item.label)).toEqual([
       "New Game",
       "Table Editor",
-      "Debug Mode",
+      "Operator View",
       "Backend Settings",
       "Hot Keys",
       "Random Sources",
       "How To Play Tichu"
     ]);
+
+    expect(
+      GAME_MENU_ITEMS.find((item) => item.label === "Operator View")
+    ).toMatchObject({
+      id: "debug_mode",
+      commandId: "toggle_debug_mode"
+    });
+
+    expect(
+      UI_HOTKEYS.find((hotkey) => hotkey.actionLabel === "Operator View")
+    ).toMatchObject({
+      id: "toggle_debug_mode",
+      commandId: "toggle_debug_mode",
+      comboLabel: "Ctrl+D"
+    });
   });
 
   it("matches hotkeys by context from the centralized registry", () => {
