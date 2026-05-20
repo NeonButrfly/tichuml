@@ -2026,6 +2026,30 @@ input {
   --card-accent-soft: rgba(77, 141, 114, 0.18);
   --card-ink: #18201d;
   --card-title-ink: rgba(35, 43, 39, 0.72);
+  --card-skin-background:
+    radial-gradient(
+      circle at 50% 18%,
+      rgba(255, 255, 255, 0.7),
+      transparent 34%
+    ),
+    linear-gradient(180deg, var(--card-paper-top), var(--card-paper-bottom));
+  --card-skin-frame-background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.18),
+      transparent 20%,
+      transparent 78%,
+      rgba(13, 10, 6, 0.04)
+    ),
+    radial-gradient(circle at 50% 50%, var(--card-accent-soft), transparent 58%);
+  --card-seal-background:
+    radial-gradient(
+      circle at 50% 38%,
+      rgba(255, 255, 255, 0.66),
+      transparent 34%
+    ),
+    radial-gradient(circle at 50% 50%, var(--card-accent-soft), transparent 72%);
+  --card-special-seal-background: var(--card-seal-background);
   --card-canonical-width: 5;
   --card-canonical-height: 7;
   --card-frame-width: 85px;
@@ -2054,13 +2078,7 @@ input {
   isolation: isolate;
   appearance: none;
   border: 1px solid rgba(205, 232, 224, 0.08);
-  background:
-    radial-gradient(
-      circle at 50% 18%,
-      rgba(255, 255, 255, 0.7),
-      transparent 34%
-    ),
-    linear-gradient(180deg, var(--card-paper-top), var(--card-paper-bottom));
+  background: var(--card-skin-background);
   color: var(--card-ink);
   text-align: left;
   display: flex;
@@ -2082,15 +2100,7 @@ input {
   inset: 2px;
   border-radius: calc(var(--card-frame-radius) - 2px);
   border: 1px solid var(--card-border);
-  background:
-    linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.18),
-      transparent 20%,
-      transparent 78%,
-      rgba(13, 10, 6, 0.04)
-    ),
-    radial-gradient(circle at 50% 50%, var(--card-accent-soft), transparent 58%);
+  background: var(--card-skin-frame-background);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.42),
     inset 0 0 0 1px rgba(48, 34, 21, 0.04);
@@ -2197,13 +2207,7 @@ input {
   border-radius: 999px;
   display: grid;
   place-items: center;
-  background:
-    radial-gradient(
-      circle at 50% 38%,
-      rgba(255, 255, 255, 0.66),
-      transparent 34%
-    ),
-    radial-gradient(circle at 50% 50%, var(--card-accent-soft), transparent 72%);
+  background: var(--card-seal-background);
   border: 1px solid rgba(255, 255, 255, 0.22);
   box-shadow:
     inset 0 0 0 1px rgba(59, 41, 26, 0.08),
@@ -2212,6 +2216,10 @@ input {
 
 .playing-card__seal--special {
   width: calc(var(--card-seal-width) + 2%);
+}
+
+.playing-card--special .playing-card__seal--special {
+  background: var(--card-special-seal-background);
 }
 
 .playing-card__glyph {
