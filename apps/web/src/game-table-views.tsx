@@ -41,6 +41,7 @@ import type {
 } from "@tichuml/shared";
 import type { BackendReachability } from "./backend/settings";
 import type { MasterControlSnapshot } from "./master-control-model";
+import type { SurfacePresentation } from "./gameplay-surface-mode";
 import {
   findMatchingHotkey,
   GAME_MENU_ITEMS,
@@ -207,6 +208,7 @@ export type GameTableViewProps = {
   state: EngineResult["nextState"];
   derived: EngineResult["derivedView"];
   controlHint: string;
+  surfacePresentation: SurfacePresentation;
   seatViews: SeatView[];
   seatRelativePlays: SeatPlayView[];
   displayedTrick: EngineResult["derivedView"]["currentTrick"] | null;
@@ -2007,6 +2009,7 @@ export function TableSurface(
   | "state"
   | "derived"
   | "controlHint"
+  | "surfacePresentation"
   | "displayedTrick"
   | "trickIsResolving"
   | "seatRelativePlays"
@@ -2021,6 +2024,7 @@ export function TableSurface(
     state,
     derived,
     controlHint,
+    surfacePresentation,
     displayedTrick,
     trickIsResolving,
     seatRelativePlays,
@@ -2033,12 +2037,30 @@ export function TableSurface(
     ? getDisplayedTrickPoints(seatRelativePlays)
     : 0;
   const renderSharedTrickLanes = variant === "debug";
+  const surfaceIsResolving =
+    variant === "normal"
+      ? surfacePresentation.tableMode === "resolution"
+      : trickIsResolving;
 
   return (
     <section
       className={[
         variant === "normal" ? "normal-play-surface" : "table-trick",
-        trickIsResolving
+        variant === "normal"
+          ? `normal-play-surface--mode-${surfacePresentation.tableMode}`
+          : "",
+        variant === "normal"
+          ? `normal-play-surface--hand-${surfacePresentation.handMode}`
+          : "",
+        variant === "normal"
+          ? surfacePresentation.controlsVisible
+            ? "normal-play-surface--controls-visible"
+            : "normal-play-surface--controls-hidden"
+          : "",
+        variant === "normal" && surfacePresentation.dramaticTurnCue
+          ? "normal-play-surface--dramatic-turn"
+          : "",
+        surfaceIsResolving
           ? variant === "normal"
             ? "normal-play-surface--resolving"
             : "table-trick--resolving"
@@ -5260,6 +5282,7 @@ export function NormalGameTableView(props: GameTableViewProps) {
                 state={props.state}
                 derived={props.derived}
                 controlHint={props.controlHint}
+                surfacePresentation={props.surfacePresentation}
                 displayedTrick={props.displayedTrick}
                 trickIsResolving={props.trickIsResolving}
                 seatRelativePlays={props.seatRelativePlays}
@@ -6033,6 +6056,7 @@ export function DebugGameTableView(props: GameTableViewProps) {
               state={props.state}
               derived={props.derived}
               controlHint={props.controlHint}
+              surfacePresentation={props.surfacePresentation}
               displayedTrick={props.displayedTrick}
               trickIsResolving={props.trickIsResolving}
               seatRelativePlays={props.seatRelativePlays}
