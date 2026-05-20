@@ -14,6 +14,34 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 
 ## Entries
 
+### 2026-05-19 - Live gameplay table should become a player-first adaptive dual-surface over-hand view
+
+- Prompt Signal: The gameplay redesign request converged on a very specific
+  live-table direction after multiple rejected mockup passes. The user wanted
+  the game to stop feeling like generic app chrome, preferred a south-player
+  over-hand view inspired by a real physical card table, asked for a studio-
+  clean table-only environment, and approved an adaptive dual-surface model
+  where the player view stays immersive while operator tools move to a separate
+  analysis surface.
+- Interpreted Requirement: Issue
+  [#74](https://github.com/NeonButrfly/tichuml/issues/74) tracks a full
+  gameplay-surface redesign requirement: the main live table should become a
+  player-first physical-table presentation with auto-simplifying calm,
+  decision, and resolution states; the table should keep minimal opponent info,
+  hidden-until-needed controls, bare felt, and strong active-turn emphasis; the
+  deck should move to a custom Tichu-native authored language with elevated
+  special cards; and operator mode should become a separate full analysis
+  surface rather than layering diagnostics onto the player table.
+- Affected Systems: `apps/web/src/App.tsx`,
+  `apps/web/src/game-table-views.tsx`,
+  `apps/web/src/game-table-view-model.ts`,
+  `apps/web/src/styles.css`,
+  table layout/view assets, gameplay deck/card assets, and operator-mode UI
+  surfaces.
+- Linked GitHub Issue: [#74](https://github.com/NeonButrfly/tichuml/issues/74)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.
+
 ### 2026-05-03 - Trick-play auto-advance must never enter the browser with a missing active seat
 
 - Prompt Signal: Live gameplay was reaching `trick_play` with the runtime error
