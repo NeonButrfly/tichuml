@@ -191,12 +191,23 @@ export function loadServerConfig(
   } = {}
 ): ServerConfig {
   const repoRoot = options.repoRoot ?? getRepoRoot();
+  const repoEnvDefaults = loadRepoEnvDefaults(repoRoot);
   const mergedEnv = {
-    ...loadRepoEnvDefaults(repoRoot),
+    ...repoEnvDefaults,
     ...env
   };
   const portValue = Number(mergedEnv.PORT ?? DEFAULT_SERVER_PORT);
-  const databaseUrl = mergedEnv.DATABASE_URL ?? defaultDatabaseUrl;
+  const useRepoDatabaseEnvForRuntime =
+    env === process.env &&
+    typeof repoEnvDefaults.DATABASE_URL === "string" &&
+    repoEnvDefaults.DATABASE_URL.trim().length > 0;
+  const useRepoBootstrapEnvForRuntime =
+    env === process.env &&
+    typeof repoEnvDefaults.PG_BOOTSTRAP_URL === "string" &&
+    repoEnvDefaults.PG_BOOTSTRAP_URL.trim().length > 0;
+  const databaseUrl = useRepoDatabaseEnvForRuntime
+    ? repoEnvDefaults.DATABASE_URL!
+    : mergedEnv.DATABASE_URL ?? defaultDatabaseUrl;
   const port = Number.isFinite(portValue) ? portValue : DEFAULT_SERVER_PORT;
   const detected = detectSystemIps();
   const detectedPublicUrl = `http://${detected.detectedDefault}:${port}`;
@@ -223,7 +234,9 @@ export function loadServerConfig(
     host: mergedEnv.HOST?.trim() || "0.0.0.0",
     databaseUrl,
     pgBootstrapUrl:
-      mergedEnv.PG_BOOTSTRAP_URL?.trim() ||
+      (useRepoBootstrapEnvForRuntime
+        ? repoEnvDefaults.PG_BOOTSTRAP_URL?.trim()
+        : mergedEnv.PG_BOOTSTRAP_URL?.trim()) ||
       withDatabaseName(databaseUrl, "postgres"),
     allowedOrigin: mergedEnv.CORS_ALLOW_ORIGIN?.trim() || "*",
     autoBootstrapDatabase: parseBooleanEnv(

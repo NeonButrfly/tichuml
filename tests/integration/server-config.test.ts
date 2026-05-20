@@ -68,6 +68,48 @@ describe("server config env loading", () => {
     );
   });
 
+  it("prefers repo database env over inherited process env during normal startup", async () => {
+    const repoRoot = await createTempRepo();
+    await fs.writeFile(
+      path.join(repoRoot, ".env"),
+      [
+        "DATABASE_URL=postgres://from-root:pw@localhost:54329/tichu",
+        "PG_BOOTSTRAP_URL=postgres://from-root:pw@localhost:54329/postgres"
+      ].join("\n")
+    );
+
+    const originalDatabaseUrl = process.env.DATABASE_URL;
+    const originalBootstrapUrl = process.env.PG_BOOTSTRAP_URL;
+
+    process.env.DATABASE_URL =
+      "postgresql://poisoned-user:pw@localhost:5432/wrongdb";
+    process.env.PG_BOOTSTRAP_URL =
+      "postgresql://poisoned-user:pw@localhost:5432/postgres";
+
+    try {
+      const config = loadServerConfig(undefined, { repoRoot });
+
+      expect(config.databaseUrl).toBe(
+        "postgres://from-root:pw@localhost:54329/tichu"
+      );
+      expect(config.pgBootstrapUrl).toBe(
+        "postgres://from-root:pw@localhost:54329/postgres"
+      );
+    } finally {
+      if (originalDatabaseUrl === undefined) {
+        delete process.env.DATABASE_URL;
+      } else {
+        process.env.DATABASE_URL = originalDatabaseUrl;
+      }
+
+      if (originalBootstrapUrl === undefined) {
+        delete process.env.PG_BOOTSTRAP_URL;
+      } else {
+        process.env.PG_BOOTSTRAP_URL = originalBootstrapUrl;
+      }
+    }
+  });
+
   it("loads runtime admin control flag from env", async () => {
     const repoRoot = await createTempRepo();
     await fs.writeFile(
