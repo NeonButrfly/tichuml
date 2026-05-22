@@ -45,7 +45,9 @@ async function main(): Promise<void> {
     console.log(`- hand attributed: ${summary.handAttributed}`);
     console.log(`- game attributed: ${summary.gameAttributed}`);
     console.log(`- reward attributed: ${summary.rewardAttributed}`);
-    console.log(`- attribution exact/range/unknown: ${summary.exactAttribution}/${summary.rangeAttribution}/${summary.unknownAttribution}`);
+    console.log(
+      `- attribution exact/range/unknown/neutral: ${summary.exactAttribution}/${summary.rangeAttribution}/${summary.unknownAttribution}/${summary.neutralAttribution}`
+    );
     console.log(`- reward min/avg/max: ${summary.rewardMin ?? "null"} / ${summary.rewardAvg ?? "null"} / ${summary.rewardMax ?? "null"}`);
     console.log(JSON.stringify(summary, null, 2));
   } finally {

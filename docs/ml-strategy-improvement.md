@@ -98,6 +98,16 @@ Evaluate a model against the heuristic baseline:
 npm run ml:evaluate -- --games 100 --ns-provider lightgbm_model --ew-provider server_heuristic --mirror-seats true --backend-url http://127.0.0.1:4310
 ```
 
+Run the scoped post-readiness loop end to end:
+
+```powershell
+npm run ml:bootstrap -- --run-id <run_id> --game-id-prefix <game_id_prefix> --output-dir training-runs/<run_id>/ml --provider server_heuristic --backend-url http://127.0.0.1:4310 --evaluate-games 100
+```
+
+`ml:bootstrap` runs scoped `ml:export`, trains against `outcome_reward`, runs
+mirrored `ml:evaluate`, and exits non-zero if the evaluation gate does not
+pass.
+
 ## Data products
 
 `ml:export` writes:

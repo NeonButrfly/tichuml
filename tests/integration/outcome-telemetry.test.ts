@@ -292,4 +292,45 @@ describe("outcome telemetry helpers", () => {
     ).toBe(true);
     expect(unsafe).not.toHaveBeenCalled();
   });
+
+  it("includes an explicit neutral system-transition reward branch for control-phase advance decisions", async () => {
+    const { sql, unsafe } = createMockSql({});
+    const payload: TelemetryEventPayload = {
+      ts: new Date().toISOString(),
+      game_id: "game-outcome",
+      hand_id: "game-outcome-hand-1",
+      phase: "finished",
+      event_type: "hand_completed",
+      actor_seat: "system",
+      event_index: 12,
+      schema_version: 2,
+      engine_version: "test-engine",
+      sim_version: "test-sim",
+      requested_provider: "system_local",
+      provider_used: "system_local",
+      fallback_used: false,
+      state_norm: null,
+      payload: { event_type: "hand_completed" },
+      metadata: {
+        hand_index: 1,
+        hand_ns_score_delta: 35,
+        hand_ew_score_delta: -35,
+        final_hand_winner_team: "NS",
+        hand_result: {
+          version: "outcome_hand_v1",
+          hand_index: 1,
+          out_order: ["seat-0", "seat-2", "seat-1", "seat-3"],
+          tichu_bonuses: []
+        }
+      }
+    };
+
+    await applyOutcomeAttributionForDecisionEvent(sql as never, payload);
+
+    expect(unsafe).toHaveBeenCalledTimes(1);
+    const rewardSql = String(unsafe.mock.calls[0]?.[0] ?? "");
+    expect(rewardSql).toContain("outcome_reward_system_transition_v1");
+    expect(rewardSql).toContain("chosen_action_type = 'advance_phase'");
+    expect(rewardSql).toContain("phase IN ('pass_reveal', 'exchange_complete', 'round_scoring')");
+  });
 });

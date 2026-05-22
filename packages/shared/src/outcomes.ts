@@ -2,7 +2,7 @@ import type { JsonObject } from "./backend.js";
 import type { SeedJsonValue } from "./seed.js";
 
 export type OutcomeActorTeam = "NS" | "EW";
-export type OutcomeAttributionQuality = "exact" | "range" | "unknown";
+export type OutcomeAttributionQuality = "exact" | "range" | "unknown" | "neutral";
 export type AggressionRiskLevel = "low" | "medium" | "high";
 
 export type PassReductionV1 = {

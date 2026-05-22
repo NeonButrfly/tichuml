@@ -1040,3 +1040,32 @@ supported size limit.`, leaving the control UI stuck at `Batches=0`,
   [6.5 – Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
 - Status:
   Lives in GitHub, not here.
+
+## 2026-05-22 - Close outcome reward holes and automate the post-readiness ML loop
+
+- Prompt signal:
+  After Linux-host readiness passed, the remaining requirement was to remove the
+  last `outcome_reward` gap instead of exempting it, then run an automated
+  scoped `export -> train -> evaluate -> gate` loop on the Linux backend host.
+- Interpreted requirement:
+  Issue [#79](https://github.com/NeonButrfly/tichuml/issues/79) tracks this
+  pass. System-owned control transitions in `pass_reveal`,
+  `exchange_complete`, and `round_scoring` must no longer leave null
+  `outcome_reward` holes; they should carry explicit neutral outcome
+  attribution, readiness should fail on any remaining reward gaps, and the
+  repository should expose a scoped ML bootstrap command that exports a run,
+  trains on `outcome_reward`, evaluates against `server_heuristic`, and fails
+  if the evaluation gate does not pass.
+- Affected systems:
+  `apps/server/src/services/telemetry-outcome-finalizer.ts`,
+  `scripts/training-data.ts`,
+  `scripts/ml-bootstrap.ts`,
+  shared outcome typings,
+  telemetry/ML docs,
+  and integration tests.
+- Linked GitHub issue:
+  [#79](https://github.com/NeonButrfly/tichuml/issues/79)
+- Milestone:
+  [6.5 – Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status:
+  Lives in GitHub, not here.

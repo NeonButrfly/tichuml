@@ -719,7 +719,13 @@ describe("training run helpers", () => {
       }
     });
 
-    expect(assessment.ok).toBe(true);
-    expect(assessment.failures).toEqual([]);
+    expect(assessment.ok).toBe(false);
+    expect(assessment.failures).toEqual(
+      expect.arrayContaining([
+        "missing_reward remained for provider=system_local phase=exchange_complete: 12.",
+        "missing_reward remained for provider=system_local phase=pass_reveal: 12.",
+        "missing_reward remained for provider=system_local phase=round_scoring: 12."
+      ])
+    );
   });
 });

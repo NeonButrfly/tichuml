@@ -136,6 +136,11 @@ The validator now reports coverage for `hand_result`, `game_result`, and
 mix, pass/Tichu/Grand Tichu rates, candidate-score stats by action, and
 aggression-component counts.
 
+System-owned control transitions in `pass_reveal`, `exchange_complete`, and
+`round_scoring` now receive explicit neutral outcome attribution instead of
+remaining null. Readiness therefore expects `reward_count === decisions` with no
+phase/provider exceptions.
+
 `telemetry:ready` is the destructive no-holes operator path for local
 readiness verification. It clears the training tables for each attempt, runs a
 scoped full-telemetry self-play batch, flushes and finalizes outcomes, runs

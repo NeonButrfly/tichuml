@@ -1009,11 +1009,6 @@ export function assessTelemetryReadiness(
   const failures: string[] = [];
   const scopedCounts = input.scopedRunValidationSummary.counts;
   const coverage = input.trainingDataValidationSummary.coverage;
-  const allowedSystemRewardPhases = new Set([
-    "exchange_complete",
-    "pass_reveal",
-    "round_scoring"
-  ]);
 
   if (!input.runComplete) {
     failures.push("run_complete is false.");
@@ -1124,24 +1119,16 @@ export function assessTelemetryReadiness(
     failures.push("tichu_calls was 0 for the scoped run.");
   }
 
-  let allowedMissingRewardRows = 0;
   for (const entry of input.scopedRunValidationSummary.missingRewardByPhaseProvider) {
     if (entry.missing_reward > 0) {
-      if (
-        entry.provider_used === "system_local" &&
-        allowedSystemRewardPhases.has(entry.phase)
-      ) {
-        allowedMissingRewardRows += entry.missing_reward;
-        continue;
-      }
       failures.push(
         `missing_reward remained for provider=${entry.provider_used} phase=${entry.phase}: ${entry.missing_reward}.`
       );
     }
   }
-  if (scopedCounts.reward_count + allowedMissingRewardRows !== scopedCounts.decisions) {
+  if (scopedCounts.reward_count !== scopedCounts.decisions) {
     failures.push(
-      `reward_count ${scopedCounts.reward_count} plus allowed system control gaps ${allowedMissingRewardRows} did not match decisions ${scopedCounts.decisions}.`
+      `reward_count ${scopedCounts.reward_count} did not match decisions ${scopedCounts.decisions}.`
     );
   }
 

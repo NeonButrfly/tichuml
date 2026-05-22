@@ -52,6 +52,7 @@ export type TelemetryFinalizeSummary = {
   exactAttribution: number;
   rangeAttribution: number;
   unknownAttribution: number;
+  neutralAttribution: number;
   rewardMin: number | null;
   rewardAvg: number | null;
   rewardMax: number | null;
@@ -143,7 +144,9 @@ function readOutcomeQuality(
   metadata: Record<string, unknown> | undefined
 ): OutcomeAttributionQuality {
   const value = readMetadataString(metadata, "attribution_quality");
-  return value === "exact" || value === "range" ? value : "unknown";
+  return value === "exact" || value === "range" || value === "neutral"
+    ? value
+    : "unknown";
 }
 
 function readCurrentHandIndex(
@@ -279,17 +282,20 @@ async function recomputeRewardForWhere(
         outcome_reward = computed.reward,
         outcome_components = computed.components,
         outcome_version = CASE
-          WHEN computed.reward IS NULL THEN outcome_version
-          ELSE 'outcome_reward_v1'
+          WHEN computed.version IS NULL THEN outcome_version
+          ELSE computed.version
         END
       FROM (
         SELECT
           id,
           reward_payload.reward,
-          reward_payload.components
+          reward_payload.components,
+          reward_payload.version
         FROM (
           SELECT
             id,
+            phase,
+            chosen_action_type,
             actor_team,
             trick_id,
             trick_winner_team,
@@ -330,6 +336,11 @@ async function recomputeRewardForWhere(
         CROSS JOIN LATERAL (
           SELECT
             CASE
+              WHEN
+                decision_rows.actor_team IS NULL AND
+                decision_rows.chosen_action_type = 'advance_phase' AND
+                decision_rows.phase IN ('pass_reveal', 'exchange_complete', 'round_scoring')
+              THEN 0
               WHEN hand_components.hand_score_delta IS NULL THEN NULL
               ELSE hand_components.hand_score_delta +
                 CASE
@@ -342,6 +353,18 @@ async function recomputeRewardForWhere(
                 CASE WHEN decision_rows.actor_team_won_game IS TRUE THEN 200 ELSE 0 END
             END AS reward,
             CASE
+              WHEN
+                decision_rows.actor_team IS NULL AND
+                decision_rows.chosen_action_type = 'advance_phase' AND
+                decision_rows.phase IN ('pass_reveal', 'exchange_complete', 'round_scoring')
+              THEN jsonb_build_object(
+                'version', 'outcome_reward_system_transition_v1',
+                'actor_scope', 'system',
+                'phase', decision_rows.phase,
+                'chosen_action_type', decision_rows.chosen_action_type,
+                'attribution_quality', 'neutral',
+                'reason', 'system_owned_control_transition'
+              )
               WHEN hand_components.hand_score_delta IS NULL THEN NULL
               ELSE jsonb_strip_nulls(jsonb_build_object(
                 'version', 'outcome_reward_v1',
@@ -364,7 +387,16 @@ async function recomputeRewardForWhere(
                   END,
                 'aggression_context_v1', decision_rows.metadata->'aggression_context_v1'
               ))
-            END AS components
+            END AS components,
+            CASE
+              WHEN
+                decision_rows.actor_team IS NULL AND
+                decision_rows.chosen_action_type = 'advance_phase' AND
+                decision_rows.phase IN ('pass_reveal', 'exchange_complete', 'round_scoring')
+              THEN 'outcome_reward_system_transition_v1'
+              WHEN hand_components.hand_score_delta IS NULL THEN NULL
+              ELSE 'outcome_reward_v1'
+            END AS version
         ) reward_payload
       ) AS computed
       WHERE decisions.id = computed.id
@@ -372,8 +404,8 @@ async function recomputeRewardForWhere(
           decisions.outcome_reward IS DISTINCT FROM computed.reward
           OR decisions.outcome_components IS DISTINCT FROM computed.components
           OR decisions.outcome_version IS DISTINCT FROM CASE
-            WHEN computed.reward IS NULL THEN decisions.outcome_version
-            ELSE 'outcome_reward_v1'
+            WHEN computed.version IS NULL THEN decisions.outcome_version
+            ELSE computed.version
           END
         )
       RETURNING decisions.id
@@ -722,6 +754,7 @@ export async function finalizeTelemetryResults(
     exact_attribution: number;
     range_attribution: number;
     unknown_attribution: number;
+    neutral_attribution: number;
     reward_min: number | null;
     reward_avg: number | null;
     reward_max: number | null;
@@ -735,6 +768,7 @@ export async function finalizeTelemetryResults(
       COUNT(*) FILTER (WHERE outcome_components->>'attribution_quality' = 'exact')::INTEGER AS exact_attribution,
       COUNT(*) FILTER (WHERE outcome_components->>'attribution_quality' = 'range')::INTEGER AS range_attribution,
       COUNT(*) FILTER (WHERE outcome_components->>'attribution_quality' = 'unknown')::INTEGER AS unknown_attribution,
+      COUNT(*) FILTER (WHERE outcome_components->>'attribution_quality' = 'neutral')::INTEGER AS neutral_attribution,
       MIN(outcome_reward)::DOUBLE PRECISION AS reward_min,
       AVG(outcome_reward)::DOUBLE PRECISION AS reward_avg,
       MAX(outcome_reward)::DOUBLE PRECISION AS reward_max
@@ -750,6 +784,7 @@ export async function finalizeTelemetryResults(
     exactAttribution: summary?.exact_attribution ?? 0,
     rangeAttribution: summary?.range_attribution ?? 0,
     unknownAttribution: summary?.unknown_attribution ?? 0,
+    neutralAttribution: summary?.neutral_attribution ?? 0,
     rewardMin: summary?.reward_min ?? null,
     rewardAvg: summary?.reward_avg ?? null,
     rewardMax: summary?.reward_max ?? null
