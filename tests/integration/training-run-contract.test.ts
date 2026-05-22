@@ -14,6 +14,8 @@ import {
   formatTrainingSimCommandForLog,
   findTrainingRunMetadataFile,
   assessTrainingStartStatus,
+  assessTelemetryReadiness,
+  isProcessStartCompatibleWithRun,
   buildTrainingSimArgs,
   parseSimBatchSummaryFromLines,
   mergeBatchSummaries,
@@ -420,5 +422,285 @@ describe("training run helpers", () => {
     } finally {
       fs.rmSync(repoRoot, { recursive: true, force: true });
     }
+  });
+
+  it("rejects PID reuse when the live process start is far newer than the run metadata", () => {
+    expect(
+      isProcessStartCompatibleWithRun({
+        runStartedAt: "2026-05-05T05:17:15.000Z",
+        processStartedAt: "2026-05-21T18:39:59.000Z"
+      })
+    ).toBe(false);
+    expect(
+      isProcessStartCompatibleWithRun({
+        runStartedAt: "2026-05-21T18:30:00.000Z",
+        processStartedAt: "2026-05-21T18:31:15.000Z"
+      })
+    ).toBe(true);
+  });
+
+  it("fails telemetry readiness when coverage, warnings, or scoped holes remain", () => {
+    const assessment = assessTelemetryReadiness({
+      requestedGames: 12,
+      runComplete: true,
+      failureReason: null,
+      fallbackCount: 0,
+      decisionProviderFailures: 0,
+      decisionTimeoutCount: 0,
+      invalidDecisionCount: 0,
+      telemetryFlushStatus: {
+        accepted: true,
+        ready: true,
+        queue_pending: 0,
+        persistence_failures: 0
+      },
+      persistenceMismatch: {
+        games: { requested: 12, executed: 12, persisted: 12, missing: 0, extra: 0 },
+        hands: { executed: 120 },
+        decisions: { executed: 480, persisted: 480, missing: 0, extra: 0 },
+        events: { executed: 720, persisted: 720, missing: 0, extra: 0 },
+        hasMismatch: false
+      },
+      concurrentWriterOverlap: {
+        warning: false,
+        scoped_window: { minTs: "2026-05-21T00:00:00.000Z", maxTs: "2026-05-21T00:05:00.000Z" },
+        overlapping_decisions: 0,
+        overlapping_events: 0,
+        overlapping_matches: 0,
+        overlap_first_ts: null,
+        overlap_last_ts: null
+      },
+      mlExportValidationSummary: {
+        accepted: true,
+        validation_status: "accepted"
+      },
+      trainingDataValidationSummary: {
+        coverage: {
+          decisions: 480,
+          state_features_coverage: 1,
+          candidate_scores_coverage: 0.91,
+          chosen_action_type_coverage: 1,
+          hand_result_coverage: 1,
+          game_result_coverage: 0.97,
+          outcome_reward_coverage: 1,
+          pass_turn_rate: 0.2,
+          pass_turn_with_legal_play_rate: 0.01,
+          call_tichu_rate: 0,
+          decline_grand_tichu_rate: 0.02,
+          grand_tichu_call_rate: 0.01,
+          pass_reduction_count: 100,
+          tichu_aggression_count: 55,
+          grand_tichu_aggression_count: 12,
+          aggression_context_count: 0
+        },
+        rewardStats: { min: -100, avg: 5, max: 100 },
+        actionDistribution: {},
+        phaseDistribution: {},
+        providerDistribution: { server_heuristic: 480 },
+        averageOutcomeRewardByAction: {},
+        candidateScoreStatsByAction: {},
+        aggressionComponentCounts: {
+          pass_reduction_v1: 100,
+          tichu_aggression_v1: 55,
+          grand_tichu_aggression_v1: 12,
+          aggression_context_v1: 0
+        },
+        warnings: [
+          "No Tichu calls were recorded.",
+          "Aggression context metadata is missing."
+        ]
+      },
+      scopedRunValidationSummary: {
+        scope: {
+          game_id_prefix: "selfplay-training-attempt-001",
+          run_id: "training-attempt-001"
+        },
+        counts: {
+          matches: 12,
+          decisions: 480,
+          events: 720,
+          server_heuristic_decisions: 480,
+          server_heuristic_trick_play_decisions: 420,
+          legal_chosen_actions: 480,
+          state_features_count: 480,
+          candidate_scores_count: 430,
+          explanation_count: 480,
+          reward_count: 480,
+          invalid_decisions: 0,
+          exploration_selected_count: 0,
+          exploration_enabled_count: 0,
+          fallback_count: 0,
+          tichu_calls: 0,
+          grand_tichu_calls: 2,
+          grand_tichu_declines: 8,
+          bomb_chosen_count: 10,
+          pass_select_count: 48
+        },
+        rewardStats: {
+          min: -100,
+          p01: -90,
+          p05: -60,
+          median: 0,
+          mean: 5,
+          p95: 85,
+          p99: 100,
+          max: 100
+        },
+        phaseDistribution: [],
+        actionDistribution: [],
+        missingRewardByPhaseProvider: [],
+        passDiagnostics: {
+          protected_cards_passed: 10,
+          control_cards_passed: 12,
+          avg_partner_support: 0.2,
+          avg_self_structure_delta: 0.1,
+          avg_dead_singles_delta: -0.3
+        },
+        matchConsistency: {
+          completed_zero_zero: 0,
+          completed_hands_le_one: 0,
+          server_mixed_provider_mismatch: 0
+        },
+        recentGames: ["game-001"]
+      }
+    });
+
+    expect(assessment.ok).toBe(false);
+    expect(assessment.failures).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("candidate_scores_coverage"),
+        expect.stringContaining("game_result_coverage"),
+        expect.stringContaining("warning"),
+        expect.stringContaining("candidate_scores_count"),
+        expect.stringContaining("tichu_calls")
+      ])
+    );
+  });
+
+  it("passes telemetry readiness only when coverage and scoped validation are hole-free", () => {
+    const assessment = assessTelemetryReadiness({
+      requestedGames: 12,
+      runComplete: true,
+      failureReason: null,
+      fallbackCount: 0,
+      decisionProviderFailures: 0,
+      decisionTimeoutCount: 0,
+      invalidDecisionCount: 0,
+      telemetryFlushStatus: {
+        accepted: true,
+        ready: true,
+        queue_pending: 0,
+        persistence_failures: 0
+      },
+      persistenceMismatch: {
+        games: { requested: 12, executed: 12, persisted: 12, missing: 0, extra: 0 },
+        hands: { executed: 120 },
+        decisions: { executed: 480, persisted: 480, missing: 0, extra: 0 },
+        events: { executed: 720, persisted: 720, missing: 0, extra: 0 },
+        hasMismatch: false
+      },
+      concurrentWriterOverlap: {
+        warning: false,
+        scoped_window: { minTs: "2026-05-21T00:00:00.000Z", maxTs: "2026-05-21T00:05:00.000Z" },
+        overlapping_decisions: 0,
+        overlapping_events: 0,
+        overlapping_matches: 0,
+        overlap_first_ts: null,
+        overlap_last_ts: null
+      },
+      mlExportValidationSummary: {
+        accepted: true,
+        validation_status: "accepted"
+      },
+      trainingDataValidationSummary: {
+        coverage: {
+          decisions: 480,
+          state_features_coverage: 1,
+          candidate_scores_coverage: 1,
+          chosen_action_type_coverage: 1,
+          hand_result_coverage: 1,
+          game_result_coverage: 1,
+          outcome_reward_coverage: 1,
+          pass_turn_rate: 0.2,
+          pass_turn_with_legal_play_rate: 0.01,
+          call_tichu_rate: 0.01,
+          decline_grand_tichu_rate: 0.02,
+          grand_tichu_call_rate: 0.01,
+          pass_reduction_count: 100,
+          tichu_aggression_count: 55,
+          grand_tichu_aggression_count: 12,
+          aggression_context_count: 55
+        },
+        rewardStats: { min: -100, avg: 5, max: 100 },
+        actionDistribution: {},
+        phaseDistribution: {},
+        providerDistribution: { server_heuristic: 480 },
+        averageOutcomeRewardByAction: {},
+        candidateScoreStatsByAction: {},
+        aggressionComponentCounts: {
+          pass_reduction_v1: 100,
+          tichu_aggression_v1: 55,
+          grand_tichu_aggression_v1: 12,
+          aggression_context_v1: 55
+        },
+        warnings: []
+      },
+      scopedRunValidationSummary: {
+        scope: {
+          game_id_prefix: "selfplay-training-attempt-001",
+          run_id: "training-attempt-001"
+        },
+        counts: {
+          matches: 12,
+          decisions: 480,
+          events: 720,
+          server_heuristic_decisions: 480,
+          server_heuristic_trick_play_decisions: 420,
+          legal_chosen_actions: 480,
+          state_features_count: 480,
+          candidate_scores_count: 480,
+          explanation_count: 480,
+          reward_count: 480,
+          invalid_decisions: 0,
+          exploration_selected_count: 0,
+          exploration_enabled_count: 0,
+          fallback_count: 0,
+          tichu_calls: 4,
+          grand_tichu_calls: 2,
+          grand_tichu_declines: 8,
+          bomb_chosen_count: 10,
+          pass_select_count: 48
+        },
+        rewardStats: {
+          min: -100,
+          p01: -90,
+          p05: -60,
+          median: 0,
+          mean: 5,
+          p95: 85,
+          p99: 100,
+          max: 100
+        },
+        phaseDistribution: [],
+        actionDistribution: [],
+        missingRewardByPhaseProvider: [],
+        passDiagnostics: {
+          protected_cards_passed: 10,
+          control_cards_passed: 12,
+          avg_partner_support: 0.2,
+          avg_self_structure_delta: 0.1,
+          avg_dead_singles_delta: -0.3
+        },
+        matchConsistency: {
+          completed_zero_zero: 0,
+          completed_hands_le_one: 0,
+          server_mixed_provider_mismatch: 0
+        },
+        recentGames: ["game-001"]
+      }
+    });
+
+    expect(assessment.ok).toBe(true);
+    expect(assessment.failures).toEqual([]);
   });
 });

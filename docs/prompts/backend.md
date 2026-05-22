@@ -2,6 +2,31 @@
 
 Prompt logs here capture backend/platform prompt intent only. GitHub issue state remains authoritative.
 
+## 2026-05-21 - Destructive telemetry readiness loop with no-hole gating
+
+- Prompt signal:
+  Guarantee telemetry readiness by continuously clearing the database, rerunning
+  sims, evaluating telemetry, fixing code, and repeating until there are no
+  gaps or holes left in the telemetry.
+- Interpreted requirement:
+  Issue [#78](https://github.com/NeonButrfly/tichuml/issues/78) governs a
+  strict local readiness operator path on top of the existing training-data
+  workflow. The repo must expose a destructive retry loop that clears training
+  tables on every attempt, runs full-telemetry scoped self-play, finalizes
+  outcomes, validates both global and scoped telemetry completeness, treats
+  warnings and coverage holes as hard failures, records machine-readable
+  attempt artifacts, and stops only when telemetry is truly clean or a bounded
+  max-attempt limit is hit.
+- Affected systems:
+  `scripts/training-data.ts`, `scripts/telemetry-validate-run.ts`,
+  `package.json`, telemetry readiness docs, and operator run artifacts.
+- Linked GitHub issue:
+  [#78](https://github.com/NeonButrfly/tichuml/issues/78)
+- Milestone:
+  [6.5 - Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status:
+  Lives in GitHub, not here.
+
 ## 2026-05-08 - Training start scripts must prove live scoped DB production before success
 
 - Prompt signal:

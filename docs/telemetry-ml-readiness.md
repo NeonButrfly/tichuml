@@ -2,6 +2,8 @@
 
 Tracking issue: [#59](https://github.com/NeonButrfly/tichuml/issues/59)
 
+Strict telemetry-readiness loop: [#78](https://github.com/NeonButrfly/tichuml/issues/78)
+
 ## Readiness summary
 
 Telemetry is now strong enough to support:
@@ -127,11 +129,21 @@ For DB-backed result attribution and training-readiness checks, use:
 - `npm run telemetry:finalize-results`
 - `npm run telemetry:validate-training-data`
 - `npm run telemetry:validate-run -- --game-id-prefix <prefix>`
+- `npm run telemetry:ready -- --games-per-batch <count> --max-attempts <n>`
 
 The validator now reports coverage for `hand_result`, `game_result`, and
 `outcome_reward`, reward min/avg/max, action and phase distributions, provider
 mix, pass/Tichu/Grand Tichu rates, candidate-score stats by action, and
 aggression-component counts.
+
+`telemetry:ready` is the destructive no-holes operator path for local
+readiness verification. It clears the training tables for each attempt, runs a
+scoped full-telemetry self-play batch, flushes and finalizes outcomes, runs
+both global and scoped telemetry validation, checks `ml:export --validate-only`,
+and repeats until the run is warning-free and coverage-complete or the max
+attempt limit is exhausted. Each attempt writes machine-readable summaries for
+finalization, training-data validation, scoped run validation, and the final
+readiness gate into its run directory plus an outer attempt summary file.
 
 ## Recommended capture mode
 

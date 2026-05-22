@@ -1,8 +1,72 @@
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { createDatabaseClient } from "../apps/server/src/db/postgres.js";
+import {
+  createDatabaseClient,
+  type DatabaseClient
+} from "../apps/server/src/db/postgres.js";
 import { parseEnvFile } from "../apps/server/src/config/env-file.ts";
+
+export type TelemetryRunValidationScope = {
+  game_id_prefix: string | null;
+  run_id: string | null;
+};
+
+export type TelemetryRunValidationSummary = {
+  scope: TelemetryRunValidationScope;
+  counts: {
+    matches: number;
+    events: number;
+    decisions: number;
+    server_heuristic_decisions: number;
+    server_heuristic_trick_play_decisions: number;
+    legal_chosen_actions: number;
+    state_features_count: number;
+    candidate_scores_count: number;
+    explanation_count: number;
+    reward_count: number;
+    invalid_decisions: number;
+    exploration_selected_count: number;
+    exploration_enabled_count: number;
+    fallback_count: number;
+    tichu_calls: number;
+    grand_tichu_calls: number;
+    grand_tichu_declines: number;
+    bomb_chosen_count: number;
+    pass_select_count: number;
+  };
+  rewardStats: {
+    min: number | null;
+    p01: number | null;
+    p05: number | null;
+    median: number | null;
+    mean: number | null;
+    p95: number | null;
+    p99: number | null;
+    max: number | null;
+  };
+  phaseDistribution: Array<{ phase: string; count: number }>;
+  actionDistribution: Array<{ chosen_action_type: string; count: number }>;
+  missingRewardByPhaseProvider: Array<{
+    provider_used: string;
+    phase: string;
+    total: number;
+    missing_reward: number;
+  }>;
+  passDiagnostics: {
+    protected_cards_passed: number;
+    control_cards_passed: number;
+    avg_partner_support: number | null;
+    avg_self_structure_delta: number | null;
+    avg_dead_singles_delta: number | null;
+  };
+  matchConsistency: {
+    completed_zero_zero: number;
+    completed_hands_le_one: number;
+    server_mixed_provider_mismatch: number;
+  };
+  recentGames: string[];
+};
 
 function repoRoot(): string {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -52,7 +116,7 @@ function escapeLikePrefix(prefix: string): string {
 
 function buildScope(): {
   whereSql: string;
-  descriptor: Record<string, string | null>;
+  descriptor: TelemetryRunValidationScope;
 } {
   const gameIdPrefix = readArg("--game-id-prefix");
   const runId = readArg("--run-id");
@@ -80,40 +144,38 @@ function buildScope(): {
   }
 }
 
-async function main(): Promise<void> {
-  if (hasFlag("--help", "-h", "help")) {
-    printHelp();
-    return;
+export async function validateTelemetryScopedRun(
+  sql: DatabaseClient,
+  config: {
+    whereSql: string;
+    descriptor: TelemetryRunValidationScope;
   }
-
-  const { whereSql, descriptor } = buildScope();
-  const sql = createDatabaseClient(resolveDatabaseUrl(readArg("--database-url")));
-
-  try {
-    const [counts] = await sql.unsafe<
-      Array<{
-        decisions: number;
-        events: number;
-        matches: number;
-        server_heuristic_decisions: number;
-        server_heuristic_trick_play_decisions: number;
-        legal_chosen_actions: number;
-        state_features_count: number;
-        candidate_scores_count: number;
-        explanation_count: number;
-        reward_count: number;
-        invalid_decisions: number;
-        exploration_selected_count: number;
-        exploration_enabled_count: number;
-        fallback_count: number;
-        tichu_calls: number;
-        grand_tichu_calls: number;
-        grand_tichu_declines: number;
-        bomb_chosen_count: number;
-        pass_select_count: number;
-      }>
-    >(
-      `
+): Promise<TelemetryRunValidationSummary> {
+  const { whereSql, descriptor } = config;
+  const [counts] = await sql.unsafe<
+    Array<{
+      decisions: number;
+      events: number;
+      matches: number;
+      server_heuristic_decisions: number;
+      server_heuristic_trick_play_decisions: number;
+      legal_chosen_actions: number;
+      state_features_count: number;
+      candidate_scores_count: number;
+      explanation_count: number;
+      reward_count: number;
+      invalid_decisions: number;
+      exploration_selected_count: number;
+      exploration_enabled_count: number;
+      fallback_count: number;
+      tichu_calls: number;
+      grand_tichu_calls: number;
+      grand_tichu_declines: number;
+      bomb_chosen_count: number;
+      pass_select_count: number;
+    }>
+  >(
+    `
       WITH scoped_decisions AS (
         SELECT *
         FROM decisions
@@ -156,21 +218,21 @@ async function main(): Promise<void> {
         )::INTEGER FROM scoped_decisions) AS bomb_chosen_count,
         (SELECT COUNT(*) FILTER (WHERE phase = 'pass_select')::INTEGER FROM scoped_decisions) AS pass_select_count
       `,
-    );
+  );
 
-    const [rewardStats] = await sql.unsafe<
-      Array<{
-        min: number | null;
-        p01: number | null;
-        p05: number | null;
-        median: number | null;
-        mean: number | null;
-        p95: number | null;
-        p99: number | null;
-        max: number | null;
-      }>
-    >(
-      `
+  const [rewardStats] = await sql.unsafe<
+    Array<{
+      min: number | null;
+      p01: number | null;
+      p05: number | null;
+      median: number | null;
+      mean: number | null;
+      p95: number | null;
+      p99: number | null;
+      max: number | null;
+    }>
+  >(
+    `
       SELECT
         MIN(outcome_reward)::DOUBLE PRECISION AS min,
         PERCENTILE_CONT(0.01) WITHIN GROUP (ORDER BY outcome_reward)::DOUBLE PRECISION AS p01,
@@ -184,41 +246,41 @@ async function main(): Promise<void> {
       WHERE ${whereSql}
         AND outcome_reward IS NOT NULL
       `,
-    );
+  );
 
-    const phaseDistribution = await sql.unsafe<
-      Array<{ phase: string; count: number }>
-    >(
-      `
+  const phaseDistribution = await sql.unsafe<
+    Array<{ phase: string; count: number }>
+  >(
+    `
       SELECT phase, COUNT(*)::INTEGER AS count
       FROM decisions
       WHERE ${whereSql}
       GROUP BY phase
       ORDER BY count DESC, phase ASC
       `,
-    );
+  );
 
-    const actionDistribution = await sql.unsafe<
-      Array<{ chosen_action_type: string; count: number }>
-    >(
-      `
+  const actionDistribution = await sql.unsafe<
+    Array<{ chosen_action_type: string; count: number }>
+  >(
+    `
       SELECT chosen_action_type, COUNT(*)::INTEGER AS count
       FROM decisions
       WHERE ${whereSql}
       GROUP BY chosen_action_type
       ORDER BY count DESC, chosen_action_type ASC
       `,
-    );
+  );
 
-    const missingRewardByPhaseProvider = await sql.unsafe<
-      Array<{
-        provider_used: string;
-        phase: string;
-        total: number;
-        missing_reward: number;
-      }>
-    >(
-      `
+  const missingRewardByPhaseProvider = await sql.unsafe<
+    Array<{
+      provider_used: string;
+      phase: string;
+      total: number;
+      missing_reward: number;
+    }>
+  >(
+    `
       SELECT
         COALESCE(provider_used, policy_source, 'unknown') AS provider_used,
         phase,
@@ -229,18 +291,18 @@ async function main(): Promise<void> {
       GROUP BY COALESCE(provider_used, policy_source, 'unknown'), phase
       ORDER BY missing_reward DESC, total DESC, provider_used ASC, phase ASC
       `,
-    );
+  );
 
-    const [passDiagnostics] = await sql.unsafe<
-      Array<{
-        protected_cards_passed: number;
-        control_cards_passed: number;
-        avg_partner_support: number | null;
-        avg_self_structure_delta: number | null;
-        avg_dead_singles_delta: number | null;
-      }>
-    >(
-      `
+  const [passDiagnostics] = await sql.unsafe<
+    Array<{
+      protected_cards_passed: number;
+      control_cards_passed: number;
+      avg_partner_support: number | null;
+      avg_self_structure_delta: number | null;
+      avg_dead_singles_delta: number | null;
+    }>
+  >(
+    `
       SELECT
         COUNT(*) FILTER (WHERE COALESCE((explanation->'selectedPassBundle'->>'protected_card_passed')::BOOLEAN, FALSE))::INTEGER AS protected_cards_passed,
         COUNT(*) FILTER (WHERE COALESCE((explanation->'selectedPassBundle'->>'control_card_passed')::BOOLEAN, FALSE))::INTEGER AS control_cards_passed,
@@ -251,16 +313,16 @@ async function main(): Promise<void> {
       WHERE ${whereSql}
         AND phase = 'pass_select'
       `,
-    );
+  );
 
-    const [matchConsistency] = await sql.unsafe<
-      Array<{
-        completed_zero_zero: number;
-        completed_hands_le_one: number;
-        server_mixed_provider_mismatch: number;
-      }>
-    >(
-      `
+  const [matchConsistency] = await sql.unsafe<
+    Array<{
+      completed_zero_zero: number;
+      completed_hands_le_one: number;
+      server_mixed_provider_mismatch: number;
+    }>
+  >(
+    `
       WITH decision_provider_majority AS (
         SELECT
           game_id,
@@ -285,56 +347,111 @@ async function main(): Promise<void> {
       LEFT JOIN decision_hand_counts USING (game_id)
       WHERE game_id IN (SELECT DISTINCT game_id FROM decisions WHERE ${whereSql})
       `,
-    );
+  );
 
-    const recentGames = await sql.unsafe<Array<{ game_id: string }>>(
-      `
+  const recentGames = await sql.unsafe<Array<{ game_id: string }>>(
+    `
       SELECT DISTINCT game_id
       FROM decisions
       WHERE ${whereSql}
       ORDER BY game_id DESC
       LIMIT 10
       `,
-    );
+  );
 
-    const summary = {
-      scope: descriptor,
-      counts,
-      rewardStats,
-      phaseDistribution,
-      actionDistribution,
-      missingRewardByPhaseProvider,
-      passDiagnostics,
-      matchConsistency,
-      recentGames: recentGames.map((row) => row.game_id),
-    };
+  return {
+    scope: descriptor,
+    counts: counts ?? {
+      matches: 0,
+      events: 0,
+      decisions: 0,
+      server_heuristic_decisions: 0,
+      server_heuristic_trick_play_decisions: 0,
+      legal_chosen_actions: 0,
+      state_features_count: 0,
+      candidate_scores_count: 0,
+      explanation_count: 0,
+      reward_count: 0,
+      invalid_decisions: 0,
+      exploration_selected_count: 0,
+      exploration_enabled_count: 0,
+      fallback_count: 0,
+      tichu_calls: 0,
+      grand_tichu_calls: 0,
+      grand_tichu_declines: 0,
+      bomb_chosen_count: 0,
+      pass_select_count: 0
+    },
+    rewardStats: rewardStats ?? {
+      min: null,
+      p01: null,
+      p05: null,
+      median: null,
+      mean: null,
+      p95: null,
+      p99: null,
+      max: null
+    },
+    phaseDistribution,
+    actionDistribution,
+    missingRewardByPhaseProvider,
+    passDiagnostics: passDiagnostics ?? {
+      protected_cards_passed: 0,
+      control_cards_passed: 0,
+      avg_partner_support: null,
+      avg_self_structure_delta: null,
+      avg_dead_singles_delta: null
+    },
+    matchConsistency: matchConsistency ?? {
+      completed_zero_zero: 0,
+      completed_hands_le_one: 0,
+      server_mixed_provider_mismatch: 0
+    },
+    recentGames: recentGames.map((row) => row.game_id)
+  };
+}
+
+async function main(): Promise<void> {
+  if (hasFlag("--help", "-h", "help")) {
+    printHelp();
+    return;
+  }
+
+  const { whereSql, descriptor } = buildScope();
+  const sql = createDatabaseClient(resolveDatabaseUrl(readArg("--database-url")));
+
+  try {
+    const summary = await validateTelemetryScopedRun(sql, {
+      whereSql,
+      descriptor
+    });
 
     console.log("Run validation");
     console.log(`- scope: ${descriptor.game_id_prefix ?? descriptor.run_id}`);
     console.log(
-      `- matches / decisions / events: ${counts?.matches ?? 0} / ${counts?.decisions ?? 0} / ${counts?.events ?? 0}`,
+      `- matches / decisions / events: ${summary.counts.matches} / ${summary.counts.decisions} / ${summary.counts.events}`,
     );
     console.log(
-      `- server_heuristic trick_play decisions: ${counts?.server_heuristic_trick_play_decisions ?? 0}`,
+      `- server_heuristic trick_play decisions: ${summary.counts.server_heuristic_trick_play_decisions}`,
     );
     console.log(
-      `- chosen_action_is_legal / has_state_features / has_candidate_scores / has_explanation: ${counts?.legal_chosen_actions ?? 0} / ${counts?.state_features_count ?? 0} / ${counts?.candidate_scores_count ?? 0} / ${counts?.explanation_count ?? 0}`,
+      `- chosen_action_is_legal / has_state_features / has_candidate_scores / has_explanation: ${summary.counts.legal_chosen_actions} / ${summary.counts.state_features_count} / ${summary.counts.candidate_scores_count} / ${summary.counts.explanation_count}`,
     );
-    console.log(`- outcome_reward rows: ${counts?.reward_count ?? 0}`);
+    console.log(`- outcome_reward rows: ${summary.counts.reward_count}`);
     console.log(
-      `- exploration selected / enabled: ${counts?.exploration_selected_count ?? 0} / ${counts?.exploration_enabled_count ?? 0}`,
-    );
-    console.log(
-      `- tichu / grand_tichu / decline_grand_tichu / bomb chosen: ${counts?.tichu_calls ?? 0} / ${counts?.grand_tichu_calls ?? 0} / ${counts?.grand_tichu_declines ?? 0} / ${counts?.bomb_chosen_count ?? 0}`,
+      `- exploration selected / enabled: ${summary.counts.exploration_selected_count} / ${summary.counts.exploration_enabled_count}`,
     );
     console.log(
-      `- reward min / median / mean / max: ${rewardStats?.min ?? "null"} / ${rewardStats?.median ?? "null"} / ${rewardStats?.mean ?? "null"} / ${rewardStats?.max ?? "null"}`,
+      `- tichu / grand_tichu / decline_grand_tichu / bomb chosen: ${summary.counts.tichu_calls} / ${summary.counts.grand_tichu_calls} / ${summary.counts.grand_tichu_declines} / ${summary.counts.bomb_chosen_count}`,
     );
     console.log(
-      `- pass diagnostics protected/control passed: ${passDiagnostics?.protected_cards_passed ?? 0} / ${passDiagnostics?.control_cards_passed ?? 0}`,
+      `- reward min / median / mean / max: ${summary.rewardStats.min ?? "null"} / ${summary.rewardStats.median ?? "null"} / ${summary.rewardStats.mean ?? "null"} / ${summary.rewardStats.max ?? "null"}`,
     );
     console.log(
-      `- match consistency zero-zero / hands<=1 / provider mismatch: ${matchConsistency?.completed_zero_zero ?? 0} / ${matchConsistency?.completed_hands_le_one ?? 0} / ${matchConsistency?.server_mixed_provider_mismatch ?? 0}`,
+      `- pass diagnostics protected/control passed: ${summary.passDiagnostics.protected_cards_passed} / ${summary.passDiagnostics.control_cards_passed}`,
+    );
+    console.log(
+      `- match consistency zero-zero / hands<=1 / provider mismatch: ${summary.matchConsistency.completed_zero_zero} / ${summary.matchConsistency.completed_hands_le_one} / ${summary.matchConsistency.server_mixed_provider_mismatch}`,
     );
     console.log(JSON.stringify(summary, null, 2));
   } finally {
@@ -342,16 +459,22 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((error: unknown) => {
-  console.error(
-    JSON.stringify(
-      {
-        ok: false,
-        error: error instanceof Error ? error.message : String(error),
-      },
-      null,
-      2,
-    ),
-  );
-  process.exitCode = 1;
-});
+const isMainModule = process.argv[1]
+  ? path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+  : false;
+
+if (isMainModule) {
+  main().catch((error: unknown) => {
+    console.error(
+      JSON.stringify(
+        {
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        null,
+        2,
+      ),
+    );
+    process.exitCode = 1;
+  });
+}

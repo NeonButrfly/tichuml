@@ -19,6 +19,16 @@ import {
   computeRemainingRequestedGames,
   runStreamingProcess,
 } from "./training-runner.js";
+import {
+  finalizeTelemetryResults,
+  validateTelemetryTrainingData,
+  type TelemetryFinalizeSummary,
+  type TrainingDataValidationSummary
+} from "../apps/server/src/services/telemetry-outcome-finalizer.js";
+import {
+  validateTelemetryScopedRun,
+  type TelemetryRunValidationSummary
+} from "./telemetry-validate-run.js";
 
 type CliOptions = Record<string, string | boolean>;
 type TrainingMetadata = Record<string, unknown>;
@@ -104,6 +114,27 @@ type TrainingStartAssessmentInput = {
 type TrainingStartAssessmentResult = {
   kind: "pending" | "success" | "failure";
   message: string;
+};
+
+type TelemetryReadinessAssessmentInput = {
+  requestedGames: number;
+  runComplete: boolean;
+  failureReason: string | null;
+  fallbackCount: number;
+  decisionProviderFailures: number;
+  decisionTimeoutCount: number;
+  invalidDecisionCount: number;
+  telemetryFlushStatus: Record<string, unknown> | null;
+  persistenceMismatch: PersistenceMismatchSummary | null;
+  concurrentWriterOverlap: ConcurrentWriterOverlap | null;
+  mlExportValidationSummary: Record<string, unknown> | null;
+  trainingDataValidationSummary: TrainingDataValidationSummary;
+  scopedRunValidationSummary: TelemetryRunValidationSummary;
+};
+
+type TelemetryReadinessAssessmentResult = {
+  ok: boolean;
+  failures: string[];
 };
 
 const TRAINING_CLEAR_SQL =
@@ -960,6 +991,176 @@ export function assessTrainingStartStatus(
   };
 }
 
+function isCoverageComplete(value: unknown): boolean {
+  return typeof value === "number" && Number.isFinite(value) && value >= 1;
+}
+
+function readSummaryNumber(
+  record: Record<string, number> | undefined,
+  key: string
+): number {
+  const value = record?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+export function assessTelemetryReadiness(
+  input: TelemetryReadinessAssessmentInput
+): TelemetryReadinessAssessmentResult {
+  const failures: string[] = [];
+  const scopedCounts = input.scopedRunValidationSummary.counts;
+  const coverage = input.trainingDataValidationSummary.coverage;
+
+  if (!input.runComplete) {
+    failures.push("run_complete is false.");
+  }
+  if (input.failureReason) {
+    failures.push(`run failure_reason is set: ${input.failureReason}`);
+  }
+  if (scopedCounts.matches !== input.requestedGames) {
+    failures.push(
+      `scoped matches ${scopedCounts.matches} did not exactly match requested_games ${input.requestedGames}.`
+    );
+  }
+  if (scopedCounts.decisions <= 0 || scopedCounts.events <= 0) {
+    failures.push("scoped decisions/events were not both populated.");
+  }
+  if (input.fallbackCount > 0) {
+    failures.push(`fallback_count was ${input.fallbackCount}.`);
+  }
+  if (input.decisionProviderFailures > 0) {
+    failures.push(
+      `decision_provider_failures was ${input.decisionProviderFailures}.`
+    );
+  }
+  if (input.decisionTimeoutCount > 0) {
+    failures.push(`decision_timeout_count was ${input.decisionTimeoutCount}.`);
+  }
+  if (input.invalidDecisionCount > 0 || scopedCounts.invalid_decisions > 0) {
+    failures.push(
+      `invalid decisions were recorded (${Math.max(
+        input.invalidDecisionCount,
+        scopedCounts.invalid_decisions
+      )}).`
+    );
+  }
+
+  const queuePending = finiteNumber(
+    isRecord(input.telemetryFlushStatus)
+      ? input.telemetryFlushStatus.queue_pending
+      : undefined
+  );
+  const persistenceFailures = finiteNumber(
+    isRecord(input.telemetryFlushStatus)
+      ? input.telemetryFlushStatus.persistence_failures
+      : undefined
+  );
+  if (queuePending > 0) {
+    failures.push(`telemetry queue still had ${queuePending} pending item(s).`);
+  }
+  if (persistenceFailures > 0) {
+    failures.push(
+      `telemetry persistence_failures was ${persistenceFailures}.`
+    );
+  }
+
+  if (input.persistenceMismatch?.hasMismatch) {
+    failures.push("persisted row counts did not match executed row counts.");
+  }
+  if (input.concurrentWriterOverlap?.warning) {
+    failures.push("concurrent writer overlap was detected in the scoped window.");
+  }
+
+  const mlExportAccepted =
+    input.mlExportValidationSummary?.accepted === true &&
+    input.mlExportValidationSummary?.validation_status === "accepted";
+  if (!mlExportAccepted) {
+    failures.push("ml_export validation did not report accepted status.");
+  }
+
+  for (const field of [
+    "state_features_coverage",
+    "candidate_scores_coverage",
+    "chosen_action_type_coverage",
+    "hand_result_coverage",
+    "game_result_coverage",
+    "outcome_reward_coverage"
+  ]) {
+    if (!isCoverageComplete(coverage[field])) {
+      failures.push(`${field} was ${String(coverage[field] ?? 0)} instead of 1.`);
+    }
+  }
+
+  if (input.trainingDataValidationSummary.warnings.length > 0) {
+    for (const warning of input.trainingDataValidationSummary.warnings) {
+      failures.push(`training-data warning: ${warning}`);
+    }
+  }
+
+  if (scopedCounts.server_heuristic_decisions !== scopedCounts.decisions) {
+    failures.push(
+      `server_heuristic_decisions ${scopedCounts.server_heuristic_decisions} did not match decisions ${scopedCounts.decisions}.`
+    );
+  }
+  if (scopedCounts.legal_chosen_actions !== scopedCounts.decisions) {
+    failures.push(
+      `legal_chosen_actions ${scopedCounts.legal_chosen_actions} did not match decisions ${scopedCounts.decisions}.`
+    );
+  }
+  if (scopedCounts.state_features_count !== scopedCounts.decisions) {
+    failures.push(
+      `state_features_count ${scopedCounts.state_features_count} did not match decisions ${scopedCounts.decisions}.`
+    );
+  }
+  if (scopedCounts.candidate_scores_count !== scopedCounts.decisions) {
+    failures.push(
+      `candidate_scores_count ${scopedCounts.candidate_scores_count} did not match decisions ${scopedCounts.decisions}.`
+    );
+  }
+  if (scopedCounts.explanation_count !== scopedCounts.decisions) {
+    failures.push(
+      `explanation_count ${scopedCounts.explanation_count} did not match decisions ${scopedCounts.decisions}.`
+    );
+  }
+  if (scopedCounts.reward_count !== scopedCounts.decisions) {
+    failures.push(
+      `reward_count ${scopedCounts.reward_count} did not match decisions ${scopedCounts.decisions}.`
+    );
+  }
+  if (scopedCounts.tichu_calls <= 0) {
+    failures.push("tichu_calls was 0 for the scoped run.");
+  }
+
+  for (const entry of input.scopedRunValidationSummary.missingRewardByPhaseProvider) {
+    if (entry.missing_reward > 0) {
+      failures.push(
+        `missing_reward remained for provider=${entry.provider_used} phase=${entry.phase}: ${entry.missing_reward}.`
+      );
+    }
+  }
+
+  if (input.scopedRunValidationSummary.matchConsistency.completed_zero_zero > 0) {
+    failures.push("completed matches with 0-0 final score were detected.");
+  }
+  if (input.scopedRunValidationSummary.matchConsistency.completed_hands_le_one > 0) {
+    failures.push("completed matches reported implausible hands_played values.");
+  }
+  if (
+    input.scopedRunValidationSummary.matchConsistency
+      .server_mixed_provider_mismatch > 0
+  ) {
+    failures.push("server/local provider mismatch was detected in matches.");
+  }
+
+  if (readSummaryNumber(coverage, "aggression_context_count") <= 0) {
+    failures.push("aggression_context_count was 0.");
+  }
+
+  return {
+    ok: failures.length === 0,
+    failures
+  };
+}
+
 function latestBatchCommandFromLogLines(lines: string[]): string | null {
   for (let index = lines.length - 1; index >= 0; index -= 1) {
     const line = lines[index]?.trim();
@@ -1155,6 +1356,57 @@ function isPidAlive(pid: number | null): boolean {
   }
 }
 
+export function isProcessStartCompatibleWithRun(input: {
+  runStartedAt: string | null;
+  processStartedAt: string | null;
+}): boolean {
+  if (!input.runStartedAt || !input.processStartedAt) {
+    return true;
+  }
+  const runStartedAtMs = Date.parse(input.runStartedAt);
+  const processStartedAtMs = Date.parse(input.processStartedAt);
+  if (!Number.isFinite(runStartedAtMs) || !Number.isFinite(processStartedAtMs)) {
+    return true;
+  }
+  const maxCompatibleDeltaMs = 10 * 60 * 1000;
+  return (
+    processStartedAtMs >= runStartedAtMs &&
+    processStartedAtMs - runStartedAtMs <= maxCompatibleDeltaMs
+  );
+}
+
+function readProcessStartedAt(pid: number | null): string | null {
+  if (!pid || !Number.isInteger(pid) || pid <= 0) {
+    return null;
+  }
+  if (process.platform === "win32") {
+    const result = spawnSync(
+      "powershell",
+      [
+        "-NoProfile",
+        "-Command",
+        `(Get-Process -Id ${pid} -ErrorAction SilentlyContinue | Select-Object -ExpandProperty StartTime).ToString('o')`
+      ],
+      {
+        encoding: "utf8",
+        windowsHide: true
+      }
+    );
+    return result.status === 0 ? (result.stdout ?? "").trim() || null : null;
+  }
+
+  const result = spawnSync("ps", ["-p", String(pid), "-o", "lstart="], {
+    encoding: "utf8",
+    windowsHide: true
+  });
+  const raw = (result.stdout ?? "").trim();
+  if (result.status !== 0 || raw.length === 0) {
+    return null;
+  }
+  const parsed = Date.parse(raw);
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
+}
+
 function readPidValue(pidFile: string): number | null {
   if (!fs.existsSync(pidFile)) {
     return null;
@@ -1211,6 +1463,24 @@ async function collectScopedLatestTimestamps(
 
 function buildScopedSelect(table: "matches" | "decisions" | "events", prefix: string): string {
   return `SELECT * FROM ${table} WHERE game_id LIKE '${escapeSqlLiteral(prefix)}%' ORDER BY game_id ASC`;
+}
+
+function buildScopedWhereSql(prefix: string): string {
+  const escapedPrefix = escapeSqlLiteral(escapeLikePrefixForSql(prefix));
+  return `game_id LIKE '${escapedPrefix}%' ESCAPE '\\'`;
+}
+
+function readJsonFileIfExists(filePath: string): Record<string, unknown> | null {
+  if (!fs.existsSync(filePath)) {
+    return null;
+  }
+  try {
+    const raw = fs.readFileSync(filePath, "utf8").replace(/^\uFEFF/u, "");
+    const parsed = JSON.parse(raw) as unknown;
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
 function buildDatabaseUrl(metadata: TrainingMetadata, password: string): string {
@@ -1337,7 +1607,105 @@ async function runMlExportCheck(metadata: TrainingMetadata): Promise<Record<stri
   return summary;
 }
 
-async function prepareRun(options: CliOptions): Promise<void> {
+async function collectTelemetryReadinessArtifacts(
+  metadata: TrainingMetadata,
+  pgPassword: string
+): Promise<{
+  finalizeSummary: TelemetryFinalizeSummary;
+  trainingDataValidationSummary: TrainingDataValidationSummary;
+  scopedRunValidationSummary: TelemetryRunValidationSummary;
+  readiness: TelemetryReadinessAssessmentResult;
+}> {
+  const prefix = scopePrefix(metadata);
+  const requestedGames =
+    metadataOptionalNumber(metadata, "requested_games") ??
+    metadataNumber(metadata, "games_per_batch");
+  const sql = createDatabaseClient({
+    host: metadataString(metadata, "pg_host"),
+    port: Number(metadataString(metadata, "pg_port")),
+    user: metadataString(metadata, "pg_user"),
+    password: pgPassword,
+    database: metadataString(metadata, "pg_db"),
+  });
+
+  try {
+    const finalizeSummary = await finalizeTelemetryResults(sql);
+    const trainingDataValidationSummary =
+      await validateTelemetryTrainingData(sql);
+    const scopedRunValidationSummary = await validateTelemetryScopedRun(sql, {
+      whereSql: buildScopedWhereSql(prefix),
+      descriptor: {
+        game_id_prefix: prefix,
+        run_id: metadataString(metadata, "run_id")
+      }
+    });
+    const readiness = assessTelemetryReadiness({
+      requestedGames,
+      runComplete: metadata.run_complete === true,
+      failureReason:
+        typeof metadata.failure_reason === "string"
+          ? metadata.failure_reason
+          : null,
+      fallbackCount: metadataOptionalNumber(metadata, "fallback_count") ?? 0,
+      decisionProviderFailures:
+        metadataOptionalNumber(metadata, "decision_provider_failures") ?? 0,
+      decisionTimeoutCount:
+        metadataOptionalNumber(metadata, "decision_timeout_count") ?? 0,
+      invalidDecisionCount:
+        metadataOptionalNumber(metadata, "invalid_decision_count") ?? 0,
+      telemetryFlushStatus: isRecord(metadata.telemetry_flush_status)
+        ? metadata.telemetry_flush_status
+        : null,
+      persistenceMismatch: isRecord(metadata.persistence_mismatch)
+        ? (metadata.persistence_mismatch as PersistenceMismatchSummary)
+        : null,
+      concurrentWriterOverlap: isRecord(metadata.concurrent_writer_overlap)
+        ? (metadata.concurrent_writer_overlap as ConcurrentWriterOverlap)
+        : null,
+      mlExportValidationSummary: readJsonFileIfExists(
+        metadataString(metadata, "ml_export_check_summary_file")
+      ),
+      trainingDataValidationSummary,
+      scopedRunValidationSummary
+    });
+
+    writeJson(
+      metadataString(metadata, "telemetry_finalize_summary_file"),
+      finalizeSummary
+    );
+    writeJson(
+      metadataString(metadata, "telemetry_validation_summary_file"),
+      trainingDataValidationSummary
+    );
+    writeJson(
+      metadataString(metadata, "telemetry_run_validation_summary_file"),
+      scopedRunValidationSummary
+    );
+    writeJson(metadataString(metadata, "telemetry_readiness_summary_file"), {
+      run_id: metadataString(metadata, "run_id"),
+      game_id_prefix: prefix,
+      requested_games: requestedGames,
+      ok: readiness.ok,
+      failures: readiness.failures,
+      finalize_summary: finalizeSummary,
+      training_data_validation_summary: trainingDataValidationSummary,
+      scoped_run_validation_summary: scopedRunValidationSummary
+    });
+
+    return {
+      finalizeSummary,
+      trainingDataValidationSummary,
+      scopedRunValidationSummary,
+      readiness
+    };
+  } finally {
+    await sql.end({ timeout: 5 });
+  }
+}
+
+async function buildPreparedRunMetadata(
+  options: CliOptions
+): Promise<TrainingMetadata> {
   const repoRoot = path.resolve(optionString(options, "repo-root"));
   const startedAt = new Date();
   const sessionNameInput = optionOptionalString(options, "session-name");
@@ -1515,6 +1883,22 @@ async function prepareRun(options: CliOptions): Promise<void> {
       runDirectory,
       "ml_export_check_summary.json"
     ),
+    telemetry_finalize_summary_file: path.join(
+      runDirectory,
+      "telemetry_finalize_summary.json"
+    ),
+    telemetry_validation_summary_file: path.join(
+      runDirectory,
+      "telemetry_validation_summary.json"
+    ),
+    telemetry_run_validation_summary_file: path.join(
+      runDirectory,
+      "telemetry_run_validation_summary.json"
+    ),
+    telemetry_readiness_summary_file: path.join(
+      runDirectory,
+      "telemetry_readiness_summary.json"
+    ),
     metadata_file: path.join(runDirectory, "metadata.json"),
     stop_file: path.resolve(
       optionOptionalString(options, "stop-file") ??
@@ -1529,6 +1913,7 @@ async function prepareRun(options: CliOptions): Promise<void> {
     ml_export_supports_scoped_run: null,
     ml_export_supports_lightgbm_output: null,
     ml_export_check_status: "pending",
+    telemetry_readiness_status: "pending",
     completed_scoped_matches: 0,
     completed_scoped_decisions: 0,
     completed_scoped_events: 0,
@@ -1556,6 +1941,11 @@ async function prepareRun(options: CliOptions): Promise<void> {
     enobufs_detected: false,
     run_seed_info: runSeedInfo,
   };
+  return metadata;
+}
+
+async function prepareRun(options: CliOptions): Promise<void> {
+  const metadata = await buildPreparedRunMetadata(options);
   process.stdout.write(`${JSON.stringify(metadata, null, 2)}\n`);
 }
 
@@ -1601,6 +1991,15 @@ function collectConflictingTrainingRuns(
       const candidatePid = readPidValue(String(parsed.pid_file ?? ""));
       const candidateRunning = isPidAlive(candidatePid);
       if (!candidateRunning) {
+        continue;
+      }
+      const candidateProcessStartedAt = readProcessStartedAt(candidatePid);
+      if (
+        !isProcessStartCompatibleWithRun({
+          runStartedAt: String(parsed.started_at ?? ""),
+          processStartedAt: candidateProcessStartedAt
+        })
+      ) {
         continue;
       }
       if (
@@ -1657,9 +2056,12 @@ async function prepareDatabase(options: CliOptions): Promise<void> {
     metadataFile,
     metadata
   );
+  const allowConflictingWriters =
+    optionBoolean(options, "allow-conflicting-writers", false) ||
+    optionBoolean(options, "dry-run", false);
   if (
     conflicts.length > 0 &&
-    !optionBoolean(options, "allow-conflicting-writers", false)
+    !allowConflictingWriters
   ) {
     throw new Error(
       `Conflicting active training writers detected: ${JSON.stringify(conflicts)}`
@@ -2046,6 +2448,20 @@ async function finalizeRun(metadata: TrainingMetadata, pgPassword: string): Prom
     metadataString(metadata, "backend_url")
   );
 
+  const telemetryReadinessArtifacts = await collectTelemetryReadinessArtifacts(
+    metadata,
+    pgPassword
+  );
+  metadata.telemetry_readiness_status = telemetryReadinessArtifacts.readiness.ok
+    ? "ready"
+    : "failed";
+  logVerification(verificationLog, {
+    event: "telemetry_readiness",
+    readiness_ok: telemetryReadinessArtifacts.readiness.ok,
+    readiness_failures: telemetryReadinessArtifacts.readiness.failures,
+    finalize_summary: telemetryReadinessArtifacts.finalizeSummary
+  });
+
   for (const tableName of ["matches", "decisions", "events"] as const) {
     runPsqlCopy({
       host: metadataString(metadata, "pg_host"),
@@ -2065,6 +2481,22 @@ async function finalizeRun(metadata: TrainingMetadata, pgPassword: string): Prom
     [metadataString(metadata, "commands_file"), path.join(exportDirectory, "commands.txt")],
     [countsFile, path.join(exportDirectory, "database_counts.txt")],
     [lastTenFile, path.join(exportDirectory, "last_10_games.txt")],
+    [
+      metadataString(metadata, "telemetry_finalize_summary_file"),
+      path.join(exportDirectory, "telemetry_finalize_summary.json"),
+    ],
+    [
+      metadataString(metadata, "telemetry_validation_summary_file"),
+      path.join(exportDirectory, "telemetry_validation_summary.json"),
+    ],
+    [
+      metadataString(metadata, "telemetry_run_validation_summary_file"),
+      path.join(exportDirectory, "telemetry_run_validation_summary.json"),
+    ],
+    [
+      metadataString(metadata, "telemetry_readiness_summary_file"),
+      path.join(exportDirectory, "telemetry_readiness_summary.json"),
+    ],
   ];
 
   if (metadataBoolean(metadata, "ml_export_check_enabled")) {
@@ -2507,6 +2939,172 @@ async function runLoop(options: CliOptions): Promise<void> {
   }
 }
 
+function repoRootFromScript(): string {
+  return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+}
+
+function attemptLabel(index: number): string {
+  return `attempt-${String(index).padStart(3, "0")}`;
+}
+
+async function readinessLoop(options: CliOptions): Promise<void> {
+  const repoRoot = path.resolve(
+    optionOptionalString(options, "repo-root") ?? repoRootFromScript()
+  );
+  const trainingRunsRoot = path.resolve(
+    optionOptionalString(options, "training-runs-root") ??
+      path.join(repoRoot, "training-runs")
+  );
+  const readinessRoot = path.resolve(
+    optionOptionalString(options, "readiness-root") ??
+      path.join(
+        trainingRunsRoot,
+        `telemetry-readiness-${new Date()
+          .toISOString()
+          .replace(/[:.]/g, "-")}`
+      )
+  );
+  const maxAttempts = optionNumber(options, "max-attempts", 3);
+  const baseSessionName =
+    optionOptionalString(options, "session-name") ?? "telemetry-readiness";
+  const attemptRecords: Array<Record<string, unknown>> = [];
+  const summaryFile = path.join(readinessRoot, "readiness-summary.json");
+  fs.mkdirSync(readinessRoot, { recursive: true });
+
+  for (let attemptIndex = 1; attemptIndex <= maxAttempts; attemptIndex += 1) {
+    const label = attemptLabel(attemptIndex);
+    const attemptRunDirectory = path.join(readinessRoot, label);
+    const attemptSessionName = sanitizeSessionName(
+      `${baseSessionName}-${label}`
+    );
+    const attemptOptions: CliOptions = {
+      ...options,
+      "repo-root": repoRoot,
+      "training-runs-root": trainingRunsRoot,
+      "run-directory": attemptRunDirectory,
+      "session-name": attemptSessionName,
+      "provider": optionString(options, "provider", "server_heuristic"),
+      "backend-url": optionString(options, "backend-url", "http://127.0.0.1:4310"),
+      "telemetry-mode": optionString(options, "telemetry-mode", "full"),
+      "strict-telemetry": optionBoolean(options, "strict-telemetry", false),
+      "games-per-batch": String(
+        optionNumber(options, "games-per-batch", optionNumber(options, "games", 1000))
+      ),
+      "pg-host": optionString(options, "pg-host", "127.0.0.1"),
+      "pg-port": optionString(options, "pg-port", "54329"),
+      "pg-user": optionString(options, "pg-user", "tichu"),
+      "pg-db": optionString(options, "pg-db", "tichu"),
+      "ml-export-command": optionString(options, "ml-export-command", "npm run ml:export"),
+      "ml-export-check-enabled": optionBoolean(
+        options,
+        "ml-export-check-enabled",
+        true
+      ),
+      "allow-unhealthy-backend": optionBoolean(
+        options,
+        "allow-unhealthy-backend",
+        false
+      ),
+      "allow-conflicting-writers": false,
+      "clear-database": true
+    };
+    if (optionOptionalString(options, "pg-password-file")) {
+      attemptOptions["pg-password-file"] = optionString(
+        options,
+        "pg-password-file"
+      );
+    } else {
+      attemptOptions["pg-password"] = optionString(
+        options,
+        "pg-password",
+        "tichu_dev_password"
+      );
+    }
+    const allowClearDbName = optionOptionalString(options, "allow-clear-db-name");
+    if (allowClearDbName) {
+      attemptOptions["allow-clear-db-name"] = allowClearDbName;
+    }
+
+    const metadata = await buildPreparedRunMetadata(attemptOptions);
+    const metadataFile = metadataString(metadata, "metadata_file");
+    saveMetadata(metadataFile, metadata);
+
+    let errorMessage: string | null = null;
+    try {
+      await prepareDatabase({
+        ...attemptOptions,
+        "metadata-file": metadataFile
+      });
+      await runLoop({
+        ...attemptOptions,
+        "metadata-file": metadataFile
+      });
+    } catch (error) {
+      errorMessage = error instanceof Error ? error.message : String(error);
+    }
+
+    const finalMetadata = loadMetadata(metadataFile);
+    const readinessSummary = readJsonFileIfExists(
+      metadataString(finalMetadata, "telemetry_readiness_summary_file")
+    );
+    const readinessOk =
+      finalMetadata.telemetry_readiness_status === "ready" &&
+      isRecord(readinessSummary) &&
+      readinessSummary.ok === true;
+    const attemptRecord = {
+      attempt: attemptIndex,
+      label,
+      run_id: finalMetadata.run_id ?? metadata.run_id ?? null,
+      session_name: finalMetadata.session_name ?? metadata.session_name ?? null,
+      run_directory: finalMetadata.run_directory ?? metadata.run_directory ?? null,
+      metadata_file: metadataFile,
+      readiness_ok: readinessOk,
+      readiness_status: finalMetadata.telemetry_readiness_status ?? "unknown",
+      failure_reason: finalMetadata.failure_reason ?? null,
+      controller_error: errorMessage,
+      telemetry_readiness_summary_file:
+        finalMetadata.telemetry_readiness_summary_file ?? null,
+      telemetry_readiness_summary: readinessSummary
+    };
+    attemptRecords.push(attemptRecord);
+    writeJson(summaryFile, {
+      repo_root: repoRoot,
+      readiness_root: readinessRoot,
+      max_attempts: maxAttempts,
+      attempts_completed: attemptRecords.length,
+      attempts: attemptRecords
+    });
+
+    if (readinessOk) {
+      process.stdout.write(
+        `${JSON.stringify(
+          {
+            ok: true,
+            readiness_root: readinessRoot,
+            summary_file: summaryFile,
+            attempts_completed: attemptRecords.length,
+            winning_attempt: attemptRecord,
+            attempts: attemptRecords
+          },
+          null,
+          2
+        )}\n`
+      );
+      return;
+    }
+  }
+
+  const finalSummary = {
+    ok: false,
+    readiness_root: readinessRoot,
+    summary_file: summaryFile,
+    attempts_completed: attemptRecords.length,
+    attempts: attemptRecords
+  };
+  process.stdout.write(`${JSON.stringify(finalSummary, null, 2)}\n`);
+  throw new Error("Telemetry readiness loop exhausted all attempts without a clean run.");
+}
+
 async function main(): Promise<void> {
   const { command, options } = parseCliOptions(process.argv.slice(2));
   if (command === "locate-run") {
@@ -2547,6 +3145,10 @@ async function main(): Promise<void> {
   }
   if (command === "run-loop") {
     await runLoop(options);
+    return;
+  }
+  if (command === "readiness-loop") {
+    await readinessLoop(options);
     return;
   }
   if (command === "finalize-run") {

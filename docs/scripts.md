@@ -126,6 +126,18 @@ path after startup verification succeeds. Failure output includes the attempted
 command, working directory, backend/db target, PID state, last log lines, and
 before/after scoped counts.
 
+For a destructive telemetry-readiness loop that clears the training tables,
+reruns scoped self-play, and hard-fails on any remaining telemetry hole, use:
+
+```powershell
+npm run telemetry:ready -- --games-per-batch 1000 --max-attempts 3
+```
+
+The command writes per-attempt run folders plus a top-level
+`readiness-summary.json` under the generated `training-runs/telemetry-readiness-*`
+directory. Read the attempt's `telemetry_readiness_summary.json` first when the
+loop fails.
+
 For a short repair summary and the exact verified operator flow, see
 [`training-start-verification.md`](./training-start-verification.md).
 
