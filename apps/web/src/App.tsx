@@ -130,10 +130,6 @@ import {
   type MasterControlSnapshot,
   type TimelineEntry
 } from "./master-control-model";
-import {
-  deriveLocalMustAct,
-  deriveSurfacePresentation
-} from "./gameplay-surface-mode";
 
 const AI_STEP_DELAY_MS = 420;
 const SYSTEM_STEP_DELAY_MS = 180;
@@ -968,14 +964,6 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
       localIsPrimaryActor ||
       Boolean(localPassSelection) ||
       (!exchangePhaseActive && localHasOptionalAction));
-  const localMustAct = deriveLocalMustAct({
-    roundGenerationPending,
-    autoplayLocal,
-    localIsPrimaryActor,
-    pickupPending,
-    hasLocalPassSelection: Boolean(localPassSelection),
-    hasLocalDragonRecipientChoice: localDragonActions.length > 0
-  });
   const localActionSummary = localActions.map((action) => describeAction(action));
   const localSummaryText =
     localActionSummary.length > 0
@@ -988,15 +976,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
   const displayedTrick = exchangePhaseActive
     ? null
     : (derived.currentTrick ?? stagedTrick);
-  const trickIsResolving =
-    !exchangePhaseActive && derived.currentTrick === null && stagedTrick !== null;
-  const surfacePresentation = deriveSurfacePresentation({
-    state,
-    localMustAct,
-    wishDialogOpen,
-    trickIsResolving,
-    hasResolutionAnimation: dogLeadAnimation !== null
-  });
+  const trickIsResolving = !exchangePhaseActive && derived.currentTrick === null && stagedTrick !== null;
   const passSelectionReady = localExchangeValidation.isValid;
   const controlHint =
     roundGenerationPending
@@ -3625,7 +3605,6 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     seatRelativePlays,
     displayedTrick,
     trickIsResolving,
-    surfacePresentation,
     pickupStageViews,
     dogLeadAnimation,
     tablePassGroups,
