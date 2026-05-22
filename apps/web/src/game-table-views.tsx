@@ -50,7 +50,6 @@ import {
   HOTKEY_CONTEXT_ORDER
 } from "./game-table-view-model";
 import { CardFace } from "./card-face";
-import { PlayerSurfaceView } from "./player-surface-view";
 import {
   getExchangeFlowState,
   isExchangePhase,
@@ -4792,241 +4791,235 @@ export function NormalGameTableView(props: GameTableViewProps) {
     ].join(":")
   });
 
-  const menu = (
-    <GameChromeMenu
-      variant="normal"
-      isOpen={props.mainMenuOpen}
-      uiMode={props.uiMode}
-      layoutEditorActive={props.layoutEditorActive}
-      onMainMenuOpenChange={props.onMainMenuOpenChange}
-      onUiCommand={props.onUiCommand}
-    />
-  );
-  const activeWish =
-    props.derived.currentWish !== null ? (
-      <div className="normal-active-wish" aria-live="polite">
-        <span className="normal-active-wish__label">Active wish</span>
-        <span className="wish-chip wish-chip--table">
-          {formatRank(props.derived.currentWish)}
-        </span>
-      </div>
-    ) : null;
-  const scoreboard = (
-    <div
-      className="normal-scoreboard-anchor"
-      style={resolveNormalBoardAnchorStyle(
-        props.normalTableLayout.scoreBadge,
-        layoutMetrics
-      )}
-    >
-      <MatchScoreboard
-        state={props.state}
-        derived={props.derived}
-        onOpenHistory={() => props.onUiCommand("open_score_history_dialog")}
-      />
-    </div>
-  );
-  const center = (
-    <TableSurface
-      variant="normal"
-      normalTableLayout={props.normalTableLayout}
-      state={props.state}
-      derived={props.derived}
-      controlHint={props.controlHint}
-      surfacePresentation={props.surfacePresentation}
-      displayedTrick={props.displayedTrick}
-      trickIsResolving={props.trickIsResolving}
-      seatRelativePlays={props.seatRelativePlays}
-      tablePassGroups={props.tablePassGroups}
-      cardLookup={props.cardLookup}
-    />
-  );
-  const topSeat = (
-    <NormalSeat
-      regionStyle={seatRegionStyleByPosition.top}
-      layoutMetrics={layoutMetrics}
-      seatView={seatByPosition.top}
-      sortedLocalHand={props.sortedLocalHand}
-      localCanInteract={props.localCanInteract}
-      localPassInteractionEnabled={props.localPassInteractionEnabled}
-      localLegalCardIds={props.localLegalCardIds}
-      selectedCardIds={props.selectedCardIds}
-      onLocalCardClick={props.onLocalCardClick}
-    />
-  );
-  const leftSeat = (
-    <NormalSeat
-      regionStyle={seatRegionStyleByPosition.left}
-      layoutMetrics={layoutMetrics}
-      seatView={seatByPosition.left}
-      sortedLocalHand={props.sortedLocalHand}
-      localCanInteract={props.localCanInteract}
-      localPassInteractionEnabled={props.localPassInteractionEnabled}
-      localLegalCardIds={props.localLegalCardIds}
-      selectedCardIds={props.selectedCardIds}
-      onLocalCardClick={props.onLocalCardClick}
-    />
-  );
-  const rightSeat = (
-    <NormalSeat
-      regionStyle={seatRegionStyleByPosition.right}
-      layoutMetrics={layoutMetrics}
-      seatView={seatByPosition.right}
-      sortedLocalHand={props.sortedLocalHand}
-      localCanInteract={props.localCanInteract}
-      localPassInteractionEnabled={props.localPassInteractionEnabled}
-      localLegalCardIds={props.localLegalCardIds}
-      selectedCardIds={props.selectedCardIds}
-      onLocalCardClick={props.onLocalCardClick}
-    />
-  );
-  const localHand = (
-    <NormalSeat
-      regionStyle={seatRegionStyleByPosition.bottom}
-      layoutMetrics={layoutMetrics}
-      seatView={seatByPosition.bottom}
-      sortedLocalHand={props.sortedLocalHand}
-      localCanInteract={props.localCanInteract}
-      localPassInteractionEnabled={props.localPassInteractionEnabled}
-      localLegalCardIds={props.localLegalCardIds}
-      selectedCardIds={props.selectedCardIds}
-      onLocalCardClick={props.onLocalCardClick}
-    />
-  );
-  const actionBand = (
-    <>
-      {props.matchingPlayActions.length > 1 && (
-        <div className="normal-inline-controls">
-          <div className="variant-row variant-row--normal">
-            {props.matchingPlayActions.map((action) => {
-              const key = buildPlayVariantKey(action);
-              const activeKey = props.activePlayVariant
-                ? buildPlayVariantKey(props.activePlayVariant)
-                : key;
-
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  className={key === activeKey ? "variant-pill is-active" : "variant-pill"}
-                  onClick={() => props.onVariantSelect(key)}
-                >
-                  {formatCombinationKind(action.combination.kind)}
-                  {action.phoenixAsRank
-                    ? ` as ${formatRank(action.phoenixAsRank)}`
-                    : ""}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      <NormalActionStrip
-        normalActionRail={props.normalActionRail}
-        localDragonRecipients={props.localDragonRecipients}
-        onDragonRecipientSelect={props.onDragonRecipientSelect}
-        onNormalAction={props.onNormalAction}
-      />
-    </>
-  );
-  const seatOverlays = (
-    <NormalSeatOverlayLayer
-      seatViews={props.seatViews}
-      sortedLocalHand={props.sortedLocalHand}
-      layoutMetrics={layoutMetrics}
-      normalTableLayout={props.normalTableLayout}
-    />
-  );
-  const passStaging = (
-    <NormalPassStagingRegions
-      normalTableLayout={props.normalTableLayout}
-      layoutMetrics={layoutMetrics}
-      seatViews={props.seatViews}
-      sortedLocalHand={props.sortedLocalHand}
-      passRouteViews={props.passRouteViews}
-      selectedPassTarget={props.selectedPassTarget}
-      cardLookup={props.cardLookup}
-      onPassTargetSelect={props.onPassTargetSelect}
-      onPassLaneDrop={props.onPassLaneDrop}
-      onPassLaneCardClick={props.onPassLaneCardClick}
-      onPassLaneCardDragStart={props.onPassLaneCardDragStart}
-      onPassLaneCardDragEnd={props.onPassLaneCardDragEnd}
-    />
-  );
-  const trickStaging = (
-    <NormalTrickStagingRegions
-      normalTableLayout={props.normalTableLayout}
-      layoutMetrics={layoutMetrics}
-      displayedTrick={props.displayedTrick}
-      seatRelativePlays={props.seatRelativePlays}
-      pickupStageViews={props.pickupStageViews}
-      dogLeadAnimation={props.dogLeadAnimation}
-      cardLookup={props.cardLookup}
-    />
-  );
-  const layoutEditor = props.layoutEditorActive ? (
-    <NormalLayoutEditor
-      normalTableLayout={props.normalTableLayout}
-      seatViews={props.seatViews}
-      sortedLocalHand={props.sortedLocalHand}
-      layoutMetrics={layoutMetrics}
-      onNormalTableLayoutChange={props.onNormalTableLayoutChange}
-      onNormalTableLayoutImport={props.onNormalTableLayoutImport}
-      onExportNormalTableLayout={props.onExportNormalTableLayout}
-      hotkeyDefinitions={props.hotkeyDefinitions}
-    />
-  ) : null;
-  const dialogLayer = (
-    <GameDialogLayer
-      activeDialog={props.activeDialog}
-      state={props.state}
-      latestEntropyDebug={props.latestEntropyDebug}
-      backendSettings={props.backendSettings}
-      backendStatus={props.backendStatus}
-      hotkeyDefinitions={props.hotkeyDefinitions}
-      onBackendSettingsChange={props.onBackendSettingsChange}
-      onTestBackend={props.onTestBackend}
-      onUiCommand={props.onUiCommand}
-    />
-  );
-  const wishDialog = props.wishDialogOpen ? (
-    <MahjongWishDialog
-      resolvedWishRank={props.resolvedWishRank}
-      wishSelectionOptions={props.wishSelectionOptions}
-      wishConfirmDisabled={props.wishConfirmDisabled}
-      wishSubmissionPending={props.wishSubmissionPending}
-      onWishRankSelect={props.onWishRankSelect}
-      onWishConfirm={props.onWishConfirm}
-      onWishCancel={props.onWishCancel}
-    />
-  ) : null;
-
   return (
-    <PlayerSurfaceView
-      viewportRef={viewportRef}
-      layoutStyle={layoutStyle}
-      controlsVisible={props.surfacePresentation.controlsVisible}
-      centerZoneClassName={getNormalCenterZoneClassName(props.layoutEditorActive)}
-      centerZoneStyle={playSurfaceRegionStyle}
-      centerZoneFelt={shouldRenderNormalCenterZoneFelt(props.layoutEditorActive)}
-      menu={menu}
-      activeWish={activeWish}
-      scoreboard={scoreboard}
-      center={center}
-      topSeat={topSeat}
-      leftSeat={leftSeat}
-      rightSeat={rightSeat}
-      localHand={localHand}
-      actionBand={actionBand}
-      actionBandStyle={actionRowRegionStyle}
-      seatOverlays={seatOverlays}
-      passStaging={passStaging}
-      trickStaging={trickStaging}
-      layoutEditor={layoutEditor}
-      dialogLayer={dialogLayer}
-      wishDialog={wishDialog}
-    />
+    <main className="tabletop-app tabletop-app--normal">
+      <section
+        ref={viewportRef}
+        className="normal-viewport"
+        style={layoutStyle}
+        data-layout-container="normal-viewport"
+      >
+        <div className="normal-viewport__board" data-layout-container="board">
+          <GameChromeMenu
+            variant="normal"
+            isOpen={props.mainMenuOpen}
+            uiMode={props.uiMode}
+            layoutEditorActive={props.layoutEditorActive}
+            onMainMenuOpenChange={props.onMainMenuOpenChange}
+            onUiCommand={props.onUiCommand}
+          />
+          {props.derived.currentWish !== null && (
+            <div className="normal-active-wish" aria-live="polite">
+              <span className="normal-active-wish__label">Active wish</span>
+              <span className="wish-chip wish-chip--table">
+                {formatRank(props.derived.currentWish)}
+              </span>
+            </div>
+          )}
+          <div
+            className="normal-scoreboard-anchor"
+            style={resolveNormalBoardAnchorStyle(
+              props.normalTableLayout.scoreBadge,
+              layoutMetrics
+            )}
+          >
+            <MatchScoreboard
+              state={props.state}
+              derived={props.derived}
+              onOpenHistory={() =>
+                props.onUiCommand("open_score_history_dialog")
+              }
+            />
+          </div>
+
+          <div className="normal-grid" data-layout-container="table-grid">
+            <section
+              className={getNormalCenterZoneClassName(props.layoutEditorActive)}
+              data-layout-container="center-zone"
+              style={playSurfaceRegionStyle}
+            >
+              {shouldRenderNormalCenterZoneFelt(props.layoutEditorActive) && (
+                <div className="normal-table__felt" />
+              )}
+              <TableSurface
+                variant="normal"
+                normalTableLayout={props.normalTableLayout}
+                state={props.state}
+                derived={props.derived}
+                controlHint={props.controlHint}
+                surfacePresentation={props.surfacePresentation}
+                displayedTrick={props.displayedTrick}
+                trickIsResolving={props.trickIsResolving}
+                seatRelativePlays={props.seatRelativePlays}
+                tablePassGroups={props.tablePassGroups}
+                cardLookup={props.cardLookup}
+              />
+            </section>
+
+            <NormalSeat
+              regionStyle={seatRegionStyleByPosition.top}
+              layoutMetrics={layoutMetrics}
+              seatView={seatByPosition.top}
+              sortedLocalHand={props.sortedLocalHand}
+              localCanInteract={props.localCanInteract}
+              localPassInteractionEnabled={props.localPassInteractionEnabled}
+              localLegalCardIds={props.localLegalCardIds}
+              selectedCardIds={props.selectedCardIds}
+              onLocalCardClick={props.onLocalCardClick}
+            />
+
+            <NormalSeat
+              regionStyle={seatRegionStyleByPosition.left}
+              layoutMetrics={layoutMetrics}
+              seatView={seatByPosition.left}
+              sortedLocalHand={props.sortedLocalHand}
+              localCanInteract={props.localCanInteract}
+              localPassInteractionEnabled={props.localPassInteractionEnabled}
+              localLegalCardIds={props.localLegalCardIds}
+              selectedCardIds={props.selectedCardIds}
+              onLocalCardClick={props.onLocalCardClick}
+            />
+
+            <NormalSeat
+              regionStyle={seatRegionStyleByPosition.right}
+              layoutMetrics={layoutMetrics}
+              seatView={seatByPosition.right}
+              sortedLocalHand={props.sortedLocalHand}
+              localCanInteract={props.localCanInteract}
+              localPassInteractionEnabled={props.localPassInteractionEnabled}
+              localLegalCardIds={props.localLegalCardIds}
+              selectedCardIds={props.selectedCardIds}
+              onLocalCardClick={props.onLocalCardClick}
+            />
+
+            <NormalSeat
+              regionStyle={seatRegionStyleByPosition.bottom}
+              layoutMetrics={layoutMetrics}
+              seatView={seatByPosition.bottom}
+              sortedLocalHand={props.sortedLocalHand}
+              localCanInteract={props.localCanInteract}
+              localPassInteractionEnabled={props.localPassInteractionEnabled}
+              localLegalCardIds={props.localLegalCardIds}
+              selectedCardIds={props.selectedCardIds}
+              onLocalCardClick={props.onLocalCardClick}
+            />
+
+            <section
+              className="normal-bottom-controls"
+              data-layout-container="action-band"
+              data-action-row="true"
+              style={actionRowRegionStyle}
+            >
+              {props.matchingPlayActions.length > 1 && (
+                <div className="normal-inline-controls">
+                  <div className="variant-row variant-row--normal">
+                    {props.matchingPlayActions.map((action) => {
+                      const key = buildPlayVariantKey(action);
+                      const activeKey = props.activePlayVariant
+                        ? buildPlayVariantKey(props.activePlayVariant)
+                        : key;
+
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          className={
+                            key === activeKey
+                              ? "variant-pill is-active"
+                              : "variant-pill"
+                          }
+                          onClick={() => props.onVariantSelect(key)}
+                        >
+                          {formatCombinationKind(action.combination.kind)}
+                          {action.phoenixAsRank
+                            ? ` as ${formatRank(action.phoenixAsRank)}`
+                            : ""}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <NormalActionStrip
+                normalActionRail={props.normalActionRail}
+                localDragonRecipients={props.localDragonRecipients}
+                onDragonRecipientSelect={props.onDragonRecipientSelect}
+                onNormalAction={props.onNormalAction}
+              />
+            </section>
+          </div>
+
+          <NormalSeatOverlayLayer
+            seatViews={props.seatViews}
+            sortedLocalHand={props.sortedLocalHand}
+            layoutMetrics={layoutMetrics}
+            normalTableLayout={props.normalTableLayout}
+          />
+
+          <NormalPassStagingRegions
+            normalTableLayout={props.normalTableLayout}
+            layoutMetrics={layoutMetrics}
+            seatViews={props.seatViews}
+            sortedLocalHand={props.sortedLocalHand}
+            passRouteViews={props.passRouteViews}
+            selectedPassTarget={props.selectedPassTarget}
+            cardLookup={props.cardLookup}
+            onPassTargetSelect={props.onPassTargetSelect}
+            onPassLaneDrop={props.onPassLaneDrop}
+            onPassLaneCardClick={props.onPassLaneCardClick}
+            onPassLaneCardDragStart={props.onPassLaneCardDragStart}
+            onPassLaneCardDragEnd={props.onPassLaneCardDragEnd}
+          />
+
+          <NormalTrickStagingRegions
+            normalTableLayout={props.normalTableLayout}
+            layoutMetrics={layoutMetrics}
+            displayedTrick={props.displayedTrick}
+            seatRelativePlays={props.seatRelativePlays}
+            pickupStageViews={props.pickupStageViews}
+            dogLeadAnimation={props.dogLeadAnimation}
+            cardLookup={props.cardLookup}
+          />
+
+          {props.layoutEditorActive && (
+            <NormalLayoutEditor
+              normalTableLayout={props.normalTableLayout}
+              seatViews={props.seatViews}
+              sortedLocalHand={props.sortedLocalHand}
+              layoutMetrics={layoutMetrics}
+              onNormalTableLayoutChange={props.onNormalTableLayoutChange}
+              onNormalTableLayoutImport={props.onNormalTableLayoutImport}
+              onExportNormalTableLayout={props.onExportNormalTableLayout}
+              hotkeyDefinitions={props.hotkeyDefinitions}
+            />
+          )}
+
+          <GameDialogLayer
+            activeDialog={props.activeDialog}
+            state={props.state}
+            latestEntropyDebug={props.latestEntropyDebug}
+            backendSettings={props.backendSettings}
+            backendStatus={props.backendStatus}
+            hotkeyDefinitions={props.hotkeyDefinitions}
+            onBackendSettingsChange={props.onBackendSettingsChange}
+            onTestBackend={props.onTestBackend}
+            onUiCommand={props.onUiCommand}
+          />
+          {props.wishDialogOpen ? (
+            <MahjongWishDialog
+              resolvedWishRank={props.resolvedWishRank}
+              wishSelectionOptions={props.wishSelectionOptions}
+              wishConfirmDisabled={props.wishConfirmDisabled}
+              wishSubmissionPending={props.wishSubmissionPending}
+              onWishRankSelect={props.onWishRankSelect}
+              onWishConfirm={props.onWishConfirm}
+              onWishCancel={props.onWishCancel}
+            />
+          ) : null}
+        </div>
+      </section>
+    </main>
   );
 }
 

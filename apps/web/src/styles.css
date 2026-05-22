@@ -2999,53 +2999,6 @@ input {
   height: 100%;
 }
 
-.player-surface {
-  position: relative;
-}
-
-.player-surface__viewport,
-.player-surface__board {
-  isolation: isolate;
-}
-
-.player-surface__table-shell {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  padding: clamp(8px, 1.2vw, 18px);
-}
-
-.player-surface__table {
-  width: min(100%, 1360px);
-  height: min(100%, 820px);
-  max-width: 100%;
-  max-height: 100%;
-}
-
-.player-surface__perspective {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  perspective: 1800px;
-  perspective-origin: 50% 34%;
-}
-
-.player-surface__seat-ring {
-  position: absolute;
-  inset: 0;
-}
-
-.player-surface__center,
-.player-surface__action-band {
-  position: relative;
-  z-index: 2;
-}
-
-.player-surface__felt {
-  opacity: 0.96;
-}
-
 .mode-toggle {
   border: 1px solid rgba(226, 237, 231, 0.14);
   border-radius: 999px;
