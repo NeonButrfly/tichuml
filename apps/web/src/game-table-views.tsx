@@ -118,7 +118,6 @@ import {
   computeNormalViewportLayoutMetrics,
   getBoardBounds,
   getNormalSeatLayout,
-  getNormalTableSpacing,
   getNormalTrickFanMetrics,
   NORMAL_HAND_LAYOUT_IDS,
   NORMAL_LAYOUT_EDITOR_ORDER,
@@ -133,7 +132,6 @@ import {
   resolveNormalBoardAnchorStyle,
   resolveNormalPassLaneGeometry,
   resolveNormalPlaySurfaceRegionStyle,
-  resolveNormalSeatAnchorGeometry,
   resolveNormalSeatRegionStyle,
   type AnchorPoint,
   type NormalLayoutElement,
@@ -838,46 +836,6 @@ function anchorPointFromBoardAnchorStyle(style: CSSProperties): AnchorPoint {
   return {
     x: parseFloat(String(style.left ?? 0)),
     y: parseFloat(String(style.top ?? 0))
-  };
-}
-
-function clampInlineNumber(value: number, minimum: number, maximum: number) {
-  return Math.min(maximum, Math.max(minimum, value));
-}
-
-function resolveSideStatusBadgeStyle(config: {
-  badgeIndex: number;
-  badgeCount: number;
-  handCardCount: number;
-  layoutMetrics: NormalViewportLayoutMetrics;
-  normalTableLayout: NormalTableLayout;
-  position: SeatVisualPosition;
-  fallbackStyle: CSSProperties;
-}): CSSProperties {
-  const seatAnchor = resolveNormalSeatAnchorGeometry({
-    position: config.position,
-    normalTableLayout: config.normalTableLayout,
-    layoutMetrics: config.layoutMetrics,
-    handCardCount: config.handCardCount
-  });
-  const { labelToBadgeGap } = getNormalTableSpacing(config.layoutMetrics);
-  const badgeStep = clampInlineNumber(
-    Math.round(config.layoutMetrics.cardWidth * 0.58),
-    38,
-    52
-  );
-  const xOffset =
-    config.badgeCount <= 1
-      ? 0
-      : config.badgeIndex === 0
-        ? -badgeStep / 2
-        : badgeStep / 2;
-
-  return {
-    ...config.fallbackStyle,
-    left: `${seatAnchor.hand.x + xOffset}px`,
-    top: `${seatAnchor.handBounds.top - labelToBadgeGap}px`,
-    transform: "translate(-50%, -100%)"
   };
 }
 
@@ -1800,7 +1758,7 @@ function NormalSeatOverlayLayer({
   layoutMetrics: NormalViewportLayoutMetrics;
 }) {
   return (
-    <div className="normal-seat-overlays" aria-hidden="true">
+    <div className="normal-seat-overlays">
       {seatViews.map((seatView) => {
         const handCardCount = seatView.isLocalSeat
           ? sortedLocalHand.length
@@ -1812,54 +1770,29 @@ function NormalSeatOverlayLayer({
           handCardCount
         });
         const tichuMarkerLabel = getTichuMarkerLabel(seatView.callState);
-        const renderInlineSideLabel = false;
-        const sideIdentityBadgeOrder = renderInlineSideLabel
-          ? ([
-              tichuMarkerLabel ? "call" : null,
-              seatView.finishIndex >= 0 ? "out" : null
-            ].filter(Boolean) as Array<"call" | "out">)
-          : [];
-        const callBadgeStyle =
-          renderInlineSideLabel && tichuMarkerLabel
-            ? resolveSideStatusBadgeStyle({
-                badgeIndex: sideIdentityBadgeOrder.indexOf("call"),
-                badgeCount: sideIdentityBadgeOrder.length,
-                handCardCount,
-                layoutMetrics,
-                normalTableLayout,
-                position: seatView.position,
-                fallbackStyle: seatLayout.callBadge
-              })
-            : seatLayout.callBadge;
-        const outBadgeStyle =
-          renderInlineSideLabel && seatView.finishIndex >= 0
-            ? resolveSideStatusBadgeStyle({
-                badgeIndex: sideIdentityBadgeOrder.indexOf("out"),
-                badgeCount: sideIdentityBadgeOrder.length,
-                handCardCount,
-                layoutMetrics,
-                normalTableLayout,
-                position: seatView.position,
-                fallbackStyle: seatLayout.outBadge
-              })
-            : seatLayout.outBadge;
 
         return (
           <div key={`overlay-${seatView.seat}`}>
-            {!renderInlineSideLabel && (
-              <div
-                className={[
-                  "normal-seat-overlay__label",
-                  `normal-seat-overlay__label--${seatView.position}`,
-                  seatView.isPrimarySeat ? "normal-seat-overlay__label--active" : ""
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
-                style={seatLayout.nameLabel}
-              >
-                <span>{seatView.title}</span>
-              </div>
-            )}
+            <div
+              className={[
+                "normal-seat-overlay__label",
+                "normal-seat-overlay__label--attached",
+                `normal-seat-overlay__label--${seatView.position}`,
+                seatView.isPrimarySeat ? "normal-seat-overlay__label--active" : ""
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              style={seatLayout.nameLabel}
+              data-seat-identity={seatView.seat}
+              aria-label={`${seatView.title}, ${seatView.relation}`}
+            >
+              <span className="normal-seat-overlay__identity-name">
+                {seatView.title}
+              </span>
+              <span className="normal-seat-overlay__identity-relation">
+                {seatView.relation}
+              </span>
+            </div>
 
             {tichuMarkerLabel && (
               <span
@@ -1870,10 +1803,20 @@ function NormalSeatOverlayLayer({
                     ? "normal-seat-overlay__call--grand"
                     : "normal-seat-overlay__call--small"
                 ].join(" ")}
-                style={callBadgeStyle}
+                style={seatLayout.callBadge}
+                data-seat-marker="call"
+                data-seat={seatView.seat}
+                aria-label={`${seatView.title} called ${
+                  tichuMarkerLabel === "GT" ? "Grand Tichu" : "Tichu"
+                }`}
                 title={tichuMarkerLabel === "GT" ? "Grand Tichu" : "Tichu"}
               >
-                {tichuMarkerLabel}
+                <span className="normal-seat-overlay__marker-seat">
+                  {seatView.title}
+                </span>
+                <span className="normal-seat-overlay__marker-value">
+                  {tichuMarkerLabel}
+                </span>
               </span>
             )}
 
@@ -1884,8 +1827,16 @@ function NormalSeatOverlayLayer({
                   `normal-seat-overlay__turn--${seatView.position}`
                 ].join(" ")}
                 style={seatLayout.turnBadge}
+                data-seat-marker="turn"
+                data-seat={seatView.seat}
+                aria-label={`${seatView.title} turn`}
               >
-                TURN
+                <span className="normal-seat-overlay__marker-seat">
+                  {seatView.title}
+                </span>
+                <span className="normal-seat-overlay__marker-value">
+                  Turn
+                </span>
               </span>
             )}
 
@@ -1895,7 +1846,8 @@ function NormalSeatOverlayLayer({
                   "normal-seat-overlay__out",
                   `normal-seat-overlay__out--${seatView.position}`
                 ].join(" ")}
-                style={outBadgeStyle}
+                style={seatLayout.outBadge}
+                aria-label={`${seatView.title}, ${formatPlacement(seatView.finishIndex)}`}
               >
                 {formatPlacement(seatView.finishIndex)}
               </span>

@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode, Ref } from "react";
 import type { SurfacePresentation } from "./gameplay-surface-mode";
 
@@ -26,6 +27,17 @@ export type PlayerSurfaceViewProps = {
   wishDialog: ReactNode;
 };
 
+function resolveElementFootprint(element: HTMLElement | null): number {
+  if (!element) {
+    return 0;
+  }
+
+  const measuredHeight =
+    element.getBoundingClientRect().height || element.offsetHeight || 0;
+
+  return Math.max(0, Math.ceil(measuredHeight));
+}
+
 export function PlayerSurfaceView({
   viewportRef,
   layoutStyle,
@@ -50,13 +62,86 @@ export function PlayerSurfaceView({
   dialogLayer,
   wishDialog
 }: PlayerSurfaceViewProps) {
+  const actionBandRef = useRef<HTMLElement | null>(null);
+  const [actionBandFootprint, setActionBandFootprint] = useState(0);
   const shouldRenderFelt =
     centerZoneFelt || surfacePresentation.tableMode === "resolution";
+  const southSafeZoneStyle =
+    surfacePresentation.controlsVisible && actionBandFootprint > 0
+      ? ({
+          "--player-surface-action-band-footprint": `${actionBandFootprint}px`
+        } as CSSProperties)
+      : undefined;
+
+  useLayoutEffect(() => {
+    if (!surfacePresentation.controlsVisible) {
+      setActionBandFootprint(0);
+      return;
+    }
+
+    const actionBandElement = actionBandRef.current;
+    if (!actionBandElement) {
+      setActionBandFootprint(0);
+      return;
+    }
+
+    const updateActionBandFootprint = (nextFootprint: number) => {
+      setActionBandFootprint((previousFootprint) =>
+        previousFootprint === nextFootprint ? previousFootprint : nextFootprint
+      );
+    };
+
+    updateActionBandFootprint(resolveElementFootprint(actionBandElement));
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      const nextFootprint = Math.max(
+        0,
+        Math.ceil(
+          entry?.contentRect.height || resolveElementFootprint(actionBandElement)
+        )
+      );
+
+      updateActionBandFootprint(nextFootprint);
+    });
+
+    resizeObserver.observe(actionBandElement);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [surfacePresentation.controlsVisible]);
+
+  const southSafeZone =
+    surfacePresentation.controlsVisible ? (
+      <div
+        className="player-surface__south-safe-zone"
+        data-south-safe-zone="reserved"
+        style={southSafeZoneStyle}
+      >
+        {localHand}
+        <section
+          ref={actionBandRef}
+          className="normal-bottom-controls player-surface__action-band"
+          data-layout-container="action-band"
+          data-action-row="true"
+          aria-label="Available actions"
+          style={actionBandStyle}
+        >
+          {actionBand}
+        </section>
+      </div>
+    ) : (
+      localHand
+    );
   const tableClassName = [
     "normal-table",
     "player-surface__table",
     `player-surface__table--${surfacePresentation.tableMode}`,
     `player-surface__hand--${surfacePresentation.handMode}`,
+    surfacePresentation.controlsVisible
+      ? "player-surface__table--south-safe-zone"
+      : "",
     surfacePresentation.dramaticTurnCue ? "player-surface__table--dramatic-turn" : ""
   ]
     .filter(Boolean)
@@ -99,18 +184,7 @@ export function PlayerSurfaceView({
                   {topSeat}
                   {leftSeat}
                   {rightSeat}
-                  {localHand}
-
-                  {surfacePresentation.controlsVisible ? (
-                    <section
-                      className="normal-bottom-controls player-surface__action-band"
-                      data-layout-container="action-band"
-                      data-action-row="true"
-                      style={actionBandStyle}
-                    >
-                      {actionBand}
-                    </section>
-                  ) : null}
+                  {southSafeZone}
                 </div>
 
                 {seatOverlays}
