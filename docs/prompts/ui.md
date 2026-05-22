@@ -516,3 +516,12 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 - Linked GitHub Issue: [#32](https://github.com/NeonButrfly/tichuml/issues/32)
 - Milestone: [6.5 – Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
 - Status Source: GitHub issue state only.
+
+### 2026-05-22 - Alternate table Pixi conversion and canonical passing-lane direction reuse
+
+- Prompt Signal: The alternate luxury table was still too flat, too text-heavy, and its passing lanes no longer matched the original table’s directional exchange geometry; the updated renderer must move to Pixi or Phaser rather than stay CSS-only.
+- Interpreted Requirement: Keep the normal table untouched, keep the alternate table on the same backend/state/action pipeline, and rebuild the alternate visual surface so a Pixi-backed board owns the wood/felt/perspective treatment while the alternate pass routes reuse the canonical lane-direction mapping from the normal table. Reduce nonessential text, keep the south-player perspective dominant, and preserve hidden-information rules.
+- Affected Systems: `apps/web/src/alternate-game-table-view.tsx`, `apps/web/src/alternate-table/layout.ts`, `apps/web/src/alternate-table/pixi-surface.tsx`, `apps/web/src/styles.css`, `apps/web/src/alternate-table/README.md`, `tests/integration/alternate-table-view.test.ts`.
+- Linked GitHub Issue: [#81](https://github.com/NeonButrfly/tichuml/issues/81)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.

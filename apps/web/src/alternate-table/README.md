@@ -8,11 +8,16 @@ rules, and action dispatch pipeline.
 
 ## Renderer Choice
 
-The implementation uses the existing React + CSS stack instead of introducing a
-separate graphics runtime. That keeps risk low, preserves the current gameplay
-pipeline, and still allows a polished 2.5D table through layered gradients,
-perspective transforms, plaques, rails, card racks, and animated selection
-states.
+The implementation now uses a hybrid renderer:
+
+- React still owns the gameplay interaction shell.
+- PixiJS draws the luxury board surface, felt, trick bowl, engraved accents,
+  and canonical pass-route slots.
+- DOM overlays are kept only for live cards, seat plaques, and actionable
+  controls that must reuse the existing gameplay handlers.
+
+This keeps the real gameplay pipeline intact while moving the visual weight off
+the earlier CSS-only panel stack.
 
 ## Shared Gameplay Path
 
@@ -47,6 +52,10 @@ Opponent hands stay hidden in the alternate table. North, East, and West render
 card backs plus counts only; the alternate renderer does not read or expose any
 extra hidden cards beyond what the normal gameplay view already receives.
 
+Pass-route direction and placement are derived from the same canonical normal
+table lane schema, so the alternate table does not fork exchange logic or
+invent a second directional mapping.
+
 ## Mockups And Preview
 
 Visual direction was guided by the reference mockups in `mockups/`, but the
@@ -58,7 +67,10 @@ entry point rather than changing the main table flow.
 
 ## Known Limitations
 
-- The alternate table intentionally keeps event/state summaries compact so the
+- The alternate table intentionally keeps event/state summaries minimal so the
   felt, trick area, and south rail remain the dominant visual surface.
-- The luxury surface is intentionally asset-free and procedural, so decorative
-  detail comes from CSS rather than external textures or images.
+- The luxury surface is still asset-free and procedural, so wood/felt detail is
+  stylized rather than photoreal.
+- Issue [#81](https://github.com/NeonButrfly/tichuml/issues/81) remains the
+  acceptance tracker for spacing and composition polish on live gameplay
+  screens.

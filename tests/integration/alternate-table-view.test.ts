@@ -10,9 +10,7 @@ import {
 } from "@tichuml/engine";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { BackendReachability } from "../../apps/web/src/backend/settings";
-import {
-  AlternateGameTableView
-} from "../../apps/web/src/alternate-game-table-view";
+import { AlternateGameTableView } from "../../apps/web/src/alternate-game-table-view";
 import {
   DEFAULT_NORMAL_TABLE_LAYOUT,
   DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS,
@@ -221,7 +219,56 @@ function createProps(
     pickupStageViews: [],
     dogLeadAnimation: null,
     tablePassGroups: [],
-    passRouteViews: [],
+    passRouteViews: [
+      {
+        key: "pass-seat-0-left",
+        sourceSeat: "seat-0",
+        sourcePosition: "bottom",
+        target: "left",
+        targetSeat: "seat-3",
+        displayMode: "passing",
+        occupied: true,
+        visibleCardId: "jade-3",
+        faceDown: false,
+        interactive: true
+      },
+      {
+        key: "pass-seat-0-partner",
+        sourceSeat: "seat-0",
+        sourcePosition: "bottom",
+        target: "partner",
+        targetSeat: "seat-2",
+        displayMode: "passing",
+        occupied: false,
+        visibleCardId: null,
+        faceDown: false,
+        interactive: true
+      },
+      {
+        key: "pass-seat-0-right",
+        sourceSeat: "seat-0",
+        sourcePosition: "bottom",
+        target: "right",
+        targetSeat: "seat-1",
+        displayMode: "passing",
+        occupied: false,
+        visibleCardId: null,
+        faceDown: false,
+        interactive: true
+      },
+      {
+        key: "pass-seat-2-right",
+        sourceSeat: "seat-2",
+        sourcePosition: "top",
+        target: "right",
+        targetSeat: "seat-1",
+        displayMode: "passing",
+        occupied: true,
+        visibleCardId: null,
+        faceDown: true,
+        interactive: false
+      }
+    ],
     passLaneViews: [
       {
         target: "left",
@@ -347,6 +394,9 @@ describe("AlternateGameTableView", () => {
     ).toBeGreaterThan(0);
     expect(view.container.textContent).toContain("WE");
     expect(view.container.textContent).toContain("THEY");
+    expect(view.container.textContent).not.toContain("Table Notes");
+    expect(view.container.textContent).not.toContain("Recent Events");
+    expect(view.container.textContent).not.toContain("Decision Summary");
 
     view.unmount();
   });
@@ -363,7 +413,7 @@ describe("AlternateGameTableView", () => {
     ).find((button) => button.textContent?.includes("Play"));
     const clearButton = Array.from(
       view.container.querySelectorAll<HTMLButtonElement>("button")
-    ).find((button) => button.textContent?.includes("Clear Selection"));
+    ).find((button) => button.textContent?.includes("Clear"));
 
     expect(localCard).not.toBeNull();
     expect(playButton).not.toBeUndefined();
@@ -378,6 +428,44 @@ describe("AlternateGameTableView", () => {
     expect(props.onLocalCardClick).toHaveBeenCalledWith("jade-3");
     expect(props.onNormalAction).toHaveBeenCalledWith("play");
     expect(props.onClearLocalSelection).toHaveBeenCalledTimes(1);
+
+    view.unmount();
+  });
+
+  it("renders directional passing routes from the canonical route model", () => {
+    const passState = createScenarioState({
+      phase: "pass_select",
+      activeSeat: "seat-0",
+      hands: {
+        "seat-0": cardsFromIds(["jade-3", "sword-3", "phoenix", "dragon"]),
+        "seat-1": cardsFromIds(["jade-10", "sword-10", "star-10"]),
+        "seat-2": cardsFromIds(["pagoda-9", "pagoda-11", "dog"]),
+        "seat-3": cardsFromIds(["star-4", "star-5", "mahjong"])
+      }
+    });
+    const view = render(
+      createElement(
+        AlternateGameTableView,
+        createProps({
+          state: passState,
+          derived: createDerived(passState)
+        })
+      )
+    );
+
+    const bottomPartner = view.container.querySelector<HTMLElement>(
+      '[data-alt-pass-route="pass-seat-0-partner"]'
+    );
+    const bottomLeft = view.container.querySelector<HTMLElement>(
+      '[data-alt-pass-route="pass-seat-0-left"]'
+    );
+    const topRight = view.container.querySelector<HTMLElement>(
+      '[data-alt-pass-route="pass-seat-2-right"]'
+    );
+
+    expect(bottomPartner?.dataset.passDirection).toBe("up");
+    expect(bottomLeft?.dataset.passDirection).toBe("left");
+    expect(topRight?.dataset.passDirection).toBe("right");
 
     view.unmount();
   });
