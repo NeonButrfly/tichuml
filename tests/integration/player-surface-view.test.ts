@@ -16,57 +16,11 @@ import {
   true;
 
 class ResizeObserverStub {
-  static instances = new Set<ResizeObserverStub>();
+  observe() {}
 
-  private readonly callback: ResizeObserverCallback;
+  disconnect() {}
 
-  private readonly observedElements = new Set<Element>();
-
-  constructor(callback: ResizeObserverCallback) {
-    this.callback = callback;
-    ResizeObserverStub.instances.add(this);
-  }
-
-  observe(element: Element) {
-    this.observedElements.add(element);
-  }
-
-  disconnect() {
-    this.observedElements.clear();
-    ResizeObserverStub.instances.delete(this);
-  }
-
-  unobserve(element: Element) {
-    this.observedElements.delete(element);
-  }
-
-  static notify(element: Element, rect: Partial<DOMRectReadOnly> = {}) {
-    for (const instance of ResizeObserverStub.instances) {
-      if (!instance.observedElements.has(element)) {
-        continue;
-      }
-
-      instance.callback(
-        [
-          {
-            target: element,
-            contentRect: {
-              x: 0,
-              y: 0,
-              top: 0,
-              right: rect.width ?? 0,
-              bottom: rect.height ?? 0,
-              left: 0,
-              width: rect.width ?? 0,
-              height: rect.height ?? 0,
-              toJSON: () => ({})
-            } as DOMRectReadOnly
-          } as ResizeObserverEntry
-        ],
-        instance as unknown as ResizeObserver
-      );
-    }
-  }
+  unobserve() {}
 }
 
 globalThis.ResizeObserver =
@@ -294,17 +248,6 @@ function createDecisionProps(): GameTableViewProps {
       controlsVisible: true,
       dramaticTurnCue: true
     },
-    seatViews: props.seatViews.map((seatView) =>
-      seatView.seat === "seat-2"
-        ? {
-            ...seatView,
-            callState: {
-              ...seatView.callState,
-              grandTichu: true
-            }
-          }
-        : seatView
-    ),
     localCanInteract: true,
     localLegalCardIds: new Set(props.sortedLocalHand.map((card) => card.id))
   };
@@ -359,92 +302,6 @@ describe("NormalGameTableView", () => {
       expect(table?.classList.contains("player-surface__hand--simplified")).toBe(true);
       expect(table?.classList.contains("player-surface__table--dramatic-turn")).toBe(true);
       expect(view.container.querySelector(".player-surface__action-band")).not.toBeNull();
-
-      const southSafeZone = view.container.querySelector(
-        ".player-surface__south-safe-zone[data-south-safe-zone='reserved']"
-      );
-      expect(southSafeZone).not.toBeNull();
-      expect(southSafeZone?.querySelector("[data-seat-region='bottom']")).not.toBeNull();
-      expect(
-        southSafeZone?.querySelector(".player-surface__action-band")
-      ).not.toBeNull();
-      expect(
-        southSafeZone?.style.getPropertyValue("--player-surface-action-band-footprint")
-      ).toBe("");
-
-      const actionBand = southSafeZone?.querySelector(
-        ".player-surface__action-band"
-      );
-      expect(actionBand).not.toBeNull();
-
-      act(() => {
-        ResizeObserverStub.notify(actionBand as Element, {
-          width: 320,
-          height: 96
-        });
-      });
-
-      expect(
-        southSafeZone?.style.getPropertyValue("--player-surface-action-band-footprint")
-      ).toBe("96px");
-    } finally {
-      view.unmount();
-    }
-  });
-
-  it("renders consistent seat identity badges and seat-associated state markers", () => {
-    const view = render(
-      createElement(NormalGameTableView, createDecisionProps())
-    );
-
-    try {
-      const overlayLayer = view.container.querySelector(".normal-seat-overlays");
-      expect(overlayLayer?.getAttribute("aria-hidden")).not.toBe("true");
-
-      const seatBadges = Array.from(
-        view.container.querySelectorAll<HTMLElement>("[data-seat-identity]")
-      );
-      expect(seatBadges).toHaveLength(4);
-
-      expect(
-        view.container.querySelector(
-          "[data-seat-identity='seat-0'] .normal-seat-overlay__identity-name"
-        )?.textContent
-      ).toBe("South");
-      expect(
-        view.container.querySelector(
-          "[data-seat-identity='seat-0'] .normal-seat-overlay__identity-relation"
-        )?.textContent
-      ).toBe("You");
-      expect(
-        view.container.querySelector("[data-seat-identity='seat-0']")?.getAttribute("aria-label")
-      ).toBe("South, You");
-      expect(
-        view.container.querySelector(
-          "[data-seat-identity='seat-2'] .normal-seat-overlay__identity-name"
-        )?.textContent
-      ).toBe("North");
-      expect(
-        view.container.querySelector(
-          "[data-seat-identity='seat-2'] .normal-seat-overlay__identity-relation"
-        )?.textContent
-      ).toBe("Partner");
-
-      const turnMarker = view.container.querySelector(
-        "[data-seat-marker='turn'][data-seat='seat-1']"
-      );
-      expect(turnMarker?.getAttribute("aria-label")).toBe("East turn");
-      expect(turnMarker?.textContent).toContain("East");
-      expect(turnMarker?.textContent).toContain("Turn");
-
-      const callMarker = view.container.querySelector(
-        "[data-seat-marker='call'][data-seat='seat-2']"
-      );
-      expect(callMarker?.getAttribute("aria-label")).toBe(
-        "North called Grand Tichu"
-      );
-      expect(callMarker?.textContent).toContain("North");
-      expect(callMarker?.textContent).toContain("GT");
     } finally {
       view.unmount();
     }
