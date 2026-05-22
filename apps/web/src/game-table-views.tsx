@@ -1427,6 +1427,7 @@ function PassRouteToken({
     return (
       <CardFace
         card={resolveCard(route.visibleCardId, cardLookup)}
+        reveal={!route.faceDown}
         className={[
           "normal-card",
           "normal-card--route",
@@ -2311,6 +2312,7 @@ function NormalSeat({
   regionStyle,
   layoutMetrics,
   seatView,
+  uiMode,
   sortedLocalHand,
   localCanInteract,
   localPassInteractionEnabled,
@@ -2329,6 +2331,7 @@ function NormalSeat({
   regionStyle: CSSProperties;
   layoutMetrics: NormalViewportLayoutMetrics;
   seatView: SeatView;
+  uiMode: UiMode;
 }) {
   const isSideSeat =
     seatView.position === "left" || seatView.position === "right";
@@ -2359,6 +2362,7 @@ function NormalSeat({
     isSideSeat && seatView.position === "right"
       ? [...seatView.cards].reverse()
       : seatView.cards;
+  const revealSeatCards = uiMode === "debug" || seatView.isLocalSeat;
   const metaBlock = (
     <div
       className={
@@ -2376,6 +2380,7 @@ function NormalSeat({
       >
         <CardFace
           card={card}
+          reveal={revealSeatCards}
           className={`normal-card normal-card--seat normal-card--seat-${seatView.position}`}
         />
       </div>
@@ -2387,6 +2392,7 @@ function NormalSeat({
       >
         <CardFace
           card={card}
+          reveal={revealSeatCards}
           className={`normal-card normal-card--seat normal-card--seat-${seatView.position}`}
         />
       </div>
@@ -4826,6 +4832,7 @@ export function NormalGameTableView(props: GameTableViewProps) {
       regionStyle={seatRegionStyleByPosition.top}
       layoutMetrics={layoutMetrics}
       seatView={seatByPosition.top}
+      uiMode={props.uiMode}
       sortedLocalHand={props.sortedLocalHand}
       localCanInteract={props.localCanInteract}
       localPassInteractionEnabled={props.localPassInteractionEnabled}
@@ -4839,6 +4846,7 @@ export function NormalGameTableView(props: GameTableViewProps) {
       regionStyle={seatRegionStyleByPosition.left}
       layoutMetrics={layoutMetrics}
       seatView={seatByPosition.left}
+      uiMode={props.uiMode}
       sortedLocalHand={props.sortedLocalHand}
       localCanInteract={props.localCanInteract}
       localPassInteractionEnabled={props.localPassInteractionEnabled}
@@ -4852,6 +4860,7 @@ export function NormalGameTableView(props: GameTableViewProps) {
       regionStyle={seatRegionStyleByPosition.right}
       layoutMetrics={layoutMetrics}
       seatView={seatByPosition.right}
+      uiMode={props.uiMode}
       sortedLocalHand={props.sortedLocalHand}
       localCanInteract={props.localCanInteract}
       localPassInteractionEnabled={props.localPassInteractionEnabled}
@@ -4865,6 +4874,7 @@ export function NormalGameTableView(props: GameTableViewProps) {
       regionStyle={seatRegionStyleByPosition.bottom}
       layoutMetrics={layoutMetrics}
       seatView={seatByPosition.bottom}
+      uiMode={props.uiMode}
       sortedLocalHand={props.sortedLocalHand}
       localCanInteract={props.localCanInteract}
       localPassInteractionEnabled={props.localPassInteractionEnabled}
