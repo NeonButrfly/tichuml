@@ -450,63 +450,6 @@ describe("NormalGameTableView", () => {
     }
   });
 
-  it("keeps only the south hand face-up in normal mode while debug mode can reveal all hands with asset-backed cards", () => {
-    const normalView = render(
-      createElement(NormalGameTableView, createDecisionProps())
-    );
-    const debugView = render(
-      createElement(NormalGameTableView, {
-        ...createDecisionProps(),
-        uiMode: "debug"
-      })
-    );
-
-    try {
-      const normalBacks = normalView.container.querySelectorAll(
-        ".playing-card--back"
-      );
-      const debugBacks = debugView.container.querySelectorAll(
-        ".playing-card--back"
-      );
-
-      expect(normalBacks).toHaveLength(3);
-      expect(
-        normalView.container.querySelector(
-          "[data-seat-region='bottom'] .playing-card--back"
-        )
-      ).toBeNull();
-      expect(
-        normalView.container.querySelector(
-          "[data-seat-region='top'] .playing-card--back"
-        )
-      ).not.toBeNull();
-      expect(
-        normalView.container.querySelector(
-          "[data-seat-region='left'] .playing-card--back"
-        )
-      ).not.toBeNull();
-      expect(
-        normalView.container.querySelector(
-          "[data-seat-region='right'] .playing-card--back"
-        )
-      ).not.toBeNull();
-      expect(
-        normalView.container.querySelector(
-          "[data-seat-region='bottom'] .playing-card__asset--frame"
-        )
-      ).not.toBeNull();
-
-      expect(debugBacks).toHaveLength(0);
-      expect(
-        debugView.container.querySelectorAll(".playing-card__asset--frame")
-          .length
-      ).toBeGreaterThanOrEqual(4);
-    } finally {
-      normalView.unmount();
-      debugView.unmount();
-    }
-  });
-
   it("renders the resolution shell and felt treatment during transient drama", () => {
     const view = render(
       createElement(NormalGameTableView, createResolutionProps())

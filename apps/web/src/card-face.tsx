@@ -1,7 +1,6 @@
 import { useState } from "react";
 import type { DragEvent as ReactDragEvent, ReactNode } from "react";
 import type { Card } from "@tichuml/engine";
-import { TABLE_GRAPHICS_ASSETS } from "./table-graphics-assets";
 
 type StandardSuit = Extract<Card, { kind: "standard" }>["suit"];
 type SpecialCardName = Extract<Card, { kind: "special" }>["special"];
@@ -272,36 +271,6 @@ function SpecialGlyph({
   }
 }
 
-function getSpecialCardAssetUrl(special: SpecialCardName): string {
-  switch (special) {
-    case "dragon":
-      return TABLE_GRAPHICS_ASSETS.specialDragon;
-    case "phoenix":
-      return TABLE_GRAPHICS_ASSETS.specialPhoenix;
-    case "dog":
-      return TABLE_GRAPHICS_ASSETS.specialDog;
-    case "mahjong":
-      return TABLE_GRAPHICS_ASSETS.specialMahjong;
-  }
-}
-
-function SpecialAsset({
-  special,
-  className = ""
-}: {
-  special: SpecialCardName;
-  className?: string;
-}) {
-  return (
-    <img
-      src={getSpecialCardAssetUrl(special)}
-      alt=""
-      aria-hidden="true"
-      className={className}
-    />
-  );
-}
-
 function CardCorner({
   label,
   symbol,
@@ -381,9 +350,9 @@ function SpecialCardArt({
 
       <div className="playing-card__center playing-card__center--special">
         <div className="playing-card__seal playing-card__seal--special">
-          <SpecialAsset
+          <SpecialGlyph
             special={card.special}
-            className="playing-card__special-asset playing-card__special-asset--seal"
+            className="playing-card__center-glyph playing-card__center-glyph--special"
           />
         </div>
         <span className="playing-card__title">
@@ -416,7 +385,6 @@ export type CardFaceProps = {
   card: Card;
   interactive?: boolean;
   tone?: "normal" | "legal" | "muted";
-  reveal?: boolean;
   selected?: boolean;
   className?: string;
   draggable?: boolean;
@@ -429,7 +397,6 @@ export function CardFace({
   card,
   interactive = false,
   tone = "normal",
-  reveal = true,
   selected = false,
   className = "",
   draggable = false,
@@ -440,7 +407,7 @@ export function CardFace({
   const [isDragging, setIsDragging] = useState(false);
   const classes = [
     "playing-card",
-    reveal ? getCardFaceToneClassName(card) : "playing-card--back",
+    getCardFaceToneClassName(card),
     tone === "legal" ? "playing-card--legal" : "",
     tone === "muted" ? "playing-card--muted" : "",
     selected ? "playing-card--selected" : "",
@@ -450,24 +417,6 @@ export function CardFace({
   ]
     .filter(Boolean)
     .join(" ");
-  const contents = reveal ? (
-    <>
-      <img
-        src={TABLE_GRAPHICS_ASSETS.cardFaceTemplate}
-        alt=""
-        aria-hidden="true"
-        className="playing-card__asset playing-card__asset--frame"
-      />
-      {cardContent(card)}
-    </>
-  ) : (
-    <img
-      src={TABLE_GRAPHICS_ASSETS.cardBack}
-      alt=""
-      aria-hidden="true"
-      className="playing-card__asset playing-card__asset--back"
-    />
-  );
 
   if (interactive) {
     const buttonProps: {
@@ -496,10 +445,10 @@ export function CardFace({
         draggable={draggable}
         {...buttonProps}
       >
-        {contents}
+        {cardContent(card)}
       </button>
     );
   }
 
-  return <div className={classes}>{contents}</div>;
+  return <div className={classes}>{cardContent(card)}</div>;
 }
