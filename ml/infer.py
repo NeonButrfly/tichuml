@@ -18,6 +18,7 @@ from feature_builder import (
     build_feature_row,
     extract_actor_legal_actions,
 )
+from json_utils import dumps_json_safe, make_json_safe
 
 
 class ModelRuntime:
@@ -37,7 +38,7 @@ class ModelRuntime:
         path = Path(meta_path)
         if not path.exists():
             return {}
-        return json.loads(path.read_text(encoding="utf-8"))
+        return make_json_safe(json.loads(path.read_text(encoding="utf-8")))
 
     def score_request(self, payload: dict[str, Any]) -> dict[str, Any]:
         actor_seat = str(payload.get("actor_seat", ""))
@@ -88,7 +89,7 @@ class ModelRuntime:
 
 def emit_response(request_id: str | None, payload: dict[str, Any]) -> None:
     response = payload if request_id is None else {"id": request_id, **payload}
-    sys.stdout.write(json.dumps(response) + "\n")
+    sys.stdout.write(dumps_json_safe(response) + "\n")
     sys.stdout.flush()
 
 

@@ -18,6 +18,7 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from feature_builder import phase_alias
+from json_utils import dumps_json_safe, make_json_safe
 
 DEFAULT_MANIFEST = Path("artifacts/ml/export-manifest.json")
 DEFAULT_REPORT_JSON = Path("artifacts/ml/training-report.json")
@@ -281,7 +282,7 @@ def top_action_average_value(frame: pd.DataFrame, scores: pd.Series, target_colu
 
 
 def report_markdown(report: dict[str, Any]) -> str:
-    metrics = report["validation_metrics"]
+    metrics = make_json_safe(report["validation_metrics"])
     return "\n".join(
         [
             "# Training Report",
@@ -490,7 +491,7 @@ def main() -> None:
     }
     meta_path = Path(args.meta_output)
     meta_path.parent.mkdir(parents=True, exist_ok=True)
-    meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    meta_path.write_text(dumps_json_safe(meta, indent=2), encoding="utf-8")
 
     report = {
         "created_at": meta["created_at"],
@@ -514,11 +515,11 @@ def main() -> None:
     }
     report_output = Path(args.report_output)
     report_output.parent.mkdir(parents=True, exist_ok=True)
-    report_output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    report_output.write_text(dumps_json_safe(report, indent=2) + "\n", encoding="utf-8")
     report_output.with_suffix(".md").write_text(report_markdown(report), encoding="utf-8")
 
     print(
-        json.dumps(
+        dumps_json_safe(
             {
                 "accepted": True,
                 "objective": args.objective,

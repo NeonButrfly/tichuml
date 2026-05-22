@@ -112,6 +112,14 @@ export class PythonLightgbmScorer implements LightgbmScorer {
     this.pending.clear();
   }
 
+  private failProtocol(error: Error): void {
+    const child = this.child;
+    this.rejectAllPending(error);
+    if (child && !child.killed) {
+      child.kill();
+    }
+  }
+
   private ensureProcess(): ChildProcessWithoutNullStreams {
     if (this.child && !this.child.killed) {
       return this.child;
@@ -171,7 +179,16 @@ export class PythonLightgbmScorer implements LightgbmScorer {
 
     const lineReader = readline.createInterface({ input: child.stdout });
     lineReader.on("line", (line) => {
-      const payload = parseJsonObjectAllowingNonFiniteLiterals(line);
+      let payload: Record<string, unknown>;
+      try {
+        payload = parseJsonObjectAllowingNonFiniteLiterals(line);
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        this.failProtocol(
+          new Error(`LightGBM inference returned invalid JSON: ${detail}`)
+        );
+        return;
+      }
       const requestId =
         typeof payload.id === "string" && payload.id.trim().length > 0
           ? payload.id

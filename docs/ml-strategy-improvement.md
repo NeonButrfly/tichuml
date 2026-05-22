@@ -196,6 +196,10 @@ The current evaluation harness writes pass or fail details into
 
 - illegal or mismatched score vectors trigger fallback
 - non-finite scores trigger fallback
+- issue [#82](https://github.com/NeonButrfly/tichuml/issues/82) hardened
+  training metadata and inference responses to emit strict JSON, and the Node
+  scorer now treats malformed protocol output as a recoverable fallback path
+  instead of letting evaluation crash the backend
 - telemetry records model metadata, score summaries, selected score, runtime
   feature counts, and fallback reason
 

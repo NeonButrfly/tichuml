@@ -1,29 +1,101 @@
-import { describe, expect, it } from "vitest";
-import { parseJsonObjectAllowingNonFiniteLiterals } from "../../apps/server/src/ml/lightgbm-scorer";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { loadServerConfig, type ServerConfig } from "../../apps/server/src/config/env";
+import {
+  parseJsonObjectAllowingNonFiniteLiterals,
+  PythonLightgbmScorer
+} from "../../apps/server/src/ml/lightgbm-scorer";
 
-describe("parseJsonObjectAllowingNonFiniteLiterals", () => {
-  it("replaces bare NaN metadata values without touching normal JSON fields", () => {
-    const payload = parseJsonObjectAllowingNonFiniteLiterals(
-      '{"id":"score-1","scores":[1,2,3],"model_metadata":{"validation_metrics":{"spearman":NaN},"label":"ok"},"runtime_metadata":{"missing_feature_count":0}}'
-    );
+function createTestConfig(tempDir: string, inferScript: string): ServerConfig {
+  const resolved = loadServerConfig({}, { repoRoot: process.cwd() });
+  return {
+    ...resolved,
+    repoRoot: tempDir,
+    pythonExecutable: resolved.pythonExecutable,
+    lightgbmInferScript: inferScript,
+    lightgbmModelPath: path.join(tempDir, "fake-model.txt"),
+    lightgbmModelMetaPath: path.join(tempDir, "fake-model.meta.json")
+  };
+}
 
-    expect(payload.id).toBe("score-1");
-    expect(payload.scores).toEqual([1, 2, 3]);
-    expect(payload.model_metadata).toEqual({
-      validation_metrics: { spearman: null },
-      label: "ok"
+describe("lightgbm scorer protocol", () => {
+  const tempDirs: string[] = [];
+
+  afterEach(async () => {
+    for (const tempDir of tempDirs.splice(0)) {
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        try {
+          fs.rmSync(tempDir, { recursive: true, force: true });
+          break;
+        } catch (error) {
+          if (
+            attempt === 9 ||
+            !(error instanceof Error) ||
+            !String(error.message).includes("EPERM")
+          ) {
+            throw error;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+      }
+    }
+  });
+
+  it("parses non-finite literals in model metadata without throwing", () => {
+    expect(
+      parseJsonObjectAllowingNonFiniteLiterals(
+        '{"id":"score-1","scores":[1.5],"model_metadata":{"validation_metrics":{"spearman":NaN,"upper":Infinity,"lower":-Infinity},"label":"NaN stays in strings"},"runtime_metadata":{}}'
+      )
+    ).toEqual({
+      id: "score-1",
+      scores: [1.5],
+      model_metadata: {
+        validation_metrics: {
+          spearman: null,
+          upper: null,
+          lower: null
+        },
+        label: "NaN stays in strings"
+      },
+      runtime_metadata: {}
     });
   });
 
-  it("also neutralizes signed infinity literals outside quoted strings", () => {
-    const payload = parseJsonObjectAllowingNonFiniteLiterals(
-      '{"id":"score-2","scores":[5],"runtime_metadata":{"best":Infinity,"worst":-Infinity,"note":"Infinity stays in strings"}}'
+  it("rejects malformed inference output without hanging pending requests", async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "lightgbm-scorer-test-"));
+    tempDirs.push(tempDir);
+    const inferScript = path.join(tempDir, "fake-infer.py");
+    fs.writeFileSync(
+      inferScript,
+      [
+        "import json",
+        "import sys",
+        "",
+        "for line in sys.stdin:",
+        "    request = json.loads(line)",
+        "    sys.stdout.write('{\"id\": \"%s\", \"scores\": [0.5], \"model_metadata\": {\"broken\": }\\n' % request['id'])",
+        "    sys.stdout.flush()",
+      ].join("\n"),
+      "utf8"
     );
+    fs.writeFileSync(path.join(tempDir, "fake-model.txt"), "model", "utf8");
+    fs.writeFileSync(path.join(tempDir, "fake-model.meta.json"), "{}", "utf8");
 
-    expect(payload.runtime_metadata).toEqual({
-      best: null,
-      worst: null,
-      note: "Infinity stays in strings"
-    });
+    const scorer = new PythonLightgbmScorer(createTestConfig(tempDir, inferScript));
+
+    await expect(
+      scorer.score({
+        stateRaw: {},
+        actorSeat: "seat-0",
+        phase: "trick_play",
+        legalActions: [],
+        stateFeatures: {} as never,
+        candidateFeatures: []
+      })
+    ).rejects.toThrow(/invalid json/i);
+
+    await scorer.close();
   });
 });
