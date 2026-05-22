@@ -106,7 +106,12 @@ npm run ml:bootstrap -- --run-id <run_id> --game-id-prefix <game_id_prefix> --ou
 
 `ml:bootstrap` runs scoped `ml:export`, trains against `outcome_reward`, runs
 mirrored `ml:evaluate`, and exits non-zero if the evaluation gate does not
-pass.
+pass. For a short host-side smoke, pass `--evaluate-min-games-for-gate <n>` to
+keep the gate threshold aligned with the smaller evaluation sample:
+
+```powershell
+npm run ml:bootstrap -- --run-id <run_id> --game-id-prefix <game_id_prefix> --output-dir training-runs/<run_id>/ml --provider server_heuristic --backend-url http://127.0.0.1:4310 --evaluate-games 3 --evaluate-min-games-for-gate 3
+```
 
 ## Data products
 

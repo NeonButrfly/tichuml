@@ -9,7 +9,8 @@ describe("ml bootstrap orchestration", () => {
       outputDir: "training-runs/training-20260522-135206-7ecc9aa3/ml",
       backendUrl: "http://127.0.0.1:4310",
       provider: "server_heuristic",
-      evaluateGames: 40
+      evaluateGames: 40,
+      evaluateMinGamesForGate: 12
     });
 
     expect(plan.steps.map((step) => step.label)).toEqual([
@@ -37,6 +38,8 @@ describe("ml bootstrap orchestration", () => {
       "--",
       "--games",
       "40",
+      "--min-games-for-gate",
+      "12",
       "--ns-provider",
       "lightgbm_model",
       "--ew-provider",
@@ -56,8 +59,23 @@ describe("ml bootstrap orchestration", () => {
         outputDir: "training-runs/training-20260522-135206-7ecc9aa3/ml",
         backendUrl: "http://127.0.0.1:4310",
         provider: "server_heuristic",
-        evaluateGames: 40
+        evaluateGames: 40,
+        evaluateMinGamesForGate: 40
       })
     ).toThrow(/game-id-prefix/i);
+  });
+
+  it("rejects non-positive evaluation sample sizes", () => {
+    expect(() =>
+      buildMlBootstrapPlan({
+        runId: "training-20260522-135206-7ecc9aa3",
+        gameIdPrefix: "selfplay-training-20260522-135206-7ecc9aa3",
+        outputDir: "training-runs/training-20260522-135206-7ecc9aa3/ml",
+        backendUrl: "http://127.0.0.1:4310",
+        provider: "server_heuristic",
+        evaluateGames: 0,
+        evaluateMinGamesForGate: 0
+      })
+    ).toThrow(/evaluate-games/i);
   });
 });

@@ -10,6 +10,7 @@ export type MlBootstrapOptions = {
   backendUrl: string;
   provider: "local" | "server_heuristic" | "lightgbm_model";
   evaluateGames: number;
+  evaluateMinGamesForGate: number;
 };
 
 export type MlBootstrapStep = {
@@ -47,6 +48,13 @@ function readNumberArg(argv: string[], flag: string, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function requirePositiveInteger(value: number, flag: string): number {
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`Expected ${flag} to be a positive integer.`);
+  }
+  return value;
+}
+
 export function buildMlBootstrapPlan(
   options: MlBootstrapOptions
 ): MlBootstrapPlan {
@@ -54,6 +62,14 @@ export function buildMlBootstrapPlan(
   const gameIdPrefix = requireNonEmpty(options.gameIdPrefix, "--game-id-prefix");
   const outputDir = requireNonEmpty(options.outputDir, "--output-dir");
   const backendUrl = requireNonEmpty(options.backendUrl, "--backend-url");
+  const evaluateGames = requirePositiveInteger(
+    options.evaluateGames,
+    "--evaluate-games"
+  );
+  const evaluateMinGamesForGate = requirePositiveInteger(
+    options.evaluateMinGamesForGate,
+    "--evaluate-min-games-for-gate"
+  );
   const datasetPath = path.join(outputDir, "train.parquet");
   const manifestPath = path.join(outputDir, "dataset_metadata.json");
 
@@ -106,7 +122,9 @@ export function buildMlBootstrapPlan(
           "ml:evaluate",
           "--",
           "--games",
-          String(options.evaluateGames),
+          String(evaluateGames),
+          "--min-games-for-gate",
+          String(evaluateMinGamesForGate),
           "--ns-provider",
           "lightgbm_model",
           "--ew-provider",
@@ -164,6 +182,7 @@ function readGatePassed(repoRoot: string): boolean {
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
+  const evaluateGames = readNumberArg(argv, "--evaluate-games", 100);
   const plan = buildMlBootstrapPlan({
     runId: readArg(argv, "--run-id") ?? "",
     gameIdPrefix: readArg(argv, "--game-id-prefix") ?? "",
@@ -172,7 +191,12 @@ async function main(): Promise<void> {
     provider:
       (readArg(argv, "--provider") as MlBootstrapOptions["provider"] | null) ??
       "server_heuristic",
-    evaluateGames: readNumberArg(argv, "--evaluate-games", 100)
+    evaluateGames,
+    evaluateMinGamesForGate: readNumberArg(
+      argv,
+      "--evaluate-min-games-for-gate",
+      evaluateGames
+    )
   });
 
   for (const step of plan.steps) {
