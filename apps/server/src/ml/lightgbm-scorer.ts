@@ -35,6 +35,68 @@ type PendingRequest = {
   timeout: NodeJS.Timeout;
 };
 
+function isJsonDelimiter(character: string | undefined): boolean {
+  return (
+    character === undefined ||
+    character === "," ||
+    character === "}" ||
+    character === "]" ||
+    /\s/.test(character)
+  );
+}
+
+export function parseJsonObjectAllowingNonFiniteLiterals(
+  line: string
+): Record<string, unknown> {
+  let sanitized = "";
+  let inString = false;
+  let escaping = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+
+    if (inString) {
+      sanitized += character;
+      if (escaping) {
+        escaping = false;
+      } else if (character === "\\") {
+        escaping = true;
+      } else if (character === "\"") {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (character === "\"") {
+      inString = true;
+      sanitized += character;
+      continue;
+    }
+
+    if (line.startsWith("-Infinity", index) && isJsonDelimiter(line[index + 9])) {
+      sanitized += "null";
+      index += 8;
+      continue;
+    }
+
+    if (line.startsWith("Infinity", index) && isJsonDelimiter(line[index + 8])) {
+      sanitized += "null";
+      index += 7;
+      continue;
+    }
+
+    if (line.startsWith("NaN", index) && isJsonDelimiter(line[index + 3])) {
+      sanitized += "null";
+      index += 2;
+      continue;
+    }
+
+    sanitized += character;
+  }
+
+  return JSON.parse(sanitized) as Record<string, unknown>;
+}
+
 export class PythonLightgbmScorer implements LightgbmScorer {
   private child: ChildProcessWithoutNullStreams | null = null;
   private pending = new Map<string, PendingRequest>();
@@ -109,7 +171,7 @@ export class PythonLightgbmScorer implements LightgbmScorer {
 
     const lineReader = readline.createInterface({ input: child.stdout });
     lineReader.on("line", (line) => {
-      const payload = JSON.parse(line) as Record<string, unknown>;
+      const payload = parseJsonObjectAllowingNonFiniteLiterals(line);
       const requestId =
         typeof payload.id === "string" && payload.id.trim().length > 0
           ? payload.id
