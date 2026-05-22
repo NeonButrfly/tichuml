@@ -1758,9 +1758,8 @@ export function resolveNormalWishAnchorStyle(config: {
     position: "absolute",
     width: `${width}px`,
     height: `${height}px`,
-    left: `${trickZone.left + paddingX + width / 2}px`,
-    top: `${trickZone.top + paddingY + height / 2}px`,
-    transform: "translate(-50%, -50%)"
+    left: `${trickZone.left + paddingX}px`,
+    top: `${trickZone.top + paddingY}px`
   };
 }
 
