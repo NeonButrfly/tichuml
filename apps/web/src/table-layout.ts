@@ -1680,90 +1680,6 @@ export function resolveNormalActionRowRegionStyle(config: {
   };
 }
 
-function resolveNormalSharedTrickZoneRect(config: {
-  normalTableLayout: NormalTableLayout;
-  layoutMetrics: NormalViewportLayoutMetrics;
-}): BoardRect {
-  const playArea = getNormalPlayAreaBounds(
-    config.normalTableLayout,
-    config.layoutMetrics
-  );
-  const width = clampNumber(
-    Math.round(playArea.width * 0.32),
-    Math.max(config.layoutMetrics.trickCardWidth * 2.4, 240),
-    Math.min(playArea.width, 420)
-  );
-  const height = clampNumber(
-    Math.round(playArea.height * 0.22),
-    Math.max(Math.round(config.layoutMetrics.trickCardHeight * 0.72), 72),
-    Math.min(playArea.height, 120)
-  );
-  const centerX = playArea.left + playArea.width / 2;
-  const centerY = playArea.top + playArea.height * 0.58;
-  const left = centerX - width / 2;
-  const top = centerY - height / 2;
-
-  return {
-    left,
-    top,
-    width,
-    height,
-    right: left + width,
-    bottom: top + height
-  };
-}
-
-export function resolveNormalSharedTrickZoneRegionStyle(config: {
-  normalTableLayout: NormalTableLayout;
-  layoutMetrics: NormalViewportLayoutMetrics;
-}): CSSProperties {
-  const trickZone = resolveNormalSharedTrickZoneRect(config);
-
-  return {
-    position: "absolute",
-    left: `${trickZone.left}px`,
-    top: `${trickZone.top}px`,
-    width: `${trickZone.width}px`,
-    height: `${trickZone.height}px`
-  };
-}
-
-export function resolveNormalWishAnchorStyle(config: {
-  normalTableLayout: NormalTableLayout;
-  layoutMetrics: NormalViewportLayoutMetrics;
-}): CSSProperties {
-  const trickZone = resolveNormalSharedTrickZoneRect(config);
-  const width = clampNumber(
-    Math.round(config.layoutMetrics.trickCardWidth * 1.08),
-    52,
-    84
-  );
-  const height = clampNumber(
-    Math.round(config.layoutMetrics.trickCardHeight * 0.42),
-    30,
-    44
-  );
-  const paddingX = clampNumber(
-    Math.round(config.layoutMetrics.trickCardWidth * 0.34),
-    18,
-    28
-  );
-  const paddingY = clampNumber(
-    Math.round(config.layoutMetrics.trickCardHeight * 0.14),
-    10,
-    18
-  );
-
-  return {
-    position: "absolute",
-    width: `${width}px`,
-    height: `${height}px`,
-    left: `${trickZone.left + paddingX + width / 2}px`,
-    top: `${trickZone.top + paddingY + height / 2}px`,
-    transform: "translate(-50%, -50%)"
-  };
-}
-
 function resolveNormalPassLaneAnchorPoint(config: {
   sourcePosition: SeatVisualPosition;
   targetPosition: SeatVisualPosition;
@@ -1999,45 +1915,34 @@ function resolveNormalStagePoint(
 
 function resolveNormalTrickPoint(
   position: SeatVisualPosition,
-  _handCardCount: number,
+  handCardCount: number,
   metrics: NormalViewportLayoutMetrics,
   normalTableLayout: NormalTableLayout
 ): AnchorPoint {
-  const trickZone = resolveNormalSharedTrickZoneRect({
-    normalTableLayout,
-    layoutMetrics: metrics
-  });
-  const horizontalInset = Math.max(
-    Math.round(metrics.trickCardWidth * 0.28),
-    Math.round(trickZone.width * 0.1)
-  );
-  const verticalInset = Math.max(
-    Math.round(metrics.trickCardHeight * 0.16),
-    Math.round(trickZone.height * 0.12)
-  );
+  const middleLaneSpec = NORMAL_PASS_STAGE_MAP[position][1];
+  const elementId = middleLaneSpec
+    ? getNormalPassLaneLayoutId(position, middleLaneSpec.targetPosition)
+    : null;
 
-  switch (position) {
-    case "top":
-      return {
-        x: trickZone.left + trickZone.width / 2,
-        y: trickZone.top + verticalInset
-      };
-    case "bottom":
-      return {
-        x: trickZone.left + trickZone.width / 2,
-        y: trickZone.bottom - verticalInset
-      };
-    case "left":
-      return {
-        x: trickZone.left + horizontalInset,
-        y: trickZone.top + trickZone.height / 2
-      };
-    case "right":
-      return {
-        x: trickZone.right - horizontalInset,
-        y: trickZone.top + trickZone.height / 2
-      };
+  if (!middleLaneSpec || !elementId) {
+    return elementAnchorToPixels(
+      normalTableLayout[NORMAL_STAGE_LAYOUT_IDS[position]],
+      metrics
+    );
   }
+
+  const routeScale = metrics.routeCardWidth / NORMAL_ROUTE_CARD_WIDTH;
+  const laneSize = scaleNormalLayoutElementSize(elementId, routeScale);
+
+  return resolveNormalPassLaneAnchorPoint({
+    sourcePosition: position,
+    targetPosition: middleLaneSpec.targetPosition,
+    normalTableLayout,
+    layoutMetrics: metrics,
+    laneWidth: laneSize.width,
+    laneHeight: laneSize.height,
+    sourceHandCardCount: handCardCount
+  });
 }
 
 export function resolveNormalStageAnchorStyle(
