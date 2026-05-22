@@ -3151,13 +3151,6 @@ input {
   padding: clamp(8px, 1.2vw, 18px);
 }
 
-.table-graphics-layer {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-}
-
 .player-surface__table {
   --player-surface-local-hand-simplified-shift: 4px;
   --player-surface-action-band-shift: 0px;
@@ -3173,7 +3166,6 @@ input {
   transition:
     transform 220ms ease,
     filter 220ms ease;
-  z-index: 1;
 }
 
 .player-surface__table::after {
@@ -4695,15 +4687,6 @@ body.normal-layout-locked {
   inset: 0;
   z-index: 3;
   pointer-events: none;
-}
-
-.player-surface__perspective,
-.player-surface__seat-ring,
-.normal-pass-staging,
-.normal-trick-staging,
-.normal-layout-editor {
-  position: relative;
-  z-index: 1;
 }
 
 .normal-seat-overlay__label,

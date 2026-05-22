@@ -1,20 +1,10 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode, Ref } from "react";
 import type { SurfacePresentation } from "./gameplay-surface-mode";
-import { TableGraphicsLayer } from "./table-graphics-layer";
-import type {
-  NormalTableLayout,
-  NormalViewportLayoutMetrics,
-  SeatVisualPosition
-} from "./table-layout";
 
 export type PlayerSurfaceViewProps = {
   viewportRef?: Ref<HTMLElement>;
   layoutStyle?: CSSProperties;
-  normalTableLayout: NormalTableLayout;
-  layoutMetrics: NormalViewportLayoutMetrics;
-  activeSeatPosition: SeatVisualPosition | null;
-  wishActive: boolean;
   surfacePresentation: SurfacePresentation;
   centerZoneClassName: string;
   centerZoneStyle?: CSSProperties;
@@ -51,10 +41,6 @@ function resolveElementFootprint(element: HTMLElement | null): number {
 export function PlayerSurfaceView({
   viewportRef,
   layoutStyle,
-  normalTableLayout,
-  layoutMetrics,
-  activeSeatPosition,
-  wishActive,
   surfacePresentation,
   centerZoneClassName,
   centerZoneStyle,
@@ -178,12 +164,6 @@ export function PlayerSurfaceView({
           {scoreboard}
 
           <div className="normal-table-shell player-surface__table-shell">
-            <TableGraphicsLayer
-              normalTableLayout={normalTableLayout}
-              layoutMetrics={layoutMetrics}
-              activeSeatPosition={activeSeatPosition}
-              wishActive={wishActive}
-            />
             <div className={tableClassName}>
               <div className="player-surface__perspective">
                 <div
