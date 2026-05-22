@@ -8,11 +8,13 @@
     "build": "vite build"
   },
   "dependencies": {
+    "@pixi/react": "^8.0.3",
     "@tichuml/ai-heuristics": "0.1.0",
     "@tichuml/engine": "0.1.0",
     "@tichuml/shared": "0.1.0",
     "@tichuml/telemetry": "0.1.0",
     "@tichuml/ui-kit": "0.1.0",
+    "pixi.js": "^8.2.6",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   }

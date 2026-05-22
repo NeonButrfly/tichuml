@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" role="img" aria-label="Generated table rim placeholder">
+  <defs>
+    <linearGradient id="rimGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7b5538" />
+      <stop offset="45%" stop-color="#a5744b" />
+      <stop offset="100%" stop-color="#563924" />
+    </linearGradient>
+  </defs>
+  <rect
+    x="12"
+    y="12"
+    width="1176"
+    height="676"
+    rx="52"
+    fill="none"
+    stroke="url(#rimGradient)"
+    stroke-width="24"
+  />
+  <rect
+    x="36"
+    y="36"
+    width="1128"
+    height="628"
+    rx="38"
+    fill="none"
+    stroke="#f4d8b7"
+    stroke-opacity="0.22"
+    stroke-width="4"
+  />
+</svg>

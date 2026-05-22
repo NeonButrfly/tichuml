@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 252" role="img" aria-label="Generated card back placeholder">
+  <defs>
+    <linearGradient id="cardBackGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#18324f" />
+      <stop offset="100%" stop-color="#0d1e31" />
+    </linearGradient>
+  </defs>
+  <rect x="6" y="6" width="168" height="240" rx="18" fill="#f4efe6" />
+  <rect x="16" y="16" width="148" height="220" rx="14" fill="url(#cardBackGradient)" />
+  <rect
+    x="28"
+    y="28"
+    width="124"
+    height="196"
+    rx="10"
+    fill="none"
+    stroke="#f0c987"
+    stroke-opacity="0.78"
+    stroke-width="4"
+  />
+  <circle cx="90" cy="126" r="34" fill="#f0c987" fill-opacity="0.2" />
+  <path
+    d="M90 82 102 114 136 114 108 134 118 168 90 148 62 168 72 134 44 114 78 114Z"
+    fill="#f0c987"
+    fill-opacity="0.82"
+  />
+</svg>
