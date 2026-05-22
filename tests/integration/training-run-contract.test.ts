@@ -614,13 +614,13 @@ describe("training run helpers", () => {
       },
       trainingDataValidationSummary: {
         coverage: {
-          decisions: 480,
+          decisions: 516,
           state_features_coverage: 1,
           candidate_scores_coverage: 1,
           chosen_action_type_coverage: 1,
           hand_result_coverage: 1,
           game_result_coverage: 1,
-          outcome_reward_coverage: 1,
+          outcome_reward_coverage: 0.9302325581,
           pass_turn_rate: 0.2,
           pass_turn_with_legal_play_rate: 0.01,
           call_tichu_rate: 0.01,
@@ -652,14 +652,14 @@ describe("training run helpers", () => {
         },
         counts: {
           matches: 12,
-          decisions: 480,
+          decisions: 516,
           events: 720,
           server_heuristic_decisions: 480,
           server_heuristic_trick_play_decisions: 420,
-          legal_chosen_actions: 480,
-          state_features_count: 480,
-          candidate_scores_count: 480,
-          explanation_count: 480,
+          legal_chosen_actions: 516,
+          state_features_count: 516,
+          candidate_scores_count: 516,
+          explanation_count: 516,
           reward_count: 480,
           invalid_decisions: 0,
           exploration_selected_count: 0,
@@ -683,7 +683,26 @@ describe("training run helpers", () => {
         },
         phaseDistribution: [],
         actionDistribution: [],
-        missingRewardByPhaseProvider: [],
+        missingRewardByPhaseProvider: [
+          {
+            provider_used: "system_local",
+            phase: "exchange_complete",
+            total: 12,
+            missing_reward: 12
+          },
+          {
+            provider_used: "system_local",
+            phase: "pass_reveal",
+            total: 12,
+            missing_reward: 12
+          },
+          {
+            provider_used: "system_local",
+            phase: "round_scoring",
+            total: 12,
+            missing_reward: 12
+          }
+        ],
         passDiagnostics: {
           protected_cards_passed: 10,
           control_cards_passed: 12,

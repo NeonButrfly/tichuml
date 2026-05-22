@@ -272,6 +272,19 @@ function earlierIso(left: string | null, right: string | null): string | null {
   return new Date(left).getTime() <= new Date(right).getTime() ? left : right;
 }
 
+function mergeMatchScoreValue(
+  current: number | null,
+  incoming: number | null
+): number | null {
+  if (current === null) {
+    return incoming;
+  }
+  if (incoming === null) {
+    return current;
+  }
+  return Math.max(current, incoming);
+}
+
 function shouldUpdateLastHandId(
   payload: TelemetryPayload,
   currentLastHandId: string | null,
@@ -323,8 +336,14 @@ function mergeMatchLifecycleSummary(
     startedAt: earlierIso(current.startedAt, fields.observedAt),
     completedAt: nextCompletedAt,
     status: nextStatus,
-    finalTeam0Score: current.finalTeam0Score ?? fields.finalTeam0Score,
-    finalTeam1Score: current.finalTeam1Score ?? fields.finalTeam1Score,
+    finalTeam0Score: mergeMatchScoreValue(
+      current.finalTeam0Score,
+      fields.finalTeam0Score
+    ),
+    finalTeam1Score: mergeMatchScoreValue(
+      current.finalTeam1Score,
+      fields.finalTeam1Score
+    ),
     winnerTeam: current.winnerTeam ?? fields.winnerTeam,
     handsPlayed:
       current.handsPlayed === null

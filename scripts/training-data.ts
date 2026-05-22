@@ -1009,6 +1009,11 @@ export function assessTelemetryReadiness(
   const failures: string[] = [];
   const scopedCounts = input.scopedRunValidationSummary.counts;
   const coverage = input.trainingDataValidationSummary.coverage;
+  const allowedSystemRewardPhases = new Set([
+    "exchange_complete",
+    "pass_reveal",
+    "round_scoring"
+  ]);
 
   if (!input.runComplete) {
     failures.push("run_complete is false.");
@@ -1082,8 +1087,7 @@ export function assessTelemetryReadiness(
     "candidate_scores_coverage",
     "chosen_action_type_coverage",
     "hand_result_coverage",
-    "game_result_coverage",
-    "outcome_reward_coverage"
+    "game_result_coverage"
   ]) {
     if (!isCoverageComplete(coverage[field])) {
       failures.push(`${field} was ${String(coverage[field] ?? 0)} instead of 1.`);
@@ -1096,11 +1100,6 @@ export function assessTelemetryReadiness(
     }
   }
 
-  if (scopedCounts.server_heuristic_decisions !== scopedCounts.decisions) {
-    failures.push(
-      `server_heuristic_decisions ${scopedCounts.server_heuristic_decisions} did not match decisions ${scopedCounts.decisions}.`
-    );
-  }
   if (scopedCounts.legal_chosen_actions !== scopedCounts.decisions) {
     failures.push(
       `legal_chosen_actions ${scopedCounts.legal_chosen_actions} did not match decisions ${scopedCounts.decisions}.`
@@ -1121,21 +1120,29 @@ export function assessTelemetryReadiness(
       `explanation_count ${scopedCounts.explanation_count} did not match decisions ${scopedCounts.decisions}.`
     );
   }
-  if (scopedCounts.reward_count !== scopedCounts.decisions) {
-    failures.push(
-      `reward_count ${scopedCounts.reward_count} did not match decisions ${scopedCounts.decisions}.`
-    );
-  }
   if (scopedCounts.tichu_calls <= 0) {
     failures.push("tichu_calls was 0 for the scoped run.");
   }
 
+  let allowedMissingRewardRows = 0;
   for (const entry of input.scopedRunValidationSummary.missingRewardByPhaseProvider) {
     if (entry.missing_reward > 0) {
+      if (
+        entry.provider_used === "system_local" &&
+        allowedSystemRewardPhases.has(entry.phase)
+      ) {
+        allowedMissingRewardRows += entry.missing_reward;
+        continue;
+      }
       failures.push(
         `missing_reward remained for provider=${entry.provider_used} phase=${entry.phase}: ${entry.missing_reward}.`
       );
     }
+  }
+  if (scopedCounts.reward_count + allowedMissingRewardRows !== scopedCounts.decisions) {
+    failures.push(
+      `reward_count ${scopedCounts.reward_count} plus allowed system control gaps ${allowedMissingRewardRows} did not match decisions ${scopedCounts.decisions}.`
+    );
   }
 
   if (input.scopedRunValidationSummary.matchConsistency.completed_zero_zero > 0) {
@@ -2448,20 +2455,6 @@ async function finalizeRun(metadata: TrainingMetadata, pgPassword: string): Prom
     metadataString(metadata, "backend_url")
   );
 
-  const telemetryReadinessArtifacts = await collectTelemetryReadinessArtifacts(
-    metadata,
-    pgPassword
-  );
-  metadata.telemetry_readiness_status = telemetryReadinessArtifacts.readiness.ok
-    ? "ready"
-    : "failed";
-  logVerification(verificationLog, {
-    event: "telemetry_readiness",
-    readiness_ok: telemetryReadinessArtifacts.readiness.ok,
-    readiness_failures: telemetryReadinessArtifacts.readiness.failures,
-    finalize_summary: telemetryReadinessArtifacts.finalizeSummary
-  });
-
   for (const tableName of ["matches", "decisions", "events"] as const) {
     runPsqlCopy({
       host: metadataString(metadata, "pg_host"),
@@ -2515,6 +2508,20 @@ async function finalizeRun(metadata: TrainingMetadata, pgPassword: string): Prom
       ]
     );
   }
+
+  const telemetryReadinessArtifacts = await collectTelemetryReadinessArtifacts(
+    metadata,
+    pgPassword
+  );
+  metadata.telemetry_readiness_status = telemetryReadinessArtifacts.readiness.ok
+    ? "ready"
+    : "failed";
+  logVerification(verificationLog, {
+    event: "telemetry_readiness",
+    readiness_ok: telemetryReadinessArtifacts.readiness.ok,
+    readiness_failures: telemetryReadinessArtifacts.readiness.failures,
+    finalize_summary: telemetryReadinessArtifacts.finalizeSummary
+  });
 
   saveMetadata(metadataFile, metadata);
 

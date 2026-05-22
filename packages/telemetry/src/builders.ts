@@ -740,6 +740,9 @@ export function buildCompactDecisionMetadata(config: {
       detail.wish_considered_tichu_pressure ?? false,
     wish_considered_grand_tichu_pressure:
       detail.wish_considered_grand_tichu_pressure ?? false,
+    ...(detail.aggression_context_v1
+      ? { aggression_context_v1: detail.aggression_context_v1 }
+      : {}),
     tichu_call_score: detail.tichu_call_score ?? null,
     tichu_call_threshold: detail.tichu_call_threshold ?? null,
     tichu_call_reason: detail.tichu_call_reason ?? null,
