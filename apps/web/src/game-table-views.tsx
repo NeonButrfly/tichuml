@@ -1597,14 +1597,6 @@ export function TableSurface(
     tablePassGroups,
     cardLookup
   } = props;
-  const resolvedSurfacePresentation =
-    surfacePresentation ??
-    ({
-      tableMode: "calm",
-      handMode: "immersive",
-      controlsVisible: false,
-      dramaticTurnCue: false
-    } satisfies SurfacePresentation);
   const status = surfaceMessage({ controlHint, state, derived });
   const exchangePhaseActive = isExchangePhase(state.phase);
   const trickPoints = displayedTrick
@@ -1613,7 +1605,7 @@ export function TableSurface(
   const renderSharedTrickLanes = variant === "debug";
   const surfaceIsResolving =
     variant === "normal"
-      ? resolvedSurfacePresentation.tableMode === "resolution"
+      ? surfacePresentation.tableMode === "resolution"
       : trickIsResolving;
 
   return (
@@ -1621,17 +1613,17 @@ export function TableSurface(
       className={[
         variant === "normal" ? "normal-play-surface" : "table-trick",
         variant === "normal"
-          ? `normal-play-surface--mode-${resolvedSurfacePresentation.tableMode}`
+          ? `normal-play-surface--mode-${surfacePresentation.tableMode}`
           : "",
         variant === "normal"
-          ? `normal-play-surface--hand-${resolvedSurfacePresentation.handMode}`
+          ? `normal-play-surface--hand-${surfacePresentation.handMode}`
           : "",
         variant === "normal"
-          ? resolvedSurfacePresentation.controlsVisible
+          ? surfacePresentation.controlsVisible
             ? "normal-play-surface--controls-visible"
             : "normal-play-surface--controls-hidden"
           : "",
-        variant === "normal" && resolvedSurfacePresentation.dramaticTurnCue
+        variant === "normal" && surfacePresentation.dramaticTurnCue
           ? "normal-play-surface--dramatic-turn"
           : "",
         surfaceIsResolving
@@ -5014,7 +5006,7 @@ export function NormalGameTableView(props: GameTableViewProps) {
     <PlayerSurfaceView
       viewportRef={viewportRef}
       layoutStyle={layoutStyle}
-      surfacePresentation={props.surfacePresentation}
+      controlsVisible={props.surfacePresentation.controlsVisible}
       centerZoneClassName={getNormalCenterZoneClassName(props.layoutEditorActive)}
       centerZoneStyle={playSurfaceRegionStyle}
       centerZoneFelt={shouldRenderNormalCenterZoneFelt(props.layoutEditorActive)}

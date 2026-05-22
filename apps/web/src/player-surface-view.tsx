@@ -1,10 +1,9 @@
 import type { CSSProperties, ReactNode, Ref } from "react";
-import type { SurfacePresentation } from "./gameplay-surface-mode";
 
 export type PlayerSurfaceViewProps = {
   viewportRef?: Ref<HTMLElement>;
   layoutStyle?: CSSProperties;
-  surfacePresentation: SurfacePresentation;
+  controlsVisible: boolean;
   centerZoneClassName: string;
   centerZoneStyle?: CSSProperties;
   centerZoneFelt: boolean;
@@ -29,7 +28,7 @@ export type PlayerSurfaceViewProps = {
 export function PlayerSurfaceView({
   viewportRef,
   layoutStyle,
-  surfacePresentation,
+  controlsVisible,
   centerZoneClassName,
   centerZoneStyle,
   centerZoneFelt,
@@ -50,18 +49,6 @@ export function PlayerSurfaceView({
   dialogLayer,
   wishDialog
 }: PlayerSurfaceViewProps) {
-  const shouldRenderFelt =
-    centerZoneFelt || surfacePresentation.tableMode === "resolution";
-  const tableClassName = [
-    "normal-table",
-    "player-surface__table",
-    `player-surface__table--${surfacePresentation.tableMode}`,
-    `player-surface__hand--${surfacePresentation.handMode}`,
-    surfacePresentation.dramaticTurnCue ? "player-surface__table--dramatic-turn" : ""
-  ]
-    .filter(Boolean)
-    .join(" ");
-
   return (
     <main className="tabletop-app tabletop-app--normal player-surface">
       <section
@@ -79,7 +66,7 @@ export function PlayerSurfaceView({
           {scoreboard}
 
           <div className="normal-table-shell player-surface__table-shell">
-            <div className={tableClassName}>
+            <div className="normal-table player-surface__table">
               <div className="player-surface__perspective">
                 <div
                   className="normal-grid player-surface__seat-ring"
@@ -90,7 +77,7 @@ export function PlayerSurfaceView({
                     data-layout-container="center-zone"
                     style={centerZoneStyle}
                   >
-                    {shouldRenderFelt && (
+                    {centerZoneFelt && (
                       <div className="normal-table__felt player-surface__felt" />
                     )}
                     {center}
@@ -101,7 +88,7 @@ export function PlayerSurfaceView({
                   {rightSeat}
                   {localHand}
 
-                  {surfacePresentation.controlsVisible ? (
+                  {controlsVisible ? (
                     <section
                       className="normal-bottom-controls player-surface__action-band"
                       data-layout-container="action-band"
