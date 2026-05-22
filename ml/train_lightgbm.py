@@ -113,6 +113,30 @@ def default_feature_columns(frame: pd.DataFrame, manifest: dict[str, Any]) -> li
     ]
 
 
+def normalize_feature_frame(frame: pd.DataFrame) -> pd.DataFrame:
+    normalized = frame.copy()
+    invalid_columns: list[str] = []
+    for column in normalized.columns:
+        series = normalized[column]
+        if pd.api.types.is_bool_dtype(series.dtype) or pd.api.types.is_numeric_dtype(
+            series.dtype
+        ):
+            continue
+        numeric = pd.to_numeric(series, errors="coerce")
+        if numeric.isna().sum() > series.isna().sum():
+            invalid_columns.append(column)
+            continue
+        normalized[column] = numeric.astype("float64")
+
+    if invalid_columns:
+        raise ValueError(
+            "Feature columns must be numeric after normalization. "
+            f"Non-numeric columns: {', '.join(invalid_columns)}"
+        )
+
+    return normalized
+
+
 def excluded_columns(
     frame: pd.DataFrame,
     manifest: dict[str, Any],
@@ -332,10 +356,11 @@ def main() -> None:
     feature_columns = default_feature_columns(frame, manifest)
     if not feature_columns:
         raise ValueError("No runtime-safe feature columns were available for training.")
+    feature_frame = normalize_feature_frame(frame[feature_columns])
 
     excluded = excluded_columns(frame, manifest, feature_columns, target_column, args.objective)
     train_frame, validation_frame, split_method = split_frame(
-        frame,
+        frame.assign(**feature_frame),
         args.objective,
         args.validation_fraction,
         args.random_state,

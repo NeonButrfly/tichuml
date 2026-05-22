@@ -66,6 +66,10 @@ default.
 - they represent the logged continuation only
 - they may appear on every candidate row for context
 - they are excluded from runtime feature manifests by default
+- issue [#77](https://github.com/NeonButrfly/tichuml/issues/77) hardened
+  chunked Parquet export so numeric columns stay stable even when early chunks
+  are all-null, and `ml:train` now coerces numeric-looking feature columns read
+  back from Parquet before LightGBM fitting
 - baseline export focuses on clean chosen-decision rows for the requested
   scope, not merely raw telemetry row presence
 - scoped validate-only export defaults to `server_heuristic` unless a provider

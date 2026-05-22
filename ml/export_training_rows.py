@@ -1181,10 +1181,9 @@ def normalize_frame_for_output(frame: pd.DataFrame) -> pd.DataFrame:
         if column in STRING_COLUMNS:
             frame[column] = pd.Series(frame[column], dtype="string")
             continue
-        if pd.api.types.is_object_dtype(frame[column].dtype):
-            numeric = pd.to_numeric(frame[column], errors="coerce")
-            if numeric.notna().any():
-                frame[column] = numeric.astype("float64")
+        numeric = pd.to_numeric(frame[column], errors="coerce")
+        if numeric.notna().any() or frame[column].isna().all():
+            frame[column] = numeric.astype("float64")
     return frame
 
 
