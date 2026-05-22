@@ -82,61 +82,61 @@ function buildSeatPlacements(width: number, height: number) {
   return {
     top: {
       plaque: roundRect({
-        x: width * 0.398,
-        y: height * 0.11,
-        width: width * 0.204,
-        height: height * 0.05
+        x: width * 0.4,
+        y: height * 0.086,
+        width: width * 0.2,
+        height: height * 0.042
       }),
       rack: roundRect({
-        x: width * 0.366,
-        y: height * 0.162,
-        width: width * 0.268,
-        height: height * 0.094
+        x: width * 0.378,
+        y: height * 0.126,
+        width: width * 0.244,
+        height: height * 0.08
       }),
       depthScale: 0.82
     },
     left: {
       plaque: roundRect({
-        x: width * 0.082,
-        y: height * 0.39,
-        width: width * 0.048,
-        height: height * 0.13
+        x: width * 0.05,
+        y: height * 0.404,
+        width: width * 0.04,
+        height: height * 0.115
       }),
       rack: roundRect({
-        x: width * 0.09,
-        y: height * 0.31,
-        width: width * 0.094,
-        height: height * 0.32
+        x: width * 0.084,
+        y: height * 0.316,
+        width: width * 0.086,
+        height: height * 0.3
       }),
       depthScale: 0.92
     },
     right: {
       plaque: roundRect({
-        x: width * 0.87,
-        y: height * 0.39,
-        width: width * 0.048,
-        height: height * 0.13
+        x: width * 0.91,
+        y: height * 0.404,
+        width: width * 0.04,
+        height: height * 0.115
       }),
       rack: roundRect({
-        x: width * 0.816,
-        y: height * 0.31,
-        width: width * 0.094,
-        height: height * 0.32
+        x: width * 0.83,
+        y: height * 0.316,
+        width: width * 0.086,
+        height: height * 0.3
       }),
       depthScale: 0.92
     },
     bottom: {
       plaque: roundRect({
-        x: width * 0.39,
-        y: height * 0.83,
-        width: width * 0.22,
-        height: height * 0.076
+        x: width * 0.396,
+        y: height * 0.828,
+        width: width * 0.208,
+        height: height * 0.06
       }),
       rack: roundRect({
-        x: width * 0.2,
-        y: height * 0.69,
-        width: width * 0.6,
-        height: height * 0.17
+        x: width * 0.198,
+        y: height * 0.676,
+        width: width * 0.604,
+        height: height * 0.15
       }),
       depthScale: 1
     }
@@ -324,46 +324,46 @@ export function resolveAlternateTableLayout(
     height,
     boardRect,
     outerFelt: [
-      point(boardOffsetX + localWidth * 0.155, boardOffsetY + localHeight * 0.17),
-      point(boardOffsetX + localWidth * 0.845, boardOffsetY + localHeight * 0.17),
-      point(boardOffsetX + localWidth * 0.94, boardOffsetY + localHeight * 0.78),
-      point(boardOffsetX + localWidth * 0.06, boardOffsetY + localHeight * 0.78)
-    ],
-    innerFelt: [
       point(boardOffsetX + localWidth * 0.19, boardOffsetY + localHeight * 0.195),
       point(boardOffsetX + localWidth * 0.81, boardOffsetY + localHeight * 0.195),
-      point(boardOffsetX + localWidth * 0.905, boardOffsetY + localHeight * 0.745),
-      point(boardOffsetX + localWidth * 0.095, boardOffsetY + localHeight * 0.745)
+      point(boardOffsetX + localWidth * 0.95, boardOffsetY + localHeight * 0.835),
+      point(boardOffsetX + localWidth * 0.05, boardOffsetY + localHeight * 0.835)
+    ],
+    innerFelt: [
+      point(boardOffsetX + localWidth * 0.22, boardOffsetY + localHeight * 0.225),
+      point(boardOffsetX + localWidth * 0.78, boardOffsetY + localHeight * 0.225),
+      point(boardOffsetX + localWidth * 0.918, boardOffsetY + localHeight * 0.802),
+      point(boardOffsetX + localWidth * 0.082, boardOffsetY + localHeight * 0.802)
     ],
     centerEmblemRect: translateRect({
-      x: localWidth * 0.375,
-      y: localHeight * 0.332,
-      width: localWidth * 0.25,
-      height: localHeight * 0.25
+      x: localWidth * 0.355,
+      y: localHeight * 0.34,
+      width: localWidth * 0.29,
+      height: localHeight * 0.29
     }),
     trickRect: translateRect({
-      x: localWidth * 0.292,
-      y: localHeight * 0.37,
-      width: localWidth * 0.416,
-      height: localHeight * 0.16
+      x: localWidth * 0.306,
+      y: localHeight * 0.44,
+      width: localWidth * 0.388,
+      height: localHeight * 0.145
     }),
     statusRect: translateRect({
       x: localWidth * 0.37,
-      y: localHeight * 0.23,
+      y: localHeight * 0.255,
       width: localWidth * 0.26,
-      height: localHeight * 0.05
-    }),
-    scoreRect: translateRect({
-      x: localWidth * 0.382,
-      y: localHeight * 0.026,
-      width: localWidth * 0.236,
       height: localHeight * 0.042
     }),
+    scoreRect: translateRect({
+      x: localWidth * 0.385,
+      y: localHeight * 0.012,
+      width: localWidth * 0.23,
+      height: localHeight * 0.032
+    }),
     southControlRect: translateRect({
-      x: localWidth * 0.23,
-      y: localHeight * 0.93,
-      width: localWidth * 0.54,
-      height: localHeight * 0.04
+      x: localWidth * 0.245,
+      y: localHeight * 0.945,
+      width: localWidth * 0.51,
+      height: localHeight * 0.03
     }),
     seats: {
       top: {
@@ -390,22 +390,22 @@ export function resolveAlternateTableLayout(
     trickPlacements: {
       top: {
         x: boardOffsetX + localWidth * 0.5,
-        y: boardOffsetY + localHeight * 0.388,
+        y: boardOffsetY + localHeight * 0.452,
         rotation: 0
       },
       right: {
-        x: boardOffsetX + localWidth * 0.634,
-        y: boardOffsetY + localHeight * 0.445,
+        x: boardOffsetX + localWidth * 0.624,
+        y: boardOffsetY + localHeight * 0.512,
         rotation: 8
       },
       bottom: {
         x: boardOffsetX + localWidth * 0.5,
-        y: boardOffsetY + localHeight * 0.505,
+        y: boardOffsetY + localHeight * 0.55,
         rotation: 0
       },
       left: {
-        x: boardOffsetX + localWidth * 0.366,
-        y: boardOffsetY + localHeight * 0.445,
+        x: boardOffsetX + localWidth * 0.376,
+        y: boardOffsetY + localHeight * 0.512,
         rotation: -8
       }
     },

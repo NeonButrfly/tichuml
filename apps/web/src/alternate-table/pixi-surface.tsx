@@ -113,15 +113,15 @@ function renderSurface(runtime: PixiRuntime, props: AlternateTablePixiSurfacePro
   const embellishments = new Graphics();
   const routeFrames = new Graphics();
 
-  const pocketRadius = props.layout.boardRect.height * 0.06;
+  const pocketRadius = props.layout.boardRect.height * 0.048;
   const outerFelt = props.layout.outerFelt;
   const innerFelt = props.layout.innerFelt;
 
   drawRectFrame(
     shadow,
     {
-      x: props.layout.boardRect.x + 8,
-      y: props.layout.boardRect.y + 14,
+      x: props.layout.boardRect.x + 6,
+      y: props.layout.boardRect.y + 10,
       width: props.layout.boardRect.width,
       height: props.layout.boardRect.height
     },
@@ -131,18 +131,18 @@ function renderSurface(runtime: PixiRuntime, props: AlternateTablePixiSurfacePro
     0.55
   );
 
-  drawRectFrame(board, props.layout.boardRect, 0x5a3119, 0x8b5a31, 44, 1);
+  drawRectFrame(board, props.layout.boardRect, 0x5a3119, 0x8b5a31, 40, 1);
   drawRectFrame(
     board,
     {
-      x: props.layout.boardRect.x + props.layout.boardRect.width * 0.026,
-      y: props.layout.boardRect.y + props.layout.boardRect.height * 0.034,
-      width: props.layout.boardRect.width * 0.948,
-      height: props.layout.boardRect.height * 0.928
+      x: props.layout.boardRect.x + props.layout.boardRect.width * 0.014,
+      y: props.layout.boardRect.y + props.layout.boardRect.height * 0.02,
+      width: props.layout.boardRect.width * 0.972,
+      height: props.layout.boardRect.height * 0.958
     },
     0x70401f,
     0xb18453,
-    38,
+    34,
     1
   );
 
@@ -163,6 +163,10 @@ function renderSurface(runtime: PixiRuntime, props: AlternateTablePixiSurfacePro
 
   drawPolygon(board, outerFelt, 0x134d3d, 1);
   drawPolygon(embellishments, innerFelt, 0x0d3328, 0.96);
+
+  const feltGlow = new Graphics();
+  feltGlow.poly(outerFelt.flatMap((entry) => [entry.x, entry.y]));
+  feltGlow.stroke({ color: 0xd9b16b, alpha: 0.22, width: 2.2 });
 
   const innerBorder = new Graphics();
   innerBorder.poly(innerFelt.flatMap((entry) => [entry.x, entry.y]));
@@ -254,7 +258,7 @@ function renderSurface(runtime: PixiRuntime, props: AlternateTablePixiSurfacePro
   centerTitle.anchor.set(0.5);
   centerTitle.position.set(
     props.layout.boardRect.x + props.layout.boardRect.width / 2,
-    props.layout.boardRect.y + props.layout.boardRect.height * 0.135
+    props.layout.boardRect.y + props.layout.boardRect.height * 0.17
   );
 
   const phaseText = new Text({
@@ -273,7 +277,16 @@ function renderSurface(runtime: PixiRuntime, props: AlternateTablePixiSurfacePro
     props.layout.statusRect.y + props.layout.statusRect.height / 2
   );
 
-  root.addChild(shadow, board, embellishments, innerBorder, routeFrames, centerTitle, phaseText);
+  root.addChild(
+    shadow,
+    board,
+    embellishments,
+    feltGlow,
+    innerBorder,
+    routeFrames,
+    centerTitle,
+    phaseText
+  );
 }
 
 export function AlternateTablePixiSurface(
