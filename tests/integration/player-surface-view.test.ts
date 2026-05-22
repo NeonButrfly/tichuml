@@ -392,6 +392,26 @@ describe("NormalGameTableView", () => {
     }
   });
 
+  it("mounts the graphics layer behind the live seat ring without replacing the action band or seat overlays", () => {
+    const view = render(
+      createElement(NormalGameTableView, createDecisionProps())
+    );
+
+    try {
+      expect(
+        view.container.querySelector("[data-table-graphics-layer='true']")
+      ).not.toBeNull();
+      expect(
+        view.container.querySelector(".player-surface__action-band")
+      ).not.toBeNull();
+      expect(
+        view.container.querySelector("[data-seat-identity='seat-0']")
+      ).not.toBeNull();
+    } finally {
+      view.unmount();
+    }
+  });
+
   it("renders consistent seat identity badges and seat-associated state markers", () => {
     const view = render(
       createElement(NormalGameTableView, createDecisionProps())

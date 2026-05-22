@@ -4771,6 +4771,8 @@ export function NormalGameTableView(props: GameTableViewProps) {
     "--normal-bottom-card-step": `${layoutMetrics.bottomCardStep}px`,
     "--normal-side-card-step": `${layoutMetrics.sideCardStep}px`
   } as CSSProperties;
+  const activeSeatPosition =
+    props.seatViews.find((seatView) => seatView.isPrimarySeat)?.position ?? null;
   useNormalLayoutDiagnostics({
     rootRef: viewportRef,
     dependencyKey: [
@@ -4996,6 +4998,10 @@ export function NormalGameTableView(props: GameTableViewProps) {
     <PlayerSurfaceView
       viewportRef={viewportRef}
       layoutStyle={layoutStyle}
+      normalTableLayout={props.normalTableLayout}
+      layoutMetrics={layoutMetrics}
+      activeSeatPosition={activeSeatPosition}
+      wishActive={Boolean(props.derived.currentWish)}
       surfacePresentation={props.surfacePresentation}
       centerZoneClassName={getNormalCenterZoneClassName(props.layoutEditorActive)}
       centerZoneStyle={playSurfaceRegionStyle}
