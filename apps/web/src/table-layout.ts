@@ -108,10 +108,20 @@ export type NormalViewportLayoutMetrics = {
   topCardStep: number;
   bottomCardStep: number;
   sideCardStep: number;
+  trickCardWidth: number;
+  trickCardHeight: number;
+  wishPickerWidth: number;
+  wishPickerHeight: number;
   selectedLift: number;
   topMinReveal: number;
   bottomMinReveal: number;
   sideMinReveal: number;
+  safeViewportLeft: number;
+  safeViewportRight: number;
+  safeViewportTop: number;
+  safeViewportBottom: number;
+  safeActionRowTop: number;
+  safeActionRowBottom: number;
   totalRequiredHeight: number;
   minimumMiddleWidth: number;
   minimumMiddleHeight: number;
@@ -601,6 +611,99 @@ function cardHeightFromWidth(width: number) {
 
 function cardWidthFromHeight(height: number) {
   return Math.floor(height * CARD_ASPECT);
+}
+
+type BoardViewportFrame = {
+  viewportWidth: number;
+  viewportHeight: number;
+  shellPaddingX: number;
+  shellPaddingY: number;
+};
+
+function resolveBoardBoundsFromViewportFrame(frame: BoardViewportFrame) {
+  const boardViewportWidth = Math.max(
+    0,
+    frame.viewportWidth - frame.shellPaddingX * 2
+  );
+  const boardViewportHeight = Math.max(
+    0,
+    frame.viewportHeight - frame.shellPaddingY * 2
+  );
+  const width = Math.max(
+    0,
+    boardViewportWidth - NORMAL_BOARD_INSET.left - NORMAL_BOARD_INSET.right
+  );
+  const height = Math.max(
+    0,
+    boardViewportHeight - NORMAL_BOARD_INSET.top - NORMAL_BOARD_INSET.bottom
+  );
+
+  return {
+    left: NORMAL_BOARD_INSET.left,
+    top: NORMAL_BOARD_INSET.top,
+    width,
+    height,
+    right: NORMAL_BOARD_INSET.left + width,
+    bottom: NORMAL_BOARD_INSET.top + height
+  };
+}
+
+function resolveNormalViewportSafeGeometry(config: {
+  board: ReturnType<typeof resolveBoardBoundsFromViewportFrame>;
+  seatInsetX: number;
+  centerInset: number;
+  bandGap: number;
+  headerHeight: number;
+  actionBandHeight: number;
+  cardWidth: number;
+  cardHeight: number;
+  centerColumnWidth: number;
+}): Pick<
+  NormalViewportLayoutMetrics,
+  | "safeViewportLeft"
+  | "safeViewportRight"
+  | "safeViewportTop"
+  | "safeViewportBottom"
+  | "safeActionRowTop"
+  | "safeActionRowBottom"
+  | "trickCardWidth"
+  | "trickCardHeight"
+  | "wishPickerWidth"
+  | "wishPickerHeight"
+> {
+  const safeActionRowTop = config.board.bottom - config.actionBandHeight;
+  const trickCardWidth = Math.min(
+    84,
+    Math.max(44, Math.round(config.cardWidth * 0.82))
+  );
+  const trickCardHeight = cardHeightFromWidth(trickCardWidth);
+  const wishPickerWidth = Math.min(
+    config.centerColumnWidth,
+    Math.max(280, Math.round(config.cardWidth * 4.2))
+  );
+  const wishPickerHeight = Math.min(
+    config.actionBandHeight,
+    Math.max(44, Math.round(config.cardHeight * 0.42))
+  );
+
+  return {
+    safeViewportLeft:
+      config.board.left + config.seatInsetX + config.centerInset + 8,
+    safeViewportRight:
+      config.board.right - config.seatInsetX - config.centerInset - 8,
+    safeViewportTop:
+      config.board.top +
+      config.headerHeight +
+      config.bandGap +
+      Math.max(12, Math.round(config.cardHeight * 0.12)),
+    safeViewportBottom: safeActionRowTop - config.bandGap,
+    safeActionRowTop,
+    safeActionRowBottom: config.board.bottom,
+    trickCardWidth,
+    trickCardHeight,
+    wishPickerWidth,
+    wishPickerHeight
+  };
 }
 
 export function requiredFanSpan(
@@ -1165,6 +1268,23 @@ export function computeNormalViewportLayoutMetrics(config: {
     }
 
     resolvedCardWidth = candidateWidth;
+    const board = resolveBoardBoundsFromViewportFrame({
+      viewportWidth,
+      viewportHeight,
+      shellPaddingX,
+      shellPaddingY
+    });
+    const safeGeometry = resolveNormalViewportSafeGeometry({
+      board,
+      seatInsetX,
+      centerInset,
+      bandGap,
+      headerHeight,
+      actionBandHeight,
+      cardWidth: candidateWidth,
+      cardHeight: candidateHeight,
+      centerColumnWidth
+    });
     return {
       viewportWidth,
       viewportHeight,
@@ -1184,6 +1304,10 @@ export function computeNormalViewportLayoutMetrics(config: {
       cardHeight: candidateHeight,
       routeCardWidth,
       routeCardHeight,
+      trickCardWidth: safeGeometry.trickCardWidth,
+      trickCardHeight: safeGeometry.trickCardHeight,
+      wishPickerWidth: safeGeometry.wishPickerWidth,
+      wishPickerHeight: safeGeometry.wishPickerHeight,
       topCardStep: calculateFanStep({
         count: config.topCount,
         cardPrimarySize: candidateWidth,
@@ -1209,6 +1333,12 @@ export function computeNormalViewportLayoutMetrics(config: {
       topMinReveal: topReveal.minimum,
       bottomMinReveal: bottomReveal.minimum,
       sideMinReveal: sideReveal.minimum,
+      safeViewportLeft: safeGeometry.safeViewportLeft,
+      safeViewportRight: safeGeometry.safeViewportRight,
+      safeViewportTop: safeGeometry.safeViewportTop,
+      safeViewportBottom: safeGeometry.safeViewportBottom,
+      safeActionRowTop: safeGeometry.safeActionRowTop,
+      safeActionRowBottom: safeGeometry.safeActionRowBottom,
       totalRequiredHeight:
         headerHeight +
         northBandHeight +
@@ -1246,6 +1376,23 @@ export function computeNormalViewportLayoutMetrics(config: {
       actionBandHeight -
       bandGap * 4
   );
+  const fallbackBoard = resolveBoardBoundsFromViewportFrame({
+    viewportWidth,
+    viewportHeight,
+    shellPaddingX,
+    shellPaddingY
+  });
+  const fallbackSafeGeometry = resolveNormalViewportSafeGeometry({
+    board: fallbackBoard,
+    seatInsetX,
+    centerInset,
+    bandGap,
+    headerHeight,
+    actionBandHeight,
+    cardWidth: resolvedCardWidth,
+    cardHeight: fallbackCardHeight,
+    centerColumnWidth: fallbackCenterColumnWidth
+  });
 
   return {
     viewportWidth,
@@ -1266,6 +1413,10 @@ export function computeNormalViewportLayoutMetrics(config: {
     cardHeight: fallbackCardHeight,
     routeCardWidth: fallbackRouteCardWidth,
     routeCardHeight: fallbackRouteCardHeight,
+    trickCardWidth: fallbackSafeGeometry.trickCardWidth,
+    trickCardHeight: fallbackSafeGeometry.trickCardHeight,
+    wishPickerWidth: fallbackSafeGeometry.wishPickerWidth,
+    wishPickerHeight: fallbackSafeGeometry.wishPickerHeight,
     topCardStep: fallbackCenterColumnWidth,
     bottomCardStep: fallbackCenterColumnWidth,
     sideCardStep: fallbackCenterBandHeight,
@@ -1273,6 +1424,12 @@ export function computeNormalViewportLayoutMetrics(config: {
     topMinReveal: Math.max(10, Math.round(resolvedCardWidth * 0.18)),
     bottomMinReveal: Math.max(20, Math.round(resolvedCardWidth * 0.42)),
     sideMinReveal: Math.max(10, Math.round(resolvedCardWidth * 0.16)),
+    safeViewportLeft: fallbackSafeGeometry.safeViewportLeft,
+    safeViewportRight: fallbackSafeGeometry.safeViewportRight,
+    safeViewportTop: fallbackSafeGeometry.safeViewportTop,
+    safeViewportBottom: fallbackSafeGeometry.safeViewportBottom,
+    safeActionRowTop: fallbackSafeGeometry.safeActionRowTop,
+    safeActionRowBottom: fallbackSafeGeometry.safeActionRowBottom,
     totalRequiredHeight:
       headerHeight +
       fallbackNorthBandHeight +
@@ -1291,31 +1448,7 @@ export function computeNormalViewportLayoutMetrics(config: {
 export function getBoardBounds(
   metrics: NormalViewportLayoutMetrics
 ): BoardRect {
-  const boardViewportWidth = Math.max(
-    0,
-    metrics.viewportWidth - metrics.shellPaddingX * 2
-  );
-  const boardViewportHeight = Math.max(
-    0,
-    metrics.viewportHeight - metrics.shellPaddingY * 2
-  );
-  const width = Math.max(
-    0,
-    boardViewportWidth - NORMAL_BOARD_INSET.left - NORMAL_BOARD_INSET.right
-  );
-  const height = Math.max(
-    0,
-    boardViewportHeight - NORMAL_BOARD_INSET.top - NORMAL_BOARD_INSET.bottom
-  );
-
-  return {
-    left: NORMAL_BOARD_INSET.left,
-    top: NORMAL_BOARD_INSET.top,
-    width,
-    height,
-    right: NORMAL_BOARD_INSET.left + width,
-    bottom: NORMAL_BOARD_INSET.top + height
-  };
+  return resolveBoardBoundsFromViewportFrame(metrics);
 }
 
 function getNormalSideLabelBorderBounds(
@@ -1394,24 +1527,54 @@ export function resolveNormalSeatAnchorGeometry(config: {
     hand.y = Math.max(hand.y, minimumHandCenterY);
   }
 
-  if (isSideSeat) {
+  if (config.position === "bottom") {
     const spacing = getNormalTableSpacing(config.layoutMetrics);
     const playArea = getNormalPlayAreaBounds(
       config.normalTableLayout,
       config.layoutMetrics
     );
-    const sideHandWidth = handMetrics.depth;
-    const sideInset = clampNumber(
-      Math.round(config.layoutMetrics.cardWidth * 0.36),
-      24,
-      30
+    const minimumSouthClearance = Math.max(
+      Math.round(config.layoutMetrics.cardHeight * 0.08),
+      Math.round(DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS.actionAreaGap)
     );
+    const minimumHandCenterY =
+      playArea.bottom -
+      config.layoutMetrics.centerInset +
+      Math.max(24, spacing.handToLaneGap) +
+      handMetrics.depth / 2;
+    const maximumHandCenterY =
+      config.layoutMetrics.safeActionRowTop -
+      minimumSouthClearance -
+      handMetrics.depth / 2;
 
-    hand.y = playArea.top + playArea.height / 2;
-    hand.x =
-      config.position === "left"
-        ? playArea.left - spacing.handToLaneGap - sideHandWidth / 2 + sideInset
-        : playArea.right + spacing.handToLaneGap + sideHandWidth / 2 - sideInset;
+    hand.y = clampNumber(
+      hand.y,
+      minimumHandCenterY,
+      Math.max(minimumHandCenterY, maximumHandCenterY)
+    );
+  }
+
+  if (isSideSeat) {
+    const sideHandWidth = handMetrics.depth;
+    const safeMinimumX =
+      config.layoutMetrics.safeViewportLeft + sideHandWidth / 2;
+    const safeMaximumX =
+      config.layoutMetrics.safeViewportRight - sideHandWidth / 2;
+    const safeMinimumY =
+      config.layoutMetrics.safeViewportTop + handMetrics.span / 2;
+    const safeMaximumY =
+      config.layoutMetrics.safeViewportBottom - handMetrics.span / 2;
+
+    hand.y = clampNumber(
+      hand.y,
+      safeMinimumY,
+      Math.max(safeMinimumY, safeMaximumY)
+    );
+    hand.x = clampNumber(
+      hand.x,
+      safeMinimumX,
+      Math.max(safeMinimumX, safeMaximumX)
+    );
   }
 
   const handBounds = resolveNormalHandBounds({
@@ -1499,23 +1662,11 @@ export function resolveNormalActionRowRegionStyle(config: {
   layoutMetrics: NormalViewportLayoutMetrics;
 }): CSSProperties {
   const board = getBoardBounds(config.layoutMetrics);
-  const southAnchor = resolveNormalSeatAnchorGeometry({
-    position: "bottom",
-    normalTableLayout: config.normalTableLayout,
-    layoutMetrics: config.layoutMetrics,
-    handCardCount: 1
-  });
-  const { southToActionRowGap } = getNormalTableSpacing(config.layoutMetrics);
-  const southLabelHeight = NORMAL_LAYOUT_ELEMENT_SPECS.southLabel.height;
   const center = {
     x: board.left + board.width * config.normalTableLayout.actionRow.x,
-    y: Math.min(
-      board.bottom - config.layoutMetrics.actionBandHeight / 2,
-      southAnchor.label.y +
-        southLabelHeight / 2 +
-        southToActionRowGap +
-        config.layoutMetrics.actionBandHeight / 2
-    ),
+    y:
+      config.layoutMetrics.safeActionRowTop +
+      config.layoutMetrics.actionBandHeight / 2,
     rotation: config.normalTableLayout.actionRow.rotation
   };
 
