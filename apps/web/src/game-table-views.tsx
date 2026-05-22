@@ -105,9 +105,11 @@ export {
   resolveNormalBoardAnchorStyle,
   resolveNormalPassLaneGeometry,
   resolveNormalPlaySurfaceRegionStyle,
+  resolveNormalSharedTrickZoneRegionStyle,
   resolveNormalSeatAnchorGeometry,
   resolveNormalSeatRegionStyle,
-  resolveNormalStageAnchorStyle
+  resolveNormalStageAnchorStyle,
+  resolveNormalWishAnchorStyle
 } from "./table-layout";
 import {
   CARD_ASPECT,
@@ -132,7 +134,9 @@ import {
   resolveNormalBoardAnchorStyle,
   resolveNormalPassLaneGeometry,
   resolveNormalPlaySurfaceRegionStyle,
+  resolveNormalSharedTrickZoneRegionStyle,
   resolveNormalSeatRegionStyle,
+  resolveNormalWishAnchorStyle,
   type AnchorPoint,
   type NormalLayoutElement,
   type NormalLayoutElementId,
@@ -1541,6 +1545,7 @@ export function TableSurface(
   | "cardLookup"
 > & {
   variant: "normal" | "debug";
+  layoutMetrics?: NormalViewportLayoutMetrics;
 }
 ) {
   const {
@@ -1573,6 +1578,20 @@ export function TableSurface(
     variant === "normal"
       ? resolvedSurfacePresentation.tableMode === "resolution"
       : trickIsResolving;
+  const trickZoneStyle =
+    variant === "normal" && props.layoutMetrics
+      ? resolveNormalSharedTrickZoneRegionStyle({
+          normalTableLayout: props.normalTableLayout,
+          layoutMetrics: props.layoutMetrics
+        })
+      : undefined;
+  const wishAnchorStyle =
+    variant === "normal" && props.layoutMetrics && derived.currentWish !== null
+      ? resolveNormalWishAnchorStyle({
+          normalTableLayout: props.normalTableLayout,
+          layoutMetrics: props.layoutMetrics
+        })
+      : undefined;
 
   return (
     <section
@@ -1601,50 +1620,58 @@ export function TableSurface(
         .filter(Boolean)
         .join(" ")}
     >
-      {!exchangePhaseActive && displayedTrick ? (
+      {variant === "normal" ? (
         <>
-          <div
-            className={
-              variant === "normal"
-                ? "normal-play-surface__core"
-                : "table-trick__core"
-            }
+          <section
+            className="normal-play-surface__trick-zone"
+            data-trick-zone="current"
+            style={trickZoneStyle}
           >
-            <span
-              className={
-                variant === "normal"
-                  ? "normal-play-surface__badge"
-                  : "table-trick__lead"
-              }
+            {!exchangePhaseActive && displayedTrick ? (
+              <div className="normal-play-surface__trick-stack">
+                <span className="normal-play-surface__badge">
+                  {formatCombinationKind(displayedTrick.currentCombination.kind)}
+                </span>
+                <span className="normal-play-surface__badge">
+                  {formatSeatShort(displayedTrick.currentWinner)} ahead
+                </span>
+                <span className="normal-play-surface__badge normal-play-surface__badge--points">
+                  Trick: {trickPoints} pts
+                </span>
+              </div>
+            ) : (
+              <div className="normal-play-surface__empty">
+                <strong>Current trick</strong>
+                <p>{status.body}</p>
+              </div>
+            )}
+          </section>
+          {derived.currentWish !== null && (
+            <div
+              className="normal-play-surface__wish-anchor"
+              data-wish-anchor="active"
+              style={wishAnchorStyle}
             >
+              <span className="normal-play-surface__wish-label">Wish</span>
+              {" "}
+              <span className="wish-chip wish-chip--table">
+                {formatRank(derived.currentWish)}
+              </span>
+            </div>
+          )}
+        </>
+      ) : !exchangePhaseActive && displayedTrick ? (
+        <>
+          <div className="table-trick__core">
+            <span className="table-trick__lead">
               {formatCombinationKind(displayedTrick.currentCombination.kind)}
             </span>
-            <span
-              className={
-                variant === "normal"
-                  ? "normal-play-surface__badge"
-                  : "table-trick__lead"
-              }
-            >
+            <span className="table-trick__lead">
               {formatSeatShort(displayedTrick.currentWinner)} ahead
             </span>
-            <span
-              className={
-                variant === "normal"
-                  ? "normal-play-surface__badge normal-play-surface__badge--points"
-                  : "table-trick__lead"
-              }
-            >
-              Trick: {trickPoints} pts
-            </span>
+            <span className="table-trick__lead">Trick: {trickPoints} pts</span>
             {derived.currentWish !== null && (
-              <span
-                className={
-                  variant === "normal"
-                    ? "normal-play-surface__badge"
-                    : "wish-chip wish-chip--table"
-                }
-              >
+              <span className="wish-chip wish-chip--table">
                 Wish {formatRank(derived.currentWish)}
               </span>
             )}
@@ -4762,15 +4789,7 @@ export function NormalGameTableView(props: GameTableViewProps) {
       onUiCommand={props.onUiCommand}
     />
   );
-  const activeWish =
-    props.derived.currentWish !== null ? (
-      <div className="normal-active-wish" aria-live="polite">
-        <span className="normal-active-wish__label">Active wish</span>
-        <span className="wish-chip wish-chip--table">
-          {formatRank(props.derived.currentWish)}
-        </span>
-      </div>
-    ) : null;
+  const activeWish = null;
   const scoreboard = (
     <div
       className="normal-scoreboard-anchor"
@@ -4790,6 +4809,7 @@ export function NormalGameTableView(props: GameTableViewProps) {
     <TableSurface
       variant="normal"
       normalTableLayout={props.normalTableLayout}
+      layoutMetrics={layoutMetrics}
       state={props.state}
       derived={props.derived}
       controlHint={props.controlHint}

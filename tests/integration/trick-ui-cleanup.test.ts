@@ -24,6 +24,11 @@ import {
 } from "../../apps/web/src/game-table-views";
 import {
   getBoardBounds,
+  resolveNormalPassLaneGeometry,
+  resolveNormalPlaySurfaceRegionStyle,
+  resolveNormalSharedTrickZoneRegionStyle,
+  resolveNormalWishAnchorStyle,
+  resolveNormalSeatAnchorGeometry,
   getNormalTableSpacing,
   getNormalSeatLayout,
   resolveNormalActionRowRegionStyle
@@ -104,6 +109,44 @@ function combo(cardIds: string[]) {
   }
 
   return result;
+}
+
+function styleRect(style: {
+  left?: string | number;
+  top?: string | number;
+  width?: string | number;
+  height?: string | number;
+}) {
+  const left = parseFloat(String(style.left ?? 0));
+  const top = parseFloat(String(style.top ?? 0));
+  const width = parseFloat(String(style.width ?? 0));
+  const height = parseFloat(String(style.height ?? 0));
+
+  return {
+    left,
+    top,
+    width,
+    height,
+    right: left + width,
+    bottom: top + height
+  };
+}
+
+function rectsOverlap(
+  first: ReturnType<typeof styleRect>,
+  second: {
+    left: number;
+    top: number;
+    right: number;
+    bottom: number;
+  }
+) {
+  return !(
+    first.right <= second.left ||
+    first.left >= second.right ||
+    first.bottom <= second.top ||
+    first.top >= second.bottom
+  );
 }
 
 afterEach(() => {
@@ -189,7 +232,7 @@ describe("trick UI cleanup", () => {
     view.unmount();
   });
 
-  it("keeps the normal play-surface core centered inside its shared play-area container", () => {
+  it("keeps the normal trick zone centered inside its shared play-area container", () => {
     const lead = combo(["jade-10"]);
     const response = combo(["dragon"]);
     const state = createScenarioState({
@@ -225,9 +268,11 @@ describe("trick UI cleanup", () => {
       })
     );
 
-    const core = view.container.querySelector<HTMLElement>(".normal-play-surface__core");
-    expect(core?.style.left).toBe("");
-    expect(core?.style.top).toBe("");
+    const trickZone = view.container.querySelector<HTMLElement>(
+      ".normal-play-surface__trick-zone"
+    );
+    expect(trickZone?.style.left).toBe("");
+    expect(trickZone?.style.top).toBe("");
 
     view.unmount();
   });
@@ -967,7 +1012,7 @@ describe("trick UI cleanup", () => {
     );
     const spacing = getNormalTableSpacing(metrics);
 
-    expect(trickY).toBeGreaterThan(pickupY);
+    expect(trickY).toBeLessThan(pickupY);
     expect(pickupY).toBeLessThan(southHandY);
     expect(trickY).toBeLessThan(southHandY);
     expect(southHandY - trickY).toBeGreaterThanOrEqual(
@@ -1016,7 +1061,7 @@ describe("trick UI cleanup", () => {
 
   it("hides the trick-points badge when no trick is active", () => {
     const state = createScenarioState({
-      phase: "trick_play",
+      phase: "grand_tichu",
       activeSeat: "seat-0",
       currentTrick: null
     });
@@ -1035,8 +1080,139 @@ describe("trick UI cleanup", () => {
       })
     );
 
+    expect(
+      view.container.querySelector('[data-trick-zone="current"]')
+    ).not.toBeNull();
+    expect(view.container.querySelector("[data-wish-anchor]")).toBeNull();
     expect(view.container.textContent).not.toContain("Trick:");
     view.unmount();
+  });
+
+  it("shows the wish anchor only when a wish is active", () => {
+    const state = createScenarioState({
+      phase: "trick_play",
+      activeSeat: "seat-1",
+      currentWish: 11,
+      currentTrick: null
+    });
+    const view = render(
+      createElement(TableSurface, {
+        variant: "normal",
+        normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+        state,
+        derived: createDerived(state),
+        controlHint: "Follow the wish",
+        displayedTrick: null,
+        trickIsResolving: false,
+        seatRelativePlays: [],
+        tablePassGroups: [],
+        cardLookup: new Map()
+      })
+    );
+
+    expect(
+      view.container.querySelector('[data-trick-zone="current"]')
+    ).not.toBeNull();
+    expect(
+      view.container.querySelector('[data-wish-anchor="active"]')?.textContent
+    ).toContain("Wish");
+    expect(
+      view.container.querySelector('[data-wish-anchor="active"]')?.textContent
+    ).toContain("J");
+
+    view.unmount();
+  });
+
+  it("keeps the shared trick zone and pass lanes in reserved non-overlapping regions", () => {
+    const layoutMetrics = computeNormalViewportLayoutMetrics({
+      viewportWidth: 1366,
+      viewportHeight: 768,
+      topCount: 14,
+      bottomCount: 14,
+      leftCount: 14,
+      rightCount: 14,
+      hasVariantPicker: false,
+      hasWishPicker: true
+    });
+    const trickZoneStyle = resolveNormalSharedTrickZoneRegionStyle({
+      normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+      layoutMetrics
+    });
+    const wishAnchorStyle = resolveNormalWishAnchorStyle({
+      normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+      layoutMetrics
+    });
+    const playSurfaceRect = styleRect(
+      resolveNormalPlaySurfaceRegionStyle({
+        normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+        layoutMetrics
+      })
+    );
+    const trickZoneRect = styleRect(trickZoneStyle);
+    const wishAnchorLeft = parseFloat(String(wishAnchorStyle.left ?? 0));
+    const wishAnchorTop = parseFloat(String(wishAnchorStyle.top ?? 0));
+
+    expect(trickZoneRect.width).toBeGreaterThan(0);
+    expect(trickZoneRect.height).toBeGreaterThan(0);
+    expect(trickZoneRect.left).toBeGreaterThan(playSurfaceRect.left);
+    expect(trickZoneRect.top).toBeGreaterThan(playSurfaceRect.top);
+    expect(trickZoneRect.right).toBeLessThan(playSurfaceRect.right);
+    expect(trickZoneRect.bottom).toBeLessThan(playSurfaceRect.bottom);
+    expect(wishAnchorLeft).toBeGreaterThan(trickZoneRect.left);
+    expect(wishAnchorLeft).toBeLessThan(trickZoneRect.left + trickZoneRect.width / 2);
+    expect(wishAnchorTop).toBeGreaterThan(trickZoneRect.top);
+    expect(wishAnchorTop).toBeLessThan(trickZoneRect.top + trickZoneRect.height / 2);
+
+    const laneCases = [
+      { sourcePosition: "top", targetPosition: "left", direction: "left" as const },
+      { sourcePosition: "top", targetPosition: "bottom", direction: "down" as const },
+      { sourcePosition: "top", targetPosition: "right", direction: "right" as const },
+      { sourcePosition: "right", targetPosition: "top", direction: "up" as const },
+      { sourcePosition: "right", targetPosition: "left", direction: "left" as const },
+      { sourcePosition: "right", targetPosition: "bottom", direction: "down" as const },
+      { sourcePosition: "bottom", targetPosition: "left", direction: "left" as const },
+      { sourcePosition: "bottom", targetPosition: "top", direction: "up" as const },
+      { sourcePosition: "bottom", targetPosition: "right", direction: "right" as const },
+      { sourcePosition: "left", targetPosition: "top", direction: "up" as const },
+      { sourcePosition: "left", targetPosition: "right", direction: "right" as const },
+      { sourcePosition: "left", targetPosition: "bottom", direction: "down" as const }
+    ];
+
+    for (const laneCase of laneCases) {
+      const handBounds = resolveNormalSeatAnchorGeometry({
+        position: laneCase.sourcePosition,
+        normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+        layoutMetrics,
+        handCardCount: 14
+      }).handBounds;
+      const laneGeometry = resolveNormalPassLaneGeometry({
+        normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+        layoutMetrics,
+        sourcePosition: laneCase.sourcePosition,
+        targetPosition: laneCase.targetPosition,
+        direction: laneCase.direction,
+        sourceHandCardCount: 14,
+        displayMode: "passing"
+      });
+
+      expect(laneGeometry).not.toBeNull();
+
+      const laneRect = styleRect(laneGeometry!.style);
+      const laneCenterX = laneRect.left + laneRect.width / 2;
+      const laneCenterY = laneRect.top + laneRect.height / 2;
+
+      if (laneCase.sourcePosition === "top") {
+        expect(laneCenterY).toBeGreaterThan(handBounds.bottom);
+      } else if (laneCase.sourcePosition === "bottom") {
+        expect(laneCenterY).toBeLessThan(handBounds.top);
+      } else if (laneCase.sourcePosition === "left") {
+        expect(laneCenterX).toBeGreaterThan(handBounds.right);
+      } else {
+        expect(laneCenterX).toBeLessThan(handBounds.left);
+      }
+
+      expect(rectsOverlap(laneRect, trickZoneRect)).toBe(false);
+    }
   });
 
   it("keeps play-area shadow editor-only", () => {
