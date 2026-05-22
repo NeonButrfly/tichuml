@@ -339,171 +339,181 @@ export function AlternateGameTableView(props: GameTableViewProps) {
         </section>
 
         <section className="alternate-south-zone" data-alt-seat="south">
-          <div className="alternate-hand">
-            {props.sortedLocalHand.map((card) => (
-              <div
-                key={card.id}
-                className="alternate-hand__card-shell"
-                style={
-                  {
-                    "--alt-card-offset": String(props.sortedLocalHand.indexOf(card))
-                  } as CSSProperties
-                }
-              >
-                <CardFace
-                  card={card}
-                  interactive={props.localCanInteract}
-                  tone={props.localLegalCardIds.has(card.id) ? "legal" : "muted"}
-                  selected={props.selectedCardIds.includes(card.id)}
-                  className="alternate-hand__card"
-                  draggable={props.localPassInteractionEnabled}
-                  onClick={() => props.onLocalCardClick(card.id)}
-                  onDragStart={(event) => {
-                    event.dataTransfer.effectAllowed = "move";
-                    event.dataTransfer.setData(
-                      "application/x-tichu-pass-card",
-                      card.id
-                    );
-                  }}
-                />
+          <div className="alternate-south-rail">
+            <div className="alternate-south-rail__hand">
+              <div className="alternate-hand">
+                {props.sortedLocalHand.map((card) => (
+                  <div
+                    key={card.id}
+                    className="alternate-hand__card-shell"
+                    style={
+                      {
+                        "--alt-card-offset": String(props.sortedLocalHand.indexOf(card))
+                      } as CSSProperties
+                    }
+                  >
+                    <CardFace
+                      card={card}
+                      interactive={props.localCanInteract}
+                      tone={props.localLegalCardIds.has(card.id) ? "legal" : "muted"}
+                      selected={props.selectedCardIds.includes(card.id)}
+                      className="alternate-hand__card"
+                      draggable={props.localPassInteractionEnabled}
+                      onClick={() => props.onLocalCardClick(card.id)}
+                      onDragStart={(event) => {
+                        event.dataTransfer.effectAllowed = "move";
+                        event.dataTransfer.setData(
+                          "application/x-tichu-pass-card",
+                          card.id
+                        );
+                      }}
+                    />
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-
-          <AlternateSeatPlaque seat={southSeat} label="SOUTH / YOU" prominent />
-
-          <div className="alternate-controls">
-            <div className="alternate-controls__primary">
-              {props.normalActionRail.map((slot) => (
-                <button
-                  key={slot.id}
-                  type="button"
-                  className={[
-                    "alternate-action-button",
-                    `alternate-action-button--${slot.tone}`
-                  ].join(" ")}
-                  disabled={!slot.enabled}
-                  onClick={() => props.onNormalAction(slot.id)}
-                >
-                  {slot.label}
-                </button>
-              ))}
             </div>
 
-            <div className="alternate-controls__secondary">
-              <button
-                type="button"
-                className="alternate-utility-button"
-                onClick={() => props.onSortModeChange("rank")}
-              >
-                Sort Rank
-              </button>
-              <button
-                type="button"
-                className="alternate-utility-button"
-                onClick={() => props.onSortModeChange("suit")}
-              >
-                Sort Suit
-              </button>
-              <button
-                type="button"
-                className="alternate-utility-button"
-                onClick={() => props.onSortModeChange("combo")}
-              >
-                Sort Combo
-              </button>
-              <button
-                type="button"
-                className="alternate-utility-button"
-                onClick={props.onClearLocalSelection}
-              >
-                Clear Selection
-              </button>
-              {props.canContinueAi && (
-                <button
-                  type="button"
-                  className="alternate-utility-button"
-                  onClick={props.onContinueAi}
-                >
-                  Continue AI
-                </button>
-              )}
-            </div>
-          </div>
+            <div className="alternate-south-rail__footer">
+              <AlternateSeatPlaque seat={southSeat} label="SOUTH / YOU" prominent />
 
-          {props.localDragonRecipients.length > 0 && (
-            <section className="alternate-dragon-panel">
-              <h2>Dragon Gift</h2>
-              <div className="alternate-dragon-panel__buttons">
-                {props.localDragonRecipients.map((recipient) => (
+              <div className="alternate-controls">
+                <div className="alternate-controls__primary">
+                  {props.normalActionRail.map((slot) => (
+                    <button
+                      key={slot.id}
+                      type="button"
+                      className={[
+                        "alternate-action-button",
+                        `alternate-action-button--${slot.tone}`
+                      ].join(" ")}
+                      disabled={!slot.enabled}
+                      onClick={() => props.onNormalAction(slot.id)}
+                    >
+                      {slot.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="alternate-controls__secondary">
                   <button
-                    key={recipient}
                     type="button"
                     className="alternate-utility-button"
-                    onClick={() => props.onDragonRecipientSelect(recipient)}
+                    onClick={() => props.onSortModeChange("rank")}
                   >
-                    {recipient}
+                    Sort Rank
                   </button>
-                ))}
+                  <button
+                    type="button"
+                    className="alternate-utility-button"
+                    onClick={() => props.onSortModeChange("suit")}
+                  >
+                    Sort Suit
+                  </button>
+                  <button
+                    type="button"
+                    className="alternate-utility-button"
+                    onClick={() => props.onSortModeChange("combo")}
+                  >
+                    Sort Combo
+                  </button>
+                  <button
+                    type="button"
+                    className="alternate-utility-button"
+                    onClick={props.onClearLocalSelection}
+                  >
+                    Clear Selection
+                  </button>
+                  {props.canContinueAi && (
+                    <button
+                      type="button"
+                      className="alternate-utility-button"
+                      onClick={props.onContinueAi}
+                    >
+                      Continue AI
+                    </button>
+                  )}
+                </div>
               </div>
-            </section>
-          )}
 
-          {props.wishDialogOpen && (
-            <section className="alternate-wish-panel">
-              <h2>Mah Jong Wish</h2>
-              <div className="alternate-wish-panel__options">
-                {props.wishSelectionOptions.map((value) => (
-                  <WishOptionButton
-                    key={value === null ? "none" : value}
-                    value={value}
-                    active={props.resolvedWishRank === value}
-                    onClick={() => props.onWishRankSelect(value)}
-                  />
-                ))}
+              <div className="alternate-local-summary">
+                <h2>Decision Summary</h2>
+                <p>{props.localSummaryText}</p>
+                {props.localActionSummary.length > 0 && (
+                  <ul>
+                    {props.localActionSummary.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                )}
+                {props.activePlayVariant && (
+                  <p className="alternate-local-summary__variant">
+                    {describeAction(props.activePlayVariant)}
+                  </p>
+                )}
               </div>
-              <div className="alternate-wish-panel__actions">
-                <button
-                  type="button"
-                  className="alternate-action-button alternate-action-button--primary"
-                  disabled={props.wishConfirmDisabled || props.wishSubmissionPending}
-                  onClick={props.onWishConfirm}
-                >
-                  Confirm Wish
-                </button>
-                <button
-                  type="button"
-                  className="alternate-utility-button"
-                  disabled={props.wishSubmissionPending}
-                  onClick={props.onWishCancel}
-                >
-                  Cancel
-                </button>
-              </div>
-            </section>
-          )}
-
-          <div className="alternate-local-summary">
-            <h2>Decision Summary</h2>
-            <p>{props.localSummaryText}</p>
-            {props.localActionSummary.length > 0 && (
-              <ul>
-                {props.localActionSummary.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            )}
-            {props.activePlayVariant && (
-              <p className="alternate-local-summary__variant">
-                {describeAction(props.activePlayVariant)}
-              </p>
-            )}
+            </div>
           </div>
+
+          {(props.localDragonRecipients.length > 0 || props.wishDialogOpen) && (
+            <div className="alternate-south-zone__support">
+              {props.localDragonRecipients.length > 0 && (
+                <section className="alternate-dragon-panel">
+                  <h2>Dragon Gift</h2>
+                  <div className="alternate-dragon-panel__buttons">
+                    {props.localDragonRecipients.map((recipient) => (
+                      <button
+                        key={recipient}
+                        type="button"
+                        className="alternate-utility-button"
+                        onClick={() => props.onDragonRecipientSelect(recipient)}
+                      >
+                        {recipient}
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {props.wishDialogOpen && (
+                <section className="alternate-wish-panel">
+                  <h2>Mah Jong Wish</h2>
+                  <div className="alternate-wish-panel__options">
+                    {props.wishSelectionOptions.map((value) => (
+                      <WishOptionButton
+                        key={value === null ? "none" : value}
+                        value={value}
+                        active={props.resolvedWishRank === value}
+                        onClick={() => props.onWishRankSelect(value)}
+                      />
+                    ))}
+                  </div>
+                  <div className="alternate-wish-panel__actions">
+                    <button
+                      type="button"
+                      className="alternate-action-button alternate-action-button--primary"
+                      disabled={props.wishConfirmDisabled || props.wishSubmissionPending}
+                      onClick={props.onWishConfirm}
+                    >
+                      Confirm Wish
+                    </button>
+                    <button
+                      type="button"
+                      className="alternate-utility-button"
+                      disabled={props.wishSubmissionPending}
+                      onClick={props.onWishCancel}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </section>
+              )}
+            </div>
+          )}
         </section>
       </section>
 
       <section className="alternate-tabletop__footer">
-        <div className="alternate-log-panel">
+        <div className="alternate-log-panel alternate-log-panel--compact">
           <h2>Recent Events</h2>
           <ul>
             {props.recentEvents.slice(-6).map((event) => (

@@ -14,6 +14,28 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 
 ## Entries
 
+### 2026-05-22 - Alternate luxury table must be LAN-reachable and visually table-first
+
+- Prompt Signal: The immediate follow-up to the alternate-table rollout said
+  the Linux-hosted alternate table could not be reached at
+  `http://192.168.50.36:5174/?table=alt`, and the user explicitly rejected the
+  current composition as "in no way correct" while asking for screenshots and a
+  real fix.
+- Interpreted Requirement: Issue
+  [#81](https://github.com/NeonButrfly/tichuml/issues/81) tracks the
+  acceptance-blocking follow-up: the luxury table preview must be reachable on
+  the Linux host through a public frontend bind, and the alternate surface must
+  feel like a coherent south-perspective table rather than a page of stacked
+  panels. The felt, rails, racks, south hand, controls, and local summary
+  should read as one integrated play surface, with compact support chrome that
+  does not overpower the table.
+- Affected Systems: `apps/web/src/alternate-game-table-view.tsx`,
+  `apps/web/src/styles.css`, `apps/web/src/alternate-table/README.md`, Linux
+  frontend launch workflow, and follow-up browser screenshot validation.
+- Linked GitHub Issue: [#81](https://github.com/NeonButrfly/tichuml/issues/81)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.
+
 ### 2026-05-22 - Add a luxury 2.5D alternate gameplay table without replacing the live table
 
 - Prompt Signal: The latest gameplay-table prompt required a second polished

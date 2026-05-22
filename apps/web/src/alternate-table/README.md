@@ -36,6 +36,8 @@ selection behavior.
 - In-app toggle: use the main menu to switch between `Classic Table` and
   `Luxury Table`.
 - Return to normal: remove `?table=alt` or switch back from the same menu.
+- Linux host preview: `bash scripts/start-frontend.sh --host 0.0.0.0 --port 5174 --backend-url http://<host>:4310`
+  then open `http://<host>:5174/?table=alt`.
 
 The existing normal route and debug route are unchanged.
 
@@ -56,8 +58,7 @@ entry point rather than changing the main table flow.
 
 ## Known Limitations
 
-- The alternate table currently focuses on the main live gameplay surface and
-  reuses existing event/state summaries rather than adding a second bespoke
-  debug dashboard.
+- The alternate table intentionally keeps event/state summaries compact so the
+  felt, trick area, and south rail remain the dominant visual surface.
 - The luxury surface is intentionally asset-free and procedural, so decorative
   detail comes from CSS rather than external textures or images.
