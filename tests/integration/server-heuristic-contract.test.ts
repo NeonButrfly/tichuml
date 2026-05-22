@@ -279,6 +279,12 @@ async function withServer<T>(
   }
 }
 
+async function flushServerQueue(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 async function withRejectingDecisionServer<T>(
   callback: (config: { baseUrl: string }) => Promise<T>
 ): Promise<T> {
@@ -1088,7 +1094,9 @@ describe("server_heuristic actor contract", () => {
 
       expect(response.status).toBe(200);
       expect(payload.provider_used).toBe("server_heuristic");
-      expect(payload.telemetry_id).toBeGreaterThan(0);
+      expect(payload.telemetry_id).toBeUndefined();
+      expect((payload.metadata as JsonObject).telemetry_queued).toBe(true);
+      await flushServerQueue();
       expect(repository.decisions.length).toBe(1);
       expect(repository.decisions[0]?.policy_source).toBe("server_heuristic");
       expect(repository.decisions[0]?.state_raw).toMatchObject({
@@ -1135,7 +1143,9 @@ describe("server_heuristic actor contract", () => {
 
       expect(response.status).toBe(200);
       expect(payload.provider_used).toBe("server_heuristic");
-      expect(payload.telemetry_id).toBe(1);
+      expect(payload.telemetry_id).toBeUndefined();
+      expect((payload.metadata as JsonObject).telemetry_queued).toBe(true);
+      await flushServerQueue();
       expect(repository.decisions.length).toBe(1);
       expect(repository.decisions[0]?.policy_source).toBe("server_heuristic");
       expect(payload.metadata).toMatchObject({

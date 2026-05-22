@@ -615,6 +615,12 @@ async function withServer<T>(
   }
 }
 
+async function flushServerQueue(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 function createDecisionPayload(): TelemetryDecisionPayload {
   return {
     ts: "2026-04-17T12:00:00.000Z",
@@ -1088,6 +1094,7 @@ describe("backend foundation server routes", () => {
         provider_used: string;
         metadata?: {
           scoring_path?: string;
+          telemetry_queued?: boolean;
           timing?: {
             payload_bytes?: number;
             parse_ms?: number;
@@ -1105,11 +1112,13 @@ describe("backend foundation server routes", () => {
       expect(payload.accepted).toBe(true);
       expect(payload.provider_used).toBe("server_heuristic");
       expect(payload.chosen_action.type).toBeDefined();
-      expect(payload.telemetry_id).toBeGreaterThan(0);
+      expect(payload.telemetry_id).toBeUndefined();
+      expect(payload.metadata?.telemetry_queued).toBe(true);
       expect(payload.metadata?.scoring_path).toBe("rich_path");
       expect(payload.metadata?.timing).toMatchObject({
         scoring_path: "rich_path"
       });
+      await flushServerQueue();
       expect(repository.decisions).toHaveLength(1);
       expect(repository.decisions[0]?.policy_source).toBe("server_heuristic");
       expect(repository.decisions[0]?.state_raw).toMatchObject({
@@ -1144,12 +1153,17 @@ describe("backend foundation server routes", () => {
         accepted: boolean;
         provider_used: string;
         telemetry_id?: number;
-        metadata?: { scoring_path?: string };
+        metadata?: {
+          scoring_path?: string;
+          telemetry_queued?: boolean;
+        };
       };
       expect(payload.accepted).toBe(true);
       expect(payload.provider_used).toBe("server_heuristic");
-      expect(payload.telemetry_id).toBeGreaterThan(0);
+      expect(payload.telemetry_id).toBeUndefined();
+      expect(payload.metadata?.telemetry_queued).toBe(true);
       expect(payload.metadata?.scoring_path).toBe("rich_path");
+      await flushServerQueue();
       expect(repository.decisions).toHaveLength(1);
       expect(repository.decisions[0]?.policy_source).toBe("server_heuristic");
     });
@@ -1207,6 +1221,7 @@ describe("backend foundation server routes", () => {
         expect(payload.metadata?.top_k_candidate_scores?.[0]?.score).toBe(0.9);
         expect(payload.metadata?.runtime_feature_count).toBe(64);
         expect(payload.metadata?.missing_feature_count).toBe(3);
+        await flushServerQueue();
         expect(repository.decisions).toHaveLength(1);
         expect(repository.decisions[0]?.policy_source).toBe("lightgbm_model");
       },
@@ -1251,12 +1266,78 @@ describe("backend foundation server routes", () => {
         expect(String(payload.metadata?.lightgbm_error ?? "")).toMatch(
           /non-finite candidate score/i
         );
+        await flushServerQueue();
         expect(repository.decisions).toHaveLength(1);
         expect(repository.decisions[0]?.policy_source).toBe("server_heuristic");
         expect(repository.decisions[0]?.metadata.lightgbm_error).toBeTruthy();
       },
       { lightgbmScorer: scorer }
     );
+  });
+
+  it("does not block simulated decision responses on telemetry persistence", async () => {
+    class BlockingDecisionRepository extends InMemoryTelemetryRepository {
+      readonly insertStarted = Promise.withResolvers<void>();
+      readonly allowInsert = Promise.withResolvers<void>();
+
+      override async insertDecision(payload: TelemetryDecisionPayload): Promise<number> {
+        this.insertStarted.resolve();
+        await this.allowInsert.promise;
+        return super.insertDecision(payload);
+      }
+    }
+
+    const repository = new BlockingDecisionRepository();
+    const server = createAppServer({
+      serverConfig: TEST_SERVER_CONFIG,
+      repository,
+      simController: new InMemorySimController(),
+      runtimeAdmin: new InMemoryRuntimeAdmin()
+    });
+
+    await new Promise<void>((resolve) => {
+      server.listen(0, "127.0.0.1", () => resolve());
+    });
+
+    const address = server.address();
+    if (!address || typeof address === "string") {
+      throw new Error("Failed to resolve the test server address.");
+    }
+
+    try {
+      const response = await fetch(`http://127.0.0.1:${address.port}/api/decision/request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(createDecisionRequestBody())
+      });
+      const payload = (await response.json()) as {
+        accepted: boolean;
+        telemetry_id?: number;
+        metadata?: { telemetry_queued?: boolean };
+      };
+
+      expect(response.status).toBe(200);
+      expect(payload.accepted).toBe(true);
+      expect(payload.telemetry_id).toBeUndefined();
+      expect(payload.metadata?.telemetry_queued).toBe(true);
+
+      await repository.insertStarted.promise;
+      expect(repository.decisions).toHaveLength(0);
+
+      repository.allowInsert.resolve();
+      await flushServerQueue();
+      expect(repository.decisions).toHaveLength(1);
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        });
+      });
+    }
   });
 
   it("orders replay data by timestamp and id", async () => {

@@ -692,7 +692,10 @@ export function createRouter({
               traceDecisionRequests: config.traceDecisionRequests,
               parseMs,
               validateMs,
-              payloadBytes
+              payloadBytes,
+              enqueueDecisionTelemetry: telemetryQueue.enqueueDecision.bind(
+                telemetryQueue
+              )
             }
           );
         } catch (error) {

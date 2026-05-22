@@ -1,12 +1,14 @@
 import type {
   DecisionRequestPayload,
   DecisionResponsePayload,
-  JsonObject
+  JsonObject,
+  TelemetryDecisionPayload
 } from "@tichuml/shared";
 import type { TelemetryRepository } from "./telemetry-repository.js";
 import { routeHeuristicDecision } from "../providers/heuristic-provider.js";
 import { routeLightgbmDecision } from "../providers/lightgbm-provider.js";
 import type { LightgbmScorer } from "../ml/lightgbm-scorer.js";
+import type { TelemetryEnqueueResult } from "./telemetry-ingest-queue.js";
 
 function logDecisionTrace(
   enabled: boolean,
@@ -28,6 +30,9 @@ export async function handleDecisionRequest(
     parseMs?: number;
     validateMs?: number;
     payloadBytes?: number;
+    enqueueDecisionTelemetry?: (
+      telemetryPayload: TelemetryDecisionPayload
+    ) => TelemetryEnqueueResult;
   } = {}
 ): Promise<DecisionResponsePayload> {
   const startedAt = Date.now();
@@ -62,12 +67,20 @@ export async function handleDecisionRequest(
         });
   const latencyMs = Date.now() - startedAt;
   let telemetryId: number | undefined;
+  let telemetryQueueResult: TelemetryEnqueueResult | undefined;
   if (routed.telemetryPayload) {
     routed.telemetryPayload.metadata = {
       ...routed.telemetryPayload.metadata,
       latency_ms: latencyMs
     };
-    telemetryId = await repository.insertDecision(routed.telemetryPayload);
+    const queueEligible = payload.metadata.simulation_mode === true;
+    if (queueEligible && dependencies.enqueueDecisionTelemetry) {
+      telemetryQueueResult = dependencies.enqueueDecisionTelemetry(
+        routed.telemetryPayload
+      );
+    } else {
+      telemetryId = await repository.insertDecision(routed.telemetryPayload);
+    }
   }
   const existingTiming =
     typeof routed.responseMetadata?.timing === "object" &&
@@ -106,6 +119,9 @@ export async function handleDecisionRequest(
           ? routed.chosen.action.actor
           : routed.chosen.actor,
     telemetry_id: telemetryId,
+    telemetry_queued: telemetryQueueResult?.queued ?? false,
+    telemetry_queue_depth: telemetryQueueResult?.queue_depth ?? null,
+    telemetry_dropped: telemetryQueueResult?.dropped ?? false,
     latency_ms: latencyMs,
     canonical_actor_seat: routed.responseMetadata?.canonical_actor_seat,
     legal_action_count: routed.responseMetadata?.legal_action_count,
@@ -123,6 +139,16 @@ export async function handleDecisionRequest(
       response_actor_seat: payload.actor_seat,
       chosen_action_type: routed.chosen.action.type,
       latency_ms: latencyMs,
+      ...(telemetryQueueResult
+        ? {
+            telemetry_queued: telemetryQueueResult.queued,
+            telemetry_queue_depth: telemetryQueueResult.queue_depth,
+            telemetry_dropped: telemetryQueueResult.dropped,
+            ...(telemetryQueueResult.drop_reason
+              ? { telemetry_drop_reason: telemetryQueueResult.drop_reason }
+              : {})
+          }
+        : {}),
       timing: {
         ...((existingTiming ?? {}) as JsonObject),
         ...timingMetadata
