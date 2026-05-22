@@ -5126,12 +5126,12 @@ export function DebugGameTableView(props: GameTableViewProps) {
             onMainMenuOpenChange={props.onMainMenuOpenChange}
             onUiCommand={props.onUiCommand}
           />
-          <p className="topbar__eyebrow">Operator Surface</p>
-          <h1>Gameplay Analysis View</h1>
+          <p className="topbar__eyebrow">Master Control Panel</p>
+          <h1>System Control Dashboard</h1>
           <p className="topbar__summary">
-            Operator-facing live observability for game state, decision routing,
+            Unified live observability for game state, decision routing,
             heuristics, telemetry, backend health, and ML readiness. Press
-            Ctrl+D to return to the player table.
+            Ctrl+D to return to the normal table.
           </p>
         </div>
 
@@ -5173,7 +5173,7 @@ export function DebugGameTableView(props: GameTableViewProps) {
             className="utility-button"
             onClick={() => props.onUiCommand("toggle_debug_mode")}
           >
-            Return to Player Table
+            Return to Table
           </button>
           <button
             type="button"
@@ -5189,7 +5189,7 @@ export function DebugGameTableView(props: GameTableViewProps) {
         <article className="master-panel">
           <div className="master-panel__header">
             <div>
-              <p className="debug-panel__eyebrow">Gameplay State</p>
+              <p className="debug-panel__eyebrow">Game + Seat State</p>
               <h2 className="master-panel__title">Game State</h2>
             </div>
             <span className="master-panel__meta">
@@ -5292,7 +5292,7 @@ export function DebugGameTableView(props: GameTableViewProps) {
         <article className="master-panel master-panel--primary">
           <div className="master-panel__header">
             <div>
-              <p className="debug-panel__eyebrow">Decision Analysis</p>
+              <p className="debug-panel__eyebrow">Decision Center</p>
               <h2 className="master-panel__title">Provider + Reasoning</h2>
             </div>
             <span className="master-panel__meta">
@@ -5448,7 +5448,7 @@ export function DebugGameTableView(props: GameTableViewProps) {
         <article className="master-panel">
           <div className="master-panel__header">
             <div>
-              <p className="debug-panel__eyebrow">Operator Telemetry</p>
+              <p className="debug-panel__eyebrow">Telemetry + Backend + ML</p>
               <h2 className="master-panel__title">Collection Readiness</h2>
             </div>
           </div>
@@ -5648,9 +5648,9 @@ export function DebugGameTableView(props: GameTableViewProps) {
           <section className="action-dock">
             <div className="action-dock__header">
               <div>
-                <p className="action-dock__eyebrow">Operator Surface</p>
+                <p className="action-dock__eyebrow">Action Rail</p>
                 <strong className="action-dock__title">
-                  Gameplay Controls
+                  Available Actions
                 </strong>
               </div>
               <span className="action-dock__phase">{props.derived.phase}</span>
@@ -5722,7 +5722,7 @@ export function DebugGameTableView(props: GameTableViewProps) {
 
         <aside className="debug-sidebar">
           <section className="debug-sidebar__section">
-            <p className="debug-panel__eyebrow">Seat Analysis</p>
+            <p className="debug-panel__eyebrow">Hand Structure Inspector</p>
             <strong className="debug-sidebar__title">
               {snapshot.handInspector.seat}
             </strong>
@@ -5748,8 +5748,8 @@ export function DebugGameTableView(props: GameTableViewProps) {
           </section>
 
           <section className="debug-sidebar__section">
-            <p className="debug-panel__eyebrow">Gameplay Timeline</p>
-            <strong className="debug-sidebar__title">Recent gameplay events</strong>
+            <p className="debug-panel__eyebrow">Timeline</p>
+            <strong className="debug-sidebar__title">Recent system events</strong>
             <ul className="debug-list">
               {snapshot.timeline.length > 0 ? (
                 [...snapshot.timeline]
@@ -5769,8 +5769,8 @@ export function DebugGameTableView(props: GameTableViewProps) {
           </section>
 
           <section className="debug-sidebar__section">
-            <p className="debug-panel__eyebrow">Operator Controls</p>
-            <strong className="debug-sidebar__title">Runtime configuration</strong>
+            <p className="debug-panel__eyebrow">Controls Panel</p>
+            <strong className="debug-sidebar__title">Runtime controls</strong>
             <div className="master-controls-grid">
               <label className="form-field">
                 <span>Decision Mode</span>
