@@ -14,6 +14,34 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 
 ## Entries
 
+### 2026-05-22 - Add a luxury 2.5D alternate gameplay table without replacing the live table
+
+- Prompt Signal: The latest gameplay-table prompt required a second polished
+  Tichu surface, not a redesign-in-place. The user explicitly required a new
+  South-player luxury table with a carved wood frame, green felt, gold accents,
+  raised racks, player plaques, a clear trick area, real interaction, and the
+  same live backend/state/action pipeline as the normal gameplay table.
+- Interpreted Requirement: Issue
+  [#80](https://github.com/NeonButrfly/tichuml/issues/80) tracks a sibling
+  renderer requirement: the existing normal table must remain available and
+  behaviorally unchanged, while a second alternate table becomes reachable
+  through the live app and reuses the same backend-backed state, legal-action
+  logic, hidden-information rules, wish/pass/Tichu/Grand Tichu flows, card
+  selection logic, and action dispatch callbacks. The alternate renderer should
+  present a South-perspective 2.5D luxury table rather than a flat top-down
+  layout or static mockup.
+- Affected Systems: `apps/web/src/App.tsx`,
+  `apps/web/src/game-table-view-model.ts`,
+  `apps/web/src/game-table-views.tsx`,
+  `apps/web/src/alternate-game-table-view.tsx`,
+  `apps/web/src/styles.css`,
+  `apps/web/src/alternate-table/README.md`,
+  `tests/integration/alternate-table-view.test.ts`,
+  `tests/integration/player-table-mode.test.ts`.
+- Linked GitHub Issue: [#80](https://github.com/NeonButrfly/tichuml/issues/80)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.
+
 ### 2026-05-20 - Live South-player Tichu table must become more spatially anchored without breaking gameplay
 
 - Prompt Signal: The follow-up gameplay table request rejected both a generic

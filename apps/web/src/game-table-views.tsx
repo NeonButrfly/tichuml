@@ -30,6 +30,7 @@ import type {
   HotkeyDefinition,
   NormalActionSlot,
   NormalActionSlotId,
+  PlayerTableVariant,
   UiCommandId,
   UiDialogId,
   UiMode
@@ -251,6 +252,7 @@ export type GameTableViewProps = {
   masterControlSnapshot: MasterControlSnapshot;
   hotkeyDefinitions: readonly HotkeyDefinition[];
   cardLookup: ReadonlyMap<string, Card>;
+  playerTableVariant: PlayerTableVariant;
   onAutoplayChange: (checked: boolean) => void;
   onContinueAi: () => void;
   onSortModeChange: (mode: HandSortMode) => void;
@@ -266,6 +268,8 @@ export type GameTableViewProps = {
   onWishCancel: () => void;
   onDragonRecipientSelect: (recipient: SeatId) => void;
   onNormalAction: (slotId: NormalActionSlotId) => void;
+  onClearLocalSelection: () => void;
+  onPlayerTableVariantChange: (variant: PlayerTableVariant) => void;
   onNormalTableLayoutChange: (nextLayout: NormalTableLayout) => void;
   onNormalTableLayoutImport: (nextConfig: NormalTableLayoutConfig) => void;
   onExportNormalTableLayout: () => void;
@@ -1763,7 +1767,7 @@ export function serializeNormalTableLayoutConfig(
   );
 }
 
-function CardFace({
+export function CardFace({
   card,
   interactive = false,
   tone = "normal",
@@ -3257,15 +3261,19 @@ export function GameChromeMenu({
   isOpen,
   uiMode,
   layoutEditorActive,
+  playerTableVariant,
   onMainMenuOpenChange,
-  onUiCommand
+  onUiCommand,
+  onPlayerTableVariantChange
 }: {
-  variant: "normal" | "debug";
+  variant: "normal" | "alternate" | "debug";
   isOpen: boolean;
   uiMode: UiMode;
   layoutEditorActive: boolean;
+  playerTableVariant: PlayerTableVariant;
   onMainMenuOpenChange: (open: boolean) => void;
   onUiCommand: (commandId: UiCommandId) => void;
+  onPlayerTableVariantChange: (variant: PlayerTableVariant) => void;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -3401,6 +3409,49 @@ export function GameChromeMenu({
               </button>
             );
           })}
+
+          <button
+            ref={(element) => {
+              itemRefs.current[GAME_MENU_ITEMS.length] = element;
+            }}
+            type="button"
+            role="menuitem"
+            className={[
+              "game-menu__item",
+              playerTableVariant === "alternate" ? "is-active" : ""
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            aria-label={
+              playerTableVariant === "alternate"
+                ? "Classic table on luxury table enabled"
+                : "Luxury table"
+            }
+            onClick={() => {
+              onMainMenuOpenChange(false);
+              onPlayerTableVariantChange(
+                playerTableVariant === "alternate" ? "normal" : "alternate"
+              );
+            }}
+          >
+            <span className="game-menu__item-copy">
+              <strong>
+                {playerTableVariant === "alternate"
+                  ? "Classic Table"
+                  : "Luxury Table"}
+              </strong>
+              <small>
+                {playerTableVariant === "alternate"
+                  ? "Return to the original gameplay table."
+                  : "Open the alternate 2.5D south-player table."}
+              </small>
+            </span>
+            {playerTableVariant === "alternate" && (
+              <span className="game-menu__item-state" aria-hidden="true">
+                ON
+              </span>
+            )}
+          </button>
         </div>
       )}
     </div>
@@ -5218,8 +5269,10 @@ export function NormalGameTableView(props: GameTableViewProps) {
             isOpen={props.mainMenuOpen}
             uiMode={props.uiMode}
             layoutEditorActive={props.layoutEditorActive}
+            playerTableVariant={props.playerTableVariant}
             onMainMenuOpenChange={props.onMainMenuOpenChange}
             onUiCommand={props.onUiCommand}
+            onPlayerTableVariantChange={props.onPlayerTableVariantChange}
           />
           {props.derived.currentWish !== null && (
             <div className="normal-active-wish" aria-live="polite">
@@ -5520,8 +5573,10 @@ export function DebugGameTableView(props: GameTableViewProps) {
             isOpen={props.mainMenuOpen}
             uiMode={props.uiMode}
             layoutEditorActive={props.layoutEditorActive}
+            playerTableVariant={props.playerTableVariant}
             onMainMenuOpenChange={props.onMainMenuOpenChange}
             onUiCommand={props.onUiCommand}
+            onPlayerTableVariantChange={props.onPlayerTableVariantChange}
           />
           <p className="topbar__eyebrow">Master Control Panel</p>
           <h1>System Control Dashboard</h1>

@@ -2,6 +2,7 @@ import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { RoundPhase } from "@tichuml/engine";
 
 export type UiMode = "normal" | "debug";
+export type PlayerTableVariant = "normal" | "alternate";
 export type UiDialogId =
   | "hotkeys"
   | "how_to_play"
@@ -136,6 +137,31 @@ export const GAME_MENU_ITEMS: readonly GameMenuItemDefinition[] = [
     commandId: "open_how_to_play_dialog"
   }
 ];
+
+export function getPlayerTableVariantFromSearch(
+  search: string
+): PlayerTableVariant {
+  const params = new URLSearchParams(search);
+  const table = params.get("table")?.trim().toLowerCase();
+  return table === "alt" || table === "alternate" || table === "luxury"
+    ? "alternate"
+    : "normal";
+}
+
+export function updateSearchWithPlayerTableVariant(
+  search: string,
+  variant: PlayerTableVariant
+): string {
+  const params = new URLSearchParams(search);
+  if (variant === "alternate") {
+    params.set("table", "alt");
+  } else {
+    params.delete("table");
+  }
+
+  const serialized = params.toString();
+  return serialized.length > 0 ? `?${serialized}` : "";
+}
 
 export const UI_HOTKEYS: readonly HotkeyDefinition[] = [
   {

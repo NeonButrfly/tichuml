@@ -58,12 +58,15 @@ import {
   type PlayLegalAction
 } from "./table-model";
 import {
+  getPlayerTableVariantFromSearch,
+  updateSearchWithPlayerTableVariant,
   createNormalActionRail,
   findMatchingHotkey,
   isEditableShortcutTarget,
   isDebugToggleShortcut,
   UI_HOTKEYS,
   type NormalActionSlotId,
+  type PlayerTableVariant,
   type UiCommandId,
   type UiDialogId,
   type UiMode
@@ -84,6 +87,7 @@ import {
   type SeatVisualPosition,
   type WishSelectionValue
 } from "./game-table-views";
+import { AlternateGameTableView } from "./alternate-game-table-view";
 import { generateSeedWithEntropy } from "./seed/orchestrator";
 import {
   type BackendRuntimeSettings,
@@ -788,6 +792,12 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     null
   );
   const [uiMode, setUiMode] = useState<UiMode>("normal");
+  const [playerTableVariant, setPlayerTableVariant] =
+    useState<PlayerTableVariant>(() =>
+      typeof window === "undefined"
+        ? "normal"
+        : getPlayerTableVariantFromSearch(window.location.search)
+    );
   const [layoutEditorActive, setLayoutEditorActive] = useState(false);
   const [mainMenuOpen, setMainMenuOpen] = useState(false);
   const [activeDialog, setActiveDialog] = useState<UiDialogId | null>(null);
@@ -852,6 +862,21 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     requestedAt: null
   });
   const lastAppliedAutomationExecutionKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const handlePopState = () => {
+      setPlayerTableVariant(getPlayerTableVariantFromSearch(window.location.search));
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, []);
 
   const state = round.nextState;
   const derived = round.derivedView;
@@ -2747,6 +2772,13 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     localPassDragRef.current = null;
   }
 
+  function clearLocalSelection() {
+    setSelectedCardIds([]);
+    setSelectedVariantKey(null);
+    setSelectedWishRank(null);
+    setWishSubmissionPending(false);
+  }
+
   function applyClientAction(
     action: EngineAction,
     chosen?: ChosenDecision,
@@ -3034,6 +3066,21 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
   function handleNormalTableLayoutImport(config: NormalTableLayoutConfig) {
     setNormalTableLayout(config.elements);
     setNormalTableLayoutTokens(config.tokens);
+  }
+
+  function handlePlayerTableVariantChange(nextVariant: PlayerTableVariant) {
+    setPlayerTableVariant(nextVariant);
+
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const nextSearch = updateSearchWithPlayerTableVariant(
+      window.location.search,
+      nextVariant
+    );
+    const nextUrl = `${window.location.pathname}${nextSearch}${window.location.hash}`;
+    window.history.replaceState(window.history.state, "", nextUrl);
   }
 
   function continueWithAi() {
@@ -3647,6 +3694,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     masterControlSnapshot,
     hotkeyDefinitions: UI_HOTKEYS,
     cardLookup,
+    playerTableVariant,
     onAutoplayChange: setAutoplayLocal,
     onContinueAi: continueWithAi,
     onSortModeChange: setSortMode,
@@ -3662,6 +3710,8 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     onWishCancel: cancelWishSelection,
     onDragonRecipientSelect: handleDragonRecipientSelect,
     onNormalAction: handleNormalAction,
+    onClearLocalSelection: clearLocalSelection,
+    onPlayerTableVariantChange: handlePlayerTableVariantChange,
     onNormalTableLayoutChange: setNormalTableLayout,
     onNormalTableLayoutImport: handleNormalTableLayoutImport,
     onExportNormalTableLayout: exportCurrentNormalTableLayout,
@@ -3679,9 +3729,13 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     onMainMenuOpenChange: setMainMenuOpen
   };
 
-  return uiMode === "normal" ? (
-    <NormalGameTableView {...viewProps} />
+  if (uiMode === "debug") {
+    return <DebugGameTableView {...viewProps} />;
+  }
+
+  return playerTableVariant === "alternate" ? (
+    <AlternateGameTableView {...viewProps} />
   ) : (
-    <DebugGameTableView {...viewProps} />
+    <NormalGameTableView {...viewProps} />
   );
 }
