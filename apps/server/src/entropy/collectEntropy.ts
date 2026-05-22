@@ -237,6 +237,74 @@ async function runEntropySource(config: {
   });
 }
 
+export function resolveEntropySourceWithinGlobalBudget(config: {
+  source: EntropySource;
+  task: ReturnType<typeof runEntropySource>;
+  globalSignal: AbortSignal;
+  runtime: ReturnType<typeof createDefaultEntropyRuntime>;
+}) {
+  const startedAt = config.runtime.now();
+
+  return new Promise<Awaited<ReturnType<typeof runEntropySource>>>(
+    (resolve, reject) => {
+      let settled = false;
+
+      const cleanup = () => {
+        config.globalSignal.removeEventListener("abort", onAbort);
+      };
+
+      const finishResolve = (value: Awaited<ReturnType<typeof runEntropySource>>) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        cleanup();
+        resolve(value);
+      };
+
+      const finishReject = (error: unknown) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        cleanup();
+        reject(error);
+      };
+
+      const onAbort = () => {
+        const reason = config.globalSignal.reason;
+        finishResolve(
+          createEntropyFailureResult({
+            sourceId: config.source.sourceId,
+            displayName: config.source.displayName,
+            qualityWeight: config.source.qualityWeight,
+            durationMs: config.runtime.now().getTime() - startedAt.getTime(),
+            error:
+              reason instanceof Error && reason.message.trim().length > 0
+                ? reason.message
+                : "global_budget_exhausted",
+            meta: {
+              aborted: true,
+              forcedByGlobalBudget: true
+            }
+          })
+        );
+      };
+
+      if (config.globalSignal.aborted) {
+        onAbort();
+        return;
+      }
+
+      config.globalSignal.addEventListener("abort", onAbort, { once: true });
+      config.task.then(
+        (result) => finishResolve(result),
+        (error) => finishReject(error)
+      );
+    }
+  );
+}
+
 export async function collectEntropy(
   options: EntropyCollectionOptions
 ): Promise<EntropyCollectionResult> {
@@ -288,12 +356,17 @@ export async function collectEntropy(
   try {
     const settled = await Promise.allSettled(
       sources.map((source) =>
-        runEntropySource({
+        resolveEntropySourceWithinGlobalBudget({
           source,
-          context,
-          runtime,
+          task: runEntropySource({
+            source,
+            context,
+            runtime,
+            globalSignal: globalController.signal,
+            sourceOverrides: options.sourceOverrides
+          }),
           globalSignal: globalController.signal,
-          sourceOverrides: options.sourceOverrides
+          runtime
         })
       )
     );

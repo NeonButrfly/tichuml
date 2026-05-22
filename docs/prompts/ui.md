@@ -14,6 +14,24 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 
 ## Entries
 
+### 2026-05-22 - Fresh hosted sessions must not hang on long entropy startup
+
+- Prompt Signal: During direct testing of the Linux-hosted alternate table, the
+  page stayed on `Starting New Game` for far too long even after the route
+  itself became reachable, which blocked layout verification from a fresh
+  browser session.
+- Interpreted Requirement: Issue
+  [#83](https://github.com/NeonButrfly/tichuml/issues/83) tracks the hosted
+  startup contract: new browser sessions must respect the configured entropy
+  budget and fall back promptly instead of waiting on slow remote entropy
+  sources long enough to make the game look hung.
+- Affected Systems: `apps/server/src/entropy/collectEntropy.ts`,
+  entropy startup tests, hosted gameplay bootstrap flow, and Linux-hosted
+  gameplay smoke verification.
+- Linked GitHub Issue: [#83](https://github.com/NeonButrfly/tichuml/issues/83)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.
+
 ### 2026-05-22 - Alternate luxury table must be LAN-reachable and visually table-first
 
 - Prompt Signal: The immediate follow-up to the alternate-table rollout said
