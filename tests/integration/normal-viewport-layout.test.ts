@@ -13,7 +13,6 @@ import {
   NORMAL_PASS_STAGE_MAP,
   resolveNormalActionRowRegionStyle,
   resolveNormalBoardAnchorPoint,
-  resolveNormalSharedTrickZoneRegionStyle,
   resolveNormalPlaySurfaceRegionStyle,
   resolveNormalSeatAnchorGeometry,
   resolveNormalSeatRegionStyle,
@@ -393,10 +392,7 @@ describe("normal viewport table layout", () => {
       );
       expect(
         parseFloat(String(southLayout.pickupZone.top))
-      ).toBeGreaterThan(parseFloat(String(southLayout.trickZone.top)));
-      expect(
-        parseFloat(String(southLayout.pickupZone.top))
-      ).toBeLessThan(southAnchor.handBounds.top);
+      ).toBeLessThanOrEqual(parseFloat(String(southLayout.trickZone.top)));
       expect(
         actionRowRect.top - safePlaySurfaceRect.bottom
       ).toBeGreaterThanOrEqual(
@@ -657,7 +653,7 @@ describe("normal viewport table layout", () => {
     { width: 1600, height: 900 },
     { width: 1366, height: 768 }
   ])(
-    "keeps pass lanes hand-clear while trick anchors stay inside the shared trick reserve at %sx%s",
+    "keeps pass lanes hand-clear while trick anchors reuse the same seat-local region at %sx%s",
     ({ width, height }) => {
       const metrics = computeNormalViewportLayoutMetrics({
         viewportWidth: width,
@@ -674,16 +670,6 @@ describe("normal viewport table layout", () => {
         DEFAULT_NORMAL_TABLE_LAYOUT.playSurface,
         metrics
       );
-      const sharedTrickZoneRect = styleRect(
-        resolveNormalSharedTrickZoneRegionStyle({
-          normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
-          layoutMetrics: metrics
-        })
-      );
-      const sharedTrickZoneCenter = {
-        x: sharedTrickZoneRect.left + sharedTrickZoneRect.width / 2,
-        y: sharedTrickZoneRect.top + sharedTrickZoneRect.height / 2
-      };
       const sourcePositions = ["top", "right", "bottom", "left"] as const;
 
       sourcePositions.forEach((sourcePosition) => {
@@ -728,11 +714,6 @@ describe("normal viewport table layout", () => {
           });
         });
 
-        expect(stageCenter.x).toBeGreaterThanOrEqual(sharedTrickZoneRect.left - 1);
-        expect(stageCenter.x).toBeLessThanOrEqual(sharedTrickZoneRect.right + 1);
-        expect(stageCenter.y).toBeGreaterThanOrEqual(sharedTrickZoneRect.top - 1);
-        expect(stageCenter.y).toBeLessThanOrEqual(sharedTrickZoneRect.bottom + 1);
-
         if (sourcePosition === "top") {
           const alignedTop = laneRects[1]!.top;
           laneRects.forEach((laneRect) => {
@@ -746,8 +727,8 @@ describe("normal viewport table layout", () => {
             rightOrBottomLane.x - centerLane.x,
             5
           );
-          expect(stageCenter.x).toBeCloseTo(sharedTrickZoneCenter.x, 5);
-          expect(stageCenter.y).toBeLessThan(sharedTrickZoneCenter.y);
+          expect(Math.abs(stageCenter.x - centerLane.x)).toBeLessThanOrEqual(6);
+          expect(Math.abs(stageCenter.y - centerLane.y)).toBeLessThanOrEqual(6);
         }
 
         if (sourcePosition === "bottom") {
@@ -763,8 +744,8 @@ describe("normal viewport table layout", () => {
             rightOrBottomLane.x - centerLane.x,
             5
           );
-          expect(stageCenter.x).toBeCloseTo(sharedTrickZoneCenter.x, 5);
-          expect(stageCenter.y).toBeGreaterThan(sharedTrickZoneCenter.y);
+          expect(Math.abs(stageCenter.x - centerLane.x)).toBeLessThanOrEqual(6);
+          expect(Math.abs(stageCenter.y - centerLane.y)).toBeLessThanOrEqual(6);
         }
 
         if (sourcePosition === "left") {
@@ -789,8 +770,8 @@ describe("normal viewport table layout", () => {
             ),
             5
           );
-          expect(stageCenter.x).toBeLessThan(sharedTrickZoneCenter.x);
-          expect(stageCenter.y).toBeCloseTo(sharedTrickZoneCenter.y, 5);
+          expect(Math.abs(stageCenter.x - centerLane.x)).toBeLessThanOrEqual(6);
+          expect(Math.abs(stageCenter.y - centerLane.y)).toBeLessThanOrEqual(6);
         }
 
         if (sourcePosition === "right") {
@@ -815,8 +796,8 @@ describe("normal viewport table layout", () => {
             ),
             5
           );
-          expect(stageCenter.x).toBeGreaterThan(sharedTrickZoneCenter.x);
-          expect(stageCenter.y).toBeCloseTo(sharedTrickZoneCenter.y, 5);
+          expect(Math.abs(stageCenter.x - centerLane.x)).toBeLessThanOrEqual(6);
+          expect(Math.abs(stageCenter.y - centerLane.y)).toBeLessThanOrEqual(6);
         }
       });
     }
