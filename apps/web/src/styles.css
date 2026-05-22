@@ -5161,9 +5161,9 @@ body.normal-layout-locked {
 .alternate-stage {
   position: relative;
   z-index: 1;
-  width: min(97vw, 1720px);
-  height: min(94vh, 980px);
-  min-height: 700px;
+  width: min(99vw, 1820px);
+  height: min(96vh, 1020px);
+  min-height: 720px;
   margin: 0 auto;
 }
 
@@ -5197,6 +5197,7 @@ body.normal-layout-locked {
   box-shadow:
     0 16px 26px rgba(0, 0, 0, 0.3),
     inset 0 1px 0 rgba(255, 236, 190, 0.14);
+  backdrop-filter: blur(8px);
 }
 
 .alternate-score-plaque,
@@ -5209,8 +5210,8 @@ body.normal-layout-locked {
   display: grid;
   grid-auto-flow: column;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  gap: 10px;
-  padding: 6px 10px;
+  gap: 8px;
+  padding: 4px 10px;
 }
 
 .alternate-score-plaque > div {
@@ -5224,15 +5225,15 @@ body.normal-layout-locked {
 .alternate-seat-tag,
 .alternate-remote-rack__count {
   color: #d8b57d;
-  font-size: 0.72rem;
-  letter-spacing: 0.16em;
+  font-size: 0.66rem;
+  letter-spacing: 0.13em;
   text-transform: uppercase;
 }
 
 .alternate-score-plaque strong,
 .alternate-status-plaque strong {
   color: var(--alternate-ink);
-  font-size: 1rem;
+  font-size: 0.9rem;
 }
 
 .alternate-score-plaque em {
@@ -5243,22 +5244,22 @@ body.normal-layout-locked {
 }
 
 .alternate-status-plaque {
-  padding: 5px 10px;
+  padding: 3px 10px;
   align-content: center;
 }
 
 .alternate-status-plaque span {
-  font-size: 0.68rem;
-  letter-spacing: 0.08em;
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
 }
 
 .alternate-status-plaque strong {
-  font-size: 0.66rem;
+  font-size: 0.62rem;
 }
 
 .alternate-seat-plaque {
   background: linear-gradient(180deg, rgba(73, 43, 22, 0.96), rgba(36, 22, 13, 0.94));
-  padding: 6px 9px;
+  padding: 5px 8px;
 }
 
 .alternate-seat-plaque.is-active {
@@ -5271,8 +5272,8 @@ body.normal-layout-locked {
 .alternate-seat-plaque__title {
   color: #f4deb4;
   font-family: var(--font-display);
-  font-size: 0.78rem;
-  letter-spacing: 0.12em;
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
   text-align: center;
 }
 
@@ -5280,14 +5281,14 @@ body.normal-layout-locked {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .alternate-seat-tag {
   display: inline-flex;
-  min-height: 24px;
+  min-height: 20px;
   align-items: center;
-  padding: 4px 8px;
+  padding: 3px 7px;
   border-radius: 999px;
   border: 1px solid rgba(216, 170, 94, 0.22);
   background: rgba(17, 21, 18, 0.46);
@@ -5307,7 +5308,7 @@ body.normal-layout-locked {
 }
 
 .alternate-seat-plaque--prominent {
-  padding: 10px 16px;
+  padding: 8px 14px;
 }
 
 .alternate-remote-rack {
@@ -5333,11 +5334,11 @@ body.normal-layout-locked {
 .alternate-remote-rack__count {
   position: absolute;
   left: 50%;
-  bottom: -14px;
+  bottom: -10px;
   transform: translateX(-50%);
-  min-width: 32px;
-  min-height: 24px;
-  padding: 3px 8px;
+  min-width: 28px;
+  min-height: 22px;
+  padding: 2px 7px;
   border-radius: 999px;
   border: 1px solid rgba(216, 170, 94, 0.22);
   background: rgba(14, 17, 14, 0.62);
@@ -5345,11 +5346,11 @@ body.normal-layout-locked {
 
 .alternate-card-back {
   position: absolute;
-  left: calc(var(--alt-card-index, 0) * 17px);
+  left: calc(var(--alt-card-index, 0) * 14px);
   top: calc(var(--alt-card-index, 0) * 1px);
-  width: 64px;
-  height: 92px;
-  border-radius: 14px;
+  width: 60px;
+  height: 88px;
+  border-radius: 13px;
   border: 1px solid rgba(229, 213, 176, 0.4);
   background:
     radial-gradient(circle at 50% 50%, rgba(231, 196, 116, 0.2), transparent 24%),
@@ -5361,7 +5362,7 @@ body.normal-layout-locked {
 
 .alternate-card-back--vertical {
   left: 8px;
-  top: calc(var(--alt-card-index, 0) * 12px);
+  top: calc(var(--alt-card-index, 0) * 11px);
   transform: rotate(90deg);
   transform-origin: center;
 }
@@ -5372,11 +5373,9 @@ body.normal-layout-locked {
   place-items: center;
   padding: 0;
   border-radius: 14px;
-  border: 1px solid rgba(209, 171, 98, 0.2);
-  background: rgba(12, 19, 17, 0.18);
-  box-shadow:
-    0 10px 14px rgba(0, 0, 0, 0.16),
-    inset 0 1px 0 rgba(255, 233, 188, 0.08);
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .alternate-pass-route.is-interactive {
@@ -5384,23 +5383,12 @@ body.normal-layout-locked {
 }
 
 .alternate-pass-route.is-selected {
-  border-color: rgba(244, 203, 129, 0.58);
   box-shadow:
-    0 10px 16px rgba(0, 0, 0, 0.2),
-    0 0 20px rgba(244, 203, 129, 0.16);
-}
-
-.alternate-pass-route__arrow {
-  position: absolute;
-  top: 6px;
-  right: 8px;
-  color: rgba(240, 210, 151, 0.82);
-  font-size: 1rem;
-  line-height: 1;
+    0 0 20px rgba(244, 203, 129, 0.2);
 }
 
 .alternate-pass-route__card {
-  width: 76px;
+  width: 70px;
 }
 
 .alternate-pass-route__hidden-card {
@@ -5424,7 +5412,7 @@ body.normal-layout-locked {
 .alternate-trick-stack {
   position: absolute;
   display: flex;
-  gap: 10px;
+  gap: 8px;
 }
 
 .alternate-trick-stack.is-winning {
@@ -5432,7 +5420,7 @@ body.normal-layout-locked {
 }
 
 .alternate-trick-card {
-  width: 76px;
+  width: 72px;
   box-shadow: 0 14px 22px rgba(0, 0, 0, 0.32);
 }
 
@@ -5452,7 +5440,7 @@ body.normal-layout-locked {
 }
 
 .alternate-south-hand__card {
-  width: 106px;
+  width: 104px;
   box-shadow:
     0 18px 26px rgba(0, 0, 0, 0.38),
     0 0 24px rgba(226, 185, 111, 0.08);
@@ -5468,10 +5456,10 @@ body.normal-layout-locked {
 .alternate-controls {
   position: absolute;
   display: grid;
-  gap: 4px;
+  gap: 6px;
   align-content: center;
   justify-items: center;
-  padding: 0 10px;
+  padding: 6px 14px 8px;
 }
 
 .alternate-controls__primary,
@@ -5481,18 +5469,19 @@ body.normal-layout-locked {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .alternate-action-button,
 .alternate-utility-button,
 .alternate-wish-option {
-  min-height: 32px;
-  padding: 0 12px;
+  min-height: 30px;
+  padding: 0 11px;
   border-radius: 999px;
   border: 1px solid rgba(227, 183, 108, 0.24);
   color: #f7e7c8;
   cursor: pointer;
+  font-size: 0.82rem;
   transition:
     transform 120ms ease,
     box-shadow 120ms ease,
@@ -5561,8 +5550,8 @@ body.normal-layout-locked {
 
 @media (max-width: 1300px) {
   .alternate-stage {
-    width: min(98vw, 1520px);
-    height: min(92vh, 920px);
+    width: min(99vw, 1600px);
+    height: min(94vh, 940px);
   }
 
   .alternate-south-hand__card {
@@ -5582,7 +5571,7 @@ body.normal-layout-locked {
   }
 
   .alternate-stage {
-    height: min(90vh, 780px);
+    height: min(92vh, 800px);
     min-height: 620px;
   }
 

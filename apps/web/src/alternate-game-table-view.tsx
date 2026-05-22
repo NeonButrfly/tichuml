@@ -53,9 +53,6 @@ function getSeatStatusTags(seat: SeatView): string[] {
   if (seat.passReady) {
     tags.push("READY");
   }
-  if (tags.length === 0) {
-    tags.push(seat.relation.toUpperCase());
-  }
   return tags.slice(0, 3);
 }
 
@@ -90,16 +87,27 @@ function renderAltCardBacks(count: number, axis: "horizontal" | "vertical") {
   ));
 }
 
-function arrowForDirection(direction: AlternatePassRoutePlacement["direction"]) {
-  switch (direction) {
-    case "left":
-      return "\u2190";
-    case "right":
-      return "\u2192";
-    case "up":
-      return "\u2191";
-    case "down":
-      return "\u2193";
+function formatAlternatePhaseLabel(
+  phase: GameTableViewProps["state"]["phase"]
+): string {
+  switch (phase) {
+    case "grand_tichu_window":
+      return "Grand Tichu";
+    case "pass_select":
+      return "Exchange";
+    case "pass_reveal":
+      return "Reveal";
+    case "exchange_complete":
+      return "Pickup";
+    case "trick_play":
+      return "Trick Play";
+    case "finished":
+      return "Round End";
+    default:
+      return phase
+        .split("_")
+        .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
+        .join(" ");
   }
 }
 
@@ -247,9 +255,6 @@ function AlternatePassRouteSlot({
           }
         }}
       >
-        <span className="alternate-pass-route__arrow" aria-hidden="true">
-          {arrowForDirection(route.direction)}
-        </span>
         <PassRouteCard
           card={assignedCard}
           onClick={() => onPassLaneCardClick(route.target)}
@@ -285,9 +290,6 @@ function AlternatePassRouteSlot({
           }
         }}
       >
-        <span className="alternate-pass-route__arrow" aria-hidden="true">
-          {arrowForDirection(route.direction)}
-        </span>
       </button>
     );
   }
@@ -299,9 +301,6 @@ function AlternatePassRouteSlot({
       data-alt-pass-route={route.key}
       data-pass-direction={route.direction}
     >
-      <span className="alternate-pass-route__arrow" aria-hidden="true">
-        {arrowForDirection(route.direction)}
-      </span>
       {assignedCard ? (
         <CardFace card={assignedCard} className="alternate-pass-route__card" />
       ) : route.occupied ? (
@@ -373,9 +372,7 @@ export function AlternateGameTableView(props: GameTableViewProps) {
     }))
   );
 
-  const statusText = props.controlHint?.trim().length
-    ? props.controlHint
-    : props.state.phase.replaceAll("_", " ");
+  const statusText = formatAlternatePhaseLabel(props.state.phase);
 
   return (
     <main className="alternate-tabletop">

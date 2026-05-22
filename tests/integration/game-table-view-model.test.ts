@@ -4,7 +4,9 @@ import {
   createNormalActionRail,
   findMatchingHotkey,
   GAME_MENU_ITEMS,
+  getAlternateTablePreviewModeFromSearch,
   getHotkeysForContext,
+  updateSearchWithPlayerTableVariant,
   isDebugToggleShortcut
 } from "../../apps/web/src/game-table-view-model";
 import {
@@ -59,6 +61,26 @@ describe("game-table view-model helpers", () => {
       "Random Sources",
       "How To Play Tichu"
     ]);
+  });
+
+  it("recognizes the dev-only alternate pass preview flag", () => {
+    expect(getAlternateTablePreviewModeFromSearch("")).toBe("none");
+    expect(getAlternateTablePreviewModeFromSearch("?table=alt&preview=pass-select")).toBe(
+      "pass-select"
+    );
+    expect(getAlternateTablePreviewModeFromSearch("?preview=PASS-SELECT")).toBe(
+      "pass-select"
+    );
+    expect(getAlternateTablePreviewModeFromSearch("?preview=unknown")).toBe("none");
+  });
+
+  it("drops the alternate preview flag when leaving the alternate table", () => {
+    expect(
+      updateSearchWithPlayerTableVariant("?table=alt&preview=pass-select", "normal")
+    ).toBe("");
+    expect(
+      updateSearchWithPlayerTableVariant("?preview=pass-select", "alternate")
+    ).toBe("?preview=pass-select&table=alt");
   });
 
   it("matches hotkeys by context from the centralized registry", () => {

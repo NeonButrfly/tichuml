@@ -58,6 +58,7 @@ import {
   type PlayLegalAction
 } from "./table-model";
 import {
+  getAlternateTablePreviewModeFromSearch,
   getPlayerTableVariantFromSearch,
   updateSearchWithPlayerTableVariant,
   createNormalActionRail,
@@ -88,6 +89,7 @@ import {
   type WishSelectionValue
 } from "./game-table-views";
 import { AlternateGameTableView } from "./alternate-game-table-view";
+import { createAlternatePassSelectPreviewSession } from "./alternate-table/preview-session";
 import { generateSeedWithEntropy } from "./seed/orchestrator";
 import {
   type BackendRuntimeSettings,
@@ -703,6 +705,17 @@ export function App() {
       roundIndex: number,
       carryState?: RoundCarryState
     ): Promise<RoundSession> => {
+      if (
+        import.meta.env.DEV &&
+        typeof window !== "undefined" &&
+        getAlternateTablePreviewModeFromSearch(window.location.search) === "pass-select"
+      ) {
+        return createAlternatePassSelectPreviewSession({
+          roundIndex,
+          carryState
+        });
+      }
+
       const generatedSeed = await generateSeedWithEntropy({
         roundIndex,
         backendBaseUrl: loadBackendSettings().backendBaseUrl

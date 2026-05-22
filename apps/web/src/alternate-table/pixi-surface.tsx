@@ -45,6 +45,27 @@ function drawRectFrame(
   graphics.stroke({ color: stroke, alpha: 0.95, width: Math.max(1.5, rect.height * 0.035) });
 }
 
+function drawInsetTray(
+  graphics: import("pixi.js").Graphics,
+  rect: Rect,
+  radius: number
+) {
+  drawRectFrame(graphics, rect, 0x2d160b, 0x7c5930, radius, 0.96);
+  drawRectFrame(
+    graphics,
+    {
+      x: rect.x + rect.width * 0.04,
+      y: rect.y + rect.height * 0.07,
+      width: rect.width * 0.92,
+      height: rect.height * 0.86
+    },
+    0x143529,
+    0x8f7344,
+    Math.max(12, radius * 0.76),
+    0.92
+  );
+}
+
 function drawArrowGlyph(
   graphics: import("pixi.js").Graphics,
   route: AlternatePassRoutePlacement
@@ -111,7 +132,9 @@ function renderSurface(runtime: PixiRuntime, props: AlternateTablePixiSurfacePro
   const board = new Graphics();
   const shadow = new Graphics();
   const embellishments = new Graphics();
-  const routeFrames = new Graphics();
+  const ornaments = new Graphics();
+  const trays = new Graphics();
+  const routeLayer = new PIXI.Container();
 
   const pocketRadius = props.layout.boardRect.height * 0.048;
   const outerFelt = props.layout.outerFelt;
@@ -164,6 +187,19 @@ function renderSurface(runtime: PixiRuntime, props: AlternateTablePixiSurfacePro
   drawPolygon(board, outerFelt, 0x134d3d, 1);
   drawPolygon(embellishments, innerFelt, 0x0d3328, 0.96);
 
+  drawInsetTray(trays, props.layout.seats.top.rack, 24);
+  drawInsetTray(trays, props.layout.seats.left.rack, 24);
+  drawInsetTray(trays, props.layout.seats.right.rack, 24);
+  drawInsetTray(trays, props.layout.seats.bottom.rack, 26);
+  drawRectFrame(
+    trays,
+    props.layout.southControlRect,
+    0x3a2112,
+    0x86643a,
+    22,
+    0.98
+  );
+
   const feltGlow = new Graphics();
   feltGlow.poly(outerFelt.flatMap((entry) => [entry.x, entry.y]));
   feltGlow.stroke({ color: 0xd9b16b, alpha: 0.22, width: 2.2 });
@@ -173,13 +209,21 @@ function renderSurface(runtime: PixiRuntime, props: AlternateTablePixiSurfacePro
   innerBorder.stroke({ color: 0xa67d3d, alpha: 0.68, width: 2 });
 
   const center = props.layout.centerEmblemRect;
-  embellishments.circle(center.x + center.width / 2, center.y + center.height / 2, center.width * 0.48);
-  embellishments.stroke({ color: 0xa67d3d, alpha: 0.66, width: 2.4 });
-  embellishments.circle(center.x + center.width / 2, center.y + center.height / 2, center.width * 0.34);
-  embellishments.stroke({ color: 0xa67d3d, alpha: 0.4, width: 1.5 });
+  ornaments.circle(center.x + center.width / 2, center.y + center.height / 2, center.width * 0.48);
+  ornaments.stroke({ color: 0xa67d3d, alpha: 0.66, width: 2.4 });
+  ornaments.circle(center.x + center.width / 2, center.y + center.height / 2, center.width * 0.34);
+  ornaments.stroke({ color: 0xa67d3d, alpha: 0.4, width: 1.5 });
+  ornaments.arc(
+    center.x + center.width / 2,
+    center.y + center.height / 2,
+    center.width * 0.54,
+    Math.PI * 0.16,
+    Math.PI * 0.84
+  );
+  ornaments.stroke({ color: 0xc7a05d, alpha: 0.15, width: 2.2 });
 
   drawRectFrame(
-    embellishments,
+    ornaments,
     props.layout.trickRect,
     props.trickHasCards ? 0x123d31 : 0x0f3027,
     0x88704a,
@@ -187,7 +231,7 @@ function renderSurface(runtime: PixiRuntime, props: AlternateTablePixiSurfacePro
     0.92
   );
   drawRectFrame(
-    embellishments,
+    ornaments,
     props.layout.statusRect,
     0x10251d,
     0x897146,
@@ -195,53 +239,48 @@ function renderSurface(runtime: PixiRuntime, props: AlternateTablePixiSurfacePro
     0.96
   );
   drawRectFrame(
-    embellishments,
+    ornaments,
     props.layout.scoreRect,
     0x101d18,
     0x8f7344,
     18,
     0.98
   );
-  drawRectFrame(
-    embellishments,
-    props.layout.southControlRect,
-    0x3e2413,
-    0x7c5930,
-    20,
-    0.92
-  );
 
   if (props.showPassRoutes) {
     props.layout.passRoutes.forEach((route) => {
-      routeFrames.roundRect(
+      const routeFrame = new Graphics();
+
+      routeFrame.roundRect(
         route.rect.x,
         route.rect.y,
         route.rect.width,
         route.rect.height,
         14
       );
-      routeFrames.fill({
+      routeFrame.fill({
         color: route.occupied ? 0x182c29 : 0x11231d,
         alpha: route.displayMode === "pickup" ? 0.82 : 0.74
       });
-      routeFrames.roundRect(
+      routeFrame.roundRect(
         route.rect.x,
         route.rect.y,
         route.rect.width,
         route.rect.height,
         14
       );
-      routeFrames.stroke({
+      routeFrame.stroke({
         color: route.interactive ? 0xc39c54 : 0x7e6b43,
         alpha: 0.92,
         width: route.interactive ? 2.4 : 1.6
       });
-      drawArrowGlyph(routeFrames, route);
-      routeFrames.stroke({
+      drawArrowGlyph(routeFrame, route);
+      routeFrame.stroke({
         color: route.interactive ? 0xf0cb76 : 0x9f814c,
         alpha: 0.9,
         width: 2
       });
+      routeLayer.addChild(routeFrame);
     });
   }
 
@@ -258,34 +297,19 @@ function renderSurface(runtime: PixiRuntime, props: AlternateTablePixiSurfacePro
   centerTitle.anchor.set(0.5);
   centerTitle.position.set(
     props.layout.boardRect.x + props.layout.boardRect.width / 2,
-    props.layout.boardRect.y + props.layout.boardRect.height * 0.17
-  );
-
-  const phaseText = new Text({
-    text: props.phaseLabel.toUpperCase(),
-    style: new TextStyle({
-      fill: 0xe8dfc7,
-      fontFamily: "Inter, system-ui, sans-serif",
-      fontSize: Math.max(13, props.layout.boardRect.height * 0.018),
-      fontWeight: "700",
-      letterSpacing: 2
-    })
-  });
-  phaseText.anchor.set(0.5);
-  phaseText.position.set(
-    props.layout.statusRect.x + props.layout.statusRect.width / 2,
-    props.layout.statusRect.y + props.layout.statusRect.height / 2
+    props.layout.boardRect.y + props.layout.boardRect.height * 0.205
   );
 
   root.addChild(
     shadow,
     board,
+    trays,
     embellishments,
+    ornaments,
     feltGlow,
     innerBorder,
-    routeFrames,
-    centerTitle,
-    phaseText
+    routeLayer,
+    centerTitle
   );
 }
 

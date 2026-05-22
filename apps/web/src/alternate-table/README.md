@@ -38,6 +38,10 @@ selection behavior.
 
 - Default table: load the normal app route as before.
 - Alternate table: add `?table=alt` to the gameplay URL.
+- Dev pass preview: in local development only, add `?table=alt&preview=pass-select`
+  to boot a real engine-driven `pass_select` state with South still owning the
+  unresolved exchange. This exists only to tune the luxury renderer against the
+  canonical live passing geometry.
 - In-app toggle: use the main menu to switch between `Classic Table` and
   `Luxury Table`.
 - Return to normal: remove `?table=alt` or switch back from the same menu.
@@ -62,8 +66,10 @@ Visual direction was guided by the reference mockups in `mockups/`, but the
 shipped alternate table is still backed by the real live game state and action
 pipeline. No mock state replaces the main gameplay path.
 
-If a future visual-only preview is needed, keep it behind an explicit dev-only
-entry point rather than changing the main table flow.
+The current dev-only preview uses the real engine transition path rather than a
+fake mock state: it declines the opening Grand Tichu window, submits
+non-South pass selections through the engine, and leaves the local South seat
+as the live `select_pass` actor.
 
 ## Known Limitations
 

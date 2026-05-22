@@ -525,3 +525,12 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 - Linked GitHub Issue: [#81](https://github.com/NeonButrfly/tichuml/issues/81)
 - Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
 - Status Source: GitHub issue state only.
+
+### 2026-05-22 - Alternate table pass-select preview and play-area maximization
+
+- Prompt Signal: The follow-up prompt pushed the alternate table toward the mockup by demanding more usable table and less border, stronger 2.5D perspective, and explicit visual tuning against a real pass-select state instead of Grand Tichu screenshots.
+- Interpreted Requirement: Keep the normal table and live backend path intact, but add an explicit dev-only `?table=alt&preview=pass-select` route that boots a real engine-driven exchange state for renderer tuning. Use that state to compress overlay text, push the north rail upward, lift the south shelf into view, widen the felt footprint, and keep pass-lane directionality tied to the canonical normal-table mapping.
+- Affected Systems: `apps/web/src/App.tsx`, `apps/web/src/game-table-view-model.ts`, `apps/web/src/alternate-table/preview-session.ts`, `apps/web/src/alternate-table/layout.ts`, `apps/web/src/alternate-table/pixi-surface.tsx`, `apps/web/src/alternate-game-table-view.tsx`, `apps/web/src/styles.css`, `apps/web/src/alternate-table/README.md`, `tests/integration/alternate-table-preview-session.test.ts`, `tests/integration/game-table-view-model.test.ts`.
+- Linked GitHub Issue: [#81](https://github.com/NeonButrfly/tichuml/issues/81)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.

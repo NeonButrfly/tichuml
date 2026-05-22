@@ -3,6 +3,7 @@ import type { RoundPhase } from "@tichuml/engine";
 
 export type UiMode = "normal" | "debug";
 export type PlayerTableVariant = "normal" | "alternate";
+export type AlternateTablePreviewMode = "none" | "pass-select";
 export type UiDialogId =
   | "hotkeys"
   | "how_to_play"
@@ -148,6 +149,14 @@ export function getPlayerTableVariantFromSearch(
     : "normal";
 }
 
+export function getAlternateTablePreviewModeFromSearch(
+  search: string
+): AlternateTablePreviewMode {
+  const params = new URLSearchParams(search);
+  const preview = params.get("preview")?.trim().toLowerCase();
+  return preview === "pass-select" ? "pass-select" : "none";
+}
+
 export function updateSearchWithPlayerTableVariant(
   search: string,
   variant: PlayerTableVariant
@@ -157,6 +166,7 @@ export function updateSearchWithPlayerTableVariant(
     params.set("table", "alt");
   } else {
     params.delete("table");
+    params.delete("preview");
   }
 
   const serialized = params.toString();

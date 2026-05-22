@@ -63,7 +63,7 @@ export type AlternateTableLayout = {
   passRoutes: AlternatePassRoutePlacement[];
 };
 
-const TABLE_ASPECT_RATIO = 1.56;
+const TABLE_ASPECT_RATIO = 1.78;
 
 function roundRect(rect: Rect): Rect {
   return {
@@ -82,60 +82,60 @@ function buildSeatPlacements(width: number, height: number) {
   return {
     top: {
       plaque: roundRect({
-        x: width * 0.4,
-        y: height * 0.086,
-        width: width * 0.2,
-        height: height * 0.042
+        x: width * 0.41,
+        y: height * 0.046,
+        width: width * 0.18,
+        height: height * 0.034
       }),
       rack: roundRect({
-        x: width * 0.378,
-        y: height * 0.126,
-        width: width * 0.244,
-        height: height * 0.08
+        x: width * 0.392,
+        y: height * 0.09,
+        width: width * 0.216,
+        height: height * 0.064
       }),
       depthScale: 0.82
     },
     left: {
       plaque: roundRect({
-        x: width * 0.05,
-        y: height * 0.404,
-        width: width * 0.04,
-        height: height * 0.115
+        x: width * 0.016,
+        y: height * 0.338,
+        width: width * 0.032,
+        height: height * 0.152
       }),
       rack: roundRect({
-        x: width * 0.084,
-        y: height * 0.316,
-        width: width * 0.086,
-        height: height * 0.3
+        x: width * 0.052,
+        y: height * 0.242,
+        width: width * 0.072,
+        height: height * 0.386
       }),
       depthScale: 0.92
     },
     right: {
       plaque: roundRect({
-        x: width * 0.91,
-        y: height * 0.404,
-        width: width * 0.04,
-        height: height * 0.115
+        x: width * 0.952,
+        y: height * 0.338,
+        width: width * 0.032,
+        height: height * 0.152
       }),
       rack: roundRect({
-        x: width * 0.83,
-        y: height * 0.316,
-        width: width * 0.086,
-        height: height * 0.3
+        x: width * 0.876,
+        y: height * 0.242,
+        width: width * 0.072,
+        height: height * 0.386
       }),
       depthScale: 0.92
     },
     bottom: {
       plaque: roundRect({
-        x: width * 0.396,
-        y: height * 0.828,
-        width: width * 0.208,
-        height: height * 0.06
+        x: width * 0.4,
+        y: height * 0.786,
+        width: width * 0.2,
+        height: height * 0.048
       }),
       rack: roundRect({
-        x: width * 0.198,
-        y: height * 0.676,
-        width: width * 0.604,
+        x: width * 0.18,
+        y: height * 0.592,
+        width: width * 0.64,
         height: height * 0.15
       }),
       depthScale: 1
@@ -150,13 +150,13 @@ function getPassClusterCenter(
 ): Point {
   switch (sourcePosition) {
     case "top":
-      return point(width * 0.5, height * 0.305);
+      return point(width * 0.5, height * 0.232);
     case "right":
-      return point(width * 0.785, height * 0.468);
+      return point(width * 0.754, height * 0.43);
     case "bottom":
-      return point(width * 0.5, height * 0.61);
+      return point(width * 0.5, height * 0.554);
     case "left":
-      return point(width * 0.215, height * 0.468);
+      return point(width * 0.246, height * 0.43);
   }
 }
 
@@ -167,18 +167,18 @@ function getPassSlotMetrics(
 ) {
   if (sourcePosition === "left" || sourcePosition === "right") {
     return {
-      slotWidth: width * 0.046,
-      slotHeight: height * 0.1,
-      spread: height * 0.122,
-      centerNudge: width * 0.032
+      slotWidth: width * 0.042,
+      slotHeight: height * 0.11,
+      spread: height * 0.128,
+      centerNudge: width * 0.03
     };
   }
 
   return {
-    slotWidth: width * 0.058,
+    slotWidth: width * 0.056,
     slotHeight: height * 0.112,
-    spread: width * 0.094,
-    rise: height * 0.032
+    spread: width * 0.108,
+    rise: height * 0.048
   };
 }
 
@@ -254,10 +254,10 @@ export function resolveAlternateTableLayout(
   const yInset = (height - fittedHeight) / 2;
 
   const boardRect = roundRect({
-    x: xInset + fittedWidth * 0.02,
-    y: yInset + fittedHeight * 0.02,
-    width: fittedWidth * 0.96,
-    height: fittedHeight * 0.96
+    x: xInset + fittedWidth * 0.01,
+    y: yInset + fittedHeight * 0.008,
+    width: fittedWidth * 0.98,
+    height: fittedHeight * 0.952
   });
 
   const boardWidth = boardRect.width;
@@ -324,46 +324,46 @@ export function resolveAlternateTableLayout(
     height,
     boardRect,
     outerFelt: [
-      point(boardOffsetX + localWidth * 0.19, boardOffsetY + localHeight * 0.195),
-      point(boardOffsetX + localWidth * 0.81, boardOffsetY + localHeight * 0.195),
-      point(boardOffsetX + localWidth * 0.95, boardOffsetY + localHeight * 0.835),
-      point(boardOffsetX + localWidth * 0.05, boardOffsetY + localHeight * 0.835)
+      point(boardOffsetX + localWidth * 0.24, boardOffsetY + localHeight * 0.11),
+      point(boardOffsetX + localWidth * 0.76, boardOffsetY + localHeight * 0.11),
+      point(boardOffsetX + localWidth * 0.964, boardOffsetY + localHeight * 0.868),
+      point(boardOffsetX + localWidth * 0.036, boardOffsetY + localHeight * 0.868)
     ],
     innerFelt: [
-      point(boardOffsetX + localWidth * 0.22, boardOffsetY + localHeight * 0.225),
-      point(boardOffsetX + localWidth * 0.78, boardOffsetY + localHeight * 0.225),
-      point(boardOffsetX + localWidth * 0.918, boardOffsetY + localHeight * 0.802),
-      point(boardOffsetX + localWidth * 0.082, boardOffsetY + localHeight * 0.802)
+      point(boardOffsetX + localWidth * 0.257, boardOffsetY + localHeight * 0.135),
+      point(boardOffsetX + localWidth * 0.743, boardOffsetY + localHeight * 0.135),
+      point(boardOffsetX + localWidth * 0.934, boardOffsetY + localHeight * 0.832),
+      point(boardOffsetX + localWidth * 0.066, boardOffsetY + localHeight * 0.832)
     ],
     centerEmblemRect: translateRect({
-      x: localWidth * 0.355,
-      y: localHeight * 0.34,
-      width: localWidth * 0.29,
-      height: localHeight * 0.29
+      x: localWidth * 0.292,
+      y: localHeight * 0.198,
+      width: localWidth * 0.416,
+      height: localHeight * 0.494
     }),
     trickRect: translateRect({
-      x: localWidth * 0.306,
-      y: localHeight * 0.44,
-      width: localWidth * 0.388,
-      height: localHeight * 0.145
+      x: localWidth * 0.274,
+      y: localHeight * 0.358,
+      width: localWidth * 0.452,
+      height: localHeight * 0.168
     }),
     statusRect: translateRect({
-      x: localWidth * 0.37,
-      y: localHeight * 0.255,
-      width: localWidth * 0.26,
-      height: localHeight * 0.042
+      x: localWidth * 0.412,
+      y: localHeight * 0.278,
+      width: localWidth * 0.176,
+      height: localHeight * 0.03
     }),
     scoreRect: translateRect({
-      x: localWidth * 0.385,
-      y: localHeight * 0.012,
-      width: localWidth * 0.23,
-      height: localHeight * 0.032
+      x: localWidth * 0.418,
+      y: localHeight * 0.006,
+      width: localWidth * 0.164,
+      height: localHeight * 0.028
     }),
     southControlRect: translateRect({
-      x: localWidth * 0.245,
-      y: localHeight * 0.945,
-      width: localWidth * 0.51,
-      height: localHeight * 0.03
+      x: localWidth * 0.232,
+      y: localHeight * 0.846,
+      width: localWidth * 0.536,
+      height: localHeight * 0.068
     }),
     seats: {
       top: {
@@ -390,23 +390,23 @@ export function resolveAlternateTableLayout(
     trickPlacements: {
       top: {
         x: boardOffsetX + localWidth * 0.5,
-        y: boardOffsetY + localHeight * 0.452,
+        y: boardOffsetY + localHeight * 0.384,
         rotation: 0
       },
       right: {
-        x: boardOffsetX + localWidth * 0.624,
-        y: boardOffsetY + localHeight * 0.512,
-        rotation: 8
+        x: boardOffsetX + localWidth * 0.634,
+        y: boardOffsetY + localHeight * 0.446,
+        rotation: 7
       },
       bottom: {
         x: boardOffsetX + localWidth * 0.5,
-        y: boardOffsetY + localHeight * 0.55,
+        y: boardOffsetY + localHeight * 0.504,
         rotation: 0
       },
       left: {
-        x: boardOffsetX + localWidth * 0.376,
-        y: boardOffsetY + localHeight * 0.512,
-        rotation: -8
+        x: boardOffsetX + localWidth * 0.366,
+        y: boardOffsetY + localHeight * 0.446,
+        rotation: -7
       }
     },
     passRoutes
