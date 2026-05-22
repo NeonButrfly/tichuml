@@ -4,21 +4,38 @@ import path from "node:path";
 
 function resolvePythonExecutable(cwd: string): string {
   const configured = process.env.PYTHON_EXECUTABLE?.trim();
-  if (configured) {
+  if (configured && isUsableExecutable(configured)) {
     return configured;
   }
 
   const windowsVenv = path.join(cwd, ".venv", "Scripts", "python.exe");
-  if (existsSync(windowsVenv)) {
+  if (existsSync(windowsVenv) && isUsableExecutable(windowsVenv)) {
     return windowsVenv;
   }
 
   const unixVenv = path.join(cwd, ".venv", "bin", "python");
-  if (existsSync(unixVenv)) {
+  if (existsSync(unixVenv) && isUsableExecutable(unixVenv)) {
     return unixVenv;
   }
 
+  if (isUsableExecutable("python")) {
+    return "python";
+  }
+
+  if (isUsableExecutable("python3")) {
+    return "python3";
+  }
+
   return "python";
+}
+
+function isUsableExecutable(candidate: string): boolean {
+  const result = spawnSync(candidate, ["--version"], {
+    stdio: "ignore",
+    timeout: 2_000,
+    shell: false
+  });
+  return result.error === undefined && result.status === 0;
 }
 
 const [, , ...args] = process.argv;

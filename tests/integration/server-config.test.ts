@@ -217,6 +217,36 @@ describe("server config env loading", () => {
     expect(config.simDefaultGamesPerBatch).toBe(9);
   });
 
+  it("falls back to the repo venv when the configured python executable is unusable", async () => {
+    const repoRoot = await createTempRepo();
+    const venvPython =
+      process.platform === "win32"
+        ? path.join(repoRoot, ".venv", "Scripts", "python.exe")
+        : path.join(repoRoot, ".venv", "bin", "python");
+    await fs.mkdir(path.dirname(venvPython), { recursive: true });
+    if (process.platform === "win32") {
+      await fs.copyFile(process.execPath, venvPython);
+    } else {
+      await fs.writeFile(
+        venvPython,
+        '#!/usr/bin/env bash\nprintf "Python 3.12.0\\n"\n',
+        { encoding: "utf8" }
+      );
+      await fs.chmod(venvPython, 0o755);
+    }
+    await fs.writeFile(
+      path.join(repoRoot, ".env"),
+      "PYTHON_EXECUTABLE=python-does-not-exist\n"
+    );
+
+    const config = loadServerConfig({}, { repoRoot });
+
+    expect(config.pythonExecutable).not.toBe("python-does-not-exist");
+    if (process.platform !== "win32") {
+      expect(config.pythonExecutable).toBe(venvPython);
+    }
+  });
+
   it("uses MAX_REQUEST_BODY_MB when REQUEST_BODY_LIMIT is absent", async () => {
     const repoRoot = await createTempRepo();
     await fs.writeFile(path.join(repoRoot, ".env"), "MAX_REQUEST_BODY_MB=7\n");

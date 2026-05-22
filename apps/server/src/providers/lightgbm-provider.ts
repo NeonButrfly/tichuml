@@ -1,4 +1,7 @@
-import { createHeuristicFeatureAnalyzer } from "@tichuml/ai-heuristics";
+import {
+  buildServerFastPathState,
+  createHeuristicFeatureAnalyzer
+} from "@tichuml/ai-heuristics";
 import type { GameState, LegalAction } from "@tichuml/engine";
 import type { DecisionRequestPayload, JsonObject } from "@tichuml/shared";
 import type { LightgbmScorer } from "../ml/lightgbm-scorer.js";
@@ -42,6 +45,7 @@ export async function routeLightgbmDecision(
   scorer: LightgbmScorer,
   options: { traceDecisionRequests?: boolean } = {}
 ): Promise<RoutedDecision> {
+  const startedAt = Date.now();
   const stateRaw = payload.state_raw;
   if (!isUsableState(stateRaw)) {
     throw new Error(
@@ -61,6 +65,7 @@ export async function routeLightgbmDecision(
     const analyzerLegalActions = Array.isArray(payload.legal_actions)
       ? ({ [payload.actor_seat]: actorLegalActions } as Record<string, LegalAction[]>)
       : (payload.legal_actions as Record<string, LegalAction[]>);
+    const featureBuildStartedAt = Date.now();
     const analyzer = createHeuristicFeatureAnalyzer({
       state: stateRaw,
       legalActions: analyzerLegalActions as never
@@ -74,6 +79,7 @@ export async function routeLightgbmDecision(
         legalAction
       )
     );
+    const featureBuildMs = Date.now() - featureBuildStartedAt;
     const scoringStartedAt = Date.now();
     const scored = await scorer.score({
       stateRaw,
@@ -125,7 +131,8 @@ export async function routeLightgbmDecision(
     const modelMetadata = scored.modelMetadata;
     const runtimeMetadata = {
       ...scored.runtimeMetadata,
-      scoring_latency_ms: scoringLatencyMs
+      scoring_latency_ms: scoringLatencyMs,
+      feature_build_ms: featureBuildMs
     } as JsonObject;
     const providerReason = "Resolved by the LightGBM action model on the backend.";
     const explanation = {
@@ -223,11 +230,17 @@ export async function routeLightgbmDecision(
             typeof runtimeMetadata.model_feature_count === "number"
               ? runtimeMetadata.model_feature_count
               : null,
-          request_validated: true,
-          provider_path: "lightgbm_model"
-        } as JsonObject
-      }),
-      responseMetadata: {
+        request_validated: true,
+        provider_path: "lightgbm_model",
+        timing: {
+          feature_build_ms: featureBuildMs,
+          evaluate_ms: scoringLatencyMs,
+          total_latency_ms: Date.now() - startedAt,
+          scoring_path: "rich_path"
+        }
+      } as JsonObject
+    }),
+    responseMetadata: {
         scores: ranked.map((entry) => ({
           action_key: entry.actionKey,
           score: entry.score,
@@ -285,18 +298,40 @@ export async function routeLightgbmDecision(
             ? runtimeMetadata.model_feature_count
             : null,
         request_validated: true,
-        provider_path: "lightgbm_model"
+        provider_path: "lightgbm_model",
+        timing: {
+          feature_build_ms: featureBuildMs,
+          evaluate_ms: scoringLatencyMs,
+          total_latency_ms: Date.now() - startedAt,
+          scoring_path: "rich_path"
+        }
       } as JsonObject
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const fallback = routeHeuristicDecision(payload, {
+    const fallbackStartedAt = Date.now();
+    const fallbackPayload = buildLightgbmFallbackPayload(
+      payload,
+      stateRaw,
+      canonicalActor,
+      actorLegalActions
+    );
+    const fallback = routeHeuristicDecision(fallbackPayload, {
       providerReason: `LightGBM inference failed; fell back to the backend heuristic: ${message}`,
       metadata: {
         requested_provider: "lightgbm_model",
         lightgbm_error: message,
         fallback_used: true,
-        provider_path: "lightgbm_model"
+        provider_path: "lightgbm_model",
+        lightgbm_requested_scoring_path:
+          typeof payload.metadata.scoring_path === "string"
+            ? payload.metadata.scoring_path
+            : "fast_path",
+        lightgbm_fallback_scoring_path:
+          typeof fallbackPayload.metadata.scoring_path === "string"
+            ? fallbackPayload.metadata.scoring_path
+            : "fast_path",
+        lightgbm_attempt_ms: Date.now() - startedAt
       },
       ...(options.traceDecisionRequests !== undefined
         ? { traceDecisionRequests: options.traceDecisionRequests }
@@ -306,12 +341,54 @@ export async function routeLightgbmDecision(
     return {
       ...fallback,
       responseMetadata: {
+        ...(fallback.responseMetadata ?? {}),
         requested_provider: "lightgbm_model",
         fallback_provider: "server_heuristic",
         fallback_used: true,
         lightgbm_error: message,
-        provider_path: "lightgbm_model"
+        provider_path: "lightgbm_model",
+        lightgbm_requested_scoring_path:
+          typeof payload.metadata.scoring_path === "string"
+            ? payload.metadata.scoring_path
+            : "fast_path",
+        lightgbm_fallback_scoring_path:
+          typeof fallbackPayload.metadata.scoring_path === "string"
+            ? fallbackPayload.metadata.scoring_path
+            : "fast_path",
+        timing: {
+          ...(typeof fallback.responseMetadata?.timing === "object" &&
+          fallback.responseMetadata.timing !== null
+            ? (fallback.responseMetadata.timing as JsonObject)
+            : {}),
+          lightgbm_attempt_ms: Date.now() - startedAt,
+          fallback_heuristic_ms: Date.now() - fallbackStartedAt,
+          total_latency_ms: Date.now() - startedAt
+        }
       }
     };
   }
+}
+
+function buildLightgbmFallbackPayload(
+  payload: DecisionRequestPayload,
+  stateRaw: GameState,
+  actorSeat: string,
+  actorLegalActions: LegalAction[]
+): DecisionRequestPayload {
+  if (payload.phase === "grand_tichu_window") {
+    return payload;
+  }
+
+  return {
+    ...payload,
+    state_norm: buildServerFastPathState(
+      stateRaw,
+      actorSeat as GameState["activeSeat"] & string
+    ) as unknown as JsonObject,
+    legal_actions: actorLegalActions as unknown as JsonObject,
+    metadata: {
+      ...payload.metadata,
+      scoring_path: "fast_path"
+    }
+  };
 }

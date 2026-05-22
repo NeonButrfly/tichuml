@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -162,23 +163,40 @@ function resolveRepoPath(
   return path.isAbsolute(rawValue) ? rawValue : path.join(repoRoot, rawValue);
 }
 
+function isUsableExecutable(candidate: string): boolean {
+  const result = spawnSync(candidate, ["--version"], {
+    stdio: "ignore",
+    timeout: 2_000,
+    shell: false
+  });
+  return result.error === undefined && result.status === 0;
+}
+
 function resolvePythonExecutable(
   repoRoot: string,
   envValue: string | undefined
 ): string {
   const rawValue = envValue?.trim();
-  if (rawValue) {
+  if (rawValue && isUsableExecutable(rawValue)) {
     return rawValue;
   }
 
   const windowsVenvPython = path.join(repoRoot, ".venv", "Scripts", "python.exe");
-  if (fs.existsSync(windowsVenvPython)) {
+  if (fs.existsSync(windowsVenvPython) && isUsableExecutable(windowsVenvPython)) {
     return windowsVenvPython;
   }
 
   const unixVenvPython = path.join(repoRoot, ".venv", "bin", "python");
-  if (fs.existsSync(unixVenvPython)) {
+  if (fs.existsSync(unixVenvPython) && isUsableExecutable(unixVenvPython)) {
     return unixVenvPython;
+  }
+
+  if (isUsableExecutable("python")) {
+    return "python";
+  }
+
+  if (isUsableExecutable("python3")) {
+    return "python3";
   }
 
   return "python";

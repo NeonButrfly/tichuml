@@ -5,10 +5,15 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import {
   applyEngineAction,
+  cardsFromIds,
   createInitialGameState,
+  createScenarioState,
+  getCanonicalActiveSeatFromState,
   getLegalActions,
+  listCombinationInterpretations,
   SYSTEM_ACTOR,
-  type EngineAction
+  type EngineAction,
+  type GameState
 } from "@tichuml/engine";
 import type {
   AdminClearResult,
@@ -752,6 +757,40 @@ function createDecisionRequestBody(options: {
   });
 }
 
+function createPassSelectDecisionRequestBody() {
+  const lead = listCombinationInterpretations(cardsFromIds(["jade-7"]), null)[0];
+  if (!lead) {
+    throw new Error("Expected a valid trick-play lead combination.");
+  }
+  const state = createScenarioState({
+    phase: "trick_play",
+    activeSeat: "seat-0",
+    currentTrick: {
+      leader: "seat-1",
+      currentWinner: "seat-1",
+      currentCombination: lead,
+      entries: [{ type: "play", seat: "seat-1", combination: lead }],
+      passingSeats: []
+    },
+    hands: {
+      "seat-0": cardsFromIds(["jade-8", "sword-9", "pagoda-12", "dragon"]),
+      "seat-1": cardsFromIds(["jade-3", "sword-4", "pagoda-5"]),
+      "seat-2": cardsFromIds(["jade-6", "sword-6", "pagoda-6", "star-6"]),
+      "seat-3": cardsFromIds(["jade-10", "sword-10", "pagoda-10"])
+    }
+  } satisfies Partial<GameState>);
+  return buildDecisionRequestPayload({
+    gameId: "game-1",
+    handId: "hand-1",
+    stateRaw: state as unknown as Record<string, unknown>,
+    stateNorm: {} as Record<string, unknown>,
+    legalActions: getLegalActions(state),
+    phase: state.phase,
+    requestedProvider: "lightgbm_model",
+    decisionIndex: 1
+  });
+}
+
 afterEach(() => {
   // reserved for future test-specific cleanup
 });
@@ -1263,6 +1302,7 @@ describe("backend foundation server routes", () => {
         expect(payload.accepted).toBe(true);
         expect(payload.provider_used).toBe("server_heuristic");
         expect(payload.metadata?.fallback_used).toBe(true);
+        expect(payload.metadata?.scoring_path).toBe("rich_path");
         expect(String(payload.metadata?.lightgbm_error ?? "")).toMatch(
           /non-finite candidate score/i
         );
@@ -1270,6 +1310,55 @@ describe("backend foundation server routes", () => {
         expect(repository.decisions).toHaveLength(1);
         expect(repository.decisions[0]?.policy_source).toBe("server_heuristic");
         expect(repository.decisions[0]?.metadata.lightgbm_error).toBeTruthy();
+      },
+      { lightgbmScorer: scorer }
+    );
+  });
+
+  it("prefers the fast heuristic path when LightGBM fallback occurs for fast-path-safe requests", async () => {
+    const scorer: LightgbmScorer = {
+      async score() {
+        throw new Error("spawn python ENOENT");
+      },
+      async close() {}
+    };
+
+    await withServer(
+      async ({ baseUrl, repository }) => {
+        const response = await fetch(`${baseUrl}/api/decision/request`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(createPassSelectDecisionRequestBody())
+        });
+
+        expect(response.status).toBe(200);
+        const payload = (await response.json()) as {
+          accepted: boolean;
+          provider_used: string;
+          metadata?: {
+            fallback_used?: boolean;
+            lightgbm_error?: string;
+            scoring_path?: string;
+            lightgbm_requested_scoring_path?: string;
+            lightgbm_fallback_scoring_path?: string;
+          };
+        };
+        expect(payload.accepted).toBe(true);
+        expect(payload.provider_used).toBe("server_heuristic");
+        expect(payload.metadata?.fallback_used).toBe(true);
+        expect(payload.metadata?.scoring_path).toBe("fast_path");
+        expect(payload.metadata?.lightgbm_requested_scoring_path).toBe("rich_path");
+        expect(payload.metadata?.lightgbm_fallback_scoring_path).toBe("fast_path");
+        expect(String(payload.metadata?.lightgbm_error ?? "")).toMatch(
+          /spawn python enoent/i
+        );
+        await flushServerQueue();
+        expect(repository.decisions).toHaveLength(1);
+        expect(repository.decisions[0]?.policy_source).toBe("server_heuristic");
+        expect(repository.decisions[0]?.metadata.scoring_path).toBe("fast_path");
+        expect(repository.decisions[0]?.metadata.lightgbm_requested_scoring_path).toBe(
+          "rich_path"
+        );
       },
       { lightgbmScorer: scorer }
     );
