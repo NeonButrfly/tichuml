@@ -16,6 +16,7 @@ type ParsedArgs = {
   seed: string;
   telemetryEnabled: boolean;
   backendBaseUrl?: string;
+  decisionTimeoutMs: number;
   quiet: boolean;
   progress: boolean;
   defaultProvider: ProviderMode;
@@ -232,6 +233,14 @@ function parseNumber(
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function parsePositiveInteger(
+  value: string | undefined,
+  fallback: number
+): number {
+  const parsed = Number.parseInt(value ?? "", 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 function parseNullableNumber(value: string | undefined): number | null {
   if (!value) {
     return null;
@@ -244,12 +253,13 @@ function parseNullableNumber(value: string | undefined): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function parseArgs(argv: string[]): ParsedArgs {
+export function parseArgs(argv: string[]): ParsedArgs {
   const seatProviders: SeatProviderOverrides = {};
   const parsed: ParsedArgs = {
     games: 100,
     seed: "evaluation",
     telemetryEnabled: true,
+    decisionTimeoutMs: 2000,
     quiet: false,
     progress: true,
     defaultProvider: "server_heuristic",
@@ -317,6 +327,13 @@ function parseArgs(argv: string[]): ParsedArgs {
         if (next) {
           parsed.backendBaseUrl = next;
         }
+        index += 1;
+        break;
+      case "--decision-timeout-ms":
+        parsed.decisionTimeoutMs = parsePositiveInteger(
+          next,
+          parsed.decisionTimeoutMs
+        );
         index += 1;
         break;
       case "--output":
@@ -1178,6 +1195,7 @@ async function main(): Promise<void> {
         defaultProvider: plan.defaultProvider,
         seatProviders: plan.seatProviders,
         telemetryEnabled: args.telemetryEnabled,
+        decisionTimeoutMs: args.decisionTimeoutMs,
         ...(args.backendBaseUrl ? { backendBaseUrl: args.backendBaseUrl } : {}),
         quiet: args.quiet,
         progress: args.progress

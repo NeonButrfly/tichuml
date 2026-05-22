@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   buildLatestSummary,
   buildProviderComparisonSummary,
-  evaluateImprovementGate
+  evaluateImprovementGate,
+  parseArgs
 } from "../../apps/sim-runner/src/evaluate";
 
 describe("ml evaluation helpers", () => {
@@ -10,6 +11,7 @@ describe("ml evaluation helpers", () => {
     games: 20,
     seed: "eval-seed",
     telemetryEnabled: false,
+    decisionTimeoutMs: 2000,
     quiet: true,
     progress: false,
     defaultProvider: "lightgbm_model",
@@ -220,5 +222,12 @@ describe("ml evaluation helpers", () => {
     expect(latest.tichu_call_rate).toBe(0.3);
     expect(latest.double_victory_rate).toBe(0.07);
     expect(latest.gate_passed).toBe(true);
+  });
+
+  it("defaults decision timeouts to the sim runner budget and accepts overrides", () => {
+    expect(parseArgs([]).decisionTimeoutMs).toBe(2000);
+    expect(
+      parseArgs(["--decision-timeout-ms", "3500"]).decisionTimeoutMs
+    ).toBe(3500);
   });
 });
