@@ -426,261 +426,270 @@ export function AlternateGameTableView(props: GameTableViewProps) {
             `alternate-overlay--camera-${cameraPreset}`
           ].join(" ")}
         >
-          <div className="alternate-camera-controls" role="group" aria-label="Perspective">
-            <button
-              type="button"
-              className={[
-                "alternate-camera-button",
-                cameraPreset === "left" ? "is-active" : ""
-              ]
-                .filter(Boolean)
-                .join(" ")}
-              onClick={() => setCameraPreset("left")}
-            >
-              Left View
-            </button>
-            <button
-              type="button"
-              className={[
-                "alternate-camera-button",
-                cameraPreset === "center" ? "is-active" : ""
-              ]
-                .filter(Boolean)
-                .join(" ")}
-              onClick={() => setCameraPreset("center")}
-            >
-              Center View
-            </button>
-            <button
-              type="button"
-              className={[
-                "alternate-camera-button",
-                cameraPreset === "right" ? "is-active" : ""
-              ]
-                .filter(Boolean)
-                .join(" ")}
-              onClick={() => setCameraPreset("right")}
-            >
-              Right View
-            </button>
-          </div>
-
-          <div className="alternate-score-plaque" style={rectStyle(layout.scoreRect)}>
-            <div>
-              <span>WE</span>
-              <strong>{weScore}</strong>
+          <div className="alternate-overlay__hud">
+            <div className="alternate-camera-controls" role="group" aria-label="Perspective">
+              <button
+                type="button"
+                className={[
+                  "alternate-camera-button",
+                  cameraPreset === "left" ? "is-active" : ""
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                onClick={() => setCameraPreset("left")}
+              >
+                Left View
+              </button>
+              <button
+                type="button"
+                className={[
+                  "alternate-camera-button",
+                  cameraPreset === "center" ? "is-active" : ""
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                onClick={() => setCameraPreset("center")}
+              >
+                Center View
+              </button>
+              <button
+                type="button"
+                className={[
+                  "alternate-camera-button",
+                  cameraPreset === "right" ? "is-active" : ""
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                onClick={() => setCameraPreset("right")}
+              >
+                Right View
+              </button>
             </div>
-            <em>:</em>
-            <div>
-              <span>THEY</span>
-              <strong>{theyScore}</strong>
+
+            <div className="alternate-score-plaque" style={rectStyle(layout.scoreRect)}>
+              <div>
+                <span>WE</span>
+                <strong>{weScore}</strong>
+              </div>
+              <em>:</em>
+              <div>
+                <span>THEY</span>
+                <strong>{theyScore}</strong>
+              </div>
             </div>
           </div>
 
-          <div className="alternate-status-plaque" style={rectStyle(layout.statusRect)}>
-            <span>{statusText}</span>
-            {props.derived.currentWish ? <strong>Wish {formatRank(props.derived.currentWish)}</strong> : null}
-          </div>
-
-          <AlternateSeatPlaque
-            seat={northSeat}
-            label="NORTH"
-            style={rectStyle(layout.seats.top.plaque)}
-          />
           <div
-            className="alternate-remote-rack alternate-remote-rack--north"
-            style={rectStyle(layout.seats.top.rack)}
-            data-alt-seat="north"
+            className={[
+              "alternate-overlay__table",
+              `alternate-overlay__table--camera-${cameraPreset}`
+            ].join(" ")}
           >
-            <div className="alternate-remote-rack__cards">{renderAltCardBacks(northSeat.handCount, "horizontal")}</div>
-          </div>
+            <div className="alternate-status-plaque" style={rectStyle(layout.statusRect)}>
+              <span>{statusText}</span>
+              {props.derived.currentWish ? <strong>Wish {formatRank(props.derived.currentWish)}</strong> : null}
+            </div>
 
-          <AlternateSeatPlaque
-            seat={westSeat}
-            label="WEST"
-            style={rectStyle(layout.seats.left.plaque)}
-            vertical
-          />
-          <div
-            className="alternate-remote-rack alternate-remote-rack--west"
-            style={rectStyle(layout.seats.left.rack)}
-            data-alt-seat="west"
-          >
-            <div className="alternate-remote-rack__cards">{renderAltCardBacks(westSeat.handCount, "vertical")}</div>
-            <span className="alternate-remote-rack__count">{westSeat.handCount}</span>
-          </div>
+            <AlternateSeatPlaque
+              seat={northSeat}
+              label="NORTH"
+              style={rectStyle(layout.seats.top.plaque)}
+            />
+            <div
+              className="alternate-remote-rack alternate-remote-rack--north"
+              style={rectStyle(layout.seats.top.rack)}
+              data-alt-seat="north"
+            >
+              <div className="alternate-remote-rack__cards">{renderAltCardBacks(northSeat.handCount, "horizontal")}</div>
+            </div>
 
-          <AlternateSeatPlaque
-            seat={eastSeat}
-            label="EAST"
-            style={rectStyle(layout.seats.right.plaque)}
-            vertical
-          />
-          <div
-            className="alternate-remote-rack alternate-remote-rack--east"
-            style={rectStyle(layout.seats.right.rack)}
-            data-alt-seat="east"
-          >
-            <div className="alternate-remote-rack__cards">{renderAltCardBacks(eastSeat.handCount, "vertical")}</div>
-            <span className="alternate-remote-rack__count">{eastSeat.handCount}</span>
-          </div>
+            <AlternateSeatPlaque
+              seat={westSeat}
+              label="WEST"
+              style={rectStyle(layout.seats.left.plaque)}
+              vertical
+            />
+            <div
+              className="alternate-remote-rack alternate-remote-rack--west"
+              style={rectStyle(layout.seats.left.rack)}
+              data-alt-seat="west"
+            >
+              <div className="alternate-remote-rack__cards">{renderAltCardBacks(westSeat.handCount, "vertical")}</div>
+              <span className="alternate-remote-rack__count">{westSeat.handCount}</span>
+            </div>
 
-          {showPassRoutes &&
-            layout.passRoutes.map((route) => (
-              <AlternatePassRouteSlot
-                key={route.key}
-                route={route}
-                cardLookup={props.cardLookup}
-                selectedPassTarget={props.selectedPassTarget}
-                onPassTargetSelect={props.onPassTargetSelect}
-                onPassLaneDrop={props.onPassLaneDrop}
-                onPassLaneCardClick={props.onPassLaneCardClick}
-                onPassLaneCardDragStart={props.onPassLaneCardDragStart}
-                onPassLaneCardDragEnd={props.onPassLaneCardDragEnd}
-              />
-            ))}
+            <AlternateSeatPlaque
+              seat={eastSeat}
+              label="EAST"
+              style={rectStyle(layout.seats.right.plaque)}
+              vertical
+            />
+            <div
+              className="alternate-remote-rack alternate-remote-rack--east"
+              style={rectStyle(layout.seats.right.rack)}
+              data-alt-seat="east"
+            >
+              <div className="alternate-remote-rack__cards">{renderAltCardBacks(eastSeat.handCount, "vertical")}</div>
+              <span className="alternate-remote-rack__count">{eastSeat.handCount}</span>
+            </div>
 
-          <div className="alternate-trick-area" style={rectStyle(layout.trickRect)}>
-            {currentTrickEntries.length > 0 ? (
-              currentTrickEntries.map((entry) => {
-                const placement = layout.trickPlacements[entry.seatPosition];
+            {showPassRoutes &&
+              layout.passRoutes.map((route) => (
+                <AlternatePassRouteSlot
+                  key={route.key}
+                  route={route}
+                  cardLookup={props.cardLookup}
+                  selectedPassTarget={props.selectedPassTarget}
+                  onPassTargetSelect={props.onPassTargetSelect}
+                  onPassLaneDrop={props.onPassLaneDrop}
+                  onPassLaneCardClick={props.onPassLaneCardClick}
+                  onPassLaneCardDragStart={props.onPassLaneCardDragStart}
+                  onPassLaneCardDragEnd={props.onPassLaneCardDragEnd}
+                />
+              ))}
+
+            <div className="alternate-trick-area" style={rectStyle(layout.trickRect)}>
+              {currentTrickEntries.length > 0 ? (
+                currentTrickEntries.map((entry) => {
+                  const placement = layout.trickPlacements[entry.seatPosition];
+                  return (
+                    <div
+                      key={entry.key}
+                      className={[
+                        "alternate-trick-stack",
+                        entry.winning ? "is-winning" : ""
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                      style={
+                        {
+                          left: `${placement.x - layout.trickRect.x}px`,
+                          top: `${placement.y - layout.trickRect.y}px`,
+                          transform: `translate(-50%, -50%) rotate(${placement.rotation}deg)`
+                        } as CSSProperties
+                      }
+                    >
+                      {entry.cardIds.map((cardId) => {
+                        const card = props.cardLookup.get(cardId);
+                        return card ? (
+                          <CardFace
+                            key={`${entry.key}-${cardId}`}
+                            card={card}
+                            className="alternate-trick-card"
+                          />
+                        ) : null;
+                      })}
+                    </div>
+                  );
+                })
+              ) : null}
+            </div>
+
+            <div
+              className="alternate-south-hand"
+              style={rectStyle(layout.seats.bottom.rack)}
+              data-alt-seat="south"
+            >
+              {props.sortedLocalHand.map((card, index) => {
+                const placement = southHandLayout.placements[index];
+                if (!placement) {
+                  return null;
+                }
                 return (
                   <div
-                    key={entry.key}
-                    className={[
-                      "alternate-trick-stack",
-                      entry.winning ? "is-winning" : ""
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
+                    key={card.id}
+                    className="alternate-south-hand__card-shell"
                     style={
                       {
-                        left: `${placement.x - layout.trickRect.x}px`,
-                        top: `${placement.y - layout.trickRect.y}px`,
-                        transform: `translate(-50%, -50%) rotate(${placement.rotation}deg)`
+                        transform: `translateX(calc(${placement.offsetPx}px - 50%)) translateY(${placement.liftPx}px) rotate(${placement.rotationDeg}deg)`,
+                        zIndex: 100 + index
                       } as CSSProperties
                     }
                   >
-                    {entry.cardIds.map((cardId) => {
-                      const card = props.cardLookup.get(cardId);
-                      return card ? (
-                        <CardFace
-                          key={`${entry.key}-${cardId}`}
-                          card={card}
-                          className="alternate-trick-card"
-                        />
-                      ) : null;
-                    })}
+                    <CardFace
+                      card={card}
+                      interactive={props.localCanInteract}
+                      tone={props.localLegalCardIds.has(card.id) ? "legal" : "muted"}
+                      selected={props.selectedCardIds.includes(card.id)}
+                      className="alternate-south-hand__card"
+                      style={{ width: `${southHandLayout.cardWidth}px` }}
+                      draggable={props.localPassInteractionEnabled}
+                      onClick={() => props.onLocalCardClick(card.id)}
+                      onDragStart={(event) => {
+                        event.dataTransfer.effectAllowed = "move";
+                        event.dataTransfer.setData("application/x-tichu-pass-card", card.id);
+                      }}
+                    />
                   </div>
                 );
-              })
-            ) : null}
-          </div>
+              })}
+            </div>
 
-          <div
-            className="alternate-south-hand"
-            style={rectStyle(layout.seats.bottom.rack)}
-            data-alt-seat="south"
-          >
-            {props.sortedLocalHand.map((card, index) => {
-              const placement = southHandLayout.placements[index];
-              if (!placement) {
-                return null;
-              }
-              return (
-                <div
-                  key={card.id}
-                  className="alternate-south-hand__card-shell"
-                  style={
-                    {
-                      transform: `translateX(calc(${placement.offsetPx}px - 50%)) translateY(${placement.liftPx}px) rotate(${placement.rotationDeg}deg)`,
-                      zIndex: 100 + index
-                    } as CSSProperties
-                  }
-                >
-                  <CardFace
-                    card={card}
-                    interactive={props.localCanInteract}
-                    tone={props.localLegalCardIds.has(card.id) ? "legal" : "muted"}
-                    selected={props.selectedCardIds.includes(card.id)}
-                    className="alternate-south-hand__card"
-                    style={{ width: `${southHandLayout.cardWidth}px` }}
-                    draggable={props.localPassInteractionEnabled}
-                    onClick={() => props.onLocalCardClick(card.id)}
-                    onDragStart={(event) => {
-                      event.dataTransfer.effectAllowed = "move";
-                      event.dataTransfer.setData("application/x-tichu-pass-card", card.id);
-                    }}
-                  />
+            <AlternateSeatPlaque
+              seat={southSeat}
+              label="SOUTH"
+              style={rectStyle(layout.seats.bottom.plaque)}
+              prominent
+            />
+
+            <div className="alternate-controls" style={rectStyle(layout.southControlRect)}>
+              <div className="alternate-controls__primary">
+                {props.normalActionRail.map((slot) => (
+                  <button
+                    key={slot.id}
+                    type="button"
+                    className={[
+                      "alternate-action-button",
+                      `alternate-action-button--${slot.tone}`
+                    ].join(" ")}
+                    disabled={!slot.enabled}
+                    onClick={() => props.onNormalAction(slot.id)}
+                  >
+                    {slot.label}
+                  </button>
+                ))}
+              </div>
+              <div className="alternate-controls__secondary">
+                <button
+                    type="button"
+                    className="alternate-utility-button"
+                    onClick={() => props.onSortModeChange("rank")}
+                  >
+                    Sort Rank
+                  </button>
+                  <button
+                    type="button"
+                    className="alternate-utility-button"
+                    onClick={() => props.onSortModeChange("suit")}
+                  >
+                    Sort Suit
+                  </button>
+                  <button
+                    type="button"
+                    className="alternate-utility-button"
+                    onClick={() => props.onSortModeChange("combo")}
+                  >
+                    Sort Combo
+                  </button>
+                  <button
+                    type="button"
+                    className="alternate-utility-button"
+                    onClick={props.onClearLocalSelection}
+                  >
+                    Clear
+                  </button>
+                  {props.canContinueAi && (
+                    <button
+                      type="button"
+                      className="alternate-utility-button"
+                      onClick={props.onContinueAi}
+                    >
+                      Continue AI
+                    </button>
+                  )}
                 </div>
-              );
-            })}
-          </div>
-
-          <AlternateSeatPlaque
-            seat={southSeat}
-            label="SOUTH"
-            style={rectStyle(layout.seats.bottom.plaque)}
-            prominent
-          />
-
-          <div className="alternate-controls" style={rectStyle(layout.southControlRect)}>
-            <div className="alternate-controls__primary">
-              {props.normalActionRail.map((slot) => (
-                <button
-                  key={slot.id}
-                  type="button"
-                  className={[
-                    "alternate-action-button",
-                    `alternate-action-button--${slot.tone}`
-                  ].join(" ")}
-                  disabled={!slot.enabled}
-                  onClick={() => props.onNormalAction(slot.id)}
-                >
-                  {slot.label}
-                </button>
-              ))}
+              </div>
             </div>
-            <div className="alternate-controls__secondary">
-              <button
-                type="button"
-                className="alternate-utility-button"
-                onClick={() => props.onSortModeChange("rank")}
-              >
-                Sort Rank
-              </button>
-              <button
-                type="button"
-                className="alternate-utility-button"
-                onClick={() => props.onSortModeChange("suit")}
-              >
-                Sort Suit
-              </button>
-              <button
-                type="button"
-                className="alternate-utility-button"
-                onClick={() => props.onSortModeChange("combo")}
-              >
-                Sort Combo
-              </button>
-              <button
-                type="button"
-                className="alternate-utility-button"
-                onClick={props.onClearLocalSelection}
-              >
-                Clear
-              </button>
-              {props.canContinueAi && (
-                <button
-                  type="button"
-                  className="alternate-utility-button"
-                  onClick={props.onContinueAi}
-                >
-                  Continue AI
-                </button>
-              )}
-            </div>
-          </div>
 
           {props.localDragonRecipients.length > 0 && (
             <section className="alternate-choice-panel alternate-choice-panel--dragon">

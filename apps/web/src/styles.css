@@ -5181,17 +5181,26 @@ body.normal-layout-locked {
 
 .alternate-overlay {
   z-index: 2;
-  transform-origin: 50% 52%;
+}
+
+.alternate-overlay__hud,
+.alternate-overlay__table {
+  position: absolute;
+  inset: 0;
+}
+
+.alternate-overlay__table {
+  transform-origin: 50% 54%;
   transition: transform 220ms ease, filter 220ms ease;
 }
 
-.alternate-overlay--camera-left {
-  transform: perspective(1800px) rotateY(4.5deg) translateX(10px) scale(0.988);
+.alternate-overlay__table--camera-left {
+  transform: perspective(1900px) rotateY(5.6deg) translateX(8px) scale(0.992);
   filter: saturate(1.02);
 }
 
-.alternate-overlay--camera-right {
-  transform: perspective(1800px) rotateY(-4.5deg) translateX(-10px) scale(0.988);
+.alternate-overlay__table--camera-right {
+  transform: perspective(1900px) rotateY(-5.6deg) translateX(-8px) scale(0.992);
   filter: saturate(1.02);
 }
 
@@ -5357,6 +5366,23 @@ body.normal-layout-locked {
 .alternate-remote-rack {
   position: absolute;
   pointer-events: none;
+  transform-origin: center center;
+}
+
+.alternate-overlay__table--camera-left .alternate-remote-rack--west {
+  transform: translateX(-6px);
+}
+
+.alternate-overlay__table--camera-left .alternate-remote-rack--east {
+  transform: translateX(4px);
+}
+
+.alternate-overlay__table--camera-right .alternate-remote-rack--west {
+  transform: translateX(-4px);
+}
+
+.alternate-overlay__table--camera-right .alternate-remote-rack--east {
+  transform: translateX(6px);
 }
 
 .alternate-remote-rack__cards {
@@ -5470,6 +5496,8 @@ body.normal-layout-locked {
 .alternate-south-hand {
   position: absolute;
   overflow: visible;
+  transform-origin: center bottom;
+  transition: transform 220ms ease;
 }
 
 .alternate-south-hand__card-shell {
@@ -5492,6 +5520,14 @@ body.normal-layout-locked {
     0 0 28px rgba(255, 213, 129, 0.26);
 }
 
+.alternate-overlay__table--camera-left .alternate-south-hand {
+  transform: translateX(10px) translateY(2px);
+}
+
+.alternate-overlay__table--camera-right .alternate-south-hand {
+  transform: translateX(-10px) translateY(2px);
+}
+
 .alternate-controls {
   position: absolute;
   display: grid;
@@ -5499,6 +5535,15 @@ body.normal-layout-locked {
   align-content: center;
   justify-items: center;
   padding: 6px 14px 8px;
+  transition: transform 220ms ease;
+}
+
+.alternate-overlay__table--camera-left .alternate-controls {
+  transform: translateX(8px);
+}
+
+.alternate-overlay__table--camera-right .alternate-controls {
+  transform: translateX(-8px);
 }
 
 .alternate-controls__primary,

@@ -1,8 +1,9 @@
 import { Canvas, useFrame } from "@react-three/fiber";
-import { Environment } from "@react-three/drei";
+import { Environment, RoundedBox } from "@react-three/drei";
 import { memo, useMemo } from "react";
 import * as THREE from "three";
 import type { AlternateTableLayout } from "./layout";
+import { resolveAlternateTableSceneLayout } from "./scene-layout";
 
 export type AlternateCameraPreset = "left" | "center" | "right";
 
@@ -16,16 +17,16 @@ const CAMERA_PRESETS: Record<
   { position: THREE.Vector3; lookAt: THREE.Vector3 }
 > = {
   left: {
-    position: new THREE.Vector3(-4.2, 7.2, 8.2),
-    lookAt: new THREE.Vector3(0, 0.45, 0)
+    position: new THREE.Vector3(-3.8, 5.95, 7),
+    lookAt: new THREE.Vector3(-0.18, 0.42, 1.3)
   },
   center: {
-    position: new THREE.Vector3(0, 7.5, 8.6),
-    lookAt: new THREE.Vector3(0, 0.48, 0)
+    position: new THREE.Vector3(0, 6.05, 7.15),
+    lookAt: new THREE.Vector3(0, 0.42, 1.4)
   },
   right: {
-    position: new THREE.Vector3(4.2, 7.2, 8.2),
-    lookAt: new THREE.Vector3(0, 0.45, 0)
+    position: new THREE.Vector3(3.8, 5.95, 7),
+    lookAt: new THREE.Vector3(0.18, 0.42, 1.3)
   }
 };
 
@@ -41,17 +42,56 @@ function CameraRig({ preset }: { preset: AlternateCameraPreset }) {
   return null;
 }
 
+function FeatureTray({
+  feature,
+  shellMaterial,
+  insetMaterial,
+  insetWidth = 0.82,
+  insetDepth = 0.72,
+  insetHeight = 0.04
+}: {
+  feature: ReturnType<typeof resolveAlternateTableSceneLayout>["northTray"];
+  shellMaterial: THREE.Material;
+  insetMaterial: THREE.Material;
+  insetWidth?: number;
+  insetDepth?: number;
+  insetHeight?: number;
+}) {
+  return (
+    <group position={[feature.center.x, feature.center.y, feature.center.z]}>
+      <RoundedBox
+        args={[feature.size.x, feature.size.y, feature.size.z]}
+        radius={feature.radius}
+        smoothness={6}
+      >
+        <primitive object={shellMaterial} attach="material" />
+      </RoundedBox>
+      <RoundedBox
+        args={[feature.size.x * insetWidth, insetHeight, feature.size.z * insetDepth]}
+        radius={feature.radius * 0.72}
+        smoothness={6}
+        position={[0, feature.size.y * 0.34, 0]}
+      >
+        <primitive object={insetMaterial} attach="material" />
+      </RoundedBox>
+    </group>
+  );
+}
+
 const TableScene = memo(function TableScene({
+  layout,
   cameraPreset
 }: {
+  layout: AlternateTableLayout;
   cameraPreset: AlternateCameraPreset;
 }) {
+  const sceneLayout = useMemo(() => resolveAlternateTableSceneLayout(layout), [layout]);
   const wood = useMemo(
     () =>
       new THREE.MeshStandardMaterial({
         color: "#6b3d1d",
-        roughness: 0.52,
-        metalness: 0.12
+        roughness: 0.5,
+        metalness: 0.14
       }),
     []
   );
@@ -59,7 +99,7 @@ const TableScene = memo(function TableScene({
     () =>
       new THREE.MeshStandardMaterial({
         color: "#45230f",
-        roughness: 0.65,
+        roughness: 0.62,
         metalness: 0.08
       }),
     []
@@ -67,9 +107,18 @@ const TableScene = memo(function TableScene({
   const felt = useMemo(
     () =>
       new THREE.MeshStandardMaterial({
-        color: "#134e3d",
-        roughness: 0.92,
+        color: "#155846",
+        roughness: 0.9,
         metalness: 0.02
+      }),
+    []
+  );
+  const feltDark = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({
+        color: "#0d382c",
+        roughness: 0.94,
+        metalness: 0.01
       }),
     []
   );
@@ -77,10 +126,14 @@ const TableScene = memo(function TableScene({
     () =>
       new THREE.MeshStandardMaterial({
         color: "#bf9550",
-        roughness: 0.42,
-        metalness: 0.62
+        roughness: 0.38,
+        metalness: 0.68
       }),
     []
+  );
+  const trickBowlRadius = Math.max(
+    Math.min(sceneLayout.trickBowl.size.x, sceneLayout.trickBowl.size.z) * 0.42,
+    0.72
   );
 
   return (
@@ -88,8 +141,8 @@ const TableScene = memo(function TableScene({
       <color attach="background" args={["#000000"]} />
       <ambientLight intensity={1.15} color="#f7e4bf" />
       <directionalLight
-        position={[4.5, 9.5, 6.5]}
-        intensity={1.5}
+        position={[4.5, 8.8, 7.2]}
+        intensity={1.45}
         color="#ffe0a6"
         castShadow={false}
       />
@@ -102,8 +155,8 @@ const TableScene = memo(function TableScene({
       <Environment preset="sunset" />
       <CameraRig preset={cameraPreset} />
 
-      <group position={[0, -0.2, 0]} rotation={[-0.08, 0, 0]}>
-        <mesh position={[0, -0.42, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      <group position={[0, -0.28, 0.42]} rotation={[-0.06, 0, 0]} scale={1.04}>
+        <mesh position={[0, -0.42, 0.3]} rotation={[-Math.PI / 2, 0, 0]}>
           <planeGeometry args={[26, 22]} />
           <shadowMaterial transparent opacity={0.18} />
         </mesh>
@@ -116,6 +169,9 @@ const TableScene = memo(function TableScene({
         </mesh>
         <mesh material={felt} position={[0, 0.16, 0]}>
           <boxGeometry args={[12.1, 0.07, 9.7]} />
+        </mesh>
+        <mesh material={feltDark} position={[0, 0.18, 0]}>
+          <boxGeometry args={[11.15, 0.02, 8.78]} />
         </mesh>
 
         <mesh material={woodDark} position={[0, 0.2, 5.15]}>
@@ -132,15 +188,91 @@ const TableScene = memo(function TableScene({
         </mesh>
 
         <mesh material={gold} position={[0, 0.19, 0]}>
-          <torusGeometry args={[2.5, 0.045, 18, 96]} />
+          <torusGeometry args={[1.28, 0.03, 18, 96]} />
         </mesh>
         <mesh material={gold} position={[0, 0.19, 0]} rotation={[Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[1.1, 1.22, 64]} />
+          <ringGeometry args={[0.58, 0.7, 64]} />
+        </mesh>
+        <mesh material={gold} position={[0, 0.205, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[1.85, 0.06]} />
         </mesh>
 
-        <mesh material={gold} position={[0, 0.205, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <planeGeometry args={[3.4, 0.08]} />
+        <FeatureTray
+          feature={sceneLayout.northTray}
+          shellMaterial={woodDark}
+          insetMaterial={feltDark}
+          insetWidth={0.88}
+          insetDepth={0.68}
+        />
+        <FeatureTray
+          feature={sceneLayout.westTray}
+          shellMaterial={woodDark}
+          insetMaterial={feltDark}
+          insetWidth={0.72}
+          insetDepth={0.82}
+        />
+        <FeatureTray
+          feature={sceneLayout.eastTray}
+          shellMaterial={woodDark}
+          insetMaterial={feltDark}
+          insetWidth={0.72}
+          insetDepth={0.82}
+        />
+        <FeatureTray
+          feature={sceneLayout.southShelf}
+          shellMaterial={wood}
+          insetMaterial={feltDark}
+          insetWidth={0.9}
+          insetDepth={0.64}
+        />
+
+        <mesh
+          material={woodDark}
+          position={[
+            sceneLayout.trickBowl.center.x,
+            sceneLayout.trickBowl.center.y,
+            sceneLayout.trickBowl.center.z
+          ]}
+        >
+          <cylinderGeometry
+            args={[trickBowlRadius, trickBowlRadius * 1.06, 0.08, 48]}
+          />
         </mesh>
+        <mesh
+          material={gold}
+          position={[
+            sceneLayout.trickBowl.center.x,
+            sceneLayout.trickBowl.center.y + 0.045,
+            sceneLayout.trickBowl.center.z
+          ]}
+          rotation={[Math.PI / 2, 0, 0]}
+        >
+          <ringGeometry args={[trickBowlRadius * 0.88, trickBowlRadius * 1.02, 48]} />
+        </mesh>
+
+        {sceneLayout.passCups.map((cup) => (
+          <group
+            key={cup.key}
+            position={[cup.center.x, cup.center.y, cup.center.z]}
+            rotation={[0, THREE.MathUtils.degToRad(-cup.rotationDeg), 0]}
+          >
+            <RoundedBox
+              args={[cup.size.x, cup.size.y, cup.size.z]}
+              radius={cup.radius}
+              smoothness={6}
+            >
+              <primitive object={woodDark} attach="material" />
+            </RoundedBox>
+            <RoundedBox
+              args={[cup.size.x * 0.78, 0.035, cup.size.z * 0.72]}
+              radius={cup.radius * 0.72}
+              smoothness={6}
+              position={[0, cup.size.y * 0.34, 0]}
+            >
+              <primitive object={feltDark} attach="material" />
+            </RoundedBox>
+          </group>
+        ))}
 
         {[
           [-6.25, 0.09, -4.75],
@@ -169,8 +301,6 @@ const TableScene = memo(function TableScene({
 export function AlternateTableThreeSurface(
   props: AlternateTableThreeSurfaceProps
 ) {
-  void props.layout;
-
   if (typeof navigator !== "undefined" && navigator.userAgent.includes("jsdom")) {
     return <div className="alternate-three-surface" data-alt-renderer="three" aria-hidden="true" />;
   }
@@ -180,9 +310,9 @@ export function AlternateTableThreeSurface(
       <Canvas
         dpr={[1, 2]}
         gl={{ antialias: true, alpha: true }}
-        camera={{ fov: 34, near: 0.1, far: 50, position: [0, 7.5, 8.6] }}
+        camera={{ fov: 31, near: 0.1, far: 50, position: [0, 6.05, 7.15] }}
       >
-        <TableScene cameraPreset={props.cameraPreset} />
+        <TableScene layout={props.layout} cameraPreset={props.cameraPreset} />
       </Canvas>
     </div>
   );

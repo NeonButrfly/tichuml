@@ -24,6 +24,11 @@ alternate renderer. Seat racks, south-hand span, and pass-route placement now
 derive from the normal table's live hand bounds and canonical pass-lane
 anchors before being projected onto the perspective luxury surface.
 
+The current 3D cohesion pass adds a shared scene-anchor layer in
+`apps/web/src/alternate-table/scene-layout.ts` so the south shelf, north tray,
+side trays, trick bowl, and pass cups all derive from those same projected
+table anchors instead of using alternate-only freehand placement.
+
 ## Shared Gameplay Path
 
 - Controller and action plumbing still live in
@@ -78,9 +83,11 @@ as the live `select_pass` actor.
 
 Focused layout regression checks now live in
 `tests/integration/alternate-table-layout.test.ts` and
-`tests/integration/alternate-hand-layout.test.ts` so the anchor-driven felt
-coverage, pass-lane clearance, and south-hand compression do not silently drift
-backward.
+`tests/integration/alternate-hand-layout.test.ts`. Scene-anchor regression
+coverage now also lives in
+`tests/integration/alternate-table-scene-layout.test.ts` so the anchor-driven
+felt coverage, pass-lane clearance, south-hand compression, and 3D tray/shelf
+ordering do not silently drift backward.
 
 ## Known Limitations
 
