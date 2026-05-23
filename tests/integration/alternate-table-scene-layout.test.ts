@@ -141,4 +141,26 @@ describe("alternate table scene layout", () => {
     expect(rightCup?.center.x).toBeGreaterThan(partnerCup?.center.x ?? 0);
     expect(partnerCup?.center.z).toBeLessThan(sceneLayout.southShelf.center.z);
   });
+
+  it("keeps rack trays and the south shelf close to their matching rails", () => {
+    const tableLayout = resolveAlternateTableLayout({
+      width: 1600,
+      height: 900,
+      seatViews,
+      passRouteViews: passRoutes,
+      normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+      hasVariantPicker: false,
+      hasWishPicker: false
+    });
+    const sceneLayout = resolveAlternateTableSceneLayout(tableLayout);
+    const northEdgeZ = -11.8 / 2;
+    const southEdgeZ = 11.8 / 2;
+    const westEdgeX = -14.8 / 2;
+    const eastEdgeX = 14.8 / 2;
+
+    expect(Math.abs(sceneLayout.northTray.center.z - northEdgeZ)).toBeLessThan(1.9);
+    expect(Math.abs(sceneLayout.southShelf.center.z - southEdgeZ)).toBeLessThan(1.9);
+    expect(Math.abs(sceneLayout.westTray.center.x - westEdgeX)).toBeLessThan(2.1);
+    expect(Math.abs(sceneLayout.eastTray.center.x - eastEdgeX)).toBeLessThan(2.1);
+  });
 });

@@ -5173,6 +5173,13 @@ body.normal-layout-locked {
   inset: 0;
 }
 
+.alternate-three-surface {
+  background:
+    radial-gradient(circle at 50% 18%, rgba(22, 54, 50, 0.52), transparent 28%),
+    radial-gradient(circle at 50% 72%, rgba(102, 57, 28, 0.24), transparent 34%),
+    linear-gradient(180deg, rgba(10, 8, 7, 0.86), rgba(8, 7, 6, 0.96));
+}
+
 .alternate-three-surface canvas {
   width: 100%;
   height: 100%;

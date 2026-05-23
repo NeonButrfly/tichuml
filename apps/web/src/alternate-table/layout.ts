@@ -201,13 +201,13 @@ function buildSeatPlacements(config: {
 
     let rackCenter = projectedCenter;
     if (position === "top") {
-      rackCenter = point(projectedCenter.x, projectedCenter.y - config.height * 0.058);
+      rackCenter = point(projectedCenter.x, projectedCenter.y - config.height * 0.112);
     } else if (position === "bottom") {
-      rackCenter = point(projectedCenter.x, projectedCenter.y + config.height * 0.022);
+      rackCenter = point(projectedCenter.x, projectedCenter.y + config.height * 0.078);
     } else if (position === "left") {
-      rackCenter = point(projectedCenter.x - config.width * 0.026, projectedCenter.y);
+      rackCenter = point(projectedCenter.x - config.width * 0.072, projectedCenter.y);
     } else {
-      rackCenter = point(projectedCenter.x + config.width * 0.026, projectedCenter.y);
+      rackCenter = point(projectedCenter.x + config.width * 0.072, projectedCenter.y);
     }
 
     const rackWidth =
@@ -240,13 +240,13 @@ function buildSeatPlacements(config: {
 
     let plaqueCenter = projectedLabel;
     if (position === "top") {
-      plaqueCenter = point(rack.x + rack.width / 2, rack.y - plaqueHeight * 0.7);
+      plaqueCenter = point(rack.x + rack.width / 2, rack.y - plaqueHeight * 0.46);
     } else if (position === "bottom") {
-      plaqueCenter = point(rack.x + rack.width / 2, rack.y + rack.height + plaqueHeight * 0.92);
+      plaqueCenter = point(rack.x + rack.width / 2, rack.y + rack.height + plaqueHeight * 0.58);
     } else if (position === "left") {
-      plaqueCenter = point(rack.x - plaqueWidth * 0.74, rack.y + rack.height / 2);
+      plaqueCenter = point(rack.x - plaqueWidth * 0.52, rack.y + rack.height / 2);
     } else {
-      plaqueCenter = point(rack.x + rack.width + plaqueWidth * 0.74, rack.y + rack.height / 2);
+      plaqueCenter = point(rack.x + rack.width + plaqueWidth * 0.52, rack.y + rack.height / 2);
     }
 
     const plaque = toProjectedRect({
@@ -454,11 +454,15 @@ export function resolveAlternateTableLayout(config: {
 
   const southRack = seats.bottom.rack;
   const southPlaque = seats.bottom.plaque;
+  const southControlHeight = boardRect.height * 0.058;
   const southControlRect = roundRect({
     x: boardRect.x + boardRect.width * 0.24,
-    y: Math.min(boardRect.y + boardRect.height * 0.924, southPlaque.y + southPlaque.height + 16),
+    y: Math.min(
+      boardRect.y + boardRect.height - southControlHeight - 8,
+      southPlaque.y + southPlaque.height + 10
+    ),
     width: boardRect.width * 0.52,
-    height: boardRect.height * 0.058
+    height: southControlHeight
   });
 
   const trickPlacements = {

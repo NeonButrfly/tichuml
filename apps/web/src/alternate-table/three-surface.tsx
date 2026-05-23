@@ -17,16 +17,16 @@ const CAMERA_PRESETS: Record<
   { position: THREE.Vector3; lookAt: THREE.Vector3 }
 > = {
   left: {
-    position: new THREE.Vector3(-3.8, 5.95, 7),
-    lookAt: new THREE.Vector3(-0.18, 0.42, 1.3)
+    position: new THREE.Vector3(-4.9, 5, 9.1),
+    lookAt: new THREE.Vector3(-0.45, 0.32, 1.12)
   },
   center: {
-    position: new THREE.Vector3(0, 6.05, 7.15),
-    lookAt: new THREE.Vector3(0, 0.42, 1.4)
+    position: new THREE.Vector3(0, 5.1, 9.35),
+    lookAt: new THREE.Vector3(0, 0.32, 1.18)
   },
   right: {
-    position: new THREE.Vector3(3.8, 5.95, 7),
-    lookAt: new THREE.Vector3(0.18, 0.42, 1.3)
+    position: new THREE.Vector3(4.9, 5, 9.1),
+    lookAt: new THREE.Vector3(0.45, 0.32, 1.12)
   }
 };
 
@@ -138,7 +138,6 @@ const TableScene = memo(function TableScene({
 
   return (
     <>
-      <color attach="background" args={["#000000"]} />
       <ambientLight intensity={1.15} color="#f7e4bf" />
       <directionalLight
         position={[4.5, 8.8, 7.2]}
@@ -155,7 +154,7 @@ const TableScene = memo(function TableScene({
       <Environment preset="sunset" />
       <CameraRig preset={cameraPreset} />
 
-      <group position={[0, -0.28, 0.42]} rotation={[-0.06, 0, 0]} scale={1.04}>
+      <group position={[0, 0.08, 0.34]} rotation={[-0.12, 0, 0]} scale={0.95}>
         <mesh position={[0, -0.42, 0.3]} rotation={[-Math.PI / 2, 0, 0]}>
           <planeGeometry args={[26, 22]} />
           <shadowMaterial transparent opacity={0.18} />
@@ -310,7 +309,7 @@ export function AlternateTableThreeSurface(
       <Canvas
         dpr={[1, 2]}
         gl={{ antialias: true, alpha: true }}
-        camera={{ fov: 31, near: 0.1, far: 50, position: [0, 6.05, 7.15] }}
+        camera={{ fov: 28, near: 0.1, far: 50, position: [0, 5.1, 9.35] }}
       >
         <TableScene layout={props.layout} cameraPreset={props.cameraPreset} />
       </Canvas>
