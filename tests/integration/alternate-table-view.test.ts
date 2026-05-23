@@ -383,7 +383,7 @@ describe("AlternateGameTableView", () => {
   it("keeps opponent hands hidden while leaving the south hand interactive", () => {
     const view = render(createElement(AlternateGameTableView, createProps()));
 
-    expect(view.container.querySelector("[data-alt-renderer='phaser']")).not.toBeNull();
+    expect(view.container.querySelector(".alternate-three-surface")).not.toBeNull();
     expect(
       view.container.querySelector("[data-alt-seat='south'] .playing-card")
     ).not.toBeNull();

@@ -1,4 +1,13 @@
-import type { PassLaneDirection, SeatVisualPosition } from "../table-layout";
+import {
+  computeNormalViewportLayoutMetrics,
+  DEFAULT_NORMAL_TABLE_LAYOUT,
+  getBoardBounds,
+  resolveNormalPassLaneGeometry,
+  resolveNormalSeatAnchorGeometry,
+  type AnchorPoint,
+  type PassLaneDirection,
+  type SeatVisualPosition
+} from "../table-layout";
 
 export type SouthPerspectiveWorldPoint = {
   x: number;
@@ -40,6 +49,42 @@ export type SouthPerspectiveProjector = {
     point: SouthPerspectiveWorldPoint,
     options?: { rotation?: number }
   ) => SouthPerspectivePose;
+};
+
+export type ImmersiveCanonicalSeatLayout = {
+  hand: AnchorPoint;
+  handBounds: {
+    left: number;
+    top: number;
+    right: number;
+    bottom: number;
+    width: number;
+    height: number;
+    center: AnchorPoint;
+  };
+  label: AnchorPoint;
+};
+
+export type ImmersiveCanonicalPassLayout = {
+  center: AnchorPoint;
+  width: number;
+  height: number;
+  rotation: number;
+};
+
+export type ImmersiveCanonicalLayout = {
+  board: {
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+    right: number;
+    bottom: number;
+    centerX: number;
+    centerY: number;
+  };
+  seats: Record<SeatVisualPosition, ImmersiveCanonicalSeatLayout>;
+  passLanes: Record<string, ImmersiveCanonicalPassLayout>;
 };
 
 export type SouthPerspectiveLayoutConfig = {
@@ -117,6 +162,169 @@ function lerp(start: number, end: number, weight: number) {
 
 function roundToViewport(value: number) {
   return Math.round(value * 10) / 10;
+}
+
+function boardPointToWorld(
+  anchor: AnchorPoint,
+  board: ImmersiveCanonicalLayout["board"]
+): SouthPerspectiveWorldPoint {
+  const relativeX = (anchor.x - board.centerX) / Math.max(board.width / 2, 1);
+  const relativeYFromTop = (anchor.y - board.top) / Math.max(board.height, 1);
+  return {
+    x: clamp(relativeX * 1.02, -0.96, 0.96),
+    y: clamp(1 - relativeYFromTop, 0.04, 0.98),
+    z: 0
+  };
+}
+
+function seatCardCount(position: SeatVisualPosition, counts: {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}) {
+  switch (position) {
+    case "top":
+      return counts.top;
+    case "right":
+      return counts.right;
+    case "bottom":
+      return counts.bottom;
+    case "left":
+      return counts.left;
+  }
+}
+
+function getPassLaneRotation(
+  sourcePosition: SeatVisualPosition,
+  direction: PassLaneDirection
+) {
+  if (sourcePosition === "left") {
+    return direction === "up" ? -82 : direction === "down" ? -98 : -90;
+  }
+  if (sourcePosition === "right") {
+    return direction === "up" ? 82 : direction === "down" ? 98 : 90;
+  }
+  return direction === "left" ? -8 : direction === "right" ? 8 : 0;
+}
+
+export function createImmersiveCanonicalLayout(config: {
+  viewportWidth: number;
+  viewportHeight: number;
+  topCount: number;
+  rightCount: number;
+  bottomCount: number;
+  leftCount: number;
+  hasVariantPicker: boolean;
+  hasWishPicker: boolean;
+}): ImmersiveCanonicalLayout {
+  const metrics = computeNormalViewportLayoutMetrics({
+    viewportWidth: config.viewportWidth,
+    viewportHeight: config.viewportHeight,
+    topCount: config.topCount,
+    bottomCount: config.bottomCount,
+    leftCount: config.leftCount,
+    rightCount: config.rightCount,
+    hasVariantPicker: config.hasVariantPicker,
+    hasWishPicker: config.hasWishPicker
+  });
+  const boardBounds = getBoardBounds(metrics);
+  const board = {
+    ...boardBounds,
+    centerX: boardBounds.left + boardBounds.width / 2,
+    centerY: boardBounds.top + boardBounds.height / 2
+  };
+
+  const seats = {
+    top: resolveNormalSeatAnchorGeometry({
+      position: "top",
+      normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+      layoutMetrics: metrics,
+      handCardCount: config.topCount
+    }),
+    right: resolveNormalSeatAnchorGeometry({
+      position: "right",
+      normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+      layoutMetrics: metrics,
+      handCardCount: config.rightCount
+    }),
+    bottom: resolveNormalSeatAnchorGeometry({
+      position: "bottom",
+      normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+      layoutMetrics: metrics,
+      handCardCount: config.bottomCount
+    }),
+    left: resolveNormalSeatAnchorGeometry({
+      position: "left",
+      normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+      layoutMetrics: metrics,
+      handCardCount: config.leftCount
+    })
+  } satisfies Record<SeatVisualPosition, ImmersiveCanonicalSeatLayout>;
+
+  const passLanes: Record<string, ImmersiveCanonicalPassLayout> = {};
+  const positions: SeatVisualPosition[] = ["top", "right", "bottom", "left"];
+  for (const sourcePosition of positions) {
+    for (const targetPosition of positions) {
+      if (sourcePosition === targetPosition) {
+        continue;
+      }
+      const lane = resolveNormalPassLaneGeometry({
+        normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+        layoutMetrics: metrics,
+        sourcePosition,
+        targetPosition,
+        direction:
+          sourcePosition === "top"
+            ? targetPosition === "left"
+              ? "left"
+              : targetPosition === "bottom"
+                ? "down"
+                : "right"
+            : sourcePosition === "bottom"
+              ? targetPosition === "left"
+                ? "left"
+                : targetPosition === "top"
+                  ? "up"
+                  : "right"
+              : sourcePosition === "left"
+                ? targetPosition === "top"
+                  ? "up"
+                  : targetPosition === "right"
+                    ? "right"
+                    : "down"
+                : targetPosition === "top"
+                  ? "up"
+                  : targetPosition === "left"
+                    ? "left"
+                    : "down",
+        sourceHandCardCount: seatCardCount(sourcePosition, {
+          top: config.topCount,
+          right: config.rightCount,
+          bottom: config.bottomCount,
+          left: config.leftCount
+        }),
+        displayMode: "passing"
+      });
+      if (!lane) {
+        continue;
+      }
+      const styleLeft = Number.parseFloat(String(lane.style.left ?? "0"));
+      const styleTop = Number.parseFloat(String(lane.style.top ?? "0"));
+      passLanes[`${sourcePosition}:${targetPosition}`] = {
+        center: {
+          x: styleLeft,
+          y: styleTop,
+          rotation: lane.rotation
+        },
+        width: lane.width,
+        height: lane.height,
+        rotation: lane.rotation
+      };
+    }
+  }
+
+  return { board, seats, passLanes };
 }
 
 function getSeatAnchor(position: SeatVisualPosition): SouthPerspectiveWorldPoint {
@@ -214,7 +422,24 @@ export function resolveSouthHandWorldPose(config: {
   index: number;
   count: number;
   selected: boolean;
+  canonicalLayout?: ImmersiveCanonicalLayout;
 }): SouthPerspectiveWorldPoint & { rotation: number } {
+  if (config.canonicalLayout) {
+    const handBounds = config.canonicalLayout.seats.bottom.handBounds;
+    const midpoint = (config.count - 1) / 2;
+    const spread = Math.max(midpoint, 1);
+    const offset = midpoint === 0 ? 0 : (config.index - midpoint) / spread;
+    const anchor = {
+      x: handBounds.center.x + offset * handBounds.width * 0.46,
+      y: handBounds.center.y - Math.abs(offset) * handBounds.height * 0.08
+    };
+    const world = boardPointToWorld(anchor, config.canonicalLayout.board);
+    return {
+      ...world,
+      z: config.selected ? 0.12 : 0,
+      rotation: offset * 2.2
+    };
+  }
   const midpoint = (config.count - 1) / 2;
   const spread = Math.max(midpoint, 1);
   const offset = midpoint === 0 ? 0 : (config.index - midpoint) / spread;
@@ -231,7 +456,41 @@ export function resolveRemoteHandWorldPose(config: {
   position: Exclude<SeatVisualPosition, "bottom">;
   index: number;
   count: number;
+  canonicalLayout?: ImmersiveCanonicalLayout;
 }): SouthPerspectiveWorldPoint & { rotation: number } {
+  if (config.canonicalLayout) {
+    const handBounds = config.canonicalLayout.seats[config.position].handBounds;
+    const midpoint = (config.count - 1) / 2;
+    const spread = Math.max(midpoint, 1);
+    const offset = midpoint === 0 ? 0 : (config.index - midpoint) / spread;
+
+    if (config.position === "top") {
+      const anchor = {
+        x: handBounds.center.x + offset * handBounds.width * 0.42,
+        y: handBounds.center.y + Math.abs(offset) * handBounds.height * 0.06
+      };
+      const world = boardPointToWorld(anchor, config.canonicalLayout.board);
+      return {
+        ...world,
+      rotation: offset * 3.4
+      };
+    }
+
+    const inwardX =
+      config.position === "left"
+        ? Math.abs(offset) * handBounds.width * 0.12
+        : -Math.abs(offset) * handBounds.width * 0.12;
+    const anchor = {
+      x: handBounds.center.x + inwardX,
+      y: handBounds.center.y + offset * handBounds.height * 0.28
+    };
+    const world = boardPointToWorld(anchor, config.canonicalLayout.board);
+    const sideRotation = config.position === "left" ? -14 : 14;
+    return {
+      ...world,
+      rotation: sideRotation + offset * (config.position === "left" ? -6 : 6)
+    };
+  }
   const midpoint = (config.count - 1) / 2;
   const spread = Math.max(midpoint, 1);
   const offset = midpoint === 0 ? 0 : (config.index - midpoint) / spread;
@@ -386,7 +645,30 @@ export function resolvePassRouteWorldPose(config: {
   targetPosition: SeatVisualPosition;
   direction: PassLaneDirection;
   displayMode: "passing" | "pickup";
+  canonicalLayout?: ImmersiveCanonicalLayout;
 }): SouthPerspectiveWorldPoint & { rotation: number } {
+  if (config.canonicalLayout) {
+    const lane =
+      config.canonicalLayout.passLanes[
+        `${config.sourcePosition}:${config.targetPosition}`
+      ];
+    if (lane) {
+      const world = boardPointToWorld(lane.center, config.canonicalLayout.board);
+      if (config.sourcePosition === "bottom") {
+        world.y = clamp(world.y + 0.1, 0.04, 0.98);
+      } else if (config.sourcePosition === "top") {
+        world.y = clamp(world.y - 0.06, 0.04, 0.98);
+      } else if (config.sourcePosition === "left") {
+        world.x = clamp(world.x + 0.05, -0.96, 0.96);
+      } else if (config.sourcePosition === "right") {
+        world.x = clamp(world.x - 0.05, -0.96, 0.96);
+      }
+      return {
+        ...world,
+        rotation: getPassLaneRotation(config.sourcePosition, config.direction)
+      };
+    }
+  }
   const source = laneSourceAnchor(config.sourcePosition, config.direction);
   const target = laneTargetAnchor(config.targetPosition);
   const control = {
@@ -416,7 +698,8 @@ export function resolvePassRouteWorldPose(config: {
 }
 
 export function resolveSouthPerspectiveDebugLayout(
-  projector: SouthPerspectiveProjector
+  projector: SouthPerspectiveProjector,
+  canonicalLayout?: ImmersiveCanonicalLayout
 ): SouthPerspectiveDebugLayout {
   const margin = projector.geometry.viewportWidth * SOUTH_PERSPECTIVE_LAYOUT.uiSafeMargin;
   const leftPanelWidth = Math.min(
@@ -460,11 +743,51 @@ export function resolveSouthPerspectiveDebugLayout(
       height: bottomPanelHeight
     },
     anchors: [
-      { key: "south-hand", ...projector.projectPoint({ x: 0, y: 0.24, z: 0 }) },
+      canonicalLayout
+        ? {
+            key: "south-hand",
+            ...projector.projectPoint(
+              boardPointToWorld(
+                canonicalLayout.seats.bottom.handBounds.center,
+                canonicalLayout.board
+              )
+            )
+          }
+        : { key: "south-hand", ...projector.projectPoint({ x: 0, y: 0.24, z: 0 }) },
       { key: "center-trick", ...projector.projectPoint({ x: 0, y: 0.56, z: 0 }) },
-      { key: "north-hand", ...projector.projectPoint({ x: 0, y: 0.94, z: 0 }) },
-      { key: "west-hand", ...projector.projectPoint({ x: -0.82, y: 0.68, z: 0 }) },
-      { key: "east-hand", ...projector.projectPoint({ x: 0.82, y: 0.68, z: 0 }) }
+      canonicalLayout
+        ? {
+            key: "north-hand",
+            ...projector.projectPoint(
+              boardPointToWorld(
+                canonicalLayout.seats.top.handBounds.center,
+                canonicalLayout.board
+              )
+            )
+          }
+        : { key: "north-hand", ...projector.projectPoint({ x: 0, y: 0.94, z: 0 }) },
+      canonicalLayout
+        ? {
+            key: "west-hand",
+            ...projector.projectPoint(
+              boardPointToWorld(
+                canonicalLayout.seats.left.handBounds.center,
+                canonicalLayout.board
+              )
+            )
+          }
+        : { key: "west-hand", ...projector.projectPoint({ x: -0.82, y: 0.68, z: 0 }) },
+      canonicalLayout
+        ? {
+            key: "east-hand",
+            ...projector.projectPoint(
+              boardPointToWorld(
+                canonicalLayout.seats.right.handBounds.center,
+                canonicalLayout.board
+              )
+            )
+          }
+        : { key: "east-hand", ...projector.projectPoint({ x: 0.82, y: 0.68, z: 0 }) }
     ].map(({ key, screenX, screenY }) => ({
       key,
       x: screenX,

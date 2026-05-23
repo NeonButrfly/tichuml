@@ -8,26 +8,27 @@ rules, and action dispatch pipeline.
 
 ## Renderer Choice
 
-The implementation now uses a projection-driven Phaser scene:
+The implementation now uses a projection-driven React Three Fiber scene:
 
 - React still owns the gameplay interaction shell, routing, and all live
   actions.
-- `apps/web/src/alternate-table/south-perspective-projection.ts` is the pure
-  fake-perspective module. It projects logical table-space coordinates into
-  screen positions, scale, rotation, and shadow values.
-- `apps/web/src/alternate-table/phaser-surface.tsx` mounts the alternate
-  Phaser scene and redraws the table, seats, remote hands, pass routes, trick
-  cards, and south hand on one shared scene plane.
-- The same host also keeps a procedural canvas fallback underneath the Phaser
-  canvas so the alternate table still presents as one coherent scene if Phaser
-  fails to initialize in a given browser environment.
-- `apps/web/src/alternate-game-table-view.tsx` now supplies a minimal DOM layer
-  for reliable hit targets, action buttons, and phase-specific dialogs while
-  the visible tabletop itself is rendered in Phaser.
+- `apps/web/src/alternate-table/south-perspective-projection.ts` remains the
+  pure geometry source. It still derives canonical seat, hand, and pass-lane
+  anchors from the existing normal table layout so the alternate view does not
+  fork interaction ownership.
+- `apps/web/src/alternate-table/three-surface.tsx` is the current immersive
+  visual surface. It renders the room, oval wooden table, 3D card planes,
+  tabletop pass slots, and card shadows inside one React-hosted scene.
+- `apps/web/src/alternate-table/phaser-surface.tsx` remains in the repo as the
+  earlier alternate-scene experiment, but the current live alternate table is
+  driven by the React Three Fiber surface instead.
+- `apps/web/src/alternate-game-table-view.tsx` still supplies a small DOM layer
+  for reliable hit targets, action buttons, and phase dialogs while the visible
+  table body is rendered in the 3D scene.
 
-This keeps the real gameplay pipeline intact while making the alternate table
-behave like one staged south-camera scene rather than a stack of projected DOM
-panels.
+This keeps the real gameplay pipeline intact while moving the alternate table
+closer to the wooden-table reference image: one shared south-camera scene
+instead of layered projected UI.
 
 The current visual target is the attached low-camera wooden-table reference:
 a broad oval tabletop filling most of the viewport, a near upright south hand,
@@ -44,6 +45,8 @@ deterministic viewport-normalized rig:
 - the near rim stays visible near the bottom edge while the far edge stays high
   enough to preserve the seated south-player camera
 - HUD panels are now overlay layers and do not reserve document flow space
+- the 3D surface now owns the visible table body and cards, while DOM remains
+  only for hit testing and controls
 
 ## Shared Gameplay Path
 
@@ -121,8 +124,10 @@ smaller and higher, and horizontal spread compresses with depth.
 
 - The alternate table intentionally keeps event/state summaries minimal so the
   tabletop remains the dominant visual surface.
-- The Phaser scene is still procedural and asset-free, so the room and wood
-  finish are stylized rather than photoreal.
+- The React Three Fiber scene is still procedural and asset-free, so the room
+  and wood finish are closer to a stylized digital table than a scanned photo.
+- The current 3D hand shelves still need further tuning against the reference
+  image, especially south-hand scale and exchange-slot readability.
 - The current acceptance blocker is finish quality, not gameplay plumbing:
   material richness, per-phase trick/pass polish, and continued camera tuning
   still need iteration against issue `#81`.

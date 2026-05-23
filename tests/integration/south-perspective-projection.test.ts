@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   SOUTH_PERSPECTIVE_LAYOUT,
+  createImmersiveCanonicalLayout,
   createSouthPerspectiveProjector,
   resolvePassRouteWorldPose,
   resolveRemoteHandWorldPose,
@@ -89,28 +90,51 @@ describe("south perspective projection", () => {
   });
 
   it("fans the south hand along a shallow near arc", () => {
+    const canonicalLayout = createImmersiveCanonicalLayout({
+      viewportWidth: 1536,
+      viewportHeight: 1024,
+      topCount: 14,
+      rightCount: 14,
+      bottomCount: 14,
+      leftCount: 14,
+      hasVariantPicker: false,
+      hasWishPicker: false
+    });
     const left = resolveSouthHandWorldPose({
       index: 0,
       count: 7,
-      selected: false
+      selected: false,
+      canonicalLayout
     });
     const middle = resolveSouthHandWorldPose({
       index: 3,
       count: 7,
-      selected: false
+      selected: false,
+      canonicalLayout
     });
 
     expect(left.y).toBeGreaterThan(middle.y);
     expect(left.y - middle.y).toBeLessThan(0.05);
-    expect(Math.abs(left.rotation)).toBeLessThan(7);
+    expect(Math.abs(left.rotation)).toBeLessThan(4);
   });
 
   it("keeps trick cards and pass routes on the tabletop band", () => {
+    const canonicalLayout = createImmersiveCanonicalLayout({
+      viewportWidth: 1536,
+      viewportHeight: 1024,
+      topCount: 14,
+      rightCount: 14,
+      bottomCount: 14,
+      leftCount: 14,
+      hasVariantPicker: false,
+      hasWishPicker: false
+    });
     const passWorld = resolvePassRouteWorldPose({
       sourcePosition: "bottom",
       targetPosition: "top",
       direction: "up",
-      displayMode: "passing"
+      displayMode: "passing",
+      canonicalLayout
     });
     const trickWorld = resolveTrickCardWorldPose({
       position: "right",
@@ -123,6 +147,90 @@ describe("south perspective projection", () => {
     expect(passWorld.y).toBeLessThan(0.8);
     expect(trickWorld.y).toBeGreaterThan(0.48);
     expect(trickWorld.y).toBeLessThan(0.68);
+  });
+
+  it("keeps south pass lanes ordered left, partner, right", () => {
+    const canonicalLayout = createImmersiveCanonicalLayout({
+      viewportWidth: 1536,
+      viewportHeight: 1024,
+      topCount: 14,
+      rightCount: 14,
+      bottomCount: 14,
+      leftCount: 14,
+      hasVariantPicker: false,
+      hasWishPicker: false
+    });
+
+    const toWest = resolvePassRouteWorldPose({
+      sourcePosition: "bottom",
+      targetPosition: "left",
+      direction: "left",
+      displayMode: "passing",
+      canonicalLayout
+    });
+    const toNorth = resolvePassRouteWorldPose({
+      sourcePosition: "bottom",
+      targetPosition: "top",
+      direction: "up",
+      displayMode: "passing",
+      canonicalLayout
+    });
+    const toEast = resolvePassRouteWorldPose({
+      sourcePosition: "bottom",
+      targetPosition: "right",
+      direction: "right",
+      displayMode: "passing",
+      canonicalLayout
+    });
+
+    expect(toWest.x).toBeLessThan(toNorth.x);
+    expect(toNorth.x).toBeLessThan(toEast.x);
+    expect(Math.abs(toWest.y - toNorth.y)).toBeLessThan(0.07);
+    expect(Math.abs(toEast.y - toNorth.y)).toBeLessThan(0.07);
+  });
+
+  it("keeps west and east remote hands on their own side arcs", () => {
+    const canonicalLayout = createImmersiveCanonicalLayout({
+      viewportWidth: 1536,
+      viewportHeight: 1024,
+      topCount: 14,
+      rightCount: 14,
+      bottomCount: 14,
+      leftCount: 14,
+      hasVariantPicker: false,
+      hasWishPicker: false
+    });
+    const westTop = resolveRemoteHandWorldPose({
+      position: "left",
+      index: 0,
+      count: 5,
+      canonicalLayout
+    });
+    const westBottom = resolveRemoteHandWorldPose({
+      position: "left",
+      index: 4,
+      count: 5,
+      canonicalLayout
+    });
+    const eastTop = resolveRemoteHandWorldPose({
+      position: "right",
+      index: 0,
+      count: 5,
+      canonicalLayout
+    });
+    const eastBottom = resolveRemoteHandWorldPose({
+      position: "right",
+      index: 4,
+      count: 5,
+      canonicalLayout
+    });
+
+    expect(westTop.x).toBeLessThan(-0.4);
+    expect(westBottom.x).toBeLessThan(-0.4);
+    expect(eastTop.x).toBeGreaterThan(0.4);
+    expect(eastBottom.x).toBeGreaterThan(0.4);
+    expect(westTop.y).toBeGreaterThan(westBottom.y);
+    expect(eastTop.y).toBeGreaterThan(eastBottom.y);
   });
 
   it("keeps the normalized layout aligned with the intended reference frame", () => {

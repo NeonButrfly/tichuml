@@ -730,3 +730,23 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 - Linked GitHub Issue: [#81](https://github.com/NeonButrfly/tichuml/issues/81)
 - Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
 - Status Source: GitHub issue state only.
+
+### 2026-05-23 - Alternate immersive table should use the game-studio React 3D path
+
+- Prompt Signal: After reviewing the still-wrong immersive screenshots, the
+  follow-up explicitly invoked `[@game-studio]` and asked for a table that
+  should be photo realistic and look like the wooden-table reference image,
+  then approved continuing on that plugin path.
+- Interpreted Requirement: Keep the normal gameplay table and all gameplay
+  state/rules/backend paths intact, but pivot the alternate renderer away from
+  a stylized 2D/Phaser presentation and onto the React-hosted 3D game path so
+  the table, room, cards, pass slots, shadows, and camera live in one visual
+  world.
+- Affected Systems: `apps/web/src/alternate-game-table-view.tsx`,
+  `apps/web/src/alternate-table/three-surface.tsx`,
+  `apps/web/src/alternate-table/south-perspective-projection.ts`,
+  `apps/web/src/alternate-table/README.md`,
+  `tests/integration/alternate-table-view.test.ts`.
+- Linked GitHub Issue: [#81](https://github.com/NeonButrfly/tichuml/issues/81)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.

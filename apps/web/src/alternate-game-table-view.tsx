@@ -17,14 +17,15 @@ import {
 } from "./game-table-views";
 import { NORMAL_PASS_STAGE_MAP, type PassLaneDirection } from "./table-layout";
 import {
-  AlternateTablePhaserSurface,
   type AlternateCameraPreset,
   type ImmersiveSceneCard,
   type ImmersiveSceneModel,
   type ImmersiveScenePassRoute,
   type ImmersiveSceneSeat
 } from "./alternate-table/phaser-surface";
+import { AlternateTableThreeSurface } from "./alternate-table/three-surface";
 import {
+  createImmersiveCanonicalLayout,
   createSouthPerspectiveProjector,
   resolvePassRouteWorldPose,
   resolveRemoteHandWorldPose,
@@ -316,6 +317,31 @@ export function AlternateGameTableView(props: GameTableViewProps) {
     [cameraYaw, stageSize.height, stageSize.width]
   );
 
+  const canonicalLayout = useMemo(
+    () =>
+      createImmersiveCanonicalLayout({
+        viewportWidth: stageSize.width,
+        viewportHeight: stageSize.height,
+        topCount: Math.max(northSeat.handCount, 1),
+        rightCount: Math.max(eastSeat.handCount, 1),
+        bottomCount: Math.max(props.sortedLocalHand.length, 1),
+        leftCount: Math.max(westSeat.handCount, 1),
+        hasVariantPicker: props.state.phase === "trick_play" && props.matchingPlayActions.length > 1,
+        hasWishPicker: props.wishDialogOpen
+      }),
+    [
+      eastSeat.handCount,
+      northSeat.handCount,
+      props.matchingPlayActions.length,
+      props.sortedLocalHand.length,
+      props.state.phase,
+      props.wishDialogOpen,
+      stageSize.height,
+      stageSize.width,
+      westSeat.handCount
+    ]
+  );
+
   const seatPositionBySeat = useMemo(
     () => new Map(props.seatViews.map((seat) => [seat.seat, seat.position] as const)),
     [props.seatViews]
@@ -340,8 +366,8 @@ export function AlternateGameTableView(props: GameTableViewProps) {
     : "None";
   const nextSeatLabel = getSeatTitleBySeatId(props.seatViews, props.derived.activeSeat);
   const layoutDebug = useMemo(
-    () => resolveSouthPerspectiveDebugLayout(projector),
-    [projector]
+    () => resolveSouthPerspectiveDebugLayout(projector, canonicalLayout),
+    [canonicalLayout, projector]
   );
   const grandTichuLabel = props.seatViews.some((seat) => seat.callState.grandTichu)
     ? "Called"
@@ -409,7 +435,8 @@ export function AlternateGameTableView(props: GameTableViewProps) {
         const world = resolveRemoteHandWorldPose({
           position,
           index,
-          count: renderBackCount(seat.handCount)
+          count: renderBackCount(seat.handCount),
+          canonicalLayout
         });
         const pose = projector.projectPoint(world, { rotation: world.rotation });
         remoteCards.push(
@@ -424,7 +451,8 @@ export function AlternateGameTableView(props: GameTableViewProps) {
       const world = resolveSouthHandWorldPose({
         index,
         count: props.sortedLocalHand.length,
-        selected: props.selectedCardIds.includes(card.id)
+        selected: props.selectedCardIds.includes(card.id),
+        canonicalLayout
       });
       const pose = projector.projectPoint(world, { rotation: world.rotation });
       return toRenderedCard("bottom", card, pose, 112, {
@@ -474,17 +502,20 @@ export function AlternateGameTableView(props: GameTableViewProps) {
             sourcePosition: route.sourcePosition,
             targetPosition,
             direction,
-            displayMode: route.displayMode
+            displayMode: route.displayMode,
+            canonicalLayout
           });
           const pose = projector.projectPoint(world, { rotation: world.rotation });
           const assignedCard =
             route.visibleCardId === null ? null : props.cardLookup.get(route.visibleCardId) ?? null;
+          const laneLayout =
+            canonicalLayout.passLanes[`${route.sourcePosition}:${targetPosition}`] ?? null;
           return [
             {
               key: route.key,
               pose,
-              width: 74 * pose.scale,
-              height: 102 * pose.scale,
+              width: Math.max(52, (laneLayout?.width ?? 74) * pose.scale),
+              height: Math.max(72, (laneLayout?.height ?? 102) * pose.scale),
               sourcePosition: route.sourcePosition,
               targetPosition,
               direction,
@@ -519,6 +550,7 @@ export function AlternateGameTableView(props: GameTableViewProps) {
     };
   }, [
     cameraYaw,
+    canonicalLayout,
     currentWishLabel,
     eastSeat,
     nextSeatLabel,
@@ -573,7 +605,7 @@ export function AlternateGameTableView(props: GameTableViewProps) {
         onPointerUp={handleStagePointerUp}
         onPointerCancel={handleStagePointerUp}
       >
-        <AlternateTablePhaserSurface model={sceneModel} />
+        <AlternateTableThreeSurface model={sceneModel} />
 
         <div
           className="alternate-overlay"

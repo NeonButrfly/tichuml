@@ -713,38 +713,20 @@ function drawFallbackCanvas(
 function drawPassRoute(
   scene: Phaser.Scene,
   route: ImmersiveScenePassRoute,
-  geometry: SouthPerspectiveTableGeometry
+  _geometry: SouthPerspectiveTableGeometry
 ) {
-  const sourceX =
-    route.sourcePosition === "bottom"
-      ? geometry.centerX
-      : route.sourcePosition === "top"
-        ? geometry.centerX
-        : route.sourcePosition === "left"
-          ? geometry.tableRect.left + geometry.tableRect.width * 0.22
-          : geometry.tableRect.left + geometry.tableRect.width * 0.78;
-  const sourceY =
-    route.sourcePosition === "bottom"
-      ? geometry.frontY - geometry.viewportHeight * 0.13
-      : route.sourcePosition === "top"
-        ? geometry.backY + geometry.viewportHeight * 0.08
-        : route.pose.screenY;
-  const guide = scene.add.graphics();
-  guide.lineStyle(2, 0xe3c58e, route.selected ? 0.34 : 0.16);
-  guide.beginPath();
-  guide.moveTo(sourceX, sourceY);
-  guide.quadraticCurveTo(
-    (sourceX + route.pose.screenX) / 2,
-    Math.min(sourceY, route.pose.screenY) - geometry.viewportHeight * 0.03,
-    route.pose.screenX,
-    route.pose.screenY
-  );
-  guide.strokePath();
-  guide.setDepth(route.pose.depth - 2);
-
   const slot = scene.add.container(route.pose.screenX, route.pose.screenY);
   slot.setDepth(route.pose.depth - 1);
   slot.setRotation((route.pose.rotation * Math.PI) / 180);
+  const shadow = scene.add.graphics();
+  shadow.fillStyle(SHADOW, route.selected ? 0.18 : 0.11);
+  shadow.fillEllipse(
+    route.width * 0.08,
+    route.height * 0.34,
+    route.width * 0.78,
+    route.height * 0.28
+  );
+  slot.add(shadow);
   const outline = scene.add.graphics();
   drawRoundedRect(
     outline,
