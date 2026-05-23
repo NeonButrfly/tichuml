@@ -5388,13 +5388,13 @@ body.normal-layout-locked {
 }
 
 .alternate-pass-route__card {
-  width: 70px;
+  width: 58px;
 }
 
 .alternate-pass-route__hidden-card {
-  width: 58px;
-  height: 80px;
-  border-radius: 12px;
+  width: 42px;
+  height: 58px;
+  border-radius: 10px;
   border: 1px solid rgba(229, 213, 176, 0.34);
   background:
     radial-gradient(circle at 50% 50%, rgba(231, 196, 116, 0.16), transparent 22%),
@@ -5433,14 +5433,10 @@ body.normal-layout-locked {
   position: absolute;
   left: 50%;
   bottom: 0;
-  transform:
-    translateX(calc(var(--alt-card-offset, 0) * 44px - 50%))
-    rotate(var(--alt-card-rotation));
   transform-origin: center bottom;
 }
 
 .alternate-south-hand__card {
-  width: 104px;
   box-shadow:
     0 18px 26px rgba(0, 0, 0, 0.38),
     0 0 24px rgba(226, 185, 111, 0.08);
@@ -5555,13 +5551,11 @@ body.normal-layout-locked {
   }
 
   .alternate-south-hand__card {
-    width: 100px;
+    width: 96px;
   }
 
   .alternate-south-hand__card-shell {
-    transform:
-      translateX(calc(var(--alt-card-offset, 0) * 38px - 50%))
-      rotate(var(--alt-card-rotation));
+    transform-origin: center bottom;
   }
 }
 
@@ -5585,13 +5579,11 @@ body.normal-layout-locked {
   }
 
   .alternate-south-hand__card-shell {
-    transform:
-      translateX(calc(var(--alt-card-offset, 0) * 30px - 50%))
-      rotate(calc(var(--alt-card-offset, 0) * 2.4deg));
+    transform-origin: center bottom;
   }
 
   .alternate-trick-card,
   .alternate-pass-route__card {
-    width: 64px;
+    width: 54px;
   }
 }

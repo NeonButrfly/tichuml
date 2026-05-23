@@ -17,6 +17,7 @@ import {
 } from "./game-table-views";
 import { AlternateTablePixiSurface } from "./alternate-table/pixi-surface";
 import { resolveAlternateTableLayout, type AlternatePassRoutePlacement, type Rect } from "./alternate-table/layout";
+import { resolveAlternateSouthHandLayout } from "./alternate-table/hand-layout";
 
 function getSeatByPosition(
   seatViews: readonly SeatView[],
@@ -360,6 +361,15 @@ export function AlternateGameTableView(props: GameTableViewProps) {
       ),
     [props.passRouteViews, props.seatViews, showPassRoutes, stageSize.height, stageSize.width]
   );
+  const southHandLayout = useMemo(
+    () =>
+      resolveAlternateSouthHandLayout({
+        count: props.sortedLocalHand.length,
+        rackWidth: layout.seats.bottom.rack.width,
+        viewportWidth: stageSize.width
+      }),
+    [layout.seats.bottom.rack.width, props.sortedLocalHand.length, stageSize.width]
+  );
 
   const currentTrickEntries = props.seatRelativePlays.flatMap(({ plays, position }) =>
     plays.map((play, index) => ({
@@ -514,17 +524,18 @@ export function AlternateGameTableView(props: GameTableViewProps) {
             data-alt-seat="south"
           >
             {props.sortedLocalHand.map((card, index) => {
-              const spreadMidpoint = (props.sortedLocalHand.length - 1) / 2;
-              const offsetFromCenter = index - spreadMidpoint;
+              const placement = southHandLayout.placements[index];
+              if (!placement) {
+                return null;
+              }
               return (
                 <div
                   key={card.id}
                   className="alternate-south-hand__card-shell"
                   style={
                     {
-                      "--alt-card-index": String(index),
-                      "--alt-card-offset": String(offsetFromCenter),
-                      "--alt-card-rotation": `${offsetFromCenter * 3.2}deg`
+                      transform: `translateX(calc(${placement.offsetPx}px - 50%)) translateY(${placement.liftPx}px) rotate(${placement.rotationDeg}deg)`,
+                      zIndex: 100 + index
                     } as CSSProperties
                   }
                 >
@@ -534,6 +545,7 @@ export function AlternateGameTableView(props: GameTableViewProps) {
                     tone={props.localLegalCardIds.has(card.id) ? "legal" : "muted"}
                     selected={props.selectedCardIds.includes(card.id)}
                     className="alternate-south-hand__card"
+                    style={{ width: `${southHandLayout.cardWidth}px` }}
                     draggable={props.localPassInteractionEnabled}
                     onClick={() => props.onLocalCardClick(card.id)}
                     onDragStart={(event) => {

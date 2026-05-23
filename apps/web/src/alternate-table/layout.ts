@@ -150,13 +150,13 @@ function getPassClusterCenter(
 ): Point {
   switch (sourcePosition) {
     case "top":
-      return point(width * 0.5, height * 0.232);
+      return point(width * 0.5, height * 0.188);
     case "right":
-      return point(width * 0.754, height * 0.43);
+      return point(width * 0.83, height * 0.46);
     case "bottom":
-      return point(width * 0.5, height * 0.554);
+      return point(width * 0.5, height * 0.652);
     case "left":
-      return point(width * 0.246, height * 0.43);
+      return point(width * 0.17, height * 0.46);
   }
 }
 
@@ -167,18 +167,18 @@ function getPassSlotMetrics(
 ) {
   if (sourcePosition === "left" || sourcePosition === "right") {
     return {
-      slotWidth: width * 0.042,
-      slotHeight: height * 0.11,
-      spread: height * 0.128,
-      centerNudge: width * 0.03
+      slotWidth: width * 0.036,
+      slotHeight: height * 0.096,
+      spread: height * 0.114,
+      centerNudge: width * 0.02
     };
   }
 
   return {
-    slotWidth: width * 0.056,
-    slotHeight: height * 0.112,
-    spread: width * 0.108,
-    rise: height * 0.048
+    slotWidth: width * 0.048,
+    slotHeight: height * 0.098,
+    spread: width * 0.094,
+    rise: height * 0.036
   };
 }
 

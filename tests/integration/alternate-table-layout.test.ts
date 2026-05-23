@@ -119,4 +119,64 @@ describe("alternate table layout geometry", () => {
       layout.boardRect.y + layout.boardRect.height
     );
   });
+
+  it("keeps pass slots out of the core trick bowl", () => {
+    const layout = resolveAlternateTableLayout(1600, 900, seatViews, [
+      ...passRoutes,
+      {
+        key: "north-left",
+        sourceSeat: "seat-2",
+        sourcePosition: "top",
+        target: "left",
+        targetSeat: "seat-3",
+        displayMode: "passing",
+        occupied: false,
+        visibleCardId: null,
+        faceDown: true,
+        interactive: false
+      },
+      {
+        key: "east-up",
+        sourceSeat: "seat-1",
+        sourcePosition: "right",
+        target: "partner",
+        targetSeat: "seat-3",
+        displayMode: "passing",
+        occupied: false,
+        visibleCardId: null,
+        faceDown: true,
+        interactive: false
+      },
+      {
+        key: "west-up",
+        sourceSeat: "seat-3",
+        sourcePosition: "left",
+        target: "partner",
+        targetSeat: "seat-1",
+        displayMode: "passing",
+        occupied: false,
+        visibleCardId: null,
+        faceDown: true,
+        interactive: false
+      }
+    ]);
+    const protectedCore = {
+      left: layout.trickRect.x - 40,
+      right: layout.trickRect.x + layout.trickRect.width + 40,
+      top: layout.trickRect.y - 34,
+      bottom: layout.trickRect.y + layout.trickRect.height + 34
+    };
+
+    for (const route of layout.passRoutes) {
+      const centerX = route.rect.x + route.rect.width / 2;
+      const centerY = route.rect.y + route.rect.height / 2;
+      const insideCore =
+        centerX >= protectedCore.left &&
+        centerX <= protectedCore.right &&
+        centerY >= protectedCore.top &&
+        centerY <= protectedCore.bottom;
+
+      expect(insideCore).toBe(false);
+    }
+  });
 });

@@ -233,9 +233,11 @@ function renderSurface(runtime: PixiRuntime, props: AlternateTablePixiSurfacePro
         ? props.layout.boardRect.y + pocketRadius * 0.92
         : props.layout.boardRect.y + props.layout.boardRect.height - pocketRadius * 0.92;
     board.circle(x, y, pocketRadius);
-    board.fill({ color: 0x4a2613, alpha: 1 });
-    board.circle(x, y, pocketRadius * 0.72);
-    board.fill({ color: 0x22130c, alpha: 1 });
+    board.fill({ color: 0x6d3d20, alpha: 1 });
+    board.circle(x, y, pocketRadius * 0.76);
+    board.fill({ color: 0x4f2b16, alpha: 1 });
+    board.circle(x, y, pocketRadius * 0.42);
+    board.fill({ color: 0x7a5630, alpha: 0.9 });
   });
 
   drawPolygon(board, outerFelt, 0x134d3d, 1);
