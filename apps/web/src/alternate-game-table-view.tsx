@@ -17,12 +17,23 @@ import {
   type SeatView,
   type WishSelectionValue
 } from "./game-table-views";
-import { resolveAlternateTableLayout, type AlternatePassRoutePlacement, type Rect } from "./alternate-table/layout";
-import { resolveAlternateSouthHandLayout } from "./alternate-table/hand-layout";
+import { NORMAL_PASS_STAGE_MAP, type PassLaneDirection, type SeatVisualPosition } from "./table-layout";
 import {
   AlternateTableThreeSurface,
   type AlternateCameraPreset
 } from "./alternate-table/three-surface";
+import {
+  createSouthPerspectiveProjector,
+  resolvePassRouteWorldPose,
+  resolveRemoteHandWorldPose,
+  resolveScorePose,
+  resolveSeatCountPose,
+  resolveSeatLabelPose,
+  resolveSouthHandWorldPose,
+  resolveStatusPose,
+  resolveTrickCardWorldPose,
+  type SouthPerspectivePose
+} from "./alternate-table/south-perspective-projection";
 
 function clamp(value: number, minimum: number, maximum: number) {
   return Math.min(maximum, Math.max(minimum, value));
@@ -72,35 +83,24 @@ function getSeatStatusTags(seat: SeatView): string[] {
   return tags.slice(0, 3);
 }
 
-function rectStyle(rect: Rect): CSSProperties {
+function projectedStyle(
+  pose: SouthPerspectivePose,
+  options?: { width?: number; extraTransform?: string }
+): CSSProperties {
   return {
-    left: `${rect.x}px`,
-    top: `${rect.y}px`,
-    width: `${rect.width}px`,
-    height: `${rect.height}px`
+    left: `${pose.screenX}px`,
+    top: `${pose.screenY}px`,
+    zIndex: Math.round(pose.depth),
+    width: options?.width ? `${options.width}px` : undefined,
+    transform: `translate(-50%, -50%) scale(${pose.scale}) rotate(${pose.rotation}deg)${
+      options?.extraTransform ? ` ${options.extraTransform}` : ""
+    }`,
+    filter: `drop-shadow(0 ${pose.shadowOffsetY}px ${pose.shadowBlur}px rgba(0, 0, 0, 0.35))`
   };
 }
 
-function renderAltCardBacks(count: number, axis: "horizontal" | "vertical") {
-  const visibleCount = Math.max(1, Math.min(count, 7));
-  return Array.from({ length: visibleCount }).map((_, index) => (
-    <span
-      key={`${axis}-${index}`}
-      className={[
-        "alternate-card-back",
-        axis === "vertical" ? "alternate-card-back--vertical" : ""
-      ]
-        .filter(Boolean)
-        .join(" ")}
-      data-alt-card-back="true"
-      style={
-        {
-          "--alt-card-index": String(index)
-        } as CSSProperties
-      }
-      aria-hidden="true"
-    />
-  ));
+function renderBackCount(count: number) {
+  return Math.max(1, Math.min(count, 6));
 }
 
 function formatAlternatePhaseLabel(
@@ -176,152 +176,33 @@ function WishOptionButton({
   );
 }
 
-function AlternateSeatPlaque({
+function SeatLabel({
   seat,
   label,
   style,
-  vertical = false,
-  prominent = false
+  subtle = false
 }: {
   seat: SeatView;
   label: string;
   style: CSSProperties;
-  vertical?: boolean;
-  prominent?: boolean;
+  subtle?: boolean;
 }) {
-  const tags = getSeatStatusTags(seat);
-
   return (
     <div
       className={[
-        "alternate-seat-plaque",
-        vertical ? "alternate-seat-plaque--vertical" : "",
-        prominent ? "alternate-seat-plaque--prominent" : "",
-        seat.isPrimarySeat ? "is-active" : ""
+        "alternate-seat-label",
+        seat.isPrimarySeat ? "is-active" : "",
+        subtle ? "is-subtle" : ""
       ]
         .filter(Boolean)
         .join(" ")}
       style={style}
       data-alt-seat-plaque={seat.position}
     >
-      <span className="alternate-seat-plaque__title">{label}</span>
-      <div className="alternate-seat-plaque__tags">
-        {tags.map((tag) => (
-          <span key={tag} className="alternate-seat-tag">
-            {tag}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function AlternatePassRouteSlot({
-  route,
-  cardLookup,
-  selectedPassTarget,
-  onPassTargetSelect,
-  onPassLaneDrop,
-  onPassLaneCardClick,
-  onPassLaneCardDragStart,
-  onPassLaneCardDragEnd
-}: {
-  route: AlternatePassRoutePlacement;
-  cardLookup: ReadonlyMap<string, Card>;
-  selectedPassTarget: GameTableViewProps["selectedPassTarget"];
-  onPassTargetSelect: GameTableViewProps["onPassTargetSelect"];
-  onPassLaneDrop: GameTableViewProps["onPassLaneDrop"];
-  onPassLaneCardClick: GameTableViewProps["onPassLaneCardClick"];
-  onPassLaneCardDragStart: GameTableViewProps["onPassLaneCardDragStart"];
-  onPassLaneCardDragEnd: GameTableViewProps["onPassLaneCardDragEnd"];
-}) {
-  const assignedCard =
-    route.visibleCardId === null ? null : cardLookup.get(route.visibleCardId) ?? null;
-  const className = [
-    "alternate-pass-route",
-    route.interactive ? "is-interactive" : "",
-    route.occupied ? "is-occupied" : "",
-    route.displayMode === "pickup" ? "is-pickup" : "",
-    selectedPassTarget === route.target && route.interactive ? "is-selected" : ""
-  ]
-    .filter(Boolean)
-    .join(" ");
-  const style = {
-    ...rectStyle(route.rect),
-    transform: `rotate(${route.rotation}deg)`
-  } satisfies CSSProperties;
-
-  if (route.interactive && assignedCard) {
-    return (
-      <div
-        className={className}
-        style={style}
-        data-alt-pass-route={route.key}
-        data-pass-direction={route.direction}
-        onClick={() => onPassTargetSelect(route.target)}
-        onDragOver={(event) => {
-          event.preventDefault();
-          event.dataTransfer.dropEffect = "move";
-        }}
-        onDrop={(event) => {
-          event.preventDefault();
-          const cardId = event.dataTransfer.getData("application/x-tichu-pass-card");
-          if (cardId) {
-            onPassLaneDrop(route.target, cardId);
-          }
-        }}
-      >
-        <PassRouteCard
-          card={assignedCard}
-          onClick={() => onPassLaneCardClick(route.target)}
-          onDragStart={(event) => {
-            event.dataTransfer.effectAllowed = "move";
-            event.dataTransfer.setData("application/x-tichu-pass-card", assignedCard.id);
-            onPassLaneCardDragStart(route.target, assignedCard.id);
-          }}
-          onDragEnd={() => onPassLaneCardDragEnd(route.target, assignedCard.id)}
-        />
-      </div>
-    );
-  }
-
-  if (route.interactive) {
-    return (
-      <button
-        type="button"
-        className={className}
-        style={style}
-        data-alt-pass-route={route.key}
-        data-pass-direction={route.direction}
-        onClick={() => onPassTargetSelect(route.target)}
-        onDragOver={(event) => {
-          event.preventDefault();
-          event.dataTransfer.dropEffect = "move";
-        }}
-        onDrop={(event) => {
-          event.preventDefault();
-          const cardId = event.dataTransfer.getData("application/x-tichu-pass-card");
-          if (cardId) {
-            onPassLaneDrop(route.target, cardId);
-          }
-        }}
-      >
-      </button>
-    );
-  }
-
-  return (
-    <div
-      className={className}
-      style={style}
-      data-alt-pass-route={route.key}
-      data-pass-direction={route.direction}
-    >
-      {assignedCard ? (
-        <CardFace card={assignedCard} className="alternate-pass-route__card" />
-      ) : route.occupied ? (
-        <span className="alternate-pass-route__hidden-card" aria-hidden="true" />
-      ) : null}
+      <span className="alternate-seat-label__title">{label}</span>
+      <span className="alternate-seat-label__tags">
+        {getSeatStatusTags(seat).join(" ")}
+      </span>
     </div>
   );
 }
@@ -363,13 +244,6 @@ export function AlternateGameTableView(props: GameTableViewProps) {
     return () => observer.disconnect();
   }, []);
 
-  const cameraPreset =
-    cameraYaw <= -0.35 ? "left" : cameraYaw >= 0.35 ? "right" : "center";
-
-  const overlayPerspectiveStyle = {
-    "--alt-camera-yaw": `${cameraYaw}`
-  } as CSSProperties;
-
   const handleCameraPresetSelect = useCallback((preset: AlternateCameraPreset) => {
     setCameraYaw(CAMERA_YAW_BY_PRESET[preset]);
   }, []);
@@ -402,7 +276,7 @@ export function AlternateGameTableView(props: GameTableViewProps) {
         return;
       }
       const delta = event.clientX - dragState.startX;
-      const yawDelta = delta / Math.max(280, stageSize.width * 0.26);
+      const yawDelta = delta / Math.max(280, stageSize.width * 0.3);
       setCameraYaw(clamp(dragState.startYaw + yawDelta, -1, 1));
     },
     [stageSize.width]
@@ -423,43 +297,26 @@ export function AlternateGameTableView(props: GameTableViewProps) {
     []
   );
 
+  const projector = useMemo(
+    () =>
+      createSouthPerspectiveProjector({
+        viewportWidth: stageSize.width,
+        viewportHeight: stageSize.height,
+        yaw: cameraYaw
+      }),
+    [cameraYaw, stageSize.height, stageSize.width]
+  );
+
+  const seatPositionBySeat = useMemo(
+    () => new Map(props.seatViews.map((seat) => [seat.seat, seat.position] as const)),
+    [props.seatViews]
+  );
+
   const showPassRoutes =
     props.passRouteViews.length > 0 &&
     (props.state.phase === "pass_select" ||
       props.state.phase === "pass_reveal" ||
       props.state.phase === "exchange_complete");
-
-  const layout = useMemo(
-    () =>
-      resolveAlternateTableLayout({
-        width: stageSize.width,
-        height: stageSize.height,
-        seatViews: props.seatViews,
-        passRouteViews: showPassRoutes ? props.passRouteViews : [],
-        normalTableLayout: props.normalTableLayout,
-        hasVariantPicker: props.matchingPlayActions.length > 1,
-        hasWishPicker: Boolean(props.activePlayVariant?.availableWishRanks)
-      }),
-    [
-      props.activePlayVariant?.availableWishRanks,
-      props.matchingPlayActions.length,
-      props.normalTableLayout,
-      props.passRouteViews,
-      props.seatViews,
-      showPassRoutes,
-      stageSize.height,
-      stageSize.width
-    ]
-  );
-  const southHandLayout = useMemo(
-    () =>
-      resolveAlternateSouthHandLayout({
-        count: props.sortedLocalHand.length,
-        rackWidth: layout.seats.bottom.rack.width,
-        baseCardWidth: layout.southHandCardWidth
-      }),
-    [layout.seats.bottom.rack.width, layout.southHandCardWidth, props.sortedLocalHand.length]
-  );
 
   const currentTrickEntries = props.seatRelativePlays.flatMap(({ plays, position }) =>
     plays.map((play, index) => ({
@@ -472,7 +329,18 @@ export function AlternateGameTableView(props: GameTableViewProps) {
     }))
   );
 
+  const cameraPreset =
+    cameraYaw <= -0.35 ? "left" : cameraYaw >= 0.35 ? "right" : "center";
   const statusText = formatAlternatePhaseLabel(props.state.phase);
+  const scorePose = resolveScorePose(projector);
+  const statusPose = resolveStatusPose(projector);
+  const northLabelPose = resolveSeatLabelPose(projector, "top");
+  const westLabelPose = resolveSeatLabelPose(projector, "left");
+  const eastLabelPose = resolveSeatLabelPose(projector, "right");
+  const southLabelPose = resolveSeatLabelPose(projector, "bottom");
+  const northCountPose = resolveSeatCountPose(projector, "top");
+  const westCountPose = resolveSeatCountPose(projector, "left");
+  const eastCountPose = resolveSeatCountPose(projector, "right");
 
   return (
     <main className="alternate-tabletop">
@@ -501,13 +369,17 @@ export function AlternateGameTableView(props: GameTableViewProps) {
         onPointerCancel={handleStagePointerUp}
       >
         <AlternateTableThreeSurface
-          layout={layout}
+          geometry={projector.geometry}
           cameraYaw={cameraYaw}
         />
 
         <div
           className="alternate-overlay"
-          style={overlayPerspectiveStyle}
+          style={
+            {
+              "--alt-camera-yaw": `${cameraYaw}`
+            } as CSSProperties
+          }
         >
           <div className="alternate-overlay__hud">
             <div className="alternate-camera-controls" role="group" aria-label="Perspective">
@@ -552,7 +424,7 @@ export function AlternateGameTableView(props: GameTableViewProps) {
               </button>
             </div>
 
-            <div className="alternate-score-plaque" style={rectStyle(layout.scoreRect)}>
+            <div className="alternate-score-plaque" style={projectedStyle(scorePose)}>
               <div>
                 <span>WE</span>
                 <strong>{weScore}</strong>
@@ -566,126 +438,242 @@ export function AlternateGameTableView(props: GameTableViewProps) {
           </div>
 
           <div className="alternate-overlay__table">
-            <div className="alternate-status-plaque" style={rectStyle(layout.statusRect)}>
+            <div className="alternate-status-plaque" style={projectedStyle(statusPose)}>
               <span>{statusText}</span>
               {props.derived.currentWish ? <strong>Wish {formatRank(props.derived.currentWish)}</strong> : null}
             </div>
 
-            <AlternateSeatPlaque
-              seat={northSeat}
-              label="NORTH"
-              style={rectStyle(layout.seats.top.plaque)}
-            />
-            <div
-              className="alternate-remote-rack alternate-remote-rack--north"
-              style={rectStyle(layout.seats.top.rack)}
-              data-alt-seat="north"
-            >
-              <div className="alternate-remote-rack__cards">{renderAltCardBacks(northSeat.handCount, "horizontal")}</div>
+            <SeatLabel seat={northSeat} label="NORTH" style={projectedStyle(northLabelPose)} />
+            <SeatLabel seat={westSeat} label="WEST" style={projectedStyle(westLabelPose)} subtle />
+            <SeatLabel seat={eastSeat} label="EAST" style={projectedStyle(eastLabelPose)} subtle />
+            <SeatLabel seat={southSeat} label="SOUTH" style={projectedStyle(southLabelPose)} />
+
+            <div className="alternate-remote-hand" data-alt-seat="north">
+              {Array.from({ length: renderBackCount(northSeat.handCount) }, (_, index) => {
+                const world = resolveRemoteHandWorldPose({
+                  position: "top",
+                  index,
+                  count: renderBackCount(northSeat.handCount)
+                });
+                const pose = projector.projectPoint(world, { rotation: world.rotation });
+                return (
+                  <span
+                    key={`north-back-${index}`}
+                    className="alternate-card-back alternate-card-back--projected"
+                    data-alt-card-back="true"
+                    style={projectedStyle(pose, { width: 84 })}
+                    aria-hidden="true"
+                  />
+                );
+              })}
+              <span className="alternate-seat-count" style={projectedStyle(northCountPose)}>
+                {northSeat.handCount}
+              </span>
             </div>
 
-            <AlternateSeatPlaque
-              seat={westSeat}
-              label="WEST"
-              style={rectStyle(layout.seats.left.plaque)}
-              vertical
-            />
-            <div
-              className="alternate-remote-rack alternate-remote-rack--west"
-              style={rectStyle(layout.seats.left.rack)}
-              data-alt-seat="west"
-            >
-              <div className="alternate-remote-rack__cards">{renderAltCardBacks(westSeat.handCount, "vertical")}</div>
-              <span className="alternate-remote-rack__count">{westSeat.handCount}</span>
+            <div className="alternate-remote-hand" data-alt-seat="west">
+              {Array.from({ length: renderBackCount(westSeat.handCount) }, (_, index) => {
+                const world = resolveRemoteHandWorldPose({
+                  position: "left",
+                  index,
+                  count: renderBackCount(westSeat.handCount)
+                });
+                const pose = projector.projectPoint(world, { rotation: world.rotation });
+                return (
+                  <span
+                    key={`west-back-${index}`}
+                    className="alternate-card-back alternate-card-back--projected"
+                    data-alt-card-back="true"
+                    style={projectedStyle(pose, { width: 82 })}
+                    aria-hidden="true"
+                  />
+                );
+              })}
+              <span className="alternate-seat-count" style={projectedStyle(westCountPose)}>
+                {westSeat.handCount}
+              </span>
             </div>
 
-            <AlternateSeatPlaque
-              seat={eastSeat}
-              label="EAST"
-              style={rectStyle(layout.seats.right.plaque)}
-              vertical
-            />
-            <div
-              className="alternate-remote-rack alternate-remote-rack--east"
-              style={rectStyle(layout.seats.right.rack)}
-              data-alt-seat="east"
-            >
-              <div className="alternate-remote-rack__cards">{renderAltCardBacks(eastSeat.handCount, "vertical")}</div>
-              <span className="alternate-remote-rack__count">{eastSeat.handCount}</span>
+            <div className="alternate-remote-hand" data-alt-seat="east">
+              {Array.from({ length: renderBackCount(eastSeat.handCount) }, (_, index) => {
+                const world = resolveRemoteHandWorldPose({
+                  position: "right",
+                  index,
+                  count: renderBackCount(eastSeat.handCount)
+                });
+                const pose = projector.projectPoint(world, { rotation: world.rotation });
+                return (
+                  <span
+                    key={`east-back-${index}`}
+                    className="alternate-card-back alternate-card-back--projected"
+                    data-alt-card-back="true"
+                    style={projectedStyle(pose, { width: 82 })}
+                    aria-hidden="true"
+                  />
+                );
+              })}
+              <span className="alternate-seat-count" style={projectedStyle(eastCountPose)}>
+                {eastSeat.handCount}
+              </span>
             </div>
 
             {showPassRoutes &&
-              layout.passRoutes.map((route) => (
-                <AlternatePassRouteSlot
-                  key={route.key}
-                  route={route}
-                  cardLookup={props.cardLookup}
-                  selectedPassTarget={props.selectedPassTarget}
-                  onPassTargetSelect={props.onPassTargetSelect}
-                  onPassLaneDrop={props.onPassLaneDrop}
-                  onPassLaneCardClick={props.onPassLaneCardClick}
-                  onPassLaneCardDragStart={props.onPassLaneCardDragStart}
-                  onPassLaneCardDragEnd={props.onPassLaneCardDragEnd}
-                />
-              ))}
+              props.passRouteViews.flatMap((route) => {
+                const targetPosition = seatPositionBySeat.get(route.targetSeat);
+                if (!targetPosition) {
+                  return [];
+                }
+                const direction =
+                  NORMAL_PASS_STAGE_MAP[route.sourcePosition].find(
+                    (entry) => entry.targetPosition === targetPosition
+                  )?.direction ?? "up";
+                const world = resolvePassRouteWorldPose({
+                  sourcePosition: route.sourcePosition,
+                  targetPosition,
+                  direction,
+                  displayMode: route.displayMode
+                });
+                const pose = projector.projectPoint(world, { rotation: world.rotation });
+                const assignedCard =
+                  route.visibleCardId === null ? null : props.cardLookup.get(route.visibleCardId) ?? null;
+                const className = [
+                  "alternate-pass-route",
+                  route.interactive ? "is-interactive" : "",
+                  route.occupied ? "is-occupied" : "",
+                  route.displayMode === "pickup" ? "is-pickup" : "",
+                  props.selectedPassTarget === route.target && route.interactive ? "is-selected" : ""
+                ]
+                  .filter(Boolean)
+                  .join(" ");
+                const style = projectedStyle(pose, { width: 66 });
+                const directionAttr: PassLaneDirection = direction;
 
-            <div className="alternate-trick-area" style={rectStyle(layout.trickRect)}>
-              {currentTrickEntries.length > 0 ? (
-                currentTrickEntries.map((entry) => {
-                  const placement = layout.trickPlacements[entry.seatPosition];
+                if (route.interactive && assignedCard) {
                   return (
                     <div
-                      key={entry.key}
+                      key={route.key}
+                      className={className}
+                      style={style}
+                      data-alt-pass-route={route.key}
+                      data-pass-direction={directionAttr}
+                      onClick={() => props.onPassTargetSelect(route.target)}
+                      onDragOver={(event) => {
+                        event.preventDefault();
+                        event.dataTransfer.dropEffect = "move";
+                      }}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        const cardId = event.dataTransfer.getData("application/x-tichu-pass-card");
+                        if (cardId) {
+                          props.onPassLaneDrop(route.target, cardId);
+                        }
+                      }}
+                    >
+                      <PassRouteCard
+                        card={assignedCard}
+                        onClick={() => props.onPassLaneCardClick(route.target)}
+                        onDragStart={(event) => {
+                          event.dataTransfer.effectAllowed = "move";
+                          event.dataTransfer.setData("application/x-tichu-pass-card", assignedCard.id);
+                          props.onPassLaneCardDragStart(route.target, assignedCard.id);
+                        }}
+                        onDragEnd={() => props.onPassLaneCardDragEnd(route.target, assignedCard.id)}
+                      />
+                    </div>
+                  );
+                }
+
+                if (route.interactive) {
+                  return (
+                    <button
+                      key={route.key}
+                      type="button"
+                      className={className}
+                      style={style}
+                      data-alt-pass-route={route.key}
+                      data-pass-direction={directionAttr}
+                      onClick={() => props.onPassTargetSelect(route.target)}
+                      onDragOver={(event) => {
+                        event.preventDefault();
+                        event.dataTransfer.dropEffect = "move";
+                      }}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        const cardId = event.dataTransfer.getData("application/x-tichu-pass-card");
+                        if (cardId) {
+                          props.onPassLaneDrop(route.target, cardId);
+                        }
+                      }}
+                    />
+                  );
+                }
+
+                return (
+                  <div
+                    key={route.key}
+                    className={className}
+                    style={style}
+                    data-alt-pass-route={route.key}
+                    data-pass-direction={directionAttr}
+                  >
+                    {assignedCard ? (
+                      <CardFace card={assignedCard} className="alternate-pass-route__card" />
+                    ) : route.occupied ? (
+                      <span className="alternate-pass-route__hidden-card" aria-hidden="true" />
+                    ) : null}
+                  </div>
+                );
+              })}
+
+            <div className="alternate-trick-plane">
+              {currentTrickEntries.map((entry) =>
+                entry.cardIds.map((cardId, index) => {
+                  const card = props.cardLookup.get(cardId);
+                  if (!card) {
+                    return null;
+                  }
+                  const world = resolveTrickCardWorldPose({
+                    position: entry.seatPosition,
+                    index,
+                    count: entry.cardIds.length,
+                    winning: entry.winning
+                  });
+                  const pose = projector.projectPoint(world, { rotation: world.rotation });
+                  return (
+                    <div
+                      key={`${entry.key}-${cardId}`}
                       className={[
                         "alternate-trick-stack",
                         entry.winning ? "is-winning" : ""
                       ]
                         .filter(Boolean)
                         .join(" ")}
-                      style={
-                        {
-                          left: `${placement.x - layout.trickRect.x}px`,
-                          top: `${placement.y - layout.trickRect.y}px`,
-                          transform: `translate(-50%, -50%) rotate(${placement.rotation}deg)`
-                        } as CSSProperties
-                      }
+                      style={projectedStyle(pose, { width: 98 })}
                     >
-                      {entry.cardIds.map((cardId) => {
-                        const card = props.cardLookup.get(cardId);
-                        return card ? (
-                          <CardFace
-                            key={`${entry.key}-${cardId}`}
-                            card={card}
-                            className="alternate-trick-card"
-                          />
-                        ) : null;
-                      })}
+                      <CardFace
+                        card={card}
+                        className="alternate-trick-card"
+                      />
                     </div>
                   );
                 })
-              ) : null}
+              )}
             </div>
 
-            <div
-              className="alternate-south-hand"
-              style={rectStyle(layout.seats.bottom.rack)}
-              data-alt-seat="south"
-            >
+            <div className="alternate-south-hand" data-alt-seat="south">
               {props.sortedLocalHand.map((card, index) => {
-                const placement = southHandLayout.placements[index];
-                if (!placement) {
-                  return null;
-                }
+                const world = resolveSouthHandWorldPose({
+                  index,
+                  count: props.sortedLocalHand.length,
+                  selected: props.selectedCardIds.includes(card.id)
+                });
+                const pose = projector.projectPoint(world, { rotation: world.rotation });
+
                 return (
                   <div
                     key={card.id}
                     className="alternate-south-hand__card-shell"
-                    style={
-                      {
-                        transform: `translateX(calc(${placement.offsetPx}px - 50%)) translateY(${placement.liftPx}px) rotate(${placement.rotationDeg}deg)`,
-                        zIndex: 100 + index
-                      } as CSSProperties
-                    }
+                    style={projectedStyle(pose, { width: 106 })}
                   >
                     <CardFace
                       card={card}
@@ -693,7 +681,7 @@ export function AlternateGameTableView(props: GameTableViewProps) {
                       tone={props.localLegalCardIds.has(card.id) ? "legal" : "muted"}
                       selected={props.selectedCardIds.includes(card.id)}
                       className="alternate-south-hand__card"
-                      style={{ width: `${southHandLayout.cardWidth}px` }}
+                      style={{ width: "106px" }}
                       draggable={props.localPassInteractionEnabled}
                       onClick={() => props.onLocalCardClick(card.id)}
                       onDragStart={(event) => {
@@ -706,14 +694,7 @@ export function AlternateGameTableView(props: GameTableViewProps) {
               })}
             </div>
 
-            <AlternateSeatPlaque
-              seat={southSeat}
-              label="SOUTH"
-              style={rectStyle(layout.seats.bottom.plaque)}
-              prominent
-            />
-
-            <div className="alternate-controls" style={rectStyle(layout.southControlRect)}>
+            <div className="alternate-controls">
               <div className="alternate-controls__primary">
                 {props.normalActionRail.map((slot) => (
                   <button

@@ -635,3 +635,26 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 - Linked GitHub Issue: [#81](https://github.com/NeonButrfly/tichuml/issues/81)
 - Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
 - Status Source: GitHub issue state only.
+
+### 2026-05-22 - Alternate table should pivot to a true south-perspective projection layer
+
+- Prompt Signal: The immersive-table reset explicitly restated that the normal
+  table must not regress, then asked for a low south-player camera angle like
+  the attached wooden-table reference image: oval tabletop, large near south
+  hand, smaller far hands, played cards projected into table space, soft
+  shadows, and a 2.5D board-game feel with minimal wasted space.
+- Interpreted Requirement: Keep the existing gameplay brain, routing, backend,
+  telemetry, and rule enforcement untouched, but rebuild the alternate table’s
+  geometry layer around a pure south-perspective projection module. Cards,
+  remote hands, trick cards, and pass routes should all derive from the same
+  fake-perspective transform instead of being laid out as separate overlay
+  panels.
+- Affected Systems: `apps/web/src/alternate-game-table-view.tsx`,
+  `apps/web/src/alternate-table/south-perspective-projection.ts`,
+  `apps/web/src/alternate-table/three-surface.tsx`,
+  `apps/web/src/styles.css`,
+  `apps/web/src/alternate-table/README.md`,
+  `tests/integration/south-perspective-projection.test.ts`.
+- Linked GitHub Issue: [#81](https://github.com/NeonButrfly/tichuml/issues/81)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.

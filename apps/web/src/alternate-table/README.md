@@ -8,31 +8,20 @@ rules, and action dispatch pipeline.
 
 ## Renderer Choice
 
-The implementation now uses a hybrid renderer:
+The implementation now uses a projection-driven hybrid renderer:
 
-- React still owns the gameplay interaction shell.
-- React Three Fiber now draws the alternate 3D table body with a real camera
-  and bounded rotation controls.
-- DOM overlays still own live cards, seat plaques, pass lanes, and actionable
-  controls so the existing gameplay handlers remain intact.
+- React still owns the gameplay interaction shell and all live actions.
+- `apps/web/src/alternate-table/south-perspective-projection.ts` is the pure
+  fake-perspective module. It projects logical table-space coordinates into
+  screen positions, scale, rotation, and shadow values.
+- `apps/web/src/alternate-table/three-surface.tsx` now acts as the immersive
+  oval tabletop surface rather than a separate decorative scene.
+- DOM overlays still own the real cards, pass routes, and buttons so the
+  existing gameplay handlers remain intact.
 
-This keeps the real gameplay pipeline intact while moving the visual weight off
-the earlier CSS-only panel stack and Pixi faux-depth pass.
-
-The latest layout pass also stops inventing separate seat geometry for the
-alternate renderer. Seat racks, south-hand span, and pass-route placement now
-derive from the normal table's live hand bounds and canonical pass-lane
-anchors before being projected onto the perspective luxury surface.
-
-The current 3D cohesion pass adds a shared scene-anchor layer in
-`apps/web/src/alternate-table/scene-layout.ts` so the south shelf, north tray,
-side trays, trick bowl, and pass cups all derive from those same projected
-table anchors instead of using alternate-only freehand placement.
-
-The latest rotation/layout pass removes the unused center ornament props,
-replaces the old preset-only camera feel with bounded drag-or-button yaw
-rotation, widens the table footprint, and reworks the south hand fan so the
-cards sit on a cleaner shared plane closer to the reference perspective.
+This keeps the real gameplay pipeline intact while making the alternate table
+behave like a single low south-camera board instead of a collection of overlay
+panels.
 
 ## Shared Gameplay Path
 
@@ -47,9 +36,9 @@ cards sit on a cleaner shared plane closer to the reference perspective.
 
 Both table variants consume the same `GameTableViewProps` data and invoke the
 same callbacks for play, pass, Tichu, Grand Tichu, wish, exchange, and
-selection behavior. The alternate view now intentionally trims the visible
-utility chrome down to the core action row plus `Clear` / `Continue AI` so
-more of the frame is devoted to the table surface.
+selection behavior. The immersive table intentionally trims visible utility
+chrome down to the core action row plus `Clear` / `Continue AI` so more of the
+frame is devoted to the table surface and projected cards.
 
 ## Navigation
 
@@ -96,19 +85,20 @@ coverage now also lives in
 felt coverage, pass-lane clearance, south-hand compression, and 3D tray/shelf
 ordering do not silently drift backward.
 
-The latest rail-integration pass also keeps the alternate pass slots visibly
-framed even when empty and moves the displayed route geometry beside the
-source rails instead of letting those lanes collapse back toward the center.
+The latest immersive projection pass adds
+`tests/integration/south-perspective-projection.test.ts` so the core camera
+behavior stays stable: near cards stay larger and lower, distant cards stay
+smaller and higher, and horizontal spread compresses with depth.
 
 ## Known Limitations
 
 - The alternate table intentionally keeps event/state summaries minimal so the
   felt, trick area, and south rail remain the dominant visual surface.
-- The luxury surface is still asset-free and procedural, so wood/felt detail is
+- The luxury surface is still asset-free and procedural, so the wood grain is
   stylized rather than photoreal.
-- The current acceptance blocker is no longer scattered seat math; it is final
-  3D material polish, the remaining black headspace above the table, and deeper
-  camera-to-overlay cohesion for the cards themselves.
+- The current acceptance blocker is no longer geometry drift. The remaining
+  work is mostly finish work: finer wood treatment, better background taste,
+  and more phase-by-phase polish for passing and trick resolution.
 - Issue [#81](https://github.com/NeonButrfly/tichuml/issues/81) remains the
   acceptance tracker for spacing and composition polish on live gameplay
   screens.
