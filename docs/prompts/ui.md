@@ -567,3 +567,23 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 - Linked GitHub Issue: [#81](https://github.com/NeonButrfly/tichuml/issues/81)
 - Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
 - Status Source: GitHub issue state only.
+
+### 2026-05-22 - Alternate table should become truly 3D with rotating perspectives
+
+- Prompt Signal: After the anchor rebuild improved organization, the next ask
+  explicitly pushed the alternate table beyond faux depth: “dial it in” and
+  make it “truly 3d with rotating perspectives.”
+- Interpreted Requirement: Keep the normal table untouched and keep the
+  alternate table on the same live backend/state/action pipeline, but replace
+  the alternate renderer body with a real 3D scene rather than relying only on
+  faux-depth tricks. The alternate surface should gain a south-default 3D
+  camera with bounded perspective controls while preserving the canonical
+  gameplay anchors and hidden-information rules.
+- Affected Systems: `apps/web/src/alternate-table/three-surface.tsx`,
+  `apps/web/src/alternate-game-table-view.tsx`,
+  `apps/web/package.json`,
+  `apps/web/src/styles.css`,
+  `apps/web/src/alternate-table/README.md`.
+- Linked GitHub Issue: [#81](https://github.com/NeonButrfly/tichuml/issues/81)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.

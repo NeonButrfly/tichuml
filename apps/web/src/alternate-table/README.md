@@ -11,13 +11,13 @@ rules, and action dispatch pipeline.
 The implementation now uses a hybrid renderer:
 
 - React still owns the gameplay interaction shell.
-- PixiJS draws the luxury board surface, felt, trick bowl, engraved accents,
-  and canonical pass-route slots.
-- DOM overlays are kept only for live cards, seat plaques, and actionable
-  controls that must reuse the existing gameplay handlers.
+- React Three Fiber now draws the alternate 3D table body with a real camera
+  and bounded left / center / right perspective presets.
+- DOM overlays still own live cards, seat plaques, pass lanes, and actionable
+  controls so the existing gameplay handlers remain intact.
 
 This keeps the real gameplay pipeline intact while moving the visual weight off
-the earlier CSS-only panel stack.
+the earlier CSS-only panel stack and Pixi faux-depth pass.
 
 The latest layout pass also stops inventing separate seat geometry for the
 alternate renderer. Seat racks, south-hand span, and pass-route placement now
@@ -89,7 +89,8 @@ backward.
 - The luxury surface is still asset-free and procedural, so wood/felt detail is
   stylized rather than photoreal.
 - The current acceptance blocker is no longer scattered seat math; it is final
-  visual polish of the rail surface and the density of the south control shelf.
+  3D material polish, camera-to-overlay cohesion, and the density of the south
+  control shelf.
 - Issue [#81](https://github.com/NeonButrfly/tichuml/issues/81) remains the
   acceptance tracker for spacing and composition polish on live gameplay
   screens.

@@ -15,9 +15,12 @@ import {
   type SeatView,
   type WishSelectionValue
 } from "./game-table-views";
-import { AlternateTablePixiSurface } from "./alternate-table/pixi-surface";
 import { resolveAlternateTableLayout, type AlternatePassRoutePlacement, type Rect } from "./alternate-table/layout";
 import { resolveAlternateSouthHandLayout } from "./alternate-table/hand-layout";
+import {
+  AlternateTableThreeSurface,
+  type AlternateCameraPreset
+} from "./alternate-table/three-surface";
 
 function getSeatByPosition(
   seatViews: readonly SeatView[],
@@ -320,6 +323,8 @@ export function AlternateGameTableView(props: GameTableViewProps) {
   const theyScore = getScoreValue(props.derived.matchScore, "team-1");
   const stageRef = useRef<HTMLDivElement | null>(null);
   const [stageSize, setStageSize] = useState({ width: 1440, height: 920 });
+  const [cameraPreset, setCameraPreset] =
+    useState<AlternateCameraPreset>("center");
 
   useEffect(() => {
     if (!stageRef.current) {
@@ -410,14 +415,56 @@ export function AlternateGameTableView(props: GameTableViewProps) {
       />
 
       <section className="alternate-stage" ref={stageRef}>
-        <AlternateTablePixiSurface
+        <AlternateTableThreeSurface
           layout={layout}
-          showPassRoutes={showPassRoutes}
-          phaseLabel={props.state.phase.replaceAll("_", " ")}
-          trickHasCards={currentTrickEntries.length > 0}
+          cameraPreset={cameraPreset}
         />
 
-        <div className="alternate-overlay">
+        <div
+          className={[
+            "alternate-overlay",
+            `alternate-overlay--camera-${cameraPreset}`
+          ].join(" ")}
+        >
+          <div className="alternate-camera-controls" role="group" aria-label="Perspective">
+            <button
+              type="button"
+              className={[
+                "alternate-camera-button",
+                cameraPreset === "left" ? "is-active" : ""
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              onClick={() => setCameraPreset("left")}
+            >
+              Left View
+            </button>
+            <button
+              type="button"
+              className={[
+                "alternate-camera-button",
+                cameraPreset === "center" ? "is-active" : ""
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              onClick={() => setCameraPreset("center")}
+            >
+              Center View
+            </button>
+            <button
+              type="button"
+              className={[
+                "alternate-camera-button",
+                cameraPreset === "right" ? "is-active" : ""
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              onClick={() => setCameraPreset("right")}
+            >
+              Right View
+            </button>
+          </div>
+
           <div className="alternate-score-plaque" style={rectStyle(layout.scoreRect)}>
             <div>
               <span>WE</span>
