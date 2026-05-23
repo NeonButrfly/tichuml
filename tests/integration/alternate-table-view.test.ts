@@ -395,6 +395,8 @@ describe("AlternateGameTableView", () => {
     ).toBeGreaterThan(0);
     expect(view.container.textContent).toContain("WE");
     expect(view.container.textContent).toContain("THEY");
+    expect(view.container.textContent).toContain("Game State");
+    expect(view.container.textContent).toContain("Phase");
     expect(view.container.textContent).not.toContain("Table Notes");
     expect(view.container.textContent).not.toContain("Recent Events");
     expect(view.container.textContent).not.toContain("Decision Summary");

@@ -23,6 +23,12 @@ This keeps the real gameplay pipeline intact while making the alternate table
 behave like a single low south-camera board instead of a collection of overlay
 panels.
 
+The latest tuning pass also pushes the alternate table toward the attached
+wooden-room reference: a smaller far arc, a flatter and more readable south
+hand, room/backdrop framing around the oval table, left-side status/state
+panels, and a bottom-right action cluster so the viewport reads like one staged
+play area instead of a centered debug board.
+
 ## Shared Gameplay Path
 
 - Controller and action plumbing still live in
@@ -97,8 +103,9 @@ smaller and higher, and horizontal spread compresses with depth.
 - The luxury surface is still asset-free and procedural, so the wood grain is
   stylized rather than photoreal.
 - The current acceptance blocker is no longer geometry drift. The remaining
-  work is mostly finish work: finer wood treatment, better background taste,
-  and more phase-by-phase polish for passing and trick resolution.
+  work is mostly finish work: finer material treatment, stronger shared-plane
+  card rendering, and more phase-by-phase polish for passing and trick
+  resolution.
 - Issue [#81](https://github.com/NeonButrfly/tichuml/issues/81) remains the
   acceptance tracker for spacing and composition polish on live gameplay
   screens.

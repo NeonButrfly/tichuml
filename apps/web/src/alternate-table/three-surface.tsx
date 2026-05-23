@@ -30,6 +30,14 @@ export function AlternateTableThreeSurface(
       data-camera-yaw={props.cameraYaw.toFixed(2)}
       aria-hidden="true"
     >
+      <div className="alternate-three-surface__room" />
+      <div className="alternate-three-surface__window alternate-three-surface__window--left" />
+      <div className="alternate-three-surface__window alternate-three-surface__window--right" />
+      <div className="alternate-three-surface__stool alternate-three-surface__stool--center" />
+      <div className="alternate-three-surface__stool alternate-three-surface__stool--left" />
+      <div className="alternate-three-surface__stool alternate-three-surface__stool--right" />
+      <div className="alternate-three-surface__chair alternate-three-surface__chair--left" />
+      <div className="alternate-three-surface__chair alternate-three-surface__chair--right" />
       <div className="alternate-three-surface__vignette" />
       <div
         className="alternate-three-surface__shadow"

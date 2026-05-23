@@ -83,6 +83,23 @@ function getSeatStatusTags(seat: SeatView): string[] {
   return tags.slice(0, 3);
 }
 
+function formatSeatPanelLabel(seat: SeatView) {
+  if (seat.isLocalSeat) {
+    return `${seat.title} (YOU)`;
+  }
+  return `${seat.title} (AI)`;
+}
+
+function getSeatTitleBySeatId(
+  seatViews: readonly SeatView[],
+  seatId: string | null
+): string {
+  if (!seatId) {
+    return "None";
+  }
+  return seatViews.find((seat) => seat.seat === seatId)?.title ?? seatId;
+}
+
 function projectedStyle(
   pose: SouthPerspectivePose,
   options?: { width?: number; extraTransform?: string }
@@ -332,6 +349,15 @@ export function AlternateGameTableView(props: GameTableViewProps) {
   const cameraPreset =
     cameraYaw <= -0.35 ? "left" : cameraYaw >= 0.35 ? "right" : "center";
   const statusText = formatAlternatePhaseLabel(props.state.phase);
+  const currentWishLabel =
+    props.derived.currentWish === null ? "None" : formatRank(props.derived.currentWish);
+  const trickSummary = props.displayedTrick
+    ? `${props.displayedTrick.entries.length} played`
+    : "Empty";
+  const dogSummary = props.dogLeadAnimation
+    ? `To ${getSeatTitleBySeatId(props.seatViews, props.dogLeadAnimation.targetSeat)}`
+    : "None";
+  const nextSeatLabel = getSeatTitleBySeatId(props.seatViews, props.derived.activeSeat);
   const scorePose = resolveScorePose(projector);
   const statusPose = resolveStatusPose(projector);
   const northLabelPose = resolveSeatLabelPose(projector, "top");
@@ -382,6 +408,24 @@ export function AlternateGameTableView(props: GameTableViewProps) {
           }
         >
           <div className="alternate-overlay__hud">
+            <section className="alternate-side-panel alternate-side-panel--status">
+              <h2>Table Status</h2>
+              <div className="alternate-side-panel__rows">
+                <div>
+                  <span>Phase</span>
+                  <strong>{statusText}</strong>
+                </div>
+                <div>
+                  <span>Wish</span>
+                  <strong>{currentWishLabel}</strong>
+                </div>
+                <div>
+                  <span>Hint</span>
+                  <strong>{props.localSummaryText || props.controlHint}</strong>
+                </div>
+              </div>
+            </section>
+
             <div className="alternate-camera-controls" role="group" aria-label="Perspective">
               <button
                 type="button"
@@ -443,10 +487,28 @@ export function AlternateGameTableView(props: GameTableViewProps) {
               {props.derived.currentWish ? <strong>Wish {formatRank(props.derived.currentWish)}</strong> : null}
             </div>
 
-            <SeatLabel seat={northSeat} label="NORTH" style={projectedStyle(northLabelPose)} />
-            <SeatLabel seat={westSeat} label="WEST" style={projectedStyle(westLabelPose)} subtle />
-            <SeatLabel seat={eastSeat} label="EAST" style={projectedStyle(eastLabelPose)} subtle />
-            <SeatLabel seat={southSeat} label="SOUTH" style={projectedStyle(southLabelPose)} />
+            <SeatLabel
+              seat={northSeat}
+              label={formatSeatPanelLabel(northSeat)}
+              style={projectedStyle(northLabelPose)}
+            />
+            <SeatLabel
+              seat={westSeat}
+              label={formatSeatPanelLabel(westSeat)}
+              style={projectedStyle(westLabelPose)}
+              subtle
+            />
+            <SeatLabel
+              seat={eastSeat}
+              label={formatSeatPanelLabel(eastSeat)}
+              style={projectedStyle(eastLabelPose)}
+              subtle
+            />
+            <SeatLabel
+              seat={southSeat}
+              label={formatSeatPanelLabel(southSeat)}
+              style={projectedStyle(southLabelPose)}
+            />
 
             <div className="alternate-remote-hand" data-alt-seat="north">
               {Array.from({ length: renderBackCount(northSeat.handCount) }, (_, index) => {
@@ -461,7 +523,7 @@ export function AlternateGameTableView(props: GameTableViewProps) {
                     key={`north-back-${index}`}
                     className="alternate-card-back alternate-card-back--projected"
                     data-alt-card-back="true"
-                    style={projectedStyle(pose, { width: 84 })}
+                    style={projectedStyle(pose, { width: 80 })}
                     aria-hidden="true"
                   />
                 );
@@ -484,7 +546,7 @@ export function AlternateGameTableView(props: GameTableViewProps) {
                     key={`west-back-${index}`}
                     className="alternate-card-back alternate-card-back--projected"
                     data-alt-card-back="true"
-                    style={projectedStyle(pose, { width: 82 })}
+                    style={projectedStyle(pose, { width: 76 })}
                     aria-hidden="true"
                   />
                 );
@@ -507,7 +569,7 @@ export function AlternateGameTableView(props: GameTableViewProps) {
                     key={`east-back-${index}`}
                     className="alternate-card-back alternate-card-back--projected"
                     data-alt-card-back="true"
-                    style={projectedStyle(pose, { width: 82 })}
+                    style={projectedStyle(pose, { width: 76 })}
                     aria-hidden="true"
                   />
                 );
@@ -728,6 +790,28 @@ export function AlternateGameTableView(props: GameTableViewProps) {
                 )}
               </div>
             </div>
+
+            <section className="alternate-side-panel alternate-side-panel--state">
+              <h2>Game State</h2>
+              <div className="alternate-side-panel__rows">
+                <div>
+                  <span>Phase</span>
+                  <strong>{statusText}</strong>
+                </div>
+                <div>
+                  <span>Trick</span>
+                  <strong>{trickSummary}</strong>
+                </div>
+                <div>
+                  <span>Dog</span>
+                  <strong>{dogSummary}</strong>
+                </div>
+                <div>
+                  <span>Next</span>
+                  <strong>{nextSeatLabel}</strong>
+                </div>
+              </div>
+            </section>
           </div>
 
           {props.localDragonRecipients.length > 0 && (

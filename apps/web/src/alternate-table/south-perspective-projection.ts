@@ -76,11 +76,11 @@ export function createSouthPerspectiveProjector(config: {
   const viewportWidth = Math.max(960, config.viewportWidth);
   const viewportHeight = Math.max(640, config.viewportHeight);
   const centerX = viewportWidth / 2;
-  const tableRadiusX = viewportWidth * 0.485;
-  const tableRadiusY = Math.min(viewportHeight * 0.42, tableRadiusX * 0.64);
-  const frontY = viewportHeight * 0.905;
-  const backY = viewportHeight * 0.255;
-  const tableCenterY = (frontY + backY) / 2 + viewportHeight * 0.022;
+  const tableRadiusX = viewportWidth * 0.456;
+  const tableRadiusY = Math.min(viewportHeight * 0.385, tableRadiusX * 0.58);
+  const frontY = viewportHeight * 0.892;
+  const backY = viewportHeight * 0.304;
+  const tableCenterY = (frontY + backY) / 2 + viewportHeight * 0.012;
 
   const geometry: SouthPerspectiveTableGeometry = {
     viewportWidth,
@@ -104,12 +104,12 @@ export function createSouthPerspectiveProjector(config: {
     yaw: clamp(config.yaw, -1, 1),
     projectPoint(point, options) {
       const depth = clamp(point.y, 0, 1);
-      const scale = lerp(1.08, 0.5, easeOutCubic(depth));
-      const compression = lerp(1.02, 0.48, Math.pow(depth, 0.9));
+      const scale = lerp(1.04, 0.52, easeOutCubic(depth));
+      const compression = lerp(0.98, 0.5, Math.pow(depth, 0.9));
       const pathY = lerp(frontY, backY, depth);
-      const bowlLift = Math.sin(depth * Math.PI) * tableRadiusY * 0.09;
-      const sideRise = Math.abs(point.x) * depth * 12;
-      const yawShift = config.yaw * depth * 58;
+      const bowlLift = Math.sin(depth * Math.PI) * tableRadiusY * 0.074;
+      const sideRise = Math.abs(point.x) * depth * 10;
+      const yawShift = config.yaw * depth * 52;
       const screenX = centerX + point.x * tableRadiusX * compression + yawShift;
       const screenY =
         pathY - bowlLift + sideRise - (point.z ?? 0) * 78 * scale;
@@ -134,12 +134,12 @@ export function resolveSouthHandWorldPose(config: {
 }): SouthPerspectiveWorldPoint & { rotation: number } {
   const midpoint = (config.count - 1) / 2;
   const offset = midpoint === 0 ? 0 : (config.index - midpoint) / midpoint;
-  const arcDepth = Math.abs(offset) * 0.06;
+  const arcDepth = Math.abs(offset) * 0.04;
   return {
-    x: offset * 0.56,
-    y: 0.08 + arcDepth,
-    z: config.selected ? 0.18 : 0,
-    rotation: offset * 8.5
+    x: offset * 0.52,
+    y: 0.1 + arcDepth,
+    z: config.selected ? 0.16 : 0,
+    rotation: offset * 6.25
   };
 }
 
@@ -153,19 +153,19 @@ export function resolveRemoteHandWorldPose(config: {
 
   if (config.position === "top") {
     return {
-      x: offset * 0.34,
-      y: 0.91 + Math.abs(offset) * 0.03,
+      x: offset * 0.31,
+      y: 0.88 + Math.abs(offset) * 0.02,
       z: 0,
-      rotation: offset * 5.5
+      rotation: offset * 5
     };
   }
 
   const side = config.position === "left" ? -1 : 1;
   return {
-    x: side * (0.9 - Math.abs(offset) * 0.05),
-    y: 0.66 + offset * 0.12,
+    x: side * (0.86 - Math.abs(offset) * 0.04),
+    y: 0.64 + offset * 0.11,
     z: 0,
-    rotation: side * -68 + offset * side * 10
+    rotation: side * -63 + offset * side * 9
   };
 }
 
@@ -176,12 +176,12 @@ export function resolveSeatLabelPose(
   const anchor = seatAnchor(position);
   const point =
     position === "bottom"
-      ? { x: anchor.x, y: 0.18, z: 0 }
+      ? { x: anchor.x, y: 0.125, z: 0 }
       : position === "top"
-        ? { x: anchor.x, y: 0.84, z: 0 }
+        ? { x: anchor.x, y: 0.82, z: 0 }
         : {
-            x: anchor.x * 0.88,
-            y: anchor.y + 0.02,
+            x: anchor.x * 0.94,
+            y: anchor.y + 0.015,
             z: 0
           };
   const pose = projector.projectPoint(point);
@@ -193,11 +193,11 @@ export function resolveSeatLabelPose(
 }
 
 export function resolveStatusPose(projector: SouthPerspectiveProjector) {
-  return projector.projectPoint({ x: -0.46, y: 0.34, z: 0 });
+  return projector.projectPoint({ x: -0.38, y: 0.35, z: 0 });
 }
 
 export function resolveScorePose(projector: SouthPerspectiveProjector) {
-  return projector.projectPoint({ x: 0, y: 0.98, z: 0 });
+  return projector.projectPoint({ x: 0, y: 0.965, z: 0 });
 }
 
 export function resolveSeatCountPose(
@@ -207,8 +207,8 @@ export function resolveSeatCountPose(
   const anchor = seatAnchor(position);
   const point =
     position === "top"
-      ? { x: anchor.x, y: 0.82, z: 0 }
-      : { x: anchor.x * 0.94, y: anchor.y + 0.12, z: 0 };
+      ? { x: anchor.x, y: 0.78, z: 0 }
+      : { x: anchor.x * 0.98, y: anchor.y + 0.09, z: 0 };
   return projector.projectPoint(point);
 }
 

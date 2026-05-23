@@ -14,6 +14,31 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 
 ## Entries
 
+### 2026-05-22 - Alternate table should tune toward the cinematic wooden-room reference
+
+- Prompt Signal: The latest visual feedback called the immersive table
+  "closer" but attached a more specific target: a cinematic wooden room, a
+  large oval table with visible air around the rim, a flatter and larger south
+  hand, smaller far hands on the back arc, and anchored left/bottom HUD panels
+  that do not steal the table's center.
+- Interpreted Requirement: Keep the normal table untouched and keep the
+  alternate table on the same gameplay/state/action pipeline, but tune the
+  south-perspective projection and overlay composition toward the closer
+  reference image. The alternate renderer should reserve visible room around
+  the ellipse, reduce the south-hand fan angle, add room/backdrop framing,
+  place contextual state panels on the left, and move the core action cluster
+  to the lower-right without bringing back the old text-heavy centered layout.
+- Affected Systems: `apps/web/src/alternate-table/south-perspective-projection.ts`,
+  `apps/web/src/alternate-game-table-view.tsx`,
+  `apps/web/src/alternate-table/three-surface.tsx`,
+  `apps/web/src/styles.css`,
+  `apps/web/src/alternate-table/README.md`,
+  `tests/integration/south-perspective-projection.test.ts`,
+  `tests/integration/alternate-table-view.test.ts`.
+- Linked GitHub Issue: [#81](https://github.com/NeonButrfly/tichuml/issues/81)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.
+
 ### 2026-05-22 - Fresh hosted sessions must not hang on long entropy startup
 
 - Prompt Signal: During direct testing of the Linux-hosted alternate table, the

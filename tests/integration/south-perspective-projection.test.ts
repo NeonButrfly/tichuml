@@ -8,6 +8,22 @@ import {
 } from "../../apps/web/src/alternate-table/south-perspective-projection";
 
 describe("south perspective projection", () => {
+  it("reserves visible room around the table ellipse", () => {
+    const projector = createSouthPerspectiveProjector({
+      viewportWidth: 1600,
+      viewportHeight: 900,
+      yaw: 0
+    });
+
+    expect(projector.geometry.tableRect.left).toBeGreaterThan(55);
+    expect(
+      projector.geometry.viewportWidth -
+        (projector.geometry.tableRect.left + projector.geometry.tableRect.width)
+    ).toBeGreaterThan(55);
+    expect(projector.geometry.tableRect.top).toBeGreaterThan(130);
+    expect(projector.geometry.tableRect.width).toBeLessThan(1500);
+  });
+
   it("projects near cards larger and lower than far cards", () => {
     const projector = createSouthPerspectiveProjector({
       viewportWidth: 1600,
@@ -55,6 +71,8 @@ describe("south perspective projection", () => {
     });
 
     expect(southLeft.y).toBeGreaterThan(southMid.y);
+    expect(southLeft.y - southMid.y).toBeLessThan(0.05);
+    expect(Math.abs(southLeft.rotation)).toBeLessThan(7);
     expect(northMid.y).toBeGreaterThan(southMid.y);
   });
 
