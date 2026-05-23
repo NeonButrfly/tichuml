@@ -609,3 +609,29 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 - Linked GitHub Issue: [#81](https://github.com/NeonButrfly/tichuml/issues/81)
 - Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
 - Status Source: GitHub issue state only.
+
+### 2026-05-22 - Alternate table center cleanup and actual rotation control
+
+- Prompt Signal: The next visual correction rejected the remaining center
+  ornament and gold arc outright, called out the alternate table as still too
+  2D, said it did not feel rotatable, and flagged the south hand plus edge
+  spacing as still not aligned. A follow-up reference image emphasized that the
+  cards should feel seated on one shared perspective plane instead of floating
+  as independent widgets.
+- Interpreted Requirement: Keep the normal table untouched and keep the
+  alternate table on the same live backend/state/action pipeline, but remove
+  the decorative center props, add real bounded camera yaw instead of only
+  left/center/right preset switching, widen the table footprint, and tighten
+  the south hand fan so the cards sit on a cleaner shared plane with less dead
+  border space.
+- Affected Systems: `apps/web/src/alternate-table/three-surface.tsx`,
+  `apps/web/src/alternate-game-table-view.tsx`,
+  `apps/web/src/alternate-table/hand-layout.ts`,
+  `apps/web/src/alternate-table/layout.ts`,
+  `apps/web/src/styles.css`,
+  `apps/web/src/alternate-table/README.md`,
+  `tests/integration/alternate-hand-layout.test.ts`,
+  `tests/integration/alternate-table-view.test.ts`.
+- Linked GitHub Issue: [#81](https://github.com/NeonButrfly/tichuml/issues/81)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.

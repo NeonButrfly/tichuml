@@ -12,7 +12,7 @@ The implementation now uses a hybrid renderer:
 
 - React still owns the gameplay interaction shell.
 - React Three Fiber now draws the alternate 3D table body with a real camera
-  and bounded left / center / right perspective presets.
+  and bounded rotation controls.
 - DOM overlays still own live cards, seat plaques, pass lanes, and actionable
   controls so the existing gameplay handlers remain intact.
 
@@ -28,6 +28,11 @@ The current 3D cohesion pass adds a shared scene-anchor layer in
 `apps/web/src/alternate-table/scene-layout.ts` so the south shelf, north tray,
 side trays, trick bowl, and pass cups all derive from those same projected
 table anchors instead of using alternate-only freehand placement.
+
+The latest rotation/layout pass removes the unused center ornament props,
+replaces the old preset-only camera feel with bounded drag-or-button yaw
+rotation, widens the table footprint, and reworks the south hand fan so the
+cards sit on a cleaner shared plane closer to the reference perspective.
 
 ## Shared Gameplay Path
 
@@ -102,8 +107,8 @@ source rails instead of letting those lanes collapse back toward the center.
 - The luxury surface is still asset-free and procedural, so wood/felt detail is
   stylized rather than photoreal.
 - The current acceptance blocker is no longer scattered seat math; it is final
-  3D material polish, camera-to-overlay cohesion, and the density of the south
-  control shelf.
+  3D material polish, the remaining black headspace above the table, and deeper
+  camera-to-overlay cohesion for the cards themselves.
 - Issue [#81](https://github.com/NeonButrfly/tichuml/issues/81) remains the
   acceptance tracker for spacing and composition polish on live gameplay
   screens.

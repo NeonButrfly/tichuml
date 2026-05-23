@@ -31,4 +31,15 @@ describe("alternate south hand layout", () => {
 
     expect(tightStep).toBeLessThan(wideStep);
   });
+
+  it("keeps the edge cards lower than the center for a cleaner seated fan", () => {
+    const layout = resolveAlternateSouthHandLayout({
+      count: 9,
+      rackWidth: 860,
+      baseCardWidth: 102
+    });
+
+    expect(layout.placements[4]?.liftPx).toBeLessThan(layout.placements[0]!.liftPx);
+    expect(layout.placements[4]?.liftPx).toBeLessThan(layout.placements[8]!.liftPx);
+  });
 });

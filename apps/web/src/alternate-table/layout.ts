@@ -200,23 +200,23 @@ function buildSeatPlacements(config: {
 
     let rackCenter = projectedCenter;
     if (position === "top") {
-      rackCenter = point(projectedCenter.x, projectedCenter.y - config.height * 0.132);
+      rackCenter = point(projectedCenter.x, projectedCenter.y - config.height * 0.148);
     } else if (position === "bottom") {
-      rackCenter = point(projectedCenter.x, projectedCenter.y + config.height * 0.086);
+      rackCenter = point(projectedCenter.x, projectedCenter.y + config.height * 0.104);
     } else if (position === "left") {
-      rackCenter = point(projectedCenter.x - config.width * 0.094, projectedCenter.y);
+      rackCenter = point(projectedCenter.x - config.width * 0.108, projectedCenter.y);
     } else {
-      rackCenter = point(projectedCenter.x + config.width * 0.094, projectedCenter.y);
+      rackCenter = point(projectedCenter.x + config.width * 0.108, projectedCenter.y);
     }
 
     const rackWidth =
       position === "left" || position === "right"
         ? metrics.cardWidth * 1.06
-        : normalSeat.handBounds.width * (position === "bottom" ? 1.02 : 0.78);
+        : normalSeat.handBounds.width * (position === "bottom" ? 1.08 : 0.74);
     const rackHeight =
       position === "left" || position === "right"
-        ? normalSeat.handBounds.height * 0.8
-        : metrics.cardHeight * (position === "bottom" ? 1.22 : 0.84);
+        ? normalSeat.handBounds.height * 0.78
+        : metrics.cardHeight * (position === "bottom" ? 1.16 : 0.78);
 
     const rack = toProjectedRect({
       center: rackCenter,
@@ -390,23 +390,23 @@ export function resolveAlternateTableLayout(config: {
   const yInset = (config.height - fittedHeight) / 2;
 
   const boardRect = roundRect({
-    x: xInset + fittedWidth * 0.004,
-    y: yInset + fittedHeight * 0.008,
-    width: fittedWidth * 0.992,
-    height: fittedHeight * 0.968
+    x: xInset + fittedWidth * 0.002,
+    y: yInset + fittedHeight * 0.004,
+    width: fittedWidth * 0.996,
+    height: fittedHeight * 0.978
   });
 
   const outerFelt = [
-    point(boardRect.x + boardRect.width * 0.232, boardRect.y + boardRect.height * 0.162),
-    point(boardRect.x + boardRect.width * 0.768, boardRect.y + boardRect.height * 0.162),
-    point(boardRect.x + boardRect.width * 0.916, boardRect.y + boardRect.height * 0.84),
-    point(boardRect.x + boardRect.width * 0.084, boardRect.y + boardRect.height * 0.84)
+    point(boardRect.x + boardRect.width * 0.206, boardRect.y + boardRect.height * 0.154),
+    point(boardRect.x + boardRect.width * 0.794, boardRect.y + boardRect.height * 0.154),
+    point(boardRect.x + boardRect.width * 0.948, boardRect.y + boardRect.height * 0.844),
+    point(boardRect.x + boardRect.width * 0.052, boardRect.y + boardRect.height * 0.844)
   ] as const;
   const innerFelt = [
-    point(boardRect.x + boardRect.width * 0.252, boardRect.y + boardRect.height * 0.188),
-    point(boardRect.x + boardRect.width * 0.748, boardRect.y + boardRect.height * 0.188),
-    point(boardRect.x + boardRect.width * 0.892, boardRect.y + boardRect.height * 0.812),
-    point(boardRect.x + boardRect.width * 0.108, boardRect.y + boardRect.height * 0.812)
+    point(boardRect.x + boardRect.width * 0.224, boardRect.y + boardRect.height * 0.182),
+    point(boardRect.x + boardRect.width * 0.776, boardRect.y + boardRect.height * 0.182),
+    point(boardRect.x + boardRect.width * 0.922, boardRect.y + boardRect.height * 0.814),
+    point(boardRect.x + boardRect.width * 0.078, boardRect.y + boardRect.height * 0.814)
   ] as const;
 
   const normalMetrics = computeNormalViewportLayoutMetrics({
@@ -438,8 +438,8 @@ export function resolveAlternateTableLayout(config: {
   );
   const centerEmblemRect = rectFromCenter(
     point(projectedPlaySurfaceCenter.x, projectedPlaySurfaceCenter.y + boardRect.height * 0.01),
-    boardRect.width * 0.34,
-    boardRect.height * 0.28
+    boardRect.width * 0.3,
+    boardRect.height * 0.24
   );
   const scoreRect = roundRect({
     x: boardRect.x + boardRect.width * 0.43,
@@ -469,12 +469,12 @@ export function resolveAlternateTableLayout(config: {
   const southPlaque = seats.bottom.plaque;
   const southControlHeight = boardRect.height * 0.044;
   const southControlRect = roundRect({
-    x: boardRect.x + boardRect.width * 0.31,
+    x: boardRect.x + boardRect.width * 0.315,
     y: Math.min(
-      boardRect.y + boardRect.height - southControlHeight - 8,
-      southPlaque.y + southPlaque.height + 8
+      boardRect.y + boardRect.height - southControlHeight - 6,
+      southPlaque.y + southPlaque.height + 6
     ),
-    width: boardRect.width * 0.38,
+    width: boardRect.width * 0.37,
     height: southControlHeight
   });
 

@@ -19,17 +19,17 @@ export function resolveAlternateSouthHandLayout(config: {
   baseCardWidth: number;
 }): AlternateSouthHandLayout {
   const count = Math.max(0, Math.floor(config.count));
-  const cardWidth = clamp(Math.round(config.baseCardWidth), 84, 112);
+  const cardWidth = clamp(Math.round(config.baseCardWidth), 82, 108);
 
   if (count === 0) {
     return { cardWidth, placements: [] };
   }
 
   const spreadSlots = Math.max(1, count - 1);
-  const usableSpan = Math.max(cardWidth, config.rackWidth - cardWidth * 1.42);
-  const spacing = clamp(usableSpan / spreadSlots, 18, 38);
-  const rotationStep = clamp(15 / spreadSlots, 0.9, 2.3);
-  const liftScale = clamp(cardWidth * 0.07, 5, 9);
+  const usableSpan = Math.max(cardWidth * 1.24, config.rackWidth - cardWidth * 0.86);
+  const spacing = clamp(usableSpan / spreadSlots, 22, 46);
+  const rotationStep = clamp(11.5 / spreadSlots, 0.55, 1.6);
+  const fanDepth = clamp(cardWidth * 0.12, 8, 14);
   const midpoint = (count - 1) / 2;
 
   return {
@@ -40,7 +40,7 @@ export function resolveAlternateSouthHandLayout(config: {
       return {
         offsetPx: normalizedOffset * spacing,
         rotationDeg: normalizedOffset * rotationStep,
-        liftPx: -distance * liftScale
+        liftPx: distance * distance * fanDepth - fanDepth * 0.38
       };
     })
   };

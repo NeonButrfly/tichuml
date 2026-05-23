@@ -1,10 +1,12 @@
 import {
   useEffect,
   useMemo,
+  useCallback,
   useRef,
   useState,
   type CSSProperties,
-  type DragEvent as ReactDragEvent
+  type DragEvent as ReactDragEvent,
+  type PointerEvent as ReactPointerEvent
 } from "react";
 import type { Card } from "@tichuml/engine";
 import {
@@ -21,6 +23,16 @@ import {
   AlternateTableThreeSurface,
   type AlternateCameraPreset
 } from "./alternate-table/three-surface";
+
+function clamp(value: number, minimum: number, maximum: number) {
+  return Math.min(maximum, Math.max(minimum, value));
+}
+
+const CAMERA_YAW_BY_PRESET: Record<AlternateCameraPreset, number> = {
+  left: -1,
+  center: 0,
+  right: 1
+};
 
 function getSeatByPosition(
   seatViews: readonly SeatView[],
@@ -322,9 +334,10 @@ export function AlternateGameTableView(props: GameTableViewProps) {
   const weScore = getScoreValue(props.derived.matchScore, "team-0");
   const theyScore = getScoreValue(props.derived.matchScore, "team-1");
   const stageRef = useRef<HTMLDivElement | null>(null);
+  const dragStateRef = useRef<{ pointerId: number; startX: number; startYaw: number } | null>(null);
   const [stageSize, setStageSize] = useState({ width: 1440, height: 920 });
-  const [cameraPreset, setCameraPreset] =
-    useState<AlternateCameraPreset>("center");
+  const [cameraYaw, setCameraYaw] = useState(0);
+  const [isStageRotating, setIsStageRotating] = useState(false);
 
   useEffect(() => {
     if (!stageRef.current) {
@@ -349,6 +362,66 @@ export function AlternateGameTableView(props: GameTableViewProps) {
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
+
+  const cameraPreset =
+    cameraYaw <= -0.35 ? "left" : cameraYaw >= 0.35 ? "right" : "center";
+
+  const overlayPerspectiveStyle = {
+    "--alt-camera-yaw": `${cameraYaw}`
+  } as CSSProperties;
+
+  const handleCameraPresetSelect = useCallback((preset: AlternateCameraPreset) => {
+    setCameraYaw(CAMERA_YAW_BY_PRESET[preset]);
+  }, []);
+
+  const handleStagePointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLElement>) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.closest(
+          "button, .playing-card, [data-alt-pass-route], .alternate-choice-panel, [data-menu-surface]"
+        )
+      ) {
+        return;
+      }
+      dragStateRef.current = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startYaw: cameraYaw
+      };
+      setIsStageRotating(true);
+      event.currentTarget.setPointerCapture(event.pointerId);
+    },
+    [cameraYaw]
+  );
+
+  const handleStagePointerMove = useCallback(
+    (event: ReactPointerEvent<HTMLElement>) => {
+      const dragState = dragStateRef.current;
+      if (!dragState || dragState.pointerId !== event.pointerId) {
+        return;
+      }
+      const delta = event.clientX - dragState.startX;
+      const yawDelta = delta / Math.max(280, stageSize.width * 0.26);
+      setCameraYaw(clamp(dragState.startYaw + yawDelta, -1, 1));
+    },
+    [stageSize.width]
+  );
+
+  const handleStagePointerUp = useCallback(
+    (event: ReactPointerEvent<HTMLElement>) => {
+      const dragState = dragStateRef.current;
+      if (!dragState || dragState.pointerId !== event.pointerId) {
+        return;
+      }
+      dragStateRef.current = null;
+      setIsStageRotating(false);
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+    },
+    []
+  );
 
   const showPassRoutes =
     props.passRouteViews.length > 0 &&
@@ -414,17 +487,27 @@ export function AlternateGameTableView(props: GameTableViewProps) {
         onPlayerTableVariantChange={props.onPlayerTableVariantChange}
       />
 
-      <section className="alternate-stage" ref={stageRef}>
+      <section
+        className={[
+          "alternate-stage",
+          isStageRotating ? "is-rotating" : ""
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        ref={stageRef}
+        onPointerDown={handleStagePointerDown}
+        onPointerMove={handleStagePointerMove}
+        onPointerUp={handleStagePointerUp}
+        onPointerCancel={handleStagePointerUp}
+      >
         <AlternateTableThreeSurface
           layout={layout}
-          cameraPreset={cameraPreset}
+          cameraYaw={cameraYaw}
         />
 
         <div
-          className={[
-            "alternate-overlay",
-            `alternate-overlay--camera-${cameraPreset}`
-          ].join(" ")}
+          className="alternate-overlay"
+          style={overlayPerspectiveStyle}
         >
           <div className="alternate-overlay__hud">
             <div className="alternate-camera-controls" role="group" aria-label="Perspective">
@@ -436,9 +519,10 @@ export function AlternateGameTableView(props: GameTableViewProps) {
                 ]
                   .filter(Boolean)
                   .join(" ")}
-                onClick={() => setCameraPreset("left")}
+                aria-label="Rotate left"
+                onClick={() => handleCameraPresetSelect("left")}
               >
-                Left View
+                ◀
               </button>
               <button
                 type="button"
@@ -448,9 +532,10 @@ export function AlternateGameTableView(props: GameTableViewProps) {
                 ]
                   .filter(Boolean)
                   .join(" ")}
-                onClick={() => setCameraPreset("center")}
+                aria-label="Center view"
+                onClick={() => handleCameraPresetSelect("center")}
               >
-                Center View
+                ●
               </button>
               <button
                 type="button"
@@ -460,9 +545,10 @@ export function AlternateGameTableView(props: GameTableViewProps) {
                 ]
                   .filter(Boolean)
                   .join(" ")}
-                onClick={() => setCameraPreset("right")}
+                aria-label="Rotate right"
+                onClick={() => handleCameraPresetSelect("right")}
               >
-                Right View
+                ▶
               </button>
             </div>
 
@@ -479,12 +565,7 @@ export function AlternateGameTableView(props: GameTableViewProps) {
             </div>
           </div>
 
-          <div
-            className={[
-              "alternate-overlay__table",
-              `alternate-overlay__table--camera-${cameraPreset}`
-            ].join(" ")}
-          >
+          <div className="alternate-overlay__table">
             <div className="alternate-status-plaque" style={rectStyle(layout.statusRect)}>
               <span>{statusText}</span>
               {props.derived.currentWish ? <strong>Wish {formatRank(props.derived.currentWish)}</strong> : null}

@@ -5134,7 +5134,7 @@ body.normal-layout-locked {
   position: relative;
   min-height: 100vh;
   overflow: hidden;
-  padding: 16px 18px;
+  padding: 6px 8px;
   background:
     radial-gradient(circle at 20% 12%, rgba(255, 205, 123, 0.14), transparent 22%),
     radial-gradient(circle at 78% 10%, rgba(111, 165, 145, 0.1), transparent 18%),
@@ -5161,10 +5161,15 @@ body.normal-layout-locked {
 .alternate-stage {
   position: relative;
   z-index: 1;
-  width: min(99vw, 1820px);
-  height: min(96vh, 1020px);
+  width: min(100vw, 1860px);
+  height: min(98vh, 1040px);
   min-height: 720px;
   margin: 0 auto;
+  cursor: grab;
+}
+
+.alternate-stage.is-rotating {
+  cursor: grabbing;
 }
 
 .alternate-three-surface,
@@ -5199,25 +5204,20 @@ body.normal-layout-locked {
 .alternate-overlay__table {
   transform-origin: 50% 54%;
   transition: transform 220ms ease, filter 220ms ease;
-}
-
-.alternate-overlay__table--camera-left {
-  transform: perspective(1900px) rotateY(5.6deg) translateX(8px) scale(0.992);
-  filter: saturate(1.02);
-}
-
-.alternate-overlay__table--camera-right {
-  transform: perspective(1900px) rotateY(-5.6deg) translateX(-8px) scale(0.992);
-  filter: saturate(1.02);
+  transform:
+    perspective(2200px)
+    rotateY(calc(var(--alt-camera-yaw, 0) * -7deg))
+    translateX(calc(var(--alt-camera-yaw, 0) * 12px))
+    scale(0.994);
 }
 
 .alternate-camera-controls {
   position: absolute;
-  top: 22px;
-  right: 28px;
+  top: 16px;
+  right: 18px;
   z-index: 6;
   display: flex;
-  gap: 8px;
+  gap: 6px;
 }
 
 .alternate-camera-button {
@@ -5376,20 +5376,20 @@ body.normal-layout-locked {
   transform-origin: center center;
 }
 
-.alternate-overlay__table--camera-left .alternate-remote-rack--west {
-  transform: translateX(-6px);
+.alternate-remote-rack--west {
+  transform:
+    translateX(calc(var(--alt-camera-yaw, 0) * 6px))
+    rotateY(calc(var(--alt-camera-yaw, 0) * -4deg));
 }
 
-.alternate-overlay__table--camera-left .alternate-remote-rack--east {
-  transform: translateX(4px);
+.alternate-remote-rack--east {
+  transform:
+    translateX(calc(var(--alt-camera-yaw, 0) * -6px))
+    rotateY(calc(var(--alt-camera-yaw, 0) * -4deg));
 }
 
-.alternate-overlay__table--camera-right .alternate-remote-rack--west {
-  transform: translateX(-4px);
-}
-
-.alternate-overlay__table--camera-right .alternate-remote-rack--east {
-  transform: translateX(6px);
+.alternate-remote-rack--north {
+  transform: translateX(calc(var(--alt-camera-yaw, 0) * -6px));
 }
 
 .alternate-remote-rack__cards {
@@ -5520,6 +5520,10 @@ body.normal-layout-locked {
   overflow: visible;
   transform-origin: center bottom;
   transition: transform 220ms ease;
+  transform:
+    translateX(calc(var(--alt-camera-yaw, 0) * -10px))
+    translateY(1px)
+    rotateY(calc(var(--alt-camera-yaw, 0) * -3deg));
 }
 
 .alternate-south-hand__card-shell {
@@ -5542,14 +5546,6 @@ body.normal-layout-locked {
     0 0 28px rgba(255, 213, 129, 0.26);
 }
 
-.alternate-overlay__table--camera-left .alternate-south-hand {
-  transform: translateX(10px) translateY(2px);
-}
-
-.alternate-overlay__table--camera-right .alternate-south-hand {
-  transform: translateX(-10px) translateY(2px);
-}
-
 .alternate-controls {
   position: absolute;
   display: grid;
@@ -5560,12 +5556,8 @@ body.normal-layout-locked {
   transition: transform 220ms ease;
 }
 
-.alternate-overlay__table--camera-left .alternate-controls {
-  transform: translateX(8px);
-}
-
-.alternate-overlay__table--camera-right .alternate-controls {
-  transform: translateX(-8px);
+.alternate-controls {
+  transform: translateX(calc(var(--alt-camera-yaw, 0) * -8px));
 }
 
 .alternate-controls__primary,
