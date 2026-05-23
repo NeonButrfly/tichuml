@@ -8,26 +8,32 @@ rules, and action dispatch pipeline.
 
 ## Renderer Choice
 
-The implementation now uses a projection-driven hybrid renderer:
+The implementation now uses a projection-driven Phaser scene:
 
-- React still owns the gameplay interaction shell and all live actions.
+- React still owns the gameplay interaction shell, routing, and all live
+  actions.
 - `apps/web/src/alternate-table/south-perspective-projection.ts` is the pure
   fake-perspective module. It projects logical table-space coordinates into
   screen positions, scale, rotation, and shadow values.
-- `apps/web/src/alternate-table/three-surface.tsx` now acts as the immersive
-  oval tabletop surface rather than a separate decorative scene.
-- DOM overlays still own the real cards, pass routes, and buttons so the
-  existing gameplay handlers remain intact.
+- `apps/web/src/alternate-table/phaser-surface.tsx` mounts the alternate
+  Phaser scene and redraws the table, seats, remote hands, pass routes, trick
+  cards, and south hand on one shared scene plane.
+- The same host also keeps a procedural canvas fallback underneath the Phaser
+  canvas so the alternate table still presents as one coherent scene if Phaser
+  fails to initialize in a given browser environment.
+- `apps/web/src/alternate-game-table-view.tsx` now supplies a minimal DOM layer
+  for reliable hit targets, action buttons, and phase-specific dialogs while
+  the visible tabletop itself is rendered in Phaser.
 
 This keeps the real gameplay pipeline intact while making the alternate table
-behave like a single low south-camera board instead of a collection of overlay
+behave like one staged south-camera scene rather than a stack of projected DOM
 panels.
 
-The latest tuning pass also pushes the alternate table toward the attached
-wooden-room reference: a smaller far arc, a flatter and more readable south
-hand, room/backdrop framing around the oval table, left-side status/state
-panels, and a bottom-right action cluster so the viewport reads like one staged
-play area instead of a centered debug board.
+The current visual target is the attached low-camera wooden-table reference:
+a broad oval tabletop filling most of the viewport, a near upright south hand,
+smaller far hands on the back arc, trick cards resting on the tabletop with
+soft shadows, and only a small amount of supporting chrome above the play
+surface.
 
 ## Shared Gameplay Path
 
@@ -37,6 +43,8 @@ play area instead of a centered debug board.
   `apps/web/src/game-table-view-model.ts`.
 - The alternate renderer lives in
   `apps/web/src/alternate-game-table-view.tsx`.
+- The Phaser scene host lives in
+  `apps/web/src/alternate-table/phaser-surface.tsx`.
 - The normal renderer remains in
   `apps/web/src/game-table-views.tsx`.
 
@@ -99,13 +107,11 @@ smaller and higher, and horizontal spread compresses with depth.
 ## Known Limitations
 
 - The alternate table intentionally keeps event/state summaries minimal so the
-  felt, trick area, and south rail remain the dominant visual surface.
-- The luxury surface is still asset-free and procedural, so the wood grain is
-  stylized rather than photoreal.
-- The current acceptance blocker is no longer geometry drift. The remaining
-  work is mostly finish work: finer material treatment, stronger shared-plane
-  card rendering, and more phase-by-phase polish for passing and trick
-  resolution.
+  tabletop remains the dominant visual surface.
+- The Phaser scene is still procedural and asset-free, so the room and wood
+  finish are stylized rather than photoreal.
+- The current acceptance blocker is finish quality, not gameplay plumbing:
+  material richness, per-phase trick/pass polish, and continued camera tuning
+  still need iteration against issue `#81`.
 - Issue [#81](https://github.com/NeonButrfly/tichuml/issues/81) remains the
-  acceptance tracker for spacing and composition polish on live gameplay
-  screens.
+  acceptance tracker for live composition and polish on the immersive table.

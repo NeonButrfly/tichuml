@@ -683,3 +683,24 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 - Linked GitHub Issue: [#81](https://github.com/NeonButrfly/tichuml/issues/81)
 - Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
 - Status Source: GitHub issue state only.
+
+### 2026-05-22 - Alternate table should move from projected DOM cards to a Phaser-owned scene
+
+- Prompt Signal: After reviewing the closer wooden-table reference, the follow-up
+  prompt explicitly approved a Phaser pivot and clarified that the real problem
+  was the table body and cards not living on the same perspective plane.
+- Interpreted Requirement: Keep the normal table untouched and keep the
+  alternate table on the same live backend/state/action/telemetry path, but
+  replace the alternate visual body with a Phaser scene that owns the room,
+  table, remote hands, trick cards, pass lanes, and south hand rendering. React
+  may remain only for minimal hit targets, action buttons, and phase dialogs.
+- Affected Systems: `apps/web/src/alternate-game-table-view.tsx`,
+  `apps/web/src/alternate-table/phaser-surface.tsx`,
+  `apps/web/src/alternate-table/south-perspective-projection.ts`,
+  `apps/web/package.json`,
+  `apps/web/src/styles.css`,
+  `apps/web/src/alternate-table/README.md`,
+  `tests/integration/alternate-table-view.test.ts`.
+- Linked GitHub Issue: [#81](https://github.com/NeonButrfly/tichuml/issues/81)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.
