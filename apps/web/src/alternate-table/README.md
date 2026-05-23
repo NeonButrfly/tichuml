@@ -19,6 +19,11 @@ The implementation now uses a hybrid renderer:
 This keeps the real gameplay pipeline intact while moving the visual weight off
 the earlier CSS-only panel stack.
 
+The latest layout pass also stops inventing separate seat geometry for the
+alternate renderer. Seat racks, south-hand span, and pass-route placement now
+derive from the normal table's live hand bounds and canonical pass-lane
+anchors before being projected onto the perspective luxury surface.
+
 ## Shared Gameplay Path
 
 - Controller and action plumbing still live in
@@ -72,8 +77,10 @@ non-South pass selections through the engine, and leaves the local South seat
 as the live `select_pass` actor.
 
 Focused layout regression checks now live in
-`tests/integration/alternate-table-layout.test.ts` so the widened felt and
-stronger top-versus-bottom perspective do not silently drift backward.
+`tests/integration/alternate-table-layout.test.ts` and
+`tests/integration/alternate-hand-layout.test.ts` so the anchor-driven felt
+coverage, pass-lane clearance, and south-hand compression do not silently drift
+backward.
 
 ## Known Limitations
 
@@ -81,6 +88,8 @@ stronger top-versus-bottom perspective do not silently drift backward.
   felt, trick area, and south rail remain the dominant visual surface.
 - The luxury surface is still asset-free and procedural, so wood/felt detail is
   stylized rather than photoreal.
+- The current acceptance blocker is no longer scattered seat math; it is final
+  visual polish of the rail surface and the density of the south control shelf.
 - Issue [#81](https://github.com/NeonButrfly/tichuml/issues/81) remains the
   acceptance tracker for spacing and composition polish on live gameplay
   screens.

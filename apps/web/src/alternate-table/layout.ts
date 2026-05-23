@@ -1,10 +1,15 @@
+import type { PassRouteView, SeatView } from "../game-table-views";
 import {
   NORMAL_PASS_STAGE_MAP,
-  type PassRouteView,
-  type SeatView,
+  computeNormalViewportLayoutMetrics,
+  getBoardBounds,
+  resolveNormalBoardAnchorPoint,
+  resolveNormalPassLaneGeometry,
+  resolveNormalSeatAnchorGeometry,
+  type NormalTableLayout,
   type PassLaneDirection,
   type SeatVisualPosition
-} from "../game-table-views";
+} from "../table-layout";
 
 export type Rect = {
   x: number;
@@ -58,12 +63,17 @@ export type AlternateTableLayout = {
   statusRect: Rect;
   scoreRect: Rect;
   southControlRect: Rect;
+  southHandCardWidth: number;
   seats: Record<SeatVisualPosition, AlternateSeatPlacement>;
   trickPlacements: Record<SeatVisualPosition, AlternateTrickPlacement>;
   passRoutes: AlternatePassRoutePlacement[];
 };
 
-const TABLE_ASPECT_RATIO = 1.78;
+const TABLE_ASPECT_RATIO = 1.75;
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(maximum, Math.max(minimum, value));
+}
 
 function roundRect(rect: Rect): Rect {
   return {
@@ -75,230 +85,270 @@ function roundRect(rect: Rect): Rect {
 }
 
 function point(x: number, y: number): Point {
-  return { x: Math.round(x), y: Math.round(y) };
+  return { x, y };
 }
 
-function buildSeatPlacements(width: number, height: number) {
-  return {
-    top: {
-      plaque: roundRect({
-        x: width * 0.41,
-        y: height * 0.046,
-        width: width * 0.18,
-        height: height * 0.034
-      }),
-      rack: roundRect({
-        x: width * 0.392,
-        y: height * 0.09,
-        width: width * 0.216,
-        height: height * 0.064
-      }),
-      depthScale: 0.82
-    },
-    left: {
-      plaque: roundRect({
-        x: width * 0.016,
-        y: height * 0.338,
-        width: width * 0.032,
-        height: height * 0.152
-      }),
-      rack: roundRect({
-        x: width * 0.052,
-        y: height * 0.242,
-        width: width * 0.072,
-        height: height * 0.386
-      }),
-      depthScale: 0.92
-    },
-    right: {
-      plaque: roundRect({
-        x: width * 0.952,
-        y: height * 0.338,
-        width: width * 0.032,
-        height: height * 0.152
-      }),
-      rack: roundRect({
-        x: width * 0.876,
-        y: height * 0.242,
-        width: width * 0.072,
-        height: height * 0.386
-      }),
-      depthScale: 0.92
-    },
-    bottom: {
-      plaque: roundRect({
-        x: width * 0.4,
-        y: height * 0.786,
-        width: width * 0.2,
-        height: height * 0.048
-      }),
-      rack: roundRect({
-        x: width * 0.18,
-        y: height * 0.592,
-        width: width * 0.64,
-        height: height * 0.15
-      }),
-      depthScale: 1
-    }
-  } satisfies Record<SeatVisualPosition, AlternateSeatPlacement>;
+function roundPoint(value: Point): Point {
+  return point(Math.round(value.x), Math.round(value.y));
 }
 
-function getPassClusterCenter(
-  sourcePosition: SeatVisualPosition,
-  width: number,
-  height: number
-): Point {
-  switch (sourcePosition) {
-    case "top":
-      return point(width * 0.5, height * 0.188);
-    case "right":
-      return point(width * 0.83, height * 0.46);
-    case "bottom":
-      return point(width * 0.5, height * 0.652);
-    case "left":
-      return point(width * 0.17, height * 0.46);
-  }
-}
-
-function getPassSlotMetrics(
-  sourcePosition: SeatVisualPosition,
-  width: number,
-  height: number
-) {
-  if (sourcePosition === "left" || sourcePosition === "right") {
-    return {
-      slotWidth: width * 0.036,
-      slotHeight: height * 0.096,
-      spread: height * 0.114,
-      centerNudge: width * 0.02
-    };
-  }
-
-  return {
-    slotWidth: width * 0.048,
-    slotHeight: height * 0.098,
-    spread: width * 0.094,
-    rise: height * 0.036
-  };
-}
-
-function getPassSlotRect(
-  sourcePosition: SeatVisualPosition,
-  slotIndex: number,
+function rectFromCenter(
+  center: Point,
   width: number,
   height: number
 ): Rect {
-  const center = getPassClusterCenter(sourcePosition, width, height);
-  if (sourcePosition === "left" || sourcePosition === "right") {
-    const metrics = getPassSlotMetrics(sourcePosition, width, height) as {
-      slotWidth: number;
-      slotHeight: number;
-      spread: number;
-      centerNudge: number;
-    };
-    const xOffset =
-      slotIndex === 1
-        ? sourcePosition === "left"
-          ? metrics.centerNudge
-          : -metrics.centerNudge
-        : 0;
-    const yOffset = slotIndex === 0 ? -metrics.spread : slotIndex === 2 ? metrics.spread : 0;
-
-    return roundRect({
-      x: center.x + xOffset - metrics.slotWidth / 2,
-      y: center.y + yOffset - metrics.slotHeight / 2,
-      width: metrics.slotWidth,
-      height: metrics.slotHeight
-    });
-  }
-
-  const metrics = getPassSlotMetrics(sourcePosition, width, height) as {
-    slotWidth: number;
-    slotHeight: number;
-    spread: number;
-    rise: number;
-  };
-  const xOffset = slotIndex === 0 ? -metrics.spread : slotIndex === 2 ? metrics.spread : 0;
-  const yOffset = slotIndex === 1 ? -metrics.rise : 0;
-
   return roundRect({
-    x: center.x + xOffset - metrics.slotWidth / 2,
-    y: center.y + yOffset - metrics.slotHeight / 2,
-    width: metrics.slotWidth,
-    height: metrics.slotHeight
+    x: center.x - width / 2,
+    y: center.y - height / 2,
+    width,
+    height
   });
 }
 
-function getPassSlotRotation(
-  sourcePosition: SeatVisualPosition,
-  slotIndex: number
-): number {
-  if (sourcePosition === "top") {
-    return slotIndex === 0 ? -10 : slotIndex === 2 ? 10 : 0;
-  }
-  if (sourcePosition === "bottom") {
-    return slotIndex === 0 ? -10 : slotIndex === 2 ? 10 : 0;
-  }
-  return 0;
+function lerp(start: number, end: number, weight: number): number {
+  return start + (end - start) * weight;
 }
 
-export function resolveAlternateTableLayout(
-  width: number,
-  height: number,
-  seatViews: readonly SeatView[],
-  passRouteViews: readonly PassRouteView[]
-): AlternateTableLayout {
-  const fittedWidth = Math.min(width, height * TABLE_ASPECT_RATIO);
-  const fittedHeight = Math.min(height, width / TABLE_ASPECT_RATIO);
-  const xInset = (width - fittedWidth) / 2;
-  const yInset = (height - fittedHeight) / 2;
+function lerpPoint(first: Point, second: Point, weight: number): Point {
+  return point(lerp(first.x, second.x, weight), lerp(first.y, second.y, weight));
+}
 
-  const boardRect = roundRect({
-    x: xInset + fittedWidth * 0.01,
-    y: yInset + fittedHeight * 0.008,
-    width: fittedWidth * 0.98,
-    height: fittedHeight * 0.952
+function parsePx(value: unknown): number {
+  return typeof value === "string" ? Number.parseFloat(value) || 0 : 0;
+}
+
+function depthScaleForY(normalY: number, boardBounds: ReturnType<typeof getBoardBounds>) {
+  const v = clamp((normalY - boardBounds.top) / Math.max(1, boardBounds.height), 0, 1);
+  return lerp(0.72, 1.04, v);
+}
+
+function projectBoardPoint(
+  anchor: Point,
+  boardBounds: ReturnType<typeof getBoardBounds>,
+  quad: readonly [Point, Point, Point, Point]
+): Point {
+  const u = clamp((anchor.x - boardBounds.left) / Math.max(1, boardBounds.width), 0, 1);
+  const v = clamp((anchor.y - boardBounds.top) / Math.max(1, boardBounds.height), 0, 1);
+  const leftEdge = lerpPoint(quad[0], quad[3], v);
+  const rightEdge = lerpPoint(quad[1], quad[2], v);
+  return lerpPoint(leftEdge, rightEdge, u);
+}
+
+function toProjectedRect(config: {
+  center: Point;
+  width: number;
+  height: number;
+  normalY: number;
+  boardBounds: ReturnType<typeof getBoardBounds>;
+  widthScale?: number;
+  heightScale?: number;
+}) {
+  const scale = depthScaleForY(config.normalY, config.boardBounds);
+  return rectFromCenter(
+    config.center,
+    config.width * scale * (config.widthScale ?? 1),
+    config.height * scale * (config.heightScale ?? 1)
+  );
+}
+
+function buildSeatPlacements(config: {
+  seatViews: readonly SeatView[];
+  normalTableLayout: NormalTableLayout;
+  boardBounds: ReturnType<typeof getBoardBounds>;
+  outerFelt: readonly [Point, Point, Point, Point];
+  hasVariantPicker: boolean;
+  hasWishPicker: boolean;
+  width: number;
+  height: number;
+}): { seats: Record<SeatVisualPosition, AlternateSeatPlacement>; southHandCardWidth: number } {
+  const metrics = computeNormalViewportLayoutMetrics({
+    viewportWidth: config.width,
+    viewportHeight: config.height,
+    topCount: config.seatViews.find((seat) => seat.position === "top")?.handCount ?? 0,
+    bottomCount: config.seatViews.find((seat) => seat.position === "bottom")?.handCount ?? 0,
+    leftCount: config.seatViews.find((seat) => seat.position === "left")?.handCount ?? 0,
+    rightCount: config.seatViews.find((seat) => seat.position === "right")?.handCount ?? 0,
+    hasVariantPicker: config.hasVariantPicker,
+    hasWishPicker: config.hasWishPicker
   });
 
-  const boardWidth = boardRect.width;
-  const boardHeight = boardRect.height;
+  const placements = {} as Record<SeatVisualPosition, AlternateSeatPlacement>;
+  const positions: SeatVisualPosition[] = ["top", "left", "right", "bottom"];
 
-  const localWidth = boardWidth;
-  const localHeight = boardHeight;
-  const boardOffsetX = boardRect.x;
-  const boardOffsetY = boardRect.y;
+  for (const position of positions) {
+    const seat = config.seatViews.find((entry) => entry.position === position);
+    if (!seat) {
+      continue;
+    }
 
-  const seats = buildSeatPlacements(localWidth, localHeight);
-  const seatPositionBySeat = new Map(seatViews.map((seat) => [seat.seat, seat.position] as const));
+    const normalSeat = resolveNormalSeatAnchorGeometry({
+      position,
+      normalTableLayout: config.normalTableLayout,
+      layoutMetrics: metrics,
+      handCardCount: seat.handCount
+    });
+    const projectedCenter = projectBoardPoint(
+      point(normalSeat.handBounds.center.x, normalSeat.handBounds.center.y),
+      config.boardBounds,
+      config.outerFelt
+    );
+    const projectedLabel = projectBoardPoint(
+      point(normalSeat.label.x, normalSeat.label.y),
+      config.boardBounds,
+      config.outerFelt
+    );
+    const depthScale = depthScaleForY(normalSeat.handBounds.center.y, config.boardBounds);
 
-  const passRoutes = passRouteViews.flatMap((route) => {
+    let rackCenter = projectedCenter;
+    if (position === "top") {
+      rackCenter = point(projectedCenter.x, projectedCenter.y - config.height * 0.058);
+    } else if (position === "bottom") {
+      rackCenter = point(projectedCenter.x, projectedCenter.y + config.height * 0.022);
+    } else if (position === "left") {
+      rackCenter = point(projectedCenter.x - config.width * 0.026, projectedCenter.y);
+    } else {
+      rackCenter = point(projectedCenter.x + config.width * 0.026, projectedCenter.y);
+    }
+
+    const rackWidth =
+      position === "left" || position === "right"
+        ? metrics.cardWidth * 1.22
+        : normalSeat.handBounds.width * (position === "bottom" ? 1.02 : 0.84);
+    const rackHeight =
+      position === "left" || position === "right"
+        ? normalSeat.handBounds.height * 0.88
+        : metrics.cardHeight * (position === "bottom" ? 1.28 : 0.92);
+
+    const rack = toProjectedRect({
+      center: rackCenter,
+      width: rackWidth,
+      height: rackHeight,
+      normalY: normalSeat.handBounds.center.y,
+      boardBounds: config.boardBounds,
+      widthScale: position === "bottom" ? 1.02 : 1,
+      heightScale: position === "bottom" ? 1.02 : 1
+    });
+
+    const plaqueWidth =
+      position === "left" || position === "right"
+        ? metrics.cardWidth * 0.82
+        : metrics.cardWidth * 2.32;
+    const plaqueHeight =
+      position === "left" || position === "right"
+        ? metrics.cardHeight * 1.72
+        : metrics.cardHeight * 0.44;
+
+    let plaqueCenter = projectedLabel;
+    if (position === "top") {
+      plaqueCenter = point(rack.x + rack.width / 2, rack.y - plaqueHeight * 0.7);
+    } else if (position === "bottom") {
+      plaqueCenter = point(rack.x + rack.width / 2, rack.y + rack.height + plaqueHeight * 0.92);
+    } else if (position === "left") {
+      plaqueCenter = point(rack.x - plaqueWidth * 0.74, rack.y + rack.height / 2);
+    } else {
+      plaqueCenter = point(rack.x + rack.width + plaqueWidth * 0.74, rack.y + rack.height / 2);
+    }
+
+    const plaque = toProjectedRect({
+      center: plaqueCenter,
+      width: plaqueWidth,
+      height: plaqueHeight,
+      normalY: normalSeat.label.y,
+      boardBounds: config.boardBounds,
+      widthScale: position === "top" ? 0.96 : 1,
+      heightScale: position === "top" ? 0.92 : 1
+    });
+
+    placements[position] = { plaque, rack, depthScale };
+  }
+
+  return {
+    seats: placements,
+    southHandCardWidth: clamp(Math.round(metrics.cardWidth * 1.08), 84, 112)
+  };
+}
+
+function buildPassRoutePlacements(config: {
+  passRouteViews: readonly PassRouteView[];
+  seatViews: readonly SeatView[];
+  normalTableLayout: NormalTableLayout;
+  boardBounds: ReturnType<typeof getBoardBounds>;
+  outerFelt: readonly [Point, Point, Point, Point];
+  width: number;
+  height: number;
+  hasVariantPicker: boolean;
+  hasWishPicker: boolean;
+}): AlternatePassRoutePlacement[] {
+  const seatPositionBySeat = new Map(
+    config.seatViews.map((seat) => [seat.seat, seat.position] as const)
+  );
+  const metrics = computeNormalViewportLayoutMetrics({
+    viewportWidth: config.width,
+    viewportHeight: config.height,
+    topCount: config.seatViews.find((seat) => seat.position === "top")?.handCount ?? 0,
+    bottomCount: config.seatViews.find((seat) => seat.position === "bottom")?.handCount ?? 0,
+    leftCount: config.seatViews.find((seat) => seat.position === "left")?.handCount ?? 0,
+    rightCount: config.seatViews.find((seat) => seat.position === "right")?.handCount ?? 0,
+    hasVariantPicker: config.hasVariantPicker,
+    hasWishPicker: config.hasWishPicker
+  });
+
+  return config.passRouteViews.flatMap((route) => {
     const targetPosition = seatPositionBySeat.get(route.targetSeat);
     if (!targetPosition) {
       return [];
     }
 
-    const laneSpecs = NORMAL_PASS_STAGE_MAP[route.sourcePosition];
-    const slotIndex = laneSpecs.findIndex((spec) => spec.targetPosition === targetPosition);
-    if (slotIndex === -1) {
+    const direction =
+      NORMAL_PASS_STAGE_MAP[route.sourcePosition].find(
+        (entry) => entry.targetPosition === targetPosition
+      )?.direction ?? "up";
+    const geometry = resolveNormalPassLaneGeometry({
+      normalTableLayout: config.normalTableLayout,
+      layoutMetrics: metrics,
+      sourcePosition: route.sourcePosition,
+      targetPosition,
+      direction,
+      sourceHandCardCount:
+        config.seatViews.find((seat) => seat.position === route.sourcePosition)?.handCount ?? 1,
+      displayMode: route.displayMode,
+      stackAlignment:
+        route.displayMode === "pickup" &&
+        (route.sourcePosition === "left" || route.sourcePosition === "right")
+          ? "centerline"
+          : "shared-edge"
+    });
+
+    if (!geometry) {
       return [];
     }
 
-    const spec = laneSpecs[slotIndex]!;
-    const rect = getPassSlotRect(route.sourcePosition, slotIndex, localWidth, localHeight);
+    const center = point(parsePx(geometry.style.left), parsePx(geometry.style.top));
+    let projectedCenter = projectBoardPoint(center, config.boardBounds, config.outerFelt);
+    const scale = depthScaleForY(center.y, config.boardBounds);
+
+    if (route.sourcePosition === "top") {
+      projectedCenter = point(projectedCenter.x, projectedCenter.y - config.height * 0.045);
+    } else if (route.sourcePosition === "bottom") {
+      projectedCenter = point(projectedCenter.x, projectedCenter.y + config.height * 0.038);
+    } else if (route.sourcePosition === "left") {
+      projectedCenter = point(projectedCenter.x - config.width * 0.022, projectedCenter.y);
+    } else {
+      projectedCenter = point(projectedCenter.x + config.width * 0.022, projectedCenter.y);
+    }
 
     return [
       {
         key: route.key,
         sourcePosition: route.sourcePosition,
         targetPosition,
-        direction: spec.direction,
-        rect: roundRect({
-          x: boardOffsetX + rect.x,
-          y: boardOffsetY + rect.y,
-          width: rect.width,
-          height: rect.height
-        }),
-        rotation: getPassSlotRotation(route.sourcePosition, slotIndex),
+        direction,
+        rect: rectFromCenter(
+          projectedCenter,
+          geometry.width * scale * 0.96,
+          geometry.height * scale * 0.96
+        ),
+        rotation: geometry.rotation,
         displayMode: route.displayMode,
         interactive: route.interactive,
         occupied: route.occupied,
@@ -307,108 +357,157 @@ export function resolveAlternateTableLayout(
         targetSeat: route.targetSeat,
         sourceSeat: route.sourceSeat,
         faceDown: route.faceDown
-      } satisfies AlternatePassRoutePlacement
+      }
     ];
   });
+}
 
-  const translateRect = (rect: Rect): Rect =>
-    roundRect({
-      x: boardOffsetX + rect.x,
-      y: boardOffsetY + rect.y,
-      width: rect.width,
-      height: rect.height
-    });
+export function resolveAlternateTableLayout(config: {
+  width: number;
+  height: number;
+  seatViews: readonly SeatView[];
+  passRouteViews: readonly PassRouteView[];
+  normalTableLayout: NormalTableLayout;
+  hasVariantPicker: boolean;
+  hasWishPicker: boolean;
+}): AlternateTableLayout {
+  const fittedWidth = Math.min(config.width, config.height * TABLE_ASPECT_RATIO);
+  const fittedHeight = Math.min(config.height, config.width / TABLE_ASPECT_RATIO);
+  const xInset = (config.width - fittedWidth) / 2;
+  const yInset = (config.height - fittedHeight) / 2;
+
+  const boardRect = roundRect({
+    x: xInset + fittedWidth * 0.004,
+    y: yInset + fittedHeight * 0.008,
+    width: fittedWidth * 0.992,
+    height: fittedHeight * 0.968
+  });
+
+  const outerFelt = [
+    point(boardRect.x + boardRect.width * 0.232, boardRect.y + boardRect.height * 0.162),
+    point(boardRect.x + boardRect.width * 0.768, boardRect.y + boardRect.height * 0.162),
+    point(boardRect.x + boardRect.width * 0.916, boardRect.y + boardRect.height * 0.84),
+    point(boardRect.x + boardRect.width * 0.084, boardRect.y + boardRect.height * 0.84)
+  ] as const;
+  const innerFelt = [
+    point(boardRect.x + boardRect.width * 0.252, boardRect.y + boardRect.height * 0.188),
+    point(boardRect.x + boardRect.width * 0.748, boardRect.y + boardRect.height * 0.188),
+    point(boardRect.x + boardRect.width * 0.892, boardRect.y + boardRect.height * 0.812),
+    point(boardRect.x + boardRect.width * 0.108, boardRect.y + boardRect.height * 0.812)
+  ] as const;
+
+  const normalMetrics = computeNormalViewportLayoutMetrics({
+    viewportWidth: config.width,
+    viewportHeight: config.height,
+    topCount: config.seatViews.find((seat) => seat.position === "top")?.handCount ?? 0,
+    bottomCount: config.seatViews.find((seat) => seat.position === "bottom")?.handCount ?? 0,
+    leftCount: config.seatViews.find((seat) => seat.position === "left")?.handCount ?? 0,
+    rightCount: config.seatViews.find((seat) => seat.position === "right")?.handCount ?? 0,
+    hasVariantPicker: config.hasVariantPicker,
+    hasWishPicker: config.hasWishPicker
+  });
+  const boardBounds = getBoardBounds(normalMetrics);
+  const playSurfaceCenter = resolveNormalBoardAnchorPoint(
+    config.normalTableLayout.playSurface,
+    normalMetrics
+  );
+  const projectedPlaySurfaceCenter = projectBoardPoint(
+    point(playSurfaceCenter.x, playSurfaceCenter.y),
+    boardBounds,
+    outerFelt
+  );
+  const playSurfaceScale = depthScaleForY(playSurfaceCenter.y, boardBounds);
+
+  const trickRect = rectFromCenter(
+    projectedPlaySurfaceCenter,
+    normalMetrics.centerColumnWidth * playSurfaceScale * 0.54,
+    normalMetrics.cardHeight * playSurfaceScale * 1.62
+  );
+  const centerEmblemRect = rectFromCenter(
+    point(projectedPlaySurfaceCenter.x, projectedPlaySurfaceCenter.y + boardRect.height * 0.01),
+    boardRect.width * 0.34,
+    boardRect.height * 0.28
+  );
+  const scoreRect = roundRect({
+    x: boardRect.x + boardRect.width * 0.43,
+    y: boardRect.y + boardRect.height * 0.028,
+    width: boardRect.width * 0.14,
+    height: boardRect.height * 0.038
+  });
+  const statusRect = roundRect({
+    x: projectedPlaySurfaceCenter.x - boardRect.width * 0.082,
+    y: trickRect.y - boardRect.height * 0.12,
+    width: boardRect.width * 0.164,
+    height: boardRect.height * 0.046
+  });
+
+  const { seats, southHandCardWidth } = buildSeatPlacements({
+    seatViews: config.seatViews,
+    normalTableLayout: config.normalTableLayout,
+    boardBounds,
+    outerFelt,
+    hasVariantPicker: config.hasVariantPicker,
+    hasWishPicker: config.hasWishPicker,
+    width: config.width,
+    height: config.height
+  });
+
+  const southRack = seats.bottom.rack;
+  const southPlaque = seats.bottom.plaque;
+  const southControlRect = roundRect({
+    x: boardRect.x + boardRect.width * 0.24,
+    y: Math.min(boardRect.y + boardRect.height * 0.924, southPlaque.y + southPlaque.height + 16),
+    width: boardRect.width * 0.52,
+    height: boardRect.height * 0.058
+  });
+
+  const trickPlacements = {
+    top: {
+      x: projectedPlaySurfaceCenter.x,
+      y: trickRect.y + trickRect.height * 0.23,
+      rotation: 0
+    },
+    right: {
+      x: trickRect.x + trickRect.width * 0.78,
+      y: trickRect.y + trickRect.height * 0.5,
+      rotation: 6
+    },
+    bottom: {
+      x: projectedPlaySurfaceCenter.x,
+      y: trickRect.y + trickRect.height * 0.76,
+      rotation: 0
+    },
+    left: {
+      x: trickRect.x + trickRect.width * 0.22,
+      y: trickRect.y + trickRect.height * 0.5,
+      rotation: -6
+    }
+  } satisfies Record<SeatVisualPosition, AlternateTrickPlacement>;
 
   return {
-    width,
-    height,
+    width: config.width,
+    height: config.height,
     boardRect,
-    outerFelt: [
-      point(boardOffsetX + localWidth * 0.24, boardOffsetY + localHeight * 0.11),
-      point(boardOffsetX + localWidth * 0.76, boardOffsetY + localHeight * 0.11),
-      point(boardOffsetX + localWidth * 0.964, boardOffsetY + localHeight * 0.868),
-      point(boardOffsetX + localWidth * 0.036, boardOffsetY + localHeight * 0.868)
-    ],
-    innerFelt: [
-      point(boardOffsetX + localWidth * 0.257, boardOffsetY + localHeight * 0.135),
-      point(boardOffsetX + localWidth * 0.743, boardOffsetY + localHeight * 0.135),
-      point(boardOffsetX + localWidth * 0.934, boardOffsetY + localHeight * 0.832),
-      point(boardOffsetX + localWidth * 0.066, boardOffsetY + localHeight * 0.832)
-    ],
-    centerEmblemRect: translateRect({
-      x: localWidth * 0.292,
-      y: localHeight * 0.198,
-      width: localWidth * 0.416,
-      height: localHeight * 0.494
-    }),
-    trickRect: translateRect({
-      x: localWidth * 0.274,
-      y: localHeight * 0.358,
-      width: localWidth * 0.452,
-      height: localHeight * 0.168
-    }),
-    statusRect: translateRect({
-      x: localWidth * 0.412,
-      y: localHeight * 0.278,
-      width: localWidth * 0.176,
-      height: localHeight * 0.03
-    }),
-    scoreRect: translateRect({
-      x: localWidth * 0.418,
-      y: localHeight * 0.006,
-      width: localWidth * 0.164,
-      height: localHeight * 0.028
-    }),
-    southControlRect: translateRect({
-      x: localWidth * 0.232,
-      y: localHeight * 0.846,
-      width: localWidth * 0.536,
-      height: localHeight * 0.068
-    }),
-    seats: {
-      top: {
-        ...seats.top,
-        plaque: translateRect(seats.top.plaque),
-        rack: translateRect(seats.top.rack)
-      },
-      left: {
-        ...seats.left,
-        plaque: translateRect(seats.left.plaque),
-        rack: translateRect(seats.left.rack)
-      },
-      right: {
-        ...seats.right,
-        plaque: translateRect(seats.right.plaque),
-        rack: translateRect(seats.right.rack)
-      },
-      bottom: {
-        ...seats.bottom,
-        plaque: translateRect(seats.bottom.plaque),
-        rack: translateRect(seats.bottom.rack)
-      }
-    },
-    trickPlacements: {
-      top: {
-        x: boardOffsetX + localWidth * 0.5,
-        y: boardOffsetY + localHeight * 0.384,
-        rotation: 0
-      },
-      right: {
-        x: boardOffsetX + localWidth * 0.634,
-        y: boardOffsetY + localHeight * 0.446,
-        rotation: 7
-      },
-      bottom: {
-        x: boardOffsetX + localWidth * 0.5,
-        y: boardOffsetY + localHeight * 0.504,
-        rotation: 0
-      },
-      left: {
-        x: boardOffsetX + localWidth * 0.366,
-        y: boardOffsetY + localHeight * 0.446,
-        rotation: -7
-      }
-    },
-    passRoutes
+    outerFelt: outerFelt.map(roundPoint),
+    innerFelt: innerFelt.map(roundPoint),
+    centerEmblemRect,
+    trickRect,
+    statusRect,
+    scoreRect,
+    southControlRect,
+    southHandCardWidth,
+    seats,
+    trickPlacements,
+    passRoutes: buildPassRoutePlacements({
+      passRouteViews: config.passRouteViews,
+      seatViews: config.seatViews,
+      normalTableLayout: config.normalTableLayout,
+      boardBounds,
+      outerFelt,
+      width: config.width,
+      height: config.height,
+      hasVariantPicker: config.hasVariantPicker,
+      hasWishPicker: config.hasWishPicker
+    })
   };
 }

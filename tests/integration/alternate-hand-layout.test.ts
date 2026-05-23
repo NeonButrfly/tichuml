@@ -6,7 +6,7 @@ describe("alternate south hand layout", () => {
     const layout = resolveAlternateSouthHandLayout({
       count: 5,
       rackWidth: 900,
-      viewportWidth: 1440
+      baseCardWidth: 102
     });
 
     expect(layout.placements[0]?.offsetPx).toBe(-layout.placements[4]!.offsetPx);
@@ -18,12 +18,12 @@ describe("alternate south hand layout", () => {
     const wide = resolveAlternateSouthHandLayout({
       count: 14,
       rackWidth: 980,
-      viewportWidth: 1440
+      baseCardWidth: 102
     });
     const tight = resolveAlternateSouthHandLayout({
       count: 14,
       rackWidth: 620,
-      viewportWidth: 1440
+      baseCardWidth: 102
     });
 
     const wideStep = wide.placements[7]!.offsetPx - wide.placements[6]!.offsetPx;

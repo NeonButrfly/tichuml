@@ -16,21 +16,20 @@ function clamp(value: number, minimum: number, maximum: number): number {
 export function resolveAlternateSouthHandLayout(config: {
   count: number;
   rackWidth: number;
-  viewportWidth: number;
+  baseCardWidth: number;
 }): AlternateSouthHandLayout {
   const count = Math.max(0, Math.floor(config.count));
-  const cardWidth =
-    config.viewportWidth < 980 ? 84 : config.viewportWidth < 1300 ? 96 : 102;
+  const cardWidth = clamp(Math.round(config.baseCardWidth), 84, 112);
 
   if (count === 0) {
     return { cardWidth, placements: [] };
   }
 
   const spreadSlots = Math.max(1, count - 1);
-  const usableSpan = Math.max(cardWidth, config.rackWidth - cardWidth * 1.3);
-  const spacing = clamp(usableSpan / spreadSlots, 18, 40);
-  const rotationStep = clamp(18 / spreadSlots, 1.1, 3.1);
-  const liftScale = clamp(cardWidth * 0.12, 8, 14);
+  const usableSpan = Math.max(cardWidth, config.rackWidth - cardWidth * 1.42);
+  const spacing = clamp(usableSpan / spreadSlots, 18, 38);
+  const rotationStep = clamp(15 / spreadSlots, 0.9, 2.3);
+  const liftScale = clamp(cardWidth * 0.07, 5, 9);
   const midpoint = (count - 1) / 2;
 
   return {

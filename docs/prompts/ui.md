@@ -543,3 +543,27 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 - Linked GitHub Issue: [#81](https://github.com/NeonButrfly/tichuml/issues/81)
 - Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
 - Status Source: GitHub issue state only.
+
+### 2026-05-22 - Alternate table must inherit the normal table's exact seat and lane organization
+
+- Prompt Signal: After reviewing the screenshot closely, the user rejected the
+  alternate renderer as disorganized, called out the south hand and pass lanes
+  as misaligned, and explicitly asked for one final attempt that reuses the
+  original table's exact seat, hand, and lane organization instead of spending
+  more time on freehand alternate-only layout tuning.
+- Interpreted Requirement: Keep the normal table untouched and keep the
+  alternate table on the same real gameplay pipeline, but stop inventing a
+  separate alternate geometry model. The alternate luxury surface should derive
+  seat racks, south-hand span, and pass-lane anchors from the normal table's
+  canonical hand bounds and pass-lane geometry, then project those anchors into
+  the Pixi perspective table so the south hand, west/east stacks, and exchange
+  lanes stay organized.
+- Affected Systems: `apps/web/src/alternate-table/layout.ts`,
+  `apps/web/src/alternate-table/hand-layout.ts`,
+  `apps/web/src/alternate-game-table-view.tsx`,
+  `apps/web/src/alternate-table/README.md`,
+  `tests/integration/alternate-table-layout.test.ts`,
+  `tests/integration/alternate-hand-layout.test.ts`.
+- Linked GitHub Issue: [#81](https://github.com/NeonButrfly/tichuml/issues/81)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { resolveAlternateTableLayout } from "../../apps/web/src/alternate-table/layout";
 import type { PassRouteView, SeatView } from "../../apps/web/src/game-table-views";
+import { DEFAULT_NORMAL_TABLE_LAYOUT } from "../../apps/web/src/table-layout";
 
 const seatViews: SeatView[] = [
   {
@@ -102,7 +103,15 @@ const passRoutes: PassRouteView[] = [
 
 describe("alternate table layout geometry", () => {
   it("keeps the felt dominant and the top edge meaningfully narrower than the south edge", () => {
-    const layout = resolveAlternateTableLayout(1600, 900, seatViews, passRoutes);
+    const layout = resolveAlternateTableLayout({
+      width: 1600,
+      height: 900,
+      seatViews,
+      passRouteViews: passRoutes,
+      normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+      hasVariantPicker: false,
+      hasWishPicker: false
+    });
     const topWidth = layout.outerFelt[1]!.x - layout.outerFelt[0]!.x;
     const bottomWidth = layout.outerFelt[2]!.x - layout.outerFelt[3]!.x;
 
@@ -111,7 +120,15 @@ describe("alternate table layout geometry", () => {
   });
 
   it("keeps the north rail compact and the south shelf inside the board", () => {
-    const layout = resolveAlternateTableLayout(1600, 900, seatViews, passRoutes);
+    const layout = resolveAlternateTableLayout({
+      width: 1600,
+      height: 900,
+      seatViews,
+      passRouteViews: passRoutes,
+      normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+      hasVariantPicker: false,
+      hasWishPicker: false
+    });
 
     expect(layout.seats.top.rack.y).toBeLessThan(layout.trickRect.y);
     expect(layout.southControlRect.y).toBeGreaterThan(layout.seats.bottom.plaque.y);
@@ -121,45 +138,53 @@ describe("alternate table layout geometry", () => {
   });
 
   it("keeps pass slots out of the core trick bowl", () => {
-    const layout = resolveAlternateTableLayout(1600, 900, seatViews, [
-      ...passRoutes,
-      {
-        key: "north-left",
-        sourceSeat: "seat-2",
-        sourcePosition: "top",
-        target: "left",
-        targetSeat: "seat-3",
-        displayMode: "passing",
-        occupied: false,
-        visibleCardId: null,
-        faceDown: true,
-        interactive: false
-      },
-      {
-        key: "east-up",
-        sourceSeat: "seat-1",
-        sourcePosition: "right",
-        target: "partner",
-        targetSeat: "seat-3",
-        displayMode: "passing",
-        occupied: false,
-        visibleCardId: null,
-        faceDown: true,
-        interactive: false
-      },
-      {
-        key: "west-up",
-        sourceSeat: "seat-3",
-        sourcePosition: "left",
-        target: "partner",
-        targetSeat: "seat-1",
-        displayMode: "passing",
-        occupied: false,
-        visibleCardId: null,
-        faceDown: true,
-        interactive: false
-      }
-    ]);
+    const layout = resolveAlternateTableLayout({
+      width: 1600,
+      height: 900,
+      seatViews,
+      passRouteViews: [
+        ...passRoutes,
+        {
+          key: "north-left",
+          sourceSeat: "seat-2",
+          sourcePosition: "top",
+          target: "left",
+          targetSeat: "seat-3",
+          displayMode: "passing",
+          occupied: false,
+          visibleCardId: null,
+          faceDown: true,
+          interactive: false
+        },
+        {
+          key: "east-up",
+          sourceSeat: "seat-1",
+          sourcePosition: "right",
+          target: "partner",
+          targetSeat: "seat-3",
+          displayMode: "passing",
+          occupied: false,
+          visibleCardId: null,
+          faceDown: true,
+          interactive: false
+        },
+        {
+          key: "west-up",
+          sourceSeat: "seat-3",
+          sourcePosition: "left",
+          target: "partner",
+          targetSeat: "seat-1",
+          displayMode: "passing",
+          occupied: false,
+          visibleCardId: null,
+          faceDown: true,
+          interactive: false
+        }
+      ],
+      normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+      hasVariantPicker: false,
+      hasWishPicker: false
+    });
     const protectedCore = {
       left: layout.trickRect.x - 40,
       right: layout.trickRect.x + layout.trickRect.width + 40,

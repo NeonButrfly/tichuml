@@ -353,22 +353,34 @@ export function AlternateGameTableView(props: GameTableViewProps) {
 
   const layout = useMemo(
     () =>
-      resolveAlternateTableLayout(
-        stageSize.width,
-        stageSize.height,
-        props.seatViews,
-        showPassRoutes ? props.passRouteViews : []
-      ),
-    [props.passRouteViews, props.seatViews, showPassRoutes, stageSize.height, stageSize.width]
+      resolveAlternateTableLayout({
+        width: stageSize.width,
+        height: stageSize.height,
+        seatViews: props.seatViews,
+        passRouteViews: showPassRoutes ? props.passRouteViews : [],
+        normalTableLayout: props.normalTableLayout,
+        hasVariantPicker: props.matchingPlayActions.length > 1,
+        hasWishPicker: Boolean(props.activePlayVariant?.availableWishRanks)
+      }),
+    [
+      props.activePlayVariant?.availableWishRanks,
+      props.matchingPlayActions.length,
+      props.normalTableLayout,
+      props.passRouteViews,
+      props.seatViews,
+      showPassRoutes,
+      stageSize.height,
+      stageSize.width
+    ]
   );
   const southHandLayout = useMemo(
     () =>
       resolveAlternateSouthHandLayout({
         count: props.sortedLocalHand.length,
         rackWidth: layout.seats.bottom.rack.width,
-        viewportWidth: stageSize.width
+        baseCardWidth: layout.southHandCardWidth
       }),
-    [layout.seats.bottom.rack.width, props.sortedLocalHand.length, stageSize.width]
+    [layout.seats.bottom.rack.width, layout.southHandCardWidth, props.sortedLocalHand.length]
   );
 
   const currentTrickEntries = props.seatRelativePlays.flatMap(({ plays, position }) =>
@@ -425,7 +437,7 @@ export function AlternateGameTableView(props: GameTableViewProps) {
 
           <AlternateSeatPlaque
             seat={northSeat}
-            label="NORTH / PARTNER"
+            label="NORTH"
             style={rectStyle(layout.seats.top.plaque)}
           />
           <div
@@ -560,7 +572,7 @@ export function AlternateGameTableView(props: GameTableViewProps) {
 
           <AlternateSeatPlaque
             seat={southSeat}
-            label="SOUTH / YOU"
+            label="SOUTH"
             style={rectStyle(layout.seats.bottom.plaque)}
             prominent
           />
