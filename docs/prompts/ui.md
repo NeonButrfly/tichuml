@@ -704,3 +704,29 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 - Linked GitHub Issue: [#81](https://github.com/NeonButrfly/tichuml/issues/81)
 - Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
 - Status Source: GitHub issue state only.
+
+### 2026-05-23 - Immersive table must use a deterministic full-viewport south rig
+
+- Prompt Signal: The latest correction rejected the immersive table for leaving
+  a huge unused black region above the table and for not matching the attached
+  south-camera wooden-table screenshot. The prompt explicitly required a
+  deterministic normalized geometry rig, full viewport ownership, overlay HUD
+  panels that do not push the scene down, and a temporary `layoutDebug=1`
+  overlay for viewport, ellipse, anchor, and safe-zone inspection.
+- Interpreted Requirement: Keep the normal table untouched and keep the
+  immersive table on the same state/action/backend/telemetry path, but rebuild
+  the alternate layout around one normalized viewport config. The scene must
+  measure the actual live stage size, anchor the table ellipse around the
+  requested viewport percentages, keep the south hand large and centered near
+  the bottom, and move status/state/action chrome into absolute overlays so the
+  table fills the frame instead of sitting below spare layout space.
+- Affected Systems: `apps/web/src/alternate-table/south-perspective-projection.ts`,
+  `apps/web/src/alternate-game-table-view.tsx`,
+  `apps/web/src/alternate-table/phaser-surface.tsx`,
+  `apps/web/src/styles.css`,
+  `apps/web/src/alternate-table/README.md`,
+  `tests/integration/south-perspective-projection.test.ts`,
+  `tests/integration/alternate-table-view.test.ts`.
+- Linked GitHub Issue: [#81](https://github.com/NeonButrfly/tichuml/issues/81)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.

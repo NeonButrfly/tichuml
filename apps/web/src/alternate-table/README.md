@@ -35,6 +35,16 @@ smaller far hands on the back arc, trick cards resting on the tabletop with
 soft shadows, and only a small amount of supporting chrome above the play
 surface.
 
+The latest stabilization pass replaced the old loose stage sizing with a
+deterministic viewport-normalized rig:
+
+- the scene always measures the real immersive stage viewport instead of
+  inflating to large minimum fallback dimensions
+- the table ellipse is anchored around `50% / 56%` with a `47% x 34%` radius
+- the near rim stays visible near the bottom edge while the far edge stays high
+  enough to preserve the seated south-player camera
+- HUD panels are now overlay layers and do not reserve document flow space
+
 ## Shared Gameplay Path
 
 - Controller and action plumbing still live in
@@ -62,6 +72,9 @@ frame is devoted to the table surface and projected cards.
   to boot a real engine-driven `pass_select` state with South still owning the
   unresolved exchange. This exists only to tune the luxury renderer against the
   canonical live passing geometry.
+- Layout debug: add `&layoutDebug=1` to show viewport bounds, the projected
+  table ellipse, seat anchors, and HUD safe zones. This overlay is off by
+  default and is only for layout tuning.
 - In-app toggle: use the main menu to switch between `Classic Table` and
   `Luxury Table`.
 - Return to normal: remove `?table=alt` or switch back from the same menu.

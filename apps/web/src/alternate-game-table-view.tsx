@@ -5,7 +5,6 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type DragEvent as ReactDragEvent,
   type PointerEvent as ReactPointerEvent
 } from "react";
 import type { Card } from "@tichuml/engine";
@@ -32,6 +31,7 @@ import {
   resolveScorePose,
   resolveSeatCountPose,
   resolveSeatLabelPose,
+  resolveSouthPerspectiveDebugLayout,
   resolveSouthHandWorldPose,
   resolveStatusPose,
   resolveTrickCardWorldPose,
@@ -202,6 +202,15 @@ function getSeatTitleBySeatId(
   return seatViews.find((seat) => seat.seat === seatId)?.title ?? seatId;
 }
 
+function useImmersiveLayoutDebugFlag() {
+  return useMemo(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+    return new URLSearchParams(window.location.search).get("layoutDebug") === "1";
+  }, []);
+}
+
 export function AlternateGameTableView(props: GameTableViewProps) {
   const northSeat = getSeatByPosition(props.seatViews, "top");
   const westSeat = getSeatByPosition(props.seatViews, "left");
@@ -219,6 +228,7 @@ export function AlternateGameTableView(props: GameTableViewProps) {
   const [stageSize, setStageSize] = useState({ width: 1500, height: 980 });
   const [cameraYaw, setCameraYaw] = useState(0);
   const [isStageRotating, setIsStageRotating] = useState(false);
+  const layoutDebugEnabled = useImmersiveLayoutDebugFlag();
 
   useEffect(() => {
     if (!stageRef.current) {
@@ -226,8 +236,8 @@ export function AlternateGameTableView(props: GameTableViewProps) {
     }
     const element = stageRef.current;
     const update = () => {
-      const nextWidth = Math.max(1080, Math.round(element.clientWidth));
-      const nextHeight = Math.max(720, Math.round(element.clientHeight));
+      const nextWidth = Math.max(320, Math.round(element.clientWidth));
+      const nextHeight = Math.max(320, Math.round(element.clientHeight));
       setStageSize((current) =>
         current.width === nextWidth && current.height === nextHeight
           ? current
@@ -249,10 +259,13 @@ export function AlternateGameTableView(props: GameTableViewProps) {
 
   const handleStagePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLElement>) => {
+      if (!layoutDebugEnabled) {
+        return;
+      }
       const target = event.target as HTMLElement | null;
       if (
         target?.closest(
-          "button, .alternate-choice-panel, .alternate-controls, [data-menu-surface]"
+          "button, .alternate-choice-panel, .alternate-controls, .alternate-hud, [data-menu-surface]"
         )
       ) {
         return;
@@ -265,25 +278,25 @@ export function AlternateGameTableView(props: GameTableViewProps) {
       setIsStageRotating(true);
       event.currentTarget.setPointerCapture(event.pointerId);
     },
-    [cameraYaw]
+    [cameraYaw, layoutDebugEnabled]
   );
 
   const handleStagePointerMove = useCallback(
     (event: ReactPointerEvent<HTMLElement>) => {
       const dragState = dragStateRef.current;
-      if (!dragState || dragState.pointerId !== event.pointerId) {
+      if (!layoutDebugEnabled || !dragState || dragState.pointerId !== event.pointerId) {
         return;
       }
       const delta = event.clientX - dragState.startX;
       const yawDelta = delta / Math.max(280, stageSize.width * 0.28);
       setCameraYaw(clamp(dragState.startYaw + yawDelta, -1, 1));
     },
-    [stageSize.width]
+    [layoutDebugEnabled, stageSize.width]
   );
 
   const handleStagePointerUp = useCallback((event: ReactPointerEvent<HTMLElement>) => {
     const dragState = dragStateRef.current;
-    if (!dragState || dragState.pointerId !== event.pointerId) {
+    if (!layoutDebugEnabled || !dragState || dragState.pointerId !== event.pointerId) {
       return;
     }
     dragStateRef.current = null;
@@ -291,7 +304,7 @@ export function AlternateGameTableView(props: GameTableViewProps) {
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
-  }, []);
+  }, [layoutDebugEnabled]);
 
   const projector = useMemo(
     () =>
@@ -326,6 +339,13 @@ export function AlternateGameTableView(props: GameTableViewProps) {
     ? `To ${getSeatTitleBySeatId(props.seatViews, props.dogLeadAnimation.targetSeat)}`
     : "None";
   const nextSeatLabel = getSeatTitleBySeatId(props.seatViews, props.derived.activeSeat);
+  const layoutDebug = useMemo(
+    () => resolveSouthPerspectiveDebugLayout(projector),
+    [projector]
+  );
+  const grandTichuLabel = props.seatViews.some((seat) => seat.callState.grandTichu)
+    ? "Called"
+    : "Off";
 
   const sceneModel = useMemo<ImmersiveSceneModel>(() => {
     const seats: ImmersiveSceneSeat[] = [
@@ -563,151 +583,267 @@ export function AlternateGameTableView(props: GameTableViewProps) {
             } as CSSProperties
           }
         >
-          <div className="alternate-camera-controls" role="group" aria-label="Perspective">
-            <button
-              type="button"
-              className={[
-                "alternate-camera-button",
-                cameraPreset === "left" ? "is-active" : ""
-              ]
-                .filter(Boolean)
-                .join(" ")}
-              aria-label="Rotate left"
-              onClick={() => handleCameraPresetSelect("left")}
-            >
-              Left
-            </button>
-            <button
-              type="button"
-              className={[
-                "alternate-camera-button",
-                cameraPreset === "center" ? "is-active" : ""
-              ]
-                .filter(Boolean)
-                .join(" ")}
-              aria-label="Center view"
-              onClick={() => handleCameraPresetSelect("center")}
-            >
-              Center
-            </button>
-            <button
-              type="button"
-              className={[
-                "alternate-camera-button",
-                cameraPreset === "right" ? "is-active" : ""
-              ]
-                .filter(Boolean)
-                .join(" ")}
-              aria-label="Rotate right"
-              onClick={() => handleCameraPresetSelect("right")}
-            >
-              Right
-            </button>
-          </div>
+          <div className="alternate-hud">
+            <section className="alternate-side-panel alternate-side-panel--status">
+              <div className="alternate-branding">
+                <span className="alternate-branding__mark" aria-hidden="true">
+                  TICHU
+                </span>
+              </div>
+              <div className="alternate-side-panel__rows">
+                <div>
+                  <span>Round Seed</span>
+                  <strong>{props.roundSeed.slice(0, 8)}</strong>
+                </div>
+                <div>
+                  <span>Decision Count</span>
+                  <strong>{props.decisionCount}</strong>
+                </div>
+                <div>
+                  <span>Phase</span>
+                  <strong>{statusText}</strong>
+                </div>
+                <div>
+                  <span>Grand Tichu</span>
+                  <strong>{grandTichuLabel}</strong>
+                </div>
+                <div>
+                  <span>Your Wish</span>
+                  <strong>{currentWishLabel}</strong>
+                </div>
+              </div>
+            </section>
 
-          <div className="alternate-hit-layer">
-            <div aria-hidden="true">
-              {sceneModel.remoteCards.map((card) => (
-                <span key={card.key} data-alt-card-back="true" />
-              ))}
+            <div className="alternate-top-actions" role="group" aria-label="Table tools">
+              <button
+                type="button"
+                className="alternate-top-button"
+                onClick={() => props.onUiCommand("open_how_to_play_dialog")}
+              >
+                Rules
+              </button>
+              <button
+                type="button"
+                className="alternate-top-button"
+                onClick={() => props.onUiCommand("open_backend_settings_dialog")}
+              >
+                Settings
+              </button>
+              {layoutDebugEnabled && (
+                <div className="alternate-camera-controls" role="group" aria-label="Perspective">
+                  <button
+                    type="button"
+                    className={[
+                      "alternate-camera-button",
+                      cameraPreset === "left" ? "is-active" : ""
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    onClick={() => handleCameraPresetSelect("left")}
+                  >
+                    Left
+                  </button>
+                  <button
+                    type="button"
+                    className={[
+                      "alternate-camera-button",
+                      cameraPreset === "center" ? "is-active" : ""
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    onClick={() => handleCameraPresetSelect("center")}
+                  >
+                    Center
+                  </button>
+                  <button
+                    type="button"
+                    className={[
+                      "alternate-camera-button",
+                      cameraPreset === "right" ? "is-active" : ""
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    onClick={() => handleCameraPresetSelect("right")}
+                  >
+                    Right
+                  </button>
+                </div>
+              )}
             </div>
-            <div data-alt-seat="south">
-              {sceneModel.southCards.map((card) => (
+
+            <section className="alternate-side-panel alternate-side-panel--state">
+              <h2>Game State</h2>
+              <div className="alternate-side-panel__rows">
+                <div>
+                  <span>Phase</span>
+                  <strong>{statusText}</strong>
+                </div>
+                <div>
+                  <span>Trick</span>
+                  <strong>{trickSummary}</strong>
+                </div>
+                <div>
+                  <span>Dog</span>
+                  <strong>{dogSummary}</strong>
+                </div>
+                <div>
+                  <span>Next</span>
+                  <strong>{nextSeatLabel}</strong>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="alternate-side-panel__footer-button"
+                onClick={() => props.onUiCommand("open_score_history_dialog")}
+              >
+                Game Log
+              </button>
+            </section>
+
+            <div className="alternate-hit-layer">
+              <div aria-hidden="true">
+                {sceneModel.remoteCards.map((card) => (
+                  <span key={card.key} data-alt-card-back="true" />
+                ))}
+              </div>
+              <div data-alt-seat="south">
+                {sceneModel.southCards.map((card) => (
+                  <button
+                    key={card.key}
+                    type="button"
+                    className="playing-card alternate-hitbox-card"
+                    style={boxStyle(card.pose, card.width, card.height, 20)}
+                    aria-label={`Select ${card.card.id}`}
+                    disabled={!props.localCanInteract}
+                    draggable={props.localPassInteractionEnabled}
+                    onClick={() => props.onLocalCardClick(card.card.id)}
+                    onDragStart={(event) => {
+                      event.dataTransfer.effectAllowed = "move";
+                      event.dataTransfer.setData("application/x-tichu-pass-card", card.card.id);
+                    }}
+                  />
+                ))}
+              </div>
+
+              {sceneModel.passRoutes.map((route) => (
                 <button
-                  key={card.key}
+                  key={route.key}
                   type="button"
-                  className="playing-card alternate-hitbox-card"
-                  style={boxStyle(card.pose, card.width, card.height, 20)}
-                  aria-label={`Select ${card.card.id}`}
-                  disabled={!props.localCanInteract}
-                  draggable={props.localPassInteractionEnabled}
-                  onClick={() => props.onLocalCardClick(card.card.id)}
-                  onDragStart={(event) => {
-                    event.dataTransfer.effectAllowed = "move";
-                    event.dataTransfer.setData("application/x-tichu-pass-card", card.card.id);
+                  className="alternate-hitbox-route"
+                  style={boxStyle(route.pose, route.width, route.height, 12)}
+                  data-alt-pass-route={route.key}
+                  data-pass-direction={route.direction}
+                  aria-label={`Pass route ${route.key}`}
+                  disabled={!route.interactive}
+                  onClick={() => {
+                    const target = props.passRouteViews.find((entry) => entry.key === route.key)?.target;
+                    if (target) {
+                      props.onPassTargetSelect(target);
+                    }
+                  }}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = "move";
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    const target = props.passRouteViews.find((entry) => entry.key === route.key)?.target;
+                    const cardId = event.dataTransfer.getData("application/x-tichu-pass-card");
+                    if (target && cardId) {
+                      props.onPassLaneDrop(target, cardId);
+                    }
                   }}
                 />
               ))}
             </div>
 
-            {sceneModel.passRoutes.map((route) => (
-              <button
-                key={route.key}
-                type="button"
-                className="alternate-hitbox-route"
-                style={boxStyle(route.pose, route.width, route.height, 12)}
-                data-alt-pass-route={route.key}
-                data-pass-direction={route.direction}
-                aria-label={`Pass route ${route.key}`}
-                disabled={!route.interactive}
-                onClick={() => {
-                  const target = props.passRouteViews.find((entry) => entry.key === route.key)?.target;
-                  if (target) {
-                    props.onPassTargetSelect(target);
-                  }
-                }}
-                onDragOver={(event) => {
-                  event.preventDefault();
-                  event.dataTransfer.dropEffect = "move";
-                }}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  const target = props.passRouteViews.find((entry) => entry.key === route.key)?.target;
-                  const cardId = event.dataTransfer.getData("application/x-tichu-pass-card");
-                  if (target && cardId) {
-                    props.onPassLaneDrop(target, cardId);
-                  }
-                }}
-              />
-            ))}
-          </div>
-
-          <div className="alternate-controls">
-            <div className="alternate-controls__primary">
-              {props.normalActionRail.map((slot) => (
-                <button
-                  key={slot.id}
-                  type="button"
-                  className={[
-                    "alternate-action-button",
-                    `alternate-action-button--${slot.tone}`
-                  ].join(" ")}
-                  disabled={!slot.enabled}
-                  onClick={() => props.onNormalAction(slot.id)}
-                >
-                  {slot.label}
-                </button>
-              ))}
-              <button
-                type="button"
-                className="alternate-utility-button"
-                onClick={props.onClearLocalSelection}
-              >
-                Clear
-              </button>
-              {props.canContinueAi && (
+            <div className="alternate-controls">
+              <div className="alternate-controls__primary">
+                {props.normalActionRail.map((slot) => (
+                  <button
+                    key={slot.id}
+                    type="button"
+                    className={[
+                      "alternate-action-button",
+                      `alternate-action-button--${slot.tone}`
+                    ].join(" ")}
+                    disabled={!slot.enabled}
+                    onClick={() => props.onNormalAction(slot.id)}
+                  >
+                    {slot.label}
+                  </button>
+                ))}
                 <button
                   type="button"
                   className="alternate-utility-button"
-                  onClick={props.onContinueAi}
+                  onClick={props.onClearLocalSelection}
                 >
-                  Continue AI
+                  Clear
                 </button>
-              )}
+                {props.canContinueAi && (
+                  <button
+                    type="button"
+                    className="alternate-utility-button"
+                    onClick={props.onContinueAi}
+                  >
+                    Continue AI
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="alternate-semantic-mirror" aria-live="polite">
+              <span>WE</span>
+              <span>THEY</span>
+              <span>Game State</span>
+              <span>Phase</span>
+              <span>{statusText}</span>
+              <span>{trickSummary}</span>
+              <span>{dogSummary}</span>
+              <span>{nextSeatLabel}</span>
             </div>
           </div>
-
-          <div className="alternate-semantic-mirror" aria-live="polite">
-            <span>WE</span>
-            <span>THEY</span>
-            <span>Game State</span>
-            <span>Phase</span>
-            <span>{statusText}</span>
-            <span>{trickSummary}</span>
-            <span>{dogSummary}</span>
-            <span>{nextSeatLabel}</span>
-          </div>
         </div>
+
+        {layoutDebugEnabled && (
+          <div className="alternate-layout-debug" aria-hidden="true">
+            <div
+              className="alternate-layout-debug__rect alternate-layout-debug__rect--table"
+              style={{
+                left: `${layoutDebug.tableRect.left}px`,
+                top: `${layoutDebug.tableRect.top}px`,
+                width: `${layoutDebug.tableRect.width}px`,
+                height: `${layoutDebug.tableRect.height}px`
+              }}
+            />
+            {[layoutDebug.safeTopLeft, layoutDebug.safeBottomLeft, layoutDebug.safeBottomRight].map(
+              (zone, index) => (
+                <div
+                  key={`safe-${index}`}
+                  className="alternate-layout-debug__rect alternate-layout-debug__rect--safe"
+                  style={{
+                    left: `${zone.left}px`,
+                    top: `${zone.top}px`,
+                    width: `${zone.width}px`,
+                    height: `${zone.height}px`
+                  }}
+                />
+              )
+            )}
+            {layoutDebug.anchors.map((anchor) => (
+              <div
+                key={anchor.key}
+                className="alternate-layout-debug__anchor"
+                style={{
+                  left: `${anchor.x}px`,
+                  top: `${anchor.y}px`
+                }}
+              >
+                <span>{anchor.key}</span>
+              </div>
+            ))}
+          </div>
+        )}
 
         {props.localDragonRecipients.length > 0 && (
           <section className="alternate-choice-panel alternate-choice-panel--dragon">

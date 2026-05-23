@@ -630,9 +630,6 @@ function drawCanvasOverlay(
 ) {
   drawCanvasBackground(context, model);
 
-  drawCanvasPlaque(context, model.score.pose, 160, 50, "WE / THEY", `${model.score.we} : ${model.score.they}`, false);
-  drawCanvasPlaque(context, model.statusPose, 176, 56, model.phaseLabel.toUpperCase(), `Wish ${model.currentWishLabel}`, false);
-
   for (const seat of model.seats) {
     const width = seat.position === "bottom" ? 186 : seat.position === "top" ? 168 : 148;
     const height = seat.position === "bottom" ? 62 : 56;
@@ -711,61 +708,6 @@ function drawFallbackCanvas(
   context.setTransform(ratio, 0, 0, ratio, 0, 0);
   context.clearRect(0, 0, model.geometry.viewportWidth, model.geometry.viewportHeight);
   drawCanvasOverlay(context, model);
-}
-
-function drawScore(scene: Phaser.Scene, model: ImmersiveSceneModel) {
-  const { pose, we, they } = model.score;
-  const width = 160;
-  const height = 50;
-  const panel = scene.add.container(pose.screenX, pose.screenY);
-  panel.setDepth(pose.depth + 40);
-  const bg = scene.add.graphics();
-  drawRoundedRect(bg, width, height, 16, 0x111111, 0.84, 0x8f7245, 0.42, 2);
-  panel.add(bg);
-  const weText = scene.add.text(-38, -8, "WE", {
-    fontFamily: "Arial",
-    fontSize: "12px",
-    color: TEXT_MUTED
-  });
-  weText.setOrigin(0.5, 0.5);
-  const theyText = scene.add.text(38, -8, "THEY", {
-    fontFamily: "Arial",
-    fontSize: "12px",
-    color: TEXT_MUTED
-  });
-  theyText.setOrigin(0.5, 0.5);
-  const scoreText = scene.add.text(0, 12, `${we} : ${they}`, {
-    fontFamily: "Georgia",
-    fontSize: "22px",
-    color: TEXT_LIGHT,
-    fontStyle: "700"
-  });
-  scoreText.setOrigin(0.5, 0.5);
-  panel.add([weText, theyText, scoreText]);
-}
-
-function drawStatus(scene: Phaser.Scene, model: ImmersiveSceneModel) {
-  const width = 176;
-  const height = 56;
-  const container = scene.add.container(model.statusPose.screenX, model.statusPose.screenY);
-  container.setDepth(model.statusPose.depth + 32);
-  const bg = scene.add.graphics();
-  drawRoundedRect(bg, width, height, 18, 0x111111, 0.82, 0x8f7245, 0.32, 2);
-  container.add(bg);
-  const phaseText = scene.add.text(0, -10, model.phaseLabel.toUpperCase(), {
-    fontFamily: "Georgia",
-    fontSize: "14px",
-    color: TEXT_LIGHT,
-    fontStyle: "700"
-  });
-  phaseText.setOrigin(0.5, 0.5);
-  const wishText = scene.add.text(0, 12, `Wish ${model.currentWishLabel}`, {
-    fontFamily: "Arial",
-    fontSize: "12px",
-    color: model.currentWishLabel === "None" ? "#bfa87e" : "#8fd67e"
-  });
-  wishText.setOrigin(0.5, 0.5);
-  container.add([phaseText, wishText]);
 }
 
 function drawPassRoute(
@@ -871,8 +813,6 @@ async function createPhaserRuntime(
       this.children.removeAll(true);
 
       drawBackground(this, model);
-      drawScore(this, model);
-      drawStatus(this, model);
 
       for (const seat of model.seats) {
         const width =

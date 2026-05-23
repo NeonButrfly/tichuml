@@ -403,15 +403,9 @@ describe("AlternateGameTableView", () => {
     expect(view.container.textContent).not.toContain("Sort Rank");
     expect(view.container.textContent).not.toContain("Sort Suit");
     expect(view.container.textContent).not.toContain("Sort Combo");
-    expect(
-      view.container.querySelector('[aria-label="Rotate left"]')
-    ).not.toBeNull();
-    expect(
-      view.container.querySelector('[aria-label="Center view"]')
-    ).not.toBeNull();
-    expect(
-      view.container.querySelector('[aria-label="Rotate right"]')
-    ).not.toBeNull();
+    expect(view.container.textContent).toContain("Rules");
+    expect(view.container.textContent).toContain("Settings");
+    expect(view.container.querySelector('[aria-label="Perspective"]')).toBeNull();
 
     view.unmount();
   });
