@@ -66,6 +66,57 @@ function drawInsetTray(
   );
 }
 
+function drawTokenWell(
+  graphics: import("pixi.js").Graphics,
+  rect: Rect,
+  radius: number
+) {
+  drawRectFrame(graphics, rect, 0x2b170d, 0x8d6d3f, radius, 0.98);
+  drawRectFrame(
+    graphics,
+    {
+      x: rect.x + rect.width * 0.08,
+      y: rect.y + rect.height * 0.08,
+      width: rect.width * 0.84,
+      height: rect.height * 0.84
+    },
+    0xa78549,
+    0xd9bb78,
+    Math.max(6, radius * 0.72),
+    0.95
+  );
+}
+
+function drawPlaque(
+  graphics: import("pixi.js").Graphics,
+  rect: Rect,
+  radius: number
+) {
+  drawRectFrame(graphics, rect, 0x4d2b16, 0x8f6738, radius, 0.98);
+  drawRectFrame(
+    graphics,
+    {
+      x: rect.x + rect.width * 0.05,
+      y: rect.y + rect.height * 0.12,
+      width: rect.width * 0.9,
+      height: rect.height * 0.76
+    },
+    0x2e180d,
+    0xd6b16e,
+    Math.max(8, radius * 0.7),
+    0.98
+  );
+}
+
+function createRect(
+  x: number,
+  y: number,
+  width: number,
+  height: number
+): Rect {
+  return { x, y, width, height };
+}
+
 function drawArrowGlyph(
   graphics: import("pixi.js").Graphics,
   route: AlternatePassRoutePlacement
@@ -133,8 +184,11 @@ function renderSurface(runtime: PixiRuntime, props: AlternateTablePixiSurfacePro
   const shadow = new Graphics();
   const embellishments = new Graphics();
   const ornaments = new Graphics();
+  const railDetails = new Graphics();
+  const ornamentArc = new Graphics();
   const trays = new Graphics();
   const routeLayer = new PIXI.Container();
+  const railLabelLayer = new PIXI.Container();
 
   const pocketRadius = props.layout.boardRect.height * 0.048;
   const outerFelt = props.layout.outerFelt;
@@ -200,6 +254,57 @@ function renderSurface(runtime: PixiRuntime, props: AlternateTablePixiSurfacePro
     0.98
   );
 
+  const topGroove = createRect(
+    props.layout.boardRect.x + props.layout.boardRect.width * 0.33,
+    props.layout.boardRect.y + props.layout.boardRect.height * 0.034,
+    props.layout.boardRect.width * 0.34,
+    props.layout.boardRect.height * 0.034
+  );
+  const bottomGroove = createRect(
+    props.layout.boardRect.x + props.layout.boardRect.width * 0.324,
+    props.layout.boardRect.y + props.layout.boardRect.height * 0.874,
+    props.layout.boardRect.width * 0.352,
+    props.layout.boardRect.height * 0.048
+  );
+  drawInsetTray(railDetails, topGroove, 16);
+  drawInsetTray(railDetails, bottomGroove, 20);
+
+  const tileSize = props.layout.boardRect.height * 0.03;
+  const leftTileBaseX = props.layout.boardRect.x + props.layout.boardRect.width * 0.05;
+  const rightTileBaseX = props.layout.boardRect.x + props.layout.boardRect.width * 0.91;
+  const upperTileY = props.layout.boardRect.y + props.layout.boardRect.height * 0.18;
+  const lowerTileY = props.layout.boardRect.y + props.layout.boardRect.height * 0.74;
+  [0, 1, 2].forEach((index) => {
+    drawTokenWell(
+      railDetails,
+      createRect(
+        leftTileBaseX,
+        upperTileY + index * tileSize * 1.22,
+        tileSize,
+        tileSize
+      ),
+      6
+    );
+    drawTokenWell(
+      railDetails,
+      createRect(
+        rightTileBaseX,
+        lowerTileY + index * tileSize * 1.22,
+        tileSize,
+        tileSize
+      ),
+      6
+    );
+  });
+
+  const frontPlaque = createRect(
+    props.layout.boardRect.x + props.layout.boardRect.width * 0.424,
+    props.layout.boardRect.y + props.layout.boardRect.height * 0.914,
+    props.layout.boardRect.width * 0.152,
+    props.layout.boardRect.height * 0.034
+  );
+  drawPlaque(railDetails, frontPlaque, 10);
+
   const feltGlow = new Graphics();
   feltGlow.poly(outerFelt.flatMap((entry) => [entry.x, entry.y]));
   feltGlow.stroke({ color: 0xd9b16b, alpha: 0.22, width: 2.2 });
@@ -213,14 +318,14 @@ function renderSurface(runtime: PixiRuntime, props: AlternateTablePixiSurfacePro
   ornaments.stroke({ color: 0xa67d3d, alpha: 0.66, width: 2.4 });
   ornaments.circle(center.x + center.width / 2, center.y + center.height / 2, center.width * 0.34);
   ornaments.stroke({ color: 0xa67d3d, alpha: 0.4, width: 1.5 });
-  ornaments.arc(
+  ornamentArc.arc(
     center.x + center.width / 2,
     center.y + center.height / 2,
     center.width * 0.54,
     Math.PI * 0.16,
     Math.PI * 0.84
   );
-  ornaments.stroke({ color: 0xc7a05d, alpha: 0.15, width: 2.2 });
+  ornamentArc.stroke({ color: 0xc7a05d, alpha: 0.15, width: 2.2 });
 
   drawRectFrame(
     ornaments,
@@ -300,16 +405,37 @@ function renderSurface(runtime: PixiRuntime, props: AlternateTablePixiSurfacePro
     props.layout.boardRect.y + props.layout.boardRect.height * 0.205
   );
 
+  const frontPlaqueLabel = new Text({
+    text: "TICHU",
+    style: new TextStyle({
+      fill: 0xdab470,
+      fontFamily: "Georgia, serif",
+      fontSize: Math.max(14, props.layout.boardRect.height * 0.018),
+      fontWeight: "700",
+      letterSpacing: 2
+    })
+  });
+  frontPlaqueLabel.anchor.set(0.5);
+  frontPlaqueLabel.position.set(
+    frontPlaque.x + frontPlaque.width / 2,
+    frontPlaque.y + frontPlaque.height / 2
+  );
+
+  railLabelLayer.addChild(frontPlaqueLabel);
+
   root.addChild(
     shadow,
     board,
     trays,
+    railDetails,
     embellishments,
     ornaments,
+    ornamentArc,
     feltGlow,
     innerBorder,
     routeLayer,
-    centerTitle
+    centerTitle,
+    railLabelLayer
   );
 }
 

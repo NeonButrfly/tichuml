@@ -534,3 +534,12 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 - Linked GitHub Issue: [#81](https://github.com/NeonButrfly/tichuml/issues/81)
 - Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
 - Status Source: GitHub issue state only.
+
+### 2026-05-22 - Alternate table mockup-comparison rail integration pass
+
+- Prompt Signal: After the mockup comparison, the next ask was to keep pushing until the alternate table felt “pro grade,” with the main gaps called out as object-read, tray integration, and camera perspective rather than gameplay wiring.
+- Interpreted Requirement: Keep the same live alternate renderer path, but use the mockup comparison to strengthen the physical table read. Add more carved rail detail, integrate a front plaque and decorative wells into the Pixi surface, fix ornament-path rendering defects, and preserve a measurable “more table, less border” geometry through focused layout regression checks.
+- Affected Systems: `apps/web/src/alternate-table/pixi-surface.tsx`, `apps/web/src/alternate-table/README.md`, `tests/integration/alternate-table-layout.test.ts`.
+- Linked GitHub Issue: [#81](https://github.com/NeonButrfly/tichuml/issues/81)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.

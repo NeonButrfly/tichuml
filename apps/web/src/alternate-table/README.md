@@ -71,6 +71,10 @@ fake mock state: it declines the opening Grand Tichu window, submits
 non-South pass selections through the engine, and leaves the local South seat
 as the live `select_pass` actor.
 
+Focused layout regression checks now live in
+`tests/integration/alternate-table-layout.test.ts` so the widened felt and
+stronger top-versus-bottom perspective do not silently drift backward.
+
 ## Known Limitations
 
 - The alternate table intentionally keeps event/state summaries minimal so the
