@@ -398,6 +398,9 @@ describe("AlternateGameTableView", () => {
     expect(view.container.textContent).not.toContain("Table Notes");
     expect(view.container.textContent).not.toContain("Recent Events");
     expect(view.container.textContent).not.toContain("Decision Summary");
+    expect(view.container.textContent).not.toContain("Sort Rank");
+    expect(view.container.textContent).not.toContain("Sort Suit");
+    expect(view.container.textContent).not.toContain("Sort Combo");
     expect(view.container.textContent).toContain("Left View");
     expect(view.container.textContent).toContain("Center View");
     expect(view.container.textContent).toContain("Right View");

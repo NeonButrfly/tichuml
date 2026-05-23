@@ -204,4 +204,119 @@ describe("alternate table layout geometry", () => {
       expect(insideCore).toBe(false);
     }
   });
+
+  it("keeps pass routes adjacent to their source rails instead of drifting into the center", () => {
+    const layout = resolveAlternateTableLayout({
+      width: 1600,
+      height: 900,
+      seatViews,
+      passRouteViews: [
+        ...passRoutes,
+        {
+          key: "north-left",
+          sourceSeat: "seat-2",
+          sourcePosition: "top",
+          target: "left",
+          targetSeat: "seat-3",
+          displayMode: "passing",
+          occupied: false,
+          visibleCardId: null,
+          faceDown: true,
+          interactive: false
+        },
+        {
+          key: "north-right",
+          sourceSeat: "seat-2",
+          sourcePosition: "top",
+          target: "right",
+          targetSeat: "seat-1",
+          displayMode: "passing",
+          occupied: false,
+          visibleCardId: null,
+          faceDown: true,
+          interactive: false
+        },
+        {
+          key: "west-up",
+          sourceSeat: "seat-3",
+          sourcePosition: "left",
+          target: "partner",
+          targetSeat: "seat-1",
+          displayMode: "passing",
+          occupied: false,
+          visibleCardId: null,
+          faceDown: true,
+          interactive: false
+        },
+        {
+          key: "west-down",
+          sourceSeat: "seat-3",
+          sourcePosition: "left",
+          target: "left",
+          targetSeat: "seat-2",
+          displayMode: "passing",
+          occupied: false,
+          visibleCardId: null,
+          faceDown: true,
+          interactive: false
+        },
+        {
+          key: "east-up",
+          sourceSeat: "seat-1",
+          sourcePosition: "right",
+          target: "partner",
+          targetSeat: "seat-3",
+          displayMode: "passing",
+          occupied: false,
+          visibleCardId: null,
+          faceDown: true,
+          interactive: false
+        },
+        {
+          key: "east-down",
+          sourceSeat: "seat-1",
+          sourcePosition: "right",
+          target: "right",
+          targetSeat: "seat-2",
+          displayMode: "passing",
+          occupied: false,
+          visibleCardId: null,
+          faceDown: true,
+          interactive: false
+        }
+      ],
+      normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+      hasVariantPicker: false,
+      hasWishPicker: false
+    });
+
+    const southRoutes = layout.passRoutes.filter((route) => route.sourcePosition === "bottom");
+    const northRoutes = layout.passRoutes.filter((route) => route.sourcePosition === "top");
+    const westRoutes = layout.passRoutes.filter((route) => route.sourcePosition === "left");
+    const eastRoutes = layout.passRoutes.filter((route) => route.sourcePosition === "right");
+
+    for (const route of southRoutes) {
+      const centerY = route.rect.y + route.rect.height / 2;
+      expect(centerY).toBeGreaterThan(layout.trickRect.y + layout.trickRect.height);
+      expect(centerY).toBeLessThan(layout.seats.bottom.rack.y);
+    }
+
+    for (const route of northRoutes) {
+      const centerY = route.rect.y + route.rect.height / 2;
+      expect(centerY).toBeGreaterThan(layout.seats.top.rack.y + layout.seats.top.rack.height);
+      expect(centerY).toBeLessThan(layout.trickRect.y);
+    }
+
+    for (const route of westRoutes) {
+      const centerX = route.rect.x + route.rect.width / 2;
+      expect(centerX).toBeGreaterThan(layout.seats.left.rack.x + layout.seats.left.rack.width);
+      expect(centerX).toBeLessThan(layout.trickRect.x);
+    }
+
+    for (const route of eastRoutes) {
+      const centerX = route.rect.x + route.rect.width / 2;
+      expect(centerX).toBeLessThan(layout.seats.right.rack.x);
+      expect(centerX).toBeGreaterThan(layout.trickRect.x + layout.trickRect.width);
+    }
+  });
 });

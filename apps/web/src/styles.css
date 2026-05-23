@@ -5449,18 +5449,33 @@ body.normal-layout-locked {
   place-items: center;
   padding: 0;
   border-radius: 14px;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
+  border: 1px solid rgba(223, 185, 112, 0.26);
+  background:
+    radial-gradient(circle at 50% 40%, rgba(31, 73, 60, 0.34), transparent 62%),
+    linear-gradient(180deg, rgba(29, 38, 33, 0.78), rgba(15, 19, 16, 0.74));
+  box-shadow:
+    0 10px 18px rgba(0, 0, 0, 0.18),
+    inset 0 0 0 1px rgba(250, 232, 186, 0.06);
 }
 
 .alternate-pass-route.is-interactive {
   cursor: pointer;
 }
 
+.alternate-pass-route:hover {
+  border-color: rgba(243, 204, 132, 0.4);
+}
+
+.alternate-pass-route.is-occupied {
+  border-color: rgba(241, 216, 162, 0.34);
+}
+
 .alternate-pass-route.is-selected {
   box-shadow:
-    0 0 20px rgba(244, 203, 129, 0.2);
+    0 0 20px rgba(244, 203, 129, 0.2),
+    0 10px 18px rgba(0, 0, 0, 0.2),
+    inset 0 0 0 1px rgba(250, 232, 186, 0.12);
+  border-color: rgba(244, 203, 129, 0.52);
 }
 
 .alternate-pass-route__card {
@@ -5538,10 +5553,10 @@ body.normal-layout-locked {
 .alternate-controls {
   position: absolute;
   display: grid;
-  gap: 6px;
+  gap: 4px;
   align-content: center;
   justify-items: center;
-  padding: 6px 14px 8px;
+  padding: 4px 10px 6px;
   transition: transform 220ms ease;
 }
 
@@ -5554,13 +5569,12 @@ body.normal-layout-locked {
 }
 
 .alternate-controls__primary,
-.alternate-controls__secondary,
 .alternate-choice-panel__options,
 .alternate-choice-panel__buttons {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 8px;
+  gap: 7px;
 }
 
 .alternate-action-button,

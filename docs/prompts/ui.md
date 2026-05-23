@@ -587,3 +587,25 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 - Linked GitHub Issue: [#81](https://github.com/NeonButrfly/tichuml/issues/81)
 - Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
 - Status Source: GitHub issue state only.
+
+### 2026-05-22 - Alternate table rail integration and pass-lane cleanup
+
+- Prompt Signal: After reviewing the live 3D screenshots, the follow-up prompts
+  rejected the chunky seat blocks, asked for opponent cards to sit on the
+  rails, called the pass geometry wrong, and explicitly asked to remove the
+  sort controls so that space could go back to the table.
+- Interpreted Requirement: Keep the normal table untouched and keep the
+  alternate table on the same live backend/state/action pipeline, but flatten
+  the fake tray blocks into rail-integrated detail, move the opponent racks
+  outward onto the wood rails, make the pass routes visibly framed and adjacent
+  to their source seats, and trim the alternate control shelf down to the core
+  play actions plus clear/continue utilities.
+- Affected Systems: `apps/web/src/alternate-table/layout.ts`,
+  `apps/web/src/alternate-table/three-surface.tsx`,
+  `apps/web/src/alternate-game-table-view.tsx`,
+  `apps/web/src/styles.css`,
+  `tests/integration/alternate-table-layout.test.ts`,
+  `tests/integration/alternate-table-view.test.ts`.
+- Linked GitHub Issue: [#81](https://github.com/NeonButrfly/tichuml/issues/81)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.

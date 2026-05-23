@@ -4,7 +4,6 @@ import {
   computeNormalViewportLayoutMetrics,
   getBoardBounds,
   resolveNormalBoardAnchorPoint,
-  resolveNormalPassLaneGeometry,
   resolveNormalSeatAnchorGeometry,
   type NormalTableLayout,
   type PassLaneDirection,
@@ -201,23 +200,23 @@ function buildSeatPlacements(config: {
 
     let rackCenter = projectedCenter;
     if (position === "top") {
-      rackCenter = point(projectedCenter.x, projectedCenter.y - config.height * 0.112);
+      rackCenter = point(projectedCenter.x, projectedCenter.y - config.height * 0.132);
     } else if (position === "bottom") {
-      rackCenter = point(projectedCenter.x, projectedCenter.y + config.height * 0.078);
+      rackCenter = point(projectedCenter.x, projectedCenter.y + config.height * 0.086);
     } else if (position === "left") {
-      rackCenter = point(projectedCenter.x - config.width * 0.072, projectedCenter.y);
+      rackCenter = point(projectedCenter.x - config.width * 0.094, projectedCenter.y);
     } else {
-      rackCenter = point(projectedCenter.x + config.width * 0.072, projectedCenter.y);
+      rackCenter = point(projectedCenter.x + config.width * 0.094, projectedCenter.y);
     }
 
     const rackWidth =
       position === "left" || position === "right"
-        ? metrics.cardWidth * 1.22
-        : normalSeat.handBounds.width * (position === "bottom" ? 1.02 : 0.84);
+        ? metrics.cardWidth * 1.06
+        : normalSeat.handBounds.width * (position === "bottom" ? 1.02 : 0.78);
     const rackHeight =
       position === "left" || position === "right"
-        ? normalSeat.handBounds.height * 0.88
-        : metrics.cardHeight * (position === "bottom" ? 1.28 : 0.92);
+        ? normalSeat.handBounds.height * 0.8
+        : metrics.cardHeight * (position === "bottom" ? 1.22 : 0.84);
 
     const rack = toProjectedRect({
       center: rackCenter,
@@ -282,6 +281,16 @@ function buildPassRoutePlacements(config: {
   const seatPositionBySeat = new Map(
     config.seatViews.map((seat) => [seat.seat, seat.position] as const)
   );
+  const seatPlacementResult = buildSeatPlacements({
+    seatViews: config.seatViews,
+    normalTableLayout: config.normalTableLayout,
+    boardBounds: config.boardBounds,
+    outerFelt: config.outerFelt,
+    hasVariantPicker: config.hasVariantPicker,
+    hasWishPicker: config.hasWishPicker,
+    width: config.width,
+    height: config.height
+  });
   const metrics = computeNormalViewportLayoutMetrics({
     viewportWidth: config.width,
     viewportHeight: config.height,
@@ -303,62 +312,66 @@ function buildPassRoutePlacements(config: {
       NORMAL_PASS_STAGE_MAP[route.sourcePosition].find(
         (entry) => entry.targetPosition === targetPosition
       )?.direction ?? "up";
-    const geometry = resolveNormalPassLaneGeometry({
-      normalTableLayout: config.normalTableLayout,
-      layoutMetrics: metrics,
-      sourcePosition: route.sourcePosition,
-      targetPosition,
-      direction,
-      sourceHandCardCount:
-        config.seatViews.find((seat) => seat.position === route.sourcePosition)?.handCount ?? 1,
-      displayMode: route.displayMode,
-      stackAlignment:
-        route.displayMode === "pickup" &&
-        (route.sourcePosition === "left" || route.sourcePosition === "right")
-          ? "centerline"
-          : "shared-edge"
-    });
-
-    if (!geometry) {
+    const sourceSeatPlacement = seatPlacementResult.seats[route.sourcePosition];
+    if (!sourceSeatPlacement) {
       return [];
     }
 
-    const center = point(parsePx(geometry.style.left), parsePx(geometry.style.top));
-    let projectedCenter = projectBoardPoint(center, config.boardBounds, config.outerFelt);
-    const scale = depthScaleForY(center.y, config.boardBounds);
+    const scale = sourceSeatPlacement.depthScale;
+    const slotWidth = clamp(metrics.cardWidth * scale * 0.86, 42, 74);
+    const slotHeight = clamp(metrics.cardHeight * scale * 0.82, 56, 104);
+    const sourceRack = sourceSeatPlacement.rack;
+    const sourceCenterX = sourceRack.x + sourceRack.width / 2;
+    const sourceCenterY = sourceRack.y + sourceRack.height / 2;
+    const horizontalGap = slotWidth * 1.24;
+    const verticalGap = slotHeight * 0.92;
+    let center = point(sourceCenterX, sourceCenterY);
 
-    if (route.sourcePosition === "top") {
-      projectedCenter = point(projectedCenter.x, projectedCenter.y - config.height * 0.045);
-    } else if (route.sourcePosition === "bottom") {
-      projectedCenter = point(projectedCenter.x, projectedCenter.y + config.height * 0.038);
+    if (route.sourcePosition === "bottom") {
+      center = point(
+        sourceCenterX +
+          (direction === "left" ? -horizontalGap : direction === "right" ? horizontalGap : 0),
+        sourceRack.y - slotHeight * 0.72
+      );
+    } else if (route.sourcePosition === "top") {
+      center = point(
+        sourceCenterX +
+          (direction === "left" ? -horizontalGap : direction === "right" ? horizontalGap : 0),
+        sourceRack.y + sourceRack.height + slotHeight * 0.72
+      );
     } else if (route.sourcePosition === "left") {
-      projectedCenter = point(projectedCenter.x - config.width * 0.022, projectedCenter.y);
-    } else {
-      projectedCenter = point(projectedCenter.x + config.width * 0.022, projectedCenter.y);
+      center = point(
+        sourceRack.x + sourceRack.width + slotWidth * 0.82,
+        sourceCenterY +
+          (direction === "up" ? -verticalGap : direction === "down" ? verticalGap : 0)
+      );
+    } else if (route.sourcePosition === "right") {
+      center = point(
+        sourceRack.x - slotWidth * 0.82,
+        sourceCenterY +
+          (direction === "up" ? -verticalGap : direction === "down" ? verticalGap : 0)
+      );
     }
 
-    return [
-      {
-        key: route.key,
-        sourcePosition: route.sourcePosition,
-        targetPosition,
-        direction,
-        rect: rectFromCenter(
-          projectedCenter,
-          geometry.width * scale * 0.96,
-          geometry.height * scale * 0.96
-        ),
-        rotation: geometry.rotation,
-        displayMode: route.displayMode,
-        interactive: route.interactive,
-        occupied: route.occupied,
-        visibleCardId: route.visibleCardId,
-        target: route.target,
-        targetSeat: route.targetSeat,
-        sourceSeat: route.sourceSeat,
-        faceDown: route.faceDown
-      }
-    ];
+    const rotation =
+      direction === "left" ? -90 : direction === "right" ? 90 : direction === "down" ? 180 : 0;
+
+    return [{
+      key: route.key,
+      sourcePosition: route.sourcePosition,
+      targetPosition,
+      direction,
+      rect: rectFromCenter(center, slotWidth, slotHeight),
+      rotation,
+      displayMode: route.displayMode,
+      interactive: route.interactive,
+      occupied: route.occupied,
+      visibleCardId: route.visibleCardId,
+      target: route.target,
+      targetSeat: route.targetSeat,
+      sourceSeat: route.sourceSeat,
+      faceDown: route.faceDown
+    }];
   });
 }
 
@@ -430,9 +443,9 @@ export function resolveAlternateTableLayout(config: {
   );
   const scoreRect = roundRect({
     x: boardRect.x + boardRect.width * 0.43,
-    y: boardRect.y + boardRect.height * 0.028,
+    y: boardRect.y + boardRect.height * 0.012,
     width: boardRect.width * 0.14,
-    height: boardRect.height * 0.038
+    height: boardRect.height * 0.032
   });
   const statusRect = roundRect({
     x: projectedPlaySurfaceCenter.x - boardRect.width * 0.082,
@@ -454,14 +467,14 @@ export function resolveAlternateTableLayout(config: {
 
   const southRack = seats.bottom.rack;
   const southPlaque = seats.bottom.plaque;
-  const southControlHeight = boardRect.height * 0.058;
+  const southControlHeight = boardRect.height * 0.044;
   const southControlRect = roundRect({
-    x: boardRect.x + boardRect.width * 0.24,
+    x: boardRect.x + boardRect.width * 0.31,
     y: Math.min(
       boardRect.y + boardRect.height - southControlHeight - 8,
-      southPlaque.y + southPlaque.height + 10
+      southPlaque.y + southPlaque.height + 8
     ),
-    width: boardRect.width * 0.52,
+    width: boardRect.width * 0.38,
     height: southControlHeight
   });
 

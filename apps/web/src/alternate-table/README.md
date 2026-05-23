@@ -41,8 +41,10 @@ table anchors instead of using alternate-only freehand placement.
   `apps/web/src/game-table-views.tsx`.
 
 Both table variants consume the same `GameTableViewProps` data and invoke the
-same callbacks for play, pass, Tichu, Grand Tichu, wish, exchange, sort, and
-selection behavior.
+same callbacks for play, pass, Tichu, Grand Tichu, wish, exchange, and
+selection behavior. The alternate view now intentionally trims the visible
+utility chrome down to the core action row plus `Clear` / `Continue AI` so
+more of the frame is devoted to the table surface.
 
 ## Navigation
 
@@ -88,6 +90,10 @@ coverage now also lives in
 `tests/integration/alternate-table-scene-layout.test.ts` so the anchor-driven
 felt coverage, pass-lane clearance, south-hand compression, and 3D tray/shelf
 ordering do not silently drift backward.
+
+The latest rail-integration pass also keeps the alternate pass slots visibly
+framed even when empty and moves the displayed route geometry beside the
+source rails instead of letting those lanes collapse back toward the center.
 
 ## Known Limitations
 

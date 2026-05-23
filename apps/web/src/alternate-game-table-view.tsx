@@ -648,48 +648,25 @@ export function AlternateGameTableView(props: GameTableViewProps) {
                     {slot.label}
                   </button>
                 ))}
-              </div>
-              <div className="alternate-controls__secondary">
                 <button
-                    type="button"
-                    className="alternate-utility-button"
-                    onClick={() => props.onSortModeChange("rank")}
-                  >
-                    Sort Rank
-                  </button>
+                  type="button"
+                  className="alternate-utility-button"
+                  onClick={props.onClearLocalSelection}
+                >
+                  Clear
+                </button>
+                {props.canContinueAi && (
                   <button
                     type="button"
                     className="alternate-utility-button"
-                    onClick={() => props.onSortModeChange("suit")}
+                    onClick={props.onContinueAi}
                   >
-                    Sort Suit
+                    Continue AI
                   </button>
-                  <button
-                    type="button"
-                    className="alternate-utility-button"
-                    onClick={() => props.onSortModeChange("combo")}
-                  >
-                    Sort Combo
-                  </button>
-                  <button
-                    type="button"
-                    className="alternate-utility-button"
-                    onClick={props.onClearLocalSelection}
-                  >
-                    Clear
-                  </button>
-                  {props.canContinueAi && (
-                    <button
-                      type="button"
-                      className="alternate-utility-button"
-                      onClick={props.onContinueAi}
-                    >
-                      Continue AI
-                    </button>
-                  )}
-                </div>
+                )}
               </div>
             </div>
+          </div>
 
           {props.localDragonRecipients.length > 0 && (
             <section className="alternate-choice-panel alternate-choice-panel--dragon">

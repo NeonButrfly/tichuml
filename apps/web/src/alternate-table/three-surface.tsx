@@ -58,19 +58,25 @@ function FeatureTray({
   insetHeight?: number;
 }) {
   return (
-    <group position={[feature.center.x, feature.center.y, feature.center.z]}>
+    <group
+      position={[
+        feature.center.x,
+        feature.center.y - feature.size.y * 0.75,
+        feature.center.z
+      ]}
+    >
       <RoundedBox
-        args={[feature.size.x, feature.size.y, feature.size.z]}
+        args={[feature.size.x, 0.055, feature.size.z]}
         radius={feature.radius}
         smoothness={6}
       >
         <primitive object={shellMaterial} attach="material" />
       </RoundedBox>
       <RoundedBox
-        args={[feature.size.x * insetWidth, insetHeight, feature.size.z * insetDepth]}
+        args={[feature.size.x * insetWidth, 0.024, feature.size.z * insetDepth]}
         radius={feature.radius * 0.72}
         smoothness={6}
-        position={[0, feature.size.y * 0.34, 0]}
+        position={[0, 0.02, 0]}
       >
         <primitive object={insetMaterial} attach="material" />
       </RoundedBox>
@@ -248,30 +254,6 @@ const TableScene = memo(function TableScene({
         >
           <ringGeometry args={[trickBowlRadius * 0.88, trickBowlRadius * 1.02, 48]} />
         </mesh>
-
-        {sceneLayout.passCups.map((cup) => (
-          <group
-            key={cup.key}
-            position={[cup.center.x, cup.center.y, cup.center.z]}
-            rotation={[0, THREE.MathUtils.degToRad(-cup.rotationDeg), 0]}
-          >
-            <RoundedBox
-              args={[cup.size.x, cup.size.y, cup.size.z]}
-              radius={cup.radius}
-              smoothness={6}
-            >
-              <primitive object={woodDark} attach="material" />
-            </RoundedBox>
-            <RoundedBox
-              args={[cup.size.x * 0.78, 0.035, cup.size.z * 0.72]}
-              radius={cup.radius * 0.72}
-              smoothness={6}
-              position={[0, cup.size.y * 0.34, 0]}
-            >
-              <primitive object={feltDark} attach="material" />
-            </RoundedBox>
-          </group>
-        ))}
 
         {[
           [-6.25, 0.09, -4.75],
