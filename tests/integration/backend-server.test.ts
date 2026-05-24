@@ -791,6 +791,52 @@ function createPassSelectDecisionRequestBody() {
   });
 }
 
+function createLargeTrickPlayDecisionRequestBody() {
+  const state = createScenarioState({
+    phase: "trick_play",
+    activeSeat: "seat-0",
+    currentTrick: null,
+    hands: {
+      "seat-0": cardsFromIds([
+        "jade-2",
+        "sword-2",
+        "jade-3",
+        "sword-3",
+        "jade-4",
+        "sword-4",
+        "jade-5",
+        "sword-5",
+        "jade-6",
+        "sword-6",
+        "jade-7",
+        "sword-7",
+        "dragon"
+      ]),
+      "seat-1": cardsFromIds(["jade-5", "sword-5", "pagoda-5"]),
+      "seat-2": cardsFromIds(["jade-6", "sword-6", "pagoda-6"]),
+      "seat-3": cardsFromIds(["jade-7", "sword-7", "pagoda-7"])
+    }
+  } satisfies Partial<GameState>);
+
+  const legalActions = getLegalActions(state);
+  const actorActions = legalActions["seat-0"] ?? [];
+  const payload = buildDecisionRequestPayload({
+    gameId: "game-large",
+    handId: "hand-large",
+    stateRaw: state as unknown as Record<string, unknown>,
+    stateNorm: {} as Record<string, unknown>,
+    legalActions,
+    phase: state.phase,
+    requestedProvider: "lightgbm_model",
+    decisionIndex: 1
+  });
+
+  return {
+    payload,
+    legalActionCount: actorActions.length
+  };
+}
+
 afterEach(() => {
   // reserved for future test-specific cleanup
 });
@@ -1358,6 +1404,66 @@ describe("backend foundation server routes", () => {
         expect(repository.decisions[0]?.metadata.scoring_path).toBe("fast_path");
         expect(repository.decisions[0]?.metadata.lightgbm_requested_scoring_path).toBe(
           "rich_path"
+        );
+      },
+      { lightgbmScorer: scorer }
+    );
+  });
+
+  it("prefilters large trick-play LightGBM requests before full feature building", async () => {
+    let scorerLegalActionCount = 0;
+    const scorer: LightgbmScorer = {
+      async score(request) {
+        scorerLegalActionCount = request.legalActions.length;
+        return {
+          scores: request.legalActions.map((_, index) => 1000 - index),
+          modelMetadata: {
+            model_type: "lightgbm_action_model"
+          },
+          runtimeMetadata: {}
+        };
+      },
+      async close() {}
+    };
+
+    const request = createLargeTrickPlayDecisionRequestBody();
+
+    await withServer(
+      async ({ baseUrl, repository }) => {
+        expect(request.legalActionCount).toBeGreaterThan(10);
+
+        const response = await fetch(`${baseUrl}/api/decision/request`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(request.payload)
+        });
+
+        expect(response.status).toBe(200);
+        const payload = (await response.json()) as {
+          accepted: boolean;
+          provider_used: string;
+          metadata?: {
+            candidate_prefilter_applied?: boolean;
+            candidate_prefilter_total?: number;
+            candidate_prefilter_retained?: number;
+          };
+        };
+        expect(payload.accepted).toBe(true);
+        expect(payload.provider_used).toBe("lightgbm_model");
+        expect(payload.metadata?.candidate_prefilter_applied).toBe(true);
+        expect(payload.metadata?.candidate_prefilter_total).toBe(
+          request.legalActionCount
+        );
+        expect(payload.metadata?.candidate_prefilter_retained).toBeLessThan(
+          request.legalActionCount
+        );
+        expect(scorerLegalActionCount).toBe(
+          payload.metadata?.candidate_prefilter_retained
+        );
+        await flushServerQueue();
+        expect(repository.decisions).toHaveLength(1);
+        expect(repository.decisions[0]?.metadata.candidate_prefilter_applied).toBe(
+          true
         );
       },
       { lightgbmScorer: scorer }

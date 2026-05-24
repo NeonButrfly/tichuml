@@ -196,6 +196,9 @@ The current evaluation harness writes pass or fail details into
 
 - illegal or mismatched score vectors trigger fallback
 - non-finite scores trigger fallback
+- large trick-play requests are prefiltered through the bounded fast-path
+  candidate generator before full LightGBM feature building, and runtime
+  metadata records when the cap was applied
 - issue [#82](https://github.com/NeonButrfly/tichuml/issues/82) hardened
   training metadata and inference responses to emit strict JSON, and the Node
   scorer now treats malformed protocol output as a recoverable fallback path

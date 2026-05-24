@@ -16,6 +16,8 @@ Telemetry is now strong enough to support:
 - strict JSON-safe LightGBM metadata exchange so evaluation cannot crash the
   backend on `NaN`-bearing validation metrics (issue
   [#82](https://github.com/NeonButrfly/tichuml/issues/82))
+- bounded candidate-prefilter metadata for large online LightGBM trick-play
+  requests so runtime latency caps are visible in telemetry
 
 This is not the same as saying every historical decision row is rollout-ready.
 Compact minimal telemetry can still be insufficient for deterministic offline

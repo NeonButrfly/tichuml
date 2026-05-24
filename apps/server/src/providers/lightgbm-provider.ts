@@ -1,6 +1,8 @@
 import {
   buildServerFastPathState,
-  createHeuristicFeatureAnalyzer
+  createHeuristicFeatureAnalyzer,
+  generateFastTrickPlayCandidates,
+  SERVER_HEURISTIC_FAST_PATH_LIMITS
 } from "@tichuml/ai-heuristics";
 import type { GameState, LegalAction } from "@tichuml/engine";
 import type { DecisionRequestPayload, JsonObject } from "@tichuml/shared";
@@ -40,6 +42,95 @@ function summarizeScoreDistribution(scores: number[]): JsonObject {
   };
 }
 
+type CandidatePrefilterResult = {
+  legalActions: LegalAction[];
+  metadata: JsonObject;
+};
+
+function findMatchingLegalAction(
+  actorLegalActions: LegalAction[],
+  stateRaw: GameState,
+  candidateAction: ReturnType<typeof generateFastTrickPlayCandidates>[number]["action"]
+): LegalAction | null {
+  const targetKey = toActionSortKey(candidateAction);
+  return (
+    actorLegalActions.find((legalAction) => {
+      const concreteAction = toConcreteActionForLegalAction(stateRaw, legalAction);
+      return toActionSortKey(concreteAction) === targetKey;
+    }) ?? null
+  );
+}
+
+function prefilterLightgbmLegalActions(
+  payload: DecisionRequestPayload,
+  stateRaw: GameState,
+  actorSeat: string,
+  actorLegalActions: LegalAction[]
+): CandidatePrefilterResult {
+  if (
+    payload.phase !== "trick_play" ||
+    actorLegalActions.length <=
+      SERVER_HEURISTIC_FAST_PATH_LIMITS.trick_play_candidate_cap
+  ) {
+    return {
+      legalActions: actorLegalActions,
+      metadata: {
+        candidate_prefilter_applied: false
+      }
+    };
+  }
+
+  const fastState = buildServerFastPathState(
+    stateRaw,
+    actorSeat as GameState["activeSeat"] & string
+  );
+  const fastCandidates = generateFastTrickPlayCandidates({
+    state: fastState,
+    actor: actorSeat as GameState["activeSeat"] & string,
+    legalActions: actorLegalActions
+  });
+  const retained = fastCandidates
+    .map((candidate) =>
+      findMatchingLegalAction(actorLegalActions, stateRaw, candidate.action)
+    )
+    .filter((candidate): candidate is LegalAction => candidate !== null);
+  const callTichuAction = actorLegalActions.find(
+    (action): action is Extract<LegalAction, { type: "call_tichu" }> =>
+      action.type === "call_tichu"
+  );
+  if (
+    callTichuAction &&
+    !retained.some(
+      (action) =>
+        action.type === "call_tichu" &&
+        toLegalActionKey(stateRaw, action) === toLegalActionKey(stateRaw, callTichuAction)
+    )
+  ) {
+    retained.push(callTichuAction);
+  }
+
+  if (retained.length === 0 || retained.length >= actorLegalActions.length) {
+    return {
+      legalActions: actorLegalActions,
+      metadata: {
+        candidate_prefilter_applied: false
+      }
+    };
+  }
+
+  return {
+    legalActions: retained,
+    metadata: {
+      candidate_prefilter_applied: true,
+      candidate_prefilter_policy: "server_fast_trick_play",
+      candidate_prefilter_total: actorLegalActions.length,
+      candidate_prefilter_retained: retained.length,
+      candidate_prefilter_limit:
+        SERVER_HEURISTIC_FAST_PATH_LIMITS.trick_play_candidate_cap
+    }
+  };
+}
+
 export async function routeLightgbmDecision(
   payload: DecisionRequestPayload,
   scorer: LightgbmScorer,
@@ -62,8 +153,15 @@ export async function routeLightgbmDecision(
   }
 
   try {
+    const prefilter = prefilterLightgbmLegalActions(
+      payload,
+      stateRaw,
+      canonicalActor,
+      actorLegalActions
+    );
+    const scoringLegalActions = prefilter.legalActions;
     const analyzerLegalActions = Array.isArray(payload.legal_actions)
-      ? ({ [payload.actor_seat]: actorLegalActions } as Record<string, LegalAction[]>)
+      ? ({ [payload.actor_seat]: scoringLegalActions } as Record<string, LegalAction[]>)
       : (payload.legal_actions as Record<string, LegalAction[]>);
     const featureBuildStartedAt = Date.now();
     const analyzer = createHeuristicFeatureAnalyzer({
@@ -72,7 +170,7 @@ export async function routeLightgbmDecision(
     });
     const actorSeat = canonicalActor;
     const stateFeatures = analyzer.getStateFeatures(actorSeat);
-    const candidateFeatures = actorLegalActions.map((legalAction) =>
+    const candidateFeatures = scoringLegalActions.map((legalAction) =>
       analyzer.getCandidateFeatures(
         actorSeat,
         toConcreteActionForLegalAction(stateRaw, legalAction),
@@ -85,22 +183,22 @@ export async function routeLightgbmDecision(
       stateRaw,
       actorSeat: canonicalActor,
       phase: payload.phase,
-      legalActions: actorLegalActions,
+      legalActions: scoringLegalActions,
       stateFeatures,
       candidateFeatures
     });
     const scoringLatencyMs = Date.now() - scoringStartedAt;
 
-    if (scored.scores.length !== actorLegalActions.length) {
+    if (scored.scores.length !== scoringLegalActions.length) {
       throw new Error(
-        `LightGBM returned ${scored.scores.length} scores for ${actorLegalActions.length} legal actions.`
+        `LightGBM returned ${scored.scores.length} scores for ${scoringLegalActions.length} legal actions.`
       );
     }
     if (scored.scores.some((score) => !Number.isFinite(score))) {
       throw new Error("LightGBM returned non-finite candidate scores.");
     }
 
-    const ranked = actorLegalActions.map((legalAction, index) => ({
+    const ranked = scoringLegalActions.map((legalAction, index) => ({
       legalAction,
       score: scored.scores[index] ?? 0,
       concreteAction: toConcreteActionForLegalAction(stateRaw, legalAction),
@@ -217,7 +315,8 @@ export async function routeLightgbmDecision(
           provider_used: "lightgbm_model",
           fallback_used: false,
           canonical_actor_seat: canonicalActor,
-          legal_action_count: actorLegalActions.length,
+          legal_action_count: scoringLegalActions.length,
+          ...prefilter.metadata,
           runtime_feature_count:
             typeof runtimeMetadata.runtime_feature_count === "number"
               ? runtimeMetadata.runtime_feature_count
@@ -284,7 +383,8 @@ export async function routeLightgbmDecision(
             : null,
         requested_provider: "lightgbm_model",
         canonical_actor_seat: canonicalActor,
-        legal_action_count: actorLegalActions.length,
+        legal_action_count: scoringLegalActions.length,
+        ...prefilter.metadata,
         runtime_feature_count:
           typeof runtimeMetadata.runtime_feature_count === "number"
             ? runtimeMetadata.runtime_feature_count
