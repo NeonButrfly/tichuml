@@ -837,38 +837,14 @@ function AnchorDebug() {
 function TableBackdrop() {
   return (
     <>
-      <div className="alternate-three-surface__room" />
-      <div
-        className="alternate-three-surface__shadow"
-        style={{ left: "7%", top: "24%", width: "86%", height: "62%" }}
-      />
-      <div
-        className="alternate-three-surface__table-rim"
-        style={{ left: "5%", top: "19%", width: "90%", height: "66%" }}
-      />
-      <div
-        className="alternate-three-surface__table-face"
-        style={{ left: "9%", top: "23%", width: "82%", height: "58%" }}
-      />
-      <div
-        style={{
-          position: "absolute",
-          left: "16%",
-          top: "29%",
-          width: "68%",
-          height: "46%",
-          borderRadius: "50%",
-          background:
-            "radial-gradient(circle at 50% 44%, rgba(255,255,255,0.07), transparent 46%), linear-gradient(180deg, #295847 0%, #1b4033 56%, #123027 100%)",
-          boxShadow:
-            "inset 0 0 0 2px rgba(212, 179, 108, 0.34), inset 0 0 0 16px rgba(10, 20, 16, 0.06)"
-        }}
-      />
-      <div
-        className="alternate-three-surface__table-sheen"
-        style={{ left: "11%", top: "24%", width: "78%", height: "54%" }}
-      />
-      <div className="alternate-three-surface__vignette" />
+      <div className="alternate-three-surface__always-room" />
+      <div className="alternate-three-surface__always-shadow" />
+      <div className="alternate-three-surface__always-table">
+        <div className="alternate-three-surface__always-table-inner">
+          <div className="alternate-three-surface__always-felt" />
+        </div>
+      </div>
+      <div className="alternate-three-surface__always-vignette" />
     </>
   );
 }
