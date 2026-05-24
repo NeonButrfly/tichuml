@@ -750,3 +750,27 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 - Linked GitHub Issue: [#81](https://github.com/NeonButrfly/tichuml/issues/81)
 - Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
 - Status Source: GitHub issue state only.
+
+### 2026-05-23 - ALT table must rebuild toward the photorealistic tray-table reference
+
+- Prompt Signal: The latest prompt raised the fidelity bar again and supplied a
+  premium tray-table reference image with dark walnut rails, green felt inset,
+  raised trays on all four sides, physical card thickness, warm lighting, and
+  the explicit instruction to treat that image as the target rather than as
+  loose inspiration.
+- Interpreted Requirement: Keep the normal gameplay table completely unchanged,
+  but rebuild the alternate table as a real 3D scene that uses the same live
+  gameplay state/action pipeline. The alternate scene should use locally
+  generated materials, reference asset path
+  `docs/reference/photorealistic-alt-tichu-table.png`, 3D cards/trays/pass
+  anchors, and a restrained overlay that does not dominate the table.
+- Affected Systems: `apps/web/src/alternate-game-table-view.tsx`,
+  `apps/web/src/alternate-table/scene-model.ts`,
+  `apps/web/src/alternate-table/three-surface.tsx`,
+  `apps/web/src/alternate-table/assets/generated/README.md`,
+  `apps/web/src/alternate-table/README.md`,
+  `docs/reference/photorealistic-alt-tichu-table.png`,
+  `apps/web/src/styles.css`.
+- Linked GitHub Issue: [#81](https://github.com/NeonButrfly/tichuml/issues/81)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.

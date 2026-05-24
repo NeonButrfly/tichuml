@@ -22,7 +22,7 @@ import {
   type ImmersiveSceneModel,
   type ImmersiveScenePassRoute,
   type ImmersiveSceneSeat
-} from "./alternate-table/phaser-surface";
+} from "./alternate-table/scene-model";
 import { AlternateTableThreeSurface } from "./alternate-table/three-surface";
 import {
   createImmersiveCanonicalLayout,
@@ -123,22 +123,6 @@ function formatAlternatePhaseLabel(
         .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
         .join(" ");
   }
-}
-
-function boxStyle(
-  pose: SouthPerspectivePose,
-  width: number,
-  height: number,
-  extraZ = 0
-): CSSProperties {
-  return {
-    left: `${pose.screenX}px`,
-    top: `${pose.screenY}px`,
-    width: `${width}px`,
-    height: `${height}px`,
-    zIndex: String(Math.round(pose.depth + extraZ)),
-    transform: `translate(-50%, -50%) rotate(${pose.rotation}deg)`
-  };
 }
 
 function toRenderedCard(
@@ -372,6 +356,15 @@ export function AlternateGameTableView(props: GameTableViewProps) {
   const grandTichuLabel = props.seatViews.some((seat) => seat.callState.grandTichu)
     ? "Called"
     : "Off";
+  const handleScenePassRouteClick = useCallback(
+    (routeKey: string) => {
+      const target = props.passRouteViews.find((route) => route.key === routeKey)?.target;
+      if (target) {
+        props.onPassTargetSelect(target);
+      }
+    },
+    [props.onPassTargetSelect, props.passRouteViews]
+  );
 
   const sceneModel = useMemo<ImmersiveSceneModel>(() => {
     const seats: ImmersiveSceneSeat[] = [
@@ -605,7 +598,12 @@ export function AlternateGameTableView(props: GameTableViewProps) {
         onPointerUp={handleStagePointerUp}
         onPointerCancel={handleStagePointerUp}
       >
-        <AlternateTableThreeSurface model={sceneModel} />
+        <AlternateTableThreeSurface
+          model={sceneModel}
+          layoutDebugEnabled={layoutDebugEnabled}
+          onSouthCardClick={props.localCanInteract ? props.onLocalCardClick : undefined}
+          onPassRouteClick={handleScenePassRouteClick}
+        />
 
         <div
           className="alternate-overlay"
@@ -732,7 +730,7 @@ export function AlternateGameTableView(props: GameTableViewProps) {
               </button>
             </section>
 
-            <div className="alternate-hit-layer">
+            <div className="alternate-semantic-inputs">
               <div aria-hidden="true">
                 {sceneModel.remoteCards.map((card) => (
                   <span key={card.key} data-alt-card-back="true" />
@@ -744,7 +742,6 @@ export function AlternateGameTableView(props: GameTableViewProps) {
                     key={card.key}
                     type="button"
                     className="playing-card alternate-hitbox-card"
-                    style={boxStyle(card.pose, card.width, card.height, 20)}
                     aria-label={`Select ${card.card.id}`}
                     disabled={!props.localCanInteract}
                     draggable={props.localPassInteractionEnabled}
@@ -762,17 +759,11 @@ export function AlternateGameTableView(props: GameTableViewProps) {
                   key={route.key}
                   type="button"
                   className="alternate-hitbox-route"
-                  style={boxStyle(route.pose, route.width, route.height, 12)}
                   data-alt-pass-route={route.key}
                   data-pass-direction={route.direction}
                   aria-label={`Pass route ${route.key}`}
                   disabled={!route.interactive}
-                  onClick={() => {
-                    const target = props.passRouteViews.find((entry) => entry.key === route.key)?.target;
-                    if (target) {
-                      props.onPassTargetSelect(target);
-                    }
-                  }}
+                  onClick={() => handleScenePassRouteClick(route.key)}
                   onDragOver={(event) => {
                     event.preventDefault();
                     event.dataTransfer.dropEffect = "move";

@@ -6,9 +6,14 @@ source of truth; the alternate table is a South-perspective luxury play surface
 that reuses the same backend-backed game state, legal-action logic, selection
 rules, and action dispatch pipeline.
 
+The visual contract for the current 3D rebuild is
+`docs/reference/photorealistic-alt-tichu-table.png`. That reference should be
+treated as the target composition for the alternate table only.
+
 ## Renderer Choice
 
-The implementation now uses a projection-driven React Three Fiber scene:
+The implementation now uses a projection-driven React Three Fiber scene with
+procedurally generated local materials:
 
 - React still owns the gameplay interaction shell, routing, and all live
   actions.
@@ -16,9 +21,15 @@ The implementation now uses a projection-driven React Three Fiber scene:
   pure geometry source. It still derives canonical seat, hand, and pass-lane
   anchors from the existing normal table layout so the alternate view does not
   fork interaction ownership.
+- `apps/web/src/alternate-table/scene-model.ts` is the shared scene contract
+  between the table shell and the 3D surface.
 - `apps/web/src/alternate-table/three-surface.tsx` is the current immersive
-  visual surface. It renders the room, oval wooden table, 3D card planes,
-  tabletop pass slots, and card shadows inside one React-hosted scene.
+  visual surface. It renders the room, walnut table, green felt inset, wooden
+  trays, 3D card meshes, plaques, tabletop pass slots, and card shadows inside
+  one React-hosted scene.
+- `apps/web/src/alternate-table/assets/generated/README.md` documents the
+  generated/local asset approach for wood, felt, plaques, card backs, and
+  special-card art.
 - `apps/web/src/alternate-table/phaser-surface.tsx` remains in the repo as the
   earlier alternate-scene experiment, but the current live alternate table is
   driven by the React Three Fiber surface instead.
@@ -30,11 +41,10 @@ This keeps the real gameplay pipeline intact while moving the alternate table
 closer to the wooden-table reference image: one shared south-camera scene
 instead of layered projected UI.
 
-The current visual target is the attached low-camera wooden-table reference:
-a broad oval tabletop filling most of the viewport, a near upright south hand,
-smaller far hands on the back arc, trick cards resting on the tabletop with
-soft shadows, and only a small amount of supporting chrome above the play
-surface.
+The current visual target is the attached premium wooden-table reference:
+a dark walnut frame, green felt inset, raised trays on all four sides, a near
+upright south hand, smaller far hands in their own trays, and trick/pass cards
+resting physically on the felt under warm cinematic lighting.
 
 The latest stabilization pass replaced the old loose stage sizing with a
 deterministic viewport-normalized rig:
@@ -124,10 +134,11 @@ smaller and higher, and horizontal spread compresses with depth.
 
 - The alternate table intentionally keeps event/state summaries minimal so the
   tabletop remains the dominant visual surface.
-- The React Three Fiber scene is still procedural and asset-free, so the room
-  and wood finish are closer to a stylized digital table than a scanned photo.
-- The current 3D hand shelves still need further tuning against the reference
-  image, especially south-hand scale and exchange-slot readability.
+- The React Three Fiber scene is still fully procedural, so the materials are
+  locally generated rather than scanned or photo-based.
+- The current 3D hand trays still need more tuning against the reference
+  image, especially felt/wood fidelity, south-hand proportion, and exchange-slot
+  readability.
 - The current acceptance blocker is finish quality, not gameplay plumbing:
   material richness, per-phase trick/pass polish, and continued camera tuning
   still need iteration against issue `#81`.
