@@ -14,6 +14,24 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 
 ## Entries
 
+### 2026-05-23 - The photorealistic ALT table must keep the full scene inside the viewport
+
+- Prompt Signal: After the 3D tray rebuild, the next visual feedback said
+  "Thats good now get everything on the screen" and attached captures showing
+  the south hand, south plaque, and side trays clipping against the viewport.
+- Interpreted Requirement: Issue
+  [#81](https://github.com/NeonButrfly/tichuml/issues/81) continues to track a
+  hard framing contract for the ALT table: the south-player 3D scene must fit
+  within common desktop viewports, keeping the front tray, side trays, south
+  hand, and active controls visible at once instead of letting the camera or
+  world scale crop the table edges.
+- Affected Systems: `apps/web/src/alternate-table/three-surface.tsx`,
+  ALT table camera/tray constants, screenshot validation artifacts, and Linux
+  host visual follow-through.
+- Linked GitHub Issue: [#81](https://github.com/NeonButrfly/tichuml/issues/81)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.
+
 ### 2026-05-22 - Alternate table should tune toward the cinematic wooden-room reference
 
 - Prompt Signal: The latest visual feedback called the immersive table

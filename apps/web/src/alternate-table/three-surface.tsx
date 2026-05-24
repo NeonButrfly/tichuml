@@ -22,12 +22,12 @@ type CardTransform = {
 };
 
 const TABLE_WORLD = {
-  width: 13.4,
-  depth: 9.1,
+  width: 11.8,
+  depth: 8.15,
   rimHeight: 0.86,
   rimRadius: 0.44,
-  feltWidth: 10.92,
-  feltDepth: 6.92,
+  feltWidth: 9.64,
+  feltDepth: 6.14,
   feltHeight: 0.18,
   plaqueHeight: 0.4
 } as const;
@@ -40,25 +40,25 @@ const CARD_WORLD = {
 } as const;
 
 const SEAT_TRAYS = {
-  bottom: { position: [0, 0.78, 3.34] as Vec3, width: 8.96, depth: 0.78, rotationY: 0 },
-  top: { position: [0, 0.78, -3.24] as Vec3, width: 5.76, depth: 0.72, rotationY: Math.PI },
-  left: { position: [-4.98, 0.78, 0.02] as Vec3, width: 4.72, depth: 0.72, rotationY: Math.PI / 2 },
-  right: { position: [4.98, 0.78, 0.02] as Vec3, width: 4.72, depth: 0.72, rotationY: -Math.PI / 2 }
+  bottom: { position: [0, 0.78, 2.78] as Vec3, width: 7.72, depth: 0.76, rotationY: 0 },
+  top: { position: [0, 0.78, -2.86] as Vec3, width: 5.18, depth: 0.68, rotationY: Math.PI },
+  left: { position: [-4.34, 0.78, 0.04] as Vec3, width: 3.94, depth: 0.68, rotationY: Math.PI / 2 },
+  right: { position: [4.34, 0.78, 0.04] as Vec3, width: 3.94, depth: 0.68, rotationY: -Math.PI / 2 }
 } as const;
 
 const PASS_ROUTE_ANCHORS: Record<string, CardTransform> = {
-  "bottom:left": { position: [-2.5, TABLE_WORLD.feltHeight + 0.03, 1.86], rotation: [-Math.PI / 2, 0, 0.38] },
-  "bottom:top": { position: [0, TABLE_WORLD.feltHeight + 0.03, 1.58], rotation: [-Math.PI / 2, 0, 0] },
-  "bottom:right": { position: [2.5, TABLE_WORLD.feltHeight + 0.03, 1.86], rotation: [-Math.PI / 2, 0, -0.38] },
-  "top:left": { position: [-1.95, TABLE_WORLD.feltHeight + 0.03, -1.72], rotation: [-Math.PI / 2, 0, -0.24] },
-  "top:bottom": { position: [0, TABLE_WORLD.feltHeight + 0.03, -1.48], rotation: [-Math.PI / 2, 0, 0] },
-  "top:right": { position: [1.95, TABLE_WORLD.feltHeight + 0.03, -1.72], rotation: [-Math.PI / 2, 0, 0.24] },
-  "left:top": { position: [-3.38, TABLE_WORLD.feltHeight + 0.03, -1.18], rotation: [-Math.PI / 2, 0, 0.82] },
-  "left:right": { position: [-2.86, TABLE_WORLD.feltHeight + 0.03, 0], rotation: [-Math.PI / 2, 0, Math.PI / 2] },
-  "left:bottom": { position: [-3.38, TABLE_WORLD.feltHeight + 0.03, 1.18], rotation: [-Math.PI / 2, 0, 2.26] },
-  "right:top": { position: [3.38, TABLE_WORLD.feltHeight + 0.03, -1.18], rotation: [-Math.PI / 2, 0, -0.82] },
-  "right:left": { position: [2.86, TABLE_WORLD.feltHeight + 0.03, 0], rotation: [-Math.PI / 2, 0, -Math.PI / 2] },
-  "right:bottom": { position: [3.38, TABLE_WORLD.feltHeight + 0.03, 1.18], rotation: [-Math.PI / 2, 0, -2.26] }
+  "bottom:left": { position: [-2.18, TABLE_WORLD.feltHeight + 0.03, 1.58], rotation: [-Math.PI / 2, 0, 0.36] },
+  "bottom:top": { position: [0, TABLE_WORLD.feltHeight + 0.03, 1.34], rotation: [-Math.PI / 2, 0, 0] },
+  "bottom:right": { position: [2.18, TABLE_WORLD.feltHeight + 0.03, 1.58], rotation: [-Math.PI / 2, 0, -0.36] },
+  "top:left": { position: [-1.72, TABLE_WORLD.feltHeight + 0.03, -1.44], rotation: [-Math.PI / 2, 0, -0.22] },
+  "top:bottom": { position: [0, TABLE_WORLD.feltHeight + 0.03, -1.26], rotation: [-Math.PI / 2, 0, 0] },
+  "top:right": { position: [1.72, TABLE_WORLD.feltHeight + 0.03, -1.44], rotation: [-Math.PI / 2, 0, 0.22] },
+  "left:top": { position: [-2.96, TABLE_WORLD.feltHeight + 0.03, -1.02], rotation: [-Math.PI / 2, 0, 0.82] },
+  "left:right": { position: [-2.52, TABLE_WORLD.feltHeight + 0.03, 0], rotation: [-Math.PI / 2, 0, Math.PI / 2] },
+  "left:bottom": { position: [-2.96, TABLE_WORLD.feltHeight + 0.03, 1.02], rotation: [-Math.PI / 2, 0, 2.26] },
+  "right:top": { position: [2.96, TABLE_WORLD.feltHeight + 0.03, -1.02], rotation: [-Math.PI / 2, 0, -0.82] },
+  "right:left": { position: [2.52, TABLE_WORLD.feltHeight + 0.03, 0], rotation: [-Math.PI / 2, 0, -Math.PI / 2] },
+  "right:bottom": { position: [2.96, TABLE_WORLD.feltHeight + 0.03, 1.02], rotation: [-Math.PI / 2, 0, -2.26] }
 };
 
 function supportsThreeCanvas() {
@@ -481,14 +481,14 @@ function createCardMaterials(
 function getSouthCardTransform(item: ImmersiveSceneCard, index: number, count: number): CardTransform {
   const midpoint = (count - 1) / 2;
   const offset = midpoint === 0 ? 0 : (index - midpoint) / Math.max(midpoint, 1);
-  const spread = clamp(0.62 - count * 0.008, 0.34, 0.62);
+  const spread = clamp(0.48 - count * 0.006, 0.26, 0.48);
   return {
     position: [
-      offset * spread * Math.max(4.8, count * 0.78),
-      1.36 + (item.selected ? CARD_WORLD.southLift : 0),
-      SEAT_TRAYS.bottom.position[2] + 0.04 + Math.abs(offset) * 0.1
+      offset * spread * Math.max(4.1, count * 0.66),
+      1.26 + (item.selected ? CARD_WORLD.southLift : 0),
+      SEAT_TRAYS.bottom.position[2] + 0.02 + Math.abs(offset) * 0.08
     ],
-    rotation: [-0.05, 0, -offset * 0.18]
+    rotation: [-0.04, 0, -offset * 0.14]
   };
 }
 
@@ -497,8 +497,8 @@ function getNorthCardTransform(index: number, count: number): CardTransform {
   const offset = midpoint === 0 ? 0 : (index - midpoint) / Math.max(midpoint, 1);
   return {
     position: [
-      offset * 0.56 * Math.max(2.1, count * 0.34),
-      1.26,
+      offset * 0.48 * Math.max(1.8, count * 0.3),
+      1.18,
       SEAT_TRAYS.top.position[2] - Math.abs(offset) * 0.03
     ],
     rotation: [-0.03, Math.PI, offset * 0.1]
@@ -512,8 +512,8 @@ function getSideCardTransform(position: "left" | "right", index: number, count: 
   return {
     position: [
       SEAT_TRAYS[position].position[0] + side * Math.abs(offset) * 0.02,
-      1.24,
-      offset * 0.58 * Math.max(1.9, count * 0.32)
+      1.18,
+      offset * 0.48 * Math.max(1.58, count * 0.28)
     ],
     rotation: [-0.04, position === "left" ? Math.PI / 2 : -Math.PI / 2, side * offset * 0.11]
   };
@@ -920,10 +920,10 @@ function TableScene({
       </RoundedBox>
 
       {[
-        [-5.86, TABLE_WORLD.rimHeight / 2 + 0.02, -4.06],
-        [5.86, TABLE_WORLD.rimHeight / 2 + 0.02, -4.06],
-        [-5.86, TABLE_WORLD.rimHeight / 2 + 0.02, 4.06],
-        [5.86, TABLE_WORLD.rimHeight / 2 + 0.02, 4.06]
+        [-5.12, TABLE_WORLD.rimHeight / 2 + 0.02, -3.62],
+        [5.12, TABLE_WORLD.rimHeight / 2 + 0.02, -3.62],
+        [-5.12, TABLE_WORLD.rimHeight / 2 + 0.02, 3.62],
+        [5.12, TABLE_WORLD.rimHeight / 2 + 0.02, 3.62]
       ].map((position, index) => (
         <mesh key={`well-${index}`} position={position as Vec3} rotation={[-Math.PI / 2, 0, 0]}>
           <ringGeometry args={[0.34, 0.58, 42]} />
@@ -937,10 +937,10 @@ function TableScene({
       <CardTray {...SEAT_TRAYS.left} />
       <CardTray {...SEAT_TRAYS.right} />
 
-      <PlaqueMesh position={[-3.92, 0.58, 2.96]} rotation={[-0.34, 0.16, 0.02]} title="WEST" subtitle={String(model.score.they)} active={false} size={[1.36, 0.66, 0.08]} />
-      <PlaqueMesh position={[3.92, 0.58, 2.96]} rotation={[-0.34, -0.16, -0.02]} title="EAST" subtitle={String(model.score.they)} active={false} size={[1.36, 0.66, 0.08]} />
-      <PlaqueMesh position={[0, 0.58, -2.98]} rotation={[-0.18, 0, 0]} title="NORTH" subtitle={String(model.score.we)} active={false} size={[1.52, 0.66, 0.08]} />
-      <PlaqueMesh position={[0, 0.48, 4.46]} rotation={[-0.52, 0, 0]} title="SOUTH" subtitle={String(model.score.we)} active={true} size={[1.72, 0.72, 0.08]} />
+      <PlaqueMesh position={[-3.44, 0.56, 2.58]} rotation={[-0.34, 0.16, 0.02]} title="WEST" subtitle={String(model.score.they)} active={false} size={[1.28, 0.62, 0.08]} />
+      <PlaqueMesh position={[3.44, 0.56, 2.58]} rotation={[-0.34, -0.16, -0.02]} title="EAST" subtitle={String(model.score.they)} active={false} size={[1.28, 0.62, 0.08]} />
+      <PlaqueMesh position={[0, 0.56, -2.62]} rotation={[-0.18, 0, 0]} title="NORTH" subtitle={String(model.score.we)} active={false} size={[1.46, 0.64, 0.08]} />
+      <PlaqueMesh position={[0, 0.44, 3.76]} rotation={[-0.5, 0, 0]} title="SOUTH" subtitle={String(model.score.we)} active={true} size={[1.6, 0.68, 0.08]} />
       <ScoreMesh we={model.score.we} they={model.score.they} />
 
       {northCards.map((item, index) => (
@@ -1056,13 +1056,13 @@ export function AlternateTableThreeSurface({
         dpr={[1, 1.75]}
         gl={{ antialias: true, alpha: true }}
         camera={{
-          position: [0, 6.15, 11.4],
-          fov: 36,
+          position: [0, 7.15, 14.1],
+          fov: 35,
           near: 0.1,
           far: 40
         }}
         onCreated={({ camera }) => {
-          camera.lookAt(0, 0.92, -0.2);
+          camera.lookAt(0, 0.98, -0.12);
         }}
       >
         <TableScene
