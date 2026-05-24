@@ -395,16 +395,16 @@ describe("AlternateGameTableView", () => {
     ).toBeGreaterThan(0);
     expect(view.container.textContent).toContain("WE");
     expect(view.container.textContent).toContain("THEY");
-    expect(view.container.textContent).toContain("Game State");
-    expect(view.container.textContent).toContain("Phase");
+    expect(view.container.textContent).not.toContain("Game State");
+    expect(view.container.textContent).not.toContain("Round Seed");
     expect(view.container.textContent).not.toContain("Table Notes");
     expect(view.container.textContent).not.toContain("Recent Events");
     expect(view.container.textContent).not.toContain("Decision Summary");
     expect(view.container.textContent).not.toContain("Sort Rank");
     expect(view.container.textContent).not.toContain("Sort Suit");
     expect(view.container.textContent).not.toContain("Sort Combo");
-    expect(view.container.textContent).toContain("Rules");
-    expect(view.container.textContent).toContain("Settings");
+    expect(view.container.textContent).not.toContain("Rules");
+    expect(view.container.textContent).not.toContain("Settings");
     expect(view.container.querySelector('[aria-label="Perspective"]')).toBeNull();
 
     view.unmount();
@@ -426,17 +426,16 @@ describe("AlternateGameTableView", () => {
 
     expect(localCard).not.toBeNull();
     expect(playButton).not.toBeUndefined();
-    expect(clearButton).not.toBeUndefined();
+    expect(clearButton).toBeUndefined();
 
     act(() => {
       localCard?.click();
       playButton?.click();
-      clearButton?.click();
     });
 
     expect(props.onLocalCardClick).toHaveBeenCalledWith("jade-3");
     expect(props.onNormalAction).toHaveBeenCalledWith("play");
-    expect(props.onClearLocalSelection).toHaveBeenCalledTimes(1);
+    expect(props.onClearLocalSelection).not.toHaveBeenCalled();
 
     view.unmount();
   });

@@ -792,3 +792,23 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 - Linked GitHub Issue: [#81](https://github.com/NeonButrfly/tichuml/issues/81)
 - Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
 - Status Source: GitHub issue state only.
+
+### 2026-05-24 - ALT table should remove duplicate overlay chrome and keep only the bottom action rail
+
+- Prompt Signal: The latest ALT-table correction explicitly rejected the
+  persistent top-left and bottom-left status panels, the duplicate top-right
+  `Rules` and `Settings` buttons, and the extra `Clear` action. The prompt
+  required those overlays to move into the hamburger/menu path instead, while
+  keeping only phase-aware gameplay controls and pinning them to the very
+  bottom edge of the viewport.
+- Interpreted Requirement: Keep the normal table and all gameplay plumbing
+  unchanged, but simplify the alternate 3D table HUD so the visible scene is
+  not covered by duplicate status chrome. The ALT view should render only the
+  semantic hitboxes plus the live action rail at the bottom of the screen,
+  without a separate visible `Clear` button.
+- Affected Systems: `apps/web/src/alternate-game-table-view.tsx`,
+  `apps/web/src/styles.css`,
+  `tests/integration/alternate-table-view.test.ts`.
+- Linked GitHub Issue: [#81](https://github.com/NeonButrfly/tichuml/issues/81)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.

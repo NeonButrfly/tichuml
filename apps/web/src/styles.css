@@ -6640,10 +6640,12 @@ body.normal-layout-locked {
 
 .alternate-controls {
   position: absolute;
-  right: 22px;
-  bottom: 22px;
+  left: 50%;
+  right: auto;
+  bottom: max(8px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
   z-index: 22;
-  width: min(326px, calc(100vw - 44px));
+  width: min(420px, calc(100vw - 24px));
   display: grid;
   gap: 8px;
 }
@@ -6652,6 +6654,7 @@ body.normal-layout-locked {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+  align-items: stretch;
 }
 
 .alternate-action-button,
@@ -6668,6 +6671,10 @@ body.normal-layout-locked {
   letter-spacing: 0.03em;
   cursor: pointer;
   box-shadow: 0 16px 28px rgba(0, 0, 0, 0.22);
+}
+
+.alternate-utility-button--full {
+  grid-column: 1 / -1;
 }
 
 .alternate-action-button--primary {
@@ -6928,9 +6935,11 @@ body.normal-layout-locked {
 }
 
 .alternate-controls {
-  right: 22px;
-  bottom: 18px;
-  width: min(324px, calc(100vw - 44px));
+  left: 50%;
+  right: auto;
+  bottom: max(8px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  width: min(420px, calc(100vw - 24px));
 }
 
 .alternate-controls__primary {
@@ -6973,8 +6982,9 @@ body.normal-layout-locked {
   }
 
   .alternate-controls {
-    right: 14px;
-    bottom: 14px;
-    width: min(288px, calc(100vw - 28px));
+    left: 50%;
+    right: auto;
+    bottom: max(8px, env(safe-area-inset-bottom));
+    width: min(360px, calc(100vw - 20px));
   }
 }

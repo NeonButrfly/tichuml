@@ -17,7 +17,6 @@ import {
 } from "./game-table-views";
 import { NORMAL_PASS_STAGE_MAP, type PassLaneDirection } from "./table-layout";
 import {
-  type AlternateCameraPreset,
   type ImmersiveSceneCard,
   type ImmersiveSceneModel,
   type ImmersiveScenePassRoute,
@@ -40,11 +39,6 @@ import {
 } from "./alternate-table/south-perspective-projection";
 
 const CARD_HEIGHT_RATIO = 1.42;
-const CAMERA_YAW_BY_PRESET: Record<AlternateCameraPreset, number> = {
-  left: -1,
-  center: 0,
-  right: 1
-};
 
 function clamp(value: number, minimum: number, maximum: number) {
   return Math.min(maximum, Math.max(minimum, value));
@@ -238,10 +232,6 @@ export function AlternateGameTableView(props: GameTableViewProps) {
     return () => observer.disconnect();
   }, []);
 
-  const handleCameraPresetSelect = useCallback((preset: AlternateCameraPreset) => {
-    setCameraYaw(CAMERA_YAW_BY_PRESET[preset]);
-  }, []);
-
   const handleStagePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLElement>) => {
       if (!layoutDebugEnabled) {
@@ -337,8 +327,6 @@ export function AlternateGameTableView(props: GameTableViewProps) {
       props.state.phase === "pass_reveal" ||
       props.state.phase === "exchange_complete");
 
-  const cameraPreset =
-    cameraYaw <= -0.35 ? "left" : cameraYaw >= 0.35 ? "right" : "center";
   const statusText = formatAlternatePhaseLabel(props.state.phase);
   const currentWishLabel =
     props.derived.currentWish === null ? "None" : formatRank(props.derived.currentWish);
@@ -353,9 +341,6 @@ export function AlternateGameTableView(props: GameTableViewProps) {
     () => resolveSouthPerspectiveDebugLayout(projector, canonicalLayout),
     [canonicalLayout, projector]
   );
-  const grandTichuLabel = props.seatViews.some((seat) => seat.callState.grandTichu)
-    ? "Called"
-    : "Off";
   const handleScenePassRouteClick = useCallback(
     (routeKey: string) => {
       const target = props.passRouteViews.find((route) => route.key === routeKey)?.target;
@@ -614,122 +599,6 @@ export function AlternateGameTableView(props: GameTableViewProps) {
           }
         >
           <div className="alternate-hud">
-            <section className="alternate-side-panel alternate-side-panel--status">
-              <div className="alternate-branding">
-                <span className="alternate-branding__mark" aria-hidden="true">
-                  TICHU
-                </span>
-              </div>
-              <div className="alternate-side-panel__rows">
-                <div>
-                  <span>Round Seed</span>
-                  <strong>{props.roundSeed.slice(0, 8)}</strong>
-                </div>
-                <div>
-                  <span>Decision Count</span>
-                  <strong>{props.decisionCount}</strong>
-                </div>
-                <div>
-                  <span>Phase</span>
-                  <strong>{statusText}</strong>
-                </div>
-                <div>
-                  <span>Grand Tichu</span>
-                  <strong>{grandTichuLabel}</strong>
-                </div>
-                <div>
-                  <span>Your Wish</span>
-                  <strong>{currentWishLabel}</strong>
-                </div>
-              </div>
-            </section>
-
-            <div className="alternate-top-actions" role="group" aria-label="Table tools">
-              <button
-                type="button"
-                className="alternate-top-button"
-                onClick={() => props.onUiCommand("open_how_to_play_dialog")}
-              >
-                Rules
-              </button>
-              <button
-                type="button"
-                className="alternate-top-button"
-                onClick={() => props.onUiCommand("open_backend_settings_dialog")}
-              >
-                Settings
-              </button>
-              {layoutDebugEnabled && (
-                <div className="alternate-camera-controls" role="group" aria-label="Perspective">
-                  <button
-                    type="button"
-                    className={[
-                      "alternate-camera-button",
-                      cameraPreset === "left" ? "is-active" : ""
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                    onClick={() => handleCameraPresetSelect("left")}
-                  >
-                    Left
-                  </button>
-                  <button
-                    type="button"
-                    className={[
-                      "alternate-camera-button",
-                      cameraPreset === "center" ? "is-active" : ""
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                    onClick={() => handleCameraPresetSelect("center")}
-                  >
-                    Center
-                  </button>
-                  <button
-                    type="button"
-                    className={[
-                      "alternate-camera-button",
-                      cameraPreset === "right" ? "is-active" : ""
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                    onClick={() => handleCameraPresetSelect("right")}
-                  >
-                    Right
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <section className="alternate-side-panel alternate-side-panel--state">
-              <h2>Game State</h2>
-              <div className="alternate-side-panel__rows">
-                <div>
-                  <span>Phase</span>
-                  <strong>{statusText}</strong>
-                </div>
-                <div>
-                  <span>Trick</span>
-                  <strong>{trickSummary}</strong>
-                </div>
-                <div>
-                  <span>Dog</span>
-                  <strong>{dogSummary}</strong>
-                </div>
-                <div>
-                  <span>Next</span>
-                  <strong>{nextSeatLabel}</strong>
-                </div>
-              </div>
-              <button
-                type="button"
-                className="alternate-side-panel__footer-button"
-                onClick={() => props.onUiCommand("open_score_history_dialog")}
-              >
-                Game Log
-              </button>
-            </section>
-
             <div className="alternate-semantic-inputs">
               <div aria-hidden="true">
                 {sceneModel.remoteCards.map((card) => (
@@ -796,17 +665,10 @@ export function AlternateGameTableView(props: GameTableViewProps) {
                     {slot.label}
                   </button>
                 ))}
-                <button
-                  type="button"
-                  className="alternate-utility-button"
-                  onClick={props.onClearLocalSelection}
-                >
-                  Clear
-                </button>
                 {props.canContinueAi && (
                   <button
                     type="button"
-                    className="alternate-utility-button"
+                    className="alternate-utility-button alternate-utility-button--full"
                     onClick={props.onContinueAi}
                   >
                     Continue AI
@@ -818,8 +680,6 @@ export function AlternateGameTableView(props: GameTableViewProps) {
             <div className="alternate-semantic-mirror" aria-live="polite">
               <span>WE</span>
               <span>THEY</span>
-              <span>Game State</span>
-              <span>Phase</span>
               <span>{statusText}</span>
               <span>{trickSummary}</span>
               <span>{dogSummary}</span>
