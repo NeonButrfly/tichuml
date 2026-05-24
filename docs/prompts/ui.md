@@ -839,3 +839,29 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 - Linked GitHub Issue: [#81](https://github.com/NeonButrfly/tichuml/issues/81)
 - Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
 - Status Source: GitHub issue state only.
+
+### 2026-05-24 - ALT table must be a clean React 3D rebuild with generated assets and no fallback stack
+
+- Prompt Signal: The latest correction explicitly rejected any further
+  visibility patches or fallback layers and required a literal clean rebuild of
+  the alternate table with React Three Fiber, generated textures, real mesh
+  cards, and complete removal of the old ALT visual stack.
+- Interpreted Requirement: Keep the default table untouched and the gameplay
+  pipeline canonical, but delete the old alternate renderer path and replace it
+  with one isolated React 3D route rooted in a single `TableRoot` scene graph.
+  The new ALT scene must use generated source textures captured in-repo, mesh
+  trays and cards, in-felt pass lanes and trick zone, and only the bottom
+  action rail as visible DOM chrome.
+- Affected Systems: `apps/web/src/App.tsx`,
+  `apps/web/src/alt-table-3d/AltTable3DRoute.tsx`,
+  `apps/web/src/alt-table-3d/AltTable3DScene.tsx`,
+  `apps/web/src/alt-table-3d/AltTable3DTableRoot.tsx`,
+  `apps/web/src/alt-table-3d/AltTable3DCardMesh.tsx`,
+  `apps/web/src/alt-table-3d/assets/asset-manifest.json`,
+  `apps/web/src/alt-table-3d/assets/scripts/build_assets.py`,
+  `apps/web/src/alt-table-3d/README.md`,
+  `tests/integration/alternate-table-view.test.ts`,
+  `tests/integration/alternate-table-route-guards.test.ts`.
+- Linked GitHub Issue: [#81](https://github.com/NeonButrfly/tichuml/issues/81)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.

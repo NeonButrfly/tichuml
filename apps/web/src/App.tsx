@@ -88,7 +88,7 @@ import {
   type SeatVisualPosition,
   type WishSelectionValue
 } from "./game-table-views";
-import { AlternateGameTableView } from "./alternate-game-table-view";
+import { AltTable3DRoute } from "./alt-table-3d/AltTable3DRoute";
 import { createAlternatePassSelectPreviewSession } from "./alternate-table/preview-session";
 import { generateSeedWithEntropy } from "./seed/orchestrator";
 import {
@@ -3747,7 +3747,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
   }
 
   return playerTableVariant === "alternate" ? (
-    <AlternateGameTableView {...viewProps} />
+    <AltTable3DRoute {...viewProps} />
   ) : (
     <NormalGameTableView {...viewProps} />
   );

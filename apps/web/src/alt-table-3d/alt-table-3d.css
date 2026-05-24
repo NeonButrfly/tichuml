@@ -1,0 +1,167 @@
+.alt-table-3d {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 50% 20%, rgba(86, 62, 38, 0.28), transparent 40%),
+    linear-gradient(180deg, #23180f 0%, #140f0c 52%, #0b0908 100%);
+  color: #f7ecd2;
+  display: grid;
+  grid-template-rows: 1fr auto;
+}
+
+.alt-table-3d__stage {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.alt-table-3d__canvas-shell {
+  position: absolute;
+  inset: 0;
+}
+
+.alt-table-3d__canvas-shell canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.alt-table-3d__status-strip {
+  position: absolute;
+  left: 1rem;
+  bottom: 4.9rem;
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.45rem 0.7rem;
+  max-width: calc(100% - 2rem);
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  color: rgba(245, 234, 206, 0.72);
+  background: rgba(16, 13, 11, 0.36);
+  border: 1px solid rgba(222, 197, 137, 0.16);
+  border-radius: 999px;
+  backdrop-filter: blur(12px);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.alt-table-3d__choice-panel {
+  position: absolute;
+  left: 1rem;
+  top: 1rem;
+  z-index: 3;
+  width: min(26rem, calc(100% - 2rem));
+  padding: 0.95rem 1rem;
+  border-radius: 1rem;
+  background: rgba(19, 14, 11, 0.9);
+  border: 1px solid rgba(220, 184, 110, 0.22);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.32);
+}
+
+.alt-table-3d__choice-panel h2 {
+  margin: 0 0 0.7rem;
+  font-size: 0.96rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.alt-table-3d__choice-options,
+.alt-table-3d__choice-buttons {
+  display: flex;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.alt-table-3d__wish-option,
+.alt-table-3d__action-button,
+.alt-table-3d__utility-button {
+  appearance: none;
+  border: 1px solid rgba(231, 205, 151, 0.24);
+  border-radius: 999px;
+  padding: 0.7rem 1rem;
+  font: inherit;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: transform 120ms ease, background-color 120ms ease, border-color 120ms ease;
+}
+
+.alt-table-3d__wish-option {
+  background: rgba(49, 38, 29, 0.92);
+  color: #f3ead4;
+}
+
+.alt-table-3d__wish-option.is-active {
+  background: rgba(173, 126, 58, 0.92);
+  color: #1e1813;
+}
+
+.alt-table-3d__action-rail {
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+  display: flex;
+  gap: 0.65rem;
+  align-items: center;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding: 0.8rem 1rem calc(0.8rem + env(safe-area-inset-bottom));
+  border-top: 1px solid rgba(221, 193, 142, 0.16);
+  background: linear-gradient(180deg, rgba(17, 13, 11, 0.42), rgba(12, 9, 8, 0.94));
+  backdrop-filter: blur(18px);
+}
+
+.alt-table-3d__action-button {
+  flex: 0 0 auto;
+  background: rgba(61, 45, 33, 0.96);
+  color: #fbf1d8;
+}
+
+.alt-table-3d__action-button--primary {
+  background: linear-gradient(180deg, #d8b66b 0%, #a97c3d 100%);
+  color: #1f170f;
+}
+
+.alt-table-3d__action-button--secondary {
+  background: rgba(72, 88, 70, 0.96);
+}
+
+.alt-table-3d__action-button--danger {
+  background: rgba(138, 61, 47, 0.96);
+}
+
+.alt-table-3d__action-button--muted {
+  background: rgba(52, 46, 42, 0.96);
+}
+
+.alt-table-3d__utility-button {
+  flex: 0 0 auto;
+  background: rgba(30, 23, 19, 0.94);
+  color: #eadcb8;
+}
+
+.alt-table-3d__utility-button--wide {
+  min-width: 10rem;
+}
+
+.alt-table-3d__action-button:hover,
+.alt-table-3d__utility-button:hover,
+.alt-table-3d__wish-option:hover {
+  transform: translateY(-1px);
+}
+
+.alt-table-3d__action-button:disabled,
+.alt-table-3d__utility-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+  transform: none;
+}
+
+@media (max-width: 900px) {
+  .alt-table-3d__status-strip {
+    display: none;
+  }
+
+  .alt-table-3d__choice-panel {
+    width: calc(100% - 2rem);
+  }
+}

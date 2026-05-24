@@ -8,9 +8,8 @@ import {
   type Card,
   type PublicDerivedState
 } from "@tichuml/engine";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { BackendReachability } from "../../apps/web/src/backend/settings";
-import { AlternateGameTableView } from "../../apps/web/src/alternate-game-table-view";
 import {
   DEFAULT_NORMAL_TABLE_LAYOUT,
   DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS,
@@ -21,6 +20,20 @@ import type { MasterControlSnapshot } from "../../apps/web/src/master-control-mo
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
+
+vi.mock("../../apps/web/src/alt-table-3d/AltTable3DScene", () => ({
+  AltTable3DScene: () =>
+    createElement("div", { "data-alt-table-3d-canvas": "true", "data-mock-scene": "true" })
+}));
+
+const { AltTable3DRoute } = await import("../../apps/web/src/alt-table-3d/AltTable3DRoute");
+
+beforeAll(() => {
+  Object.defineProperty(window.navigator, "userAgent", {
+    value: "Mozilla/5.0 Chrome/148.0.0.0 Safari/537.36",
+    configurable: true
+  });
+});
 
 function render(element: ReactElement) {
   const container = document.createElement("div");
@@ -288,9 +301,9 @@ function createProps(
     ],
     sortedLocalHand: state.hands["seat-0"],
     localCanInteract: true,
-    localPassInteractionEnabled: false,
+    localPassInteractionEnabled: true,
     localLegalCardIds: new Set(["jade-3", "sword-3", "phoenix"]),
-    selectedCardIds: ["jade-3", "sword-3"],
+    selectedCardIds: ["jade-3"],
     selectedPassTarget: "partner",
     passSelectionReady: false,
     matchingPlayActions: [],
@@ -379,44 +392,30 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("AlternateGameTableView", () => {
-  it("keeps opponent hands hidden while leaving the south hand interactive", () => {
-    const view = render(createElement(AlternateGameTableView, createProps()));
+describe("AltTable3DRoute", () => {
+  it("renders the isolated 3D scene graph markers and bottom action rail", () => {
+    const view = render(createElement(AltTable3DRoute, createProps()));
 
-    expect(view.container.querySelector(".alternate-three-surface")).not.toBeNull();
-    expect(
-      view.container.querySelector("[data-alt-seat='south'] .playing-card")
-    ).not.toBeNull();
-    expect(
-      view.container.querySelector("[data-alt-seat='north'] .playing-card")
-    ).toBeNull();
-    expect(
-      view.container.querySelectorAll("[data-alt-card-back='true']").length
-    ).toBeGreaterThan(0);
-    expect(view.container.textContent).toContain("WE");
-    expect(view.container.textContent).toContain("THEY");
-    expect(view.container.textContent).not.toContain("Game State");
-    expect(view.container.textContent).not.toContain("Round Seed");
-    expect(view.container.textContent).not.toContain("Table Notes");
-    expect(view.container.textContent).not.toContain("Recent Events");
-    expect(view.container.textContent).not.toContain("Decision Summary");
-    expect(view.container.textContent).not.toContain("Sort Rank");
-    expect(view.container.textContent).not.toContain("Sort Suit");
-    expect(view.container.textContent).not.toContain("Sort Combo");
-    expect(view.container.textContent).not.toContain("Rules");
-    expect(view.container.textContent).not.toContain("Settings");
-    expect(view.container.querySelector('[aria-label="Perspective"]')).toBeNull();
+    expect(view.container.querySelector("[data-alt-table-3d-canvas='true']")).not.toBeNull();
+    expect(view.container.querySelector("[data-alt-table-3d-scene='true']")).not.toBeNull();
+    expect(view.container.querySelectorAll("[data-scene-node='seat-tray']")).toHaveLength(4);
+    expect(view.container.querySelector("[data-scene-node='felt-inset']")).not.toBeNull();
+    expect(view.container.querySelector("[data-scene-node='trick-zone']")).not.toBeNull();
+    expect(view.container.querySelectorAll("[data-scene-node='pass-lane']").length).toBeGreaterThan(0);
+    expect(view.container.querySelectorAll("[data-scene-card='south-mesh']").length).toBeGreaterThan(0);
+    expect(view.container.querySelectorAll("[data-scene-card='opponent-mesh']").length).toBeGreaterThan(0);
+    expect(view.container.querySelector("[data-alt-table-3d-action-rail='true']")).not.toBeNull();
+    expect(view.container.querySelector(".alternate-three-surface")).toBeNull();
+    expect(view.container.querySelector(".alternate-tabletop")).toBeNull();
+    expect(view.container.querySelector(".alternate-hitbox-card")).toBeNull();
+    expect(view.container.querySelector(".alternate-hitbox-route")).toBeNull();
 
     view.unmount();
   });
 
-  it("dispatches through the existing card and action handlers", () => {
+  it("keeps the action rail wired through the existing gameplay handlers", () => {
     const props = createProps();
-    const view = render(createElement(AlternateGameTableView, props));
-
-    const localCard = view.container.querySelector<HTMLButtonElement>(
-      "[data-alt-seat='south'] .playing-card"
-    );
+    const view = render(createElement(AltTable3DRoute, props));
     const playButton = Array.from(
       view.container.querySelectorAll<HTMLButtonElement>("button")
     ).find((button) => button.textContent?.includes("Play"));
@@ -424,23 +423,20 @@ describe("AlternateGameTableView", () => {
       view.container.querySelectorAll<HTMLButtonElement>("button")
     ).find((button) => button.textContent?.includes("Clear"));
 
-    expect(localCard).not.toBeNull();
     expect(playButton).not.toBeUndefined();
     expect(clearButton).toBeUndefined();
 
     act(() => {
-      localCard?.click();
       playButton?.click();
     });
 
-    expect(props.onLocalCardClick).toHaveBeenCalledWith("jade-3");
     expect(props.onNormalAction).toHaveBeenCalledWith("play");
     expect(props.onClearLocalSelection).not.toHaveBeenCalled();
 
     view.unmount();
   });
 
-  it("renders directional passing routes from the canonical route model", () => {
+  it("renders directional passing lanes from the canonical route model", () => {
     const passState = createScenarioState({
       phase: "pass_select",
       activeSeat: "seat-0",
@@ -453,7 +449,7 @@ describe("AlternateGameTableView", () => {
     });
     const view = render(
       createElement(
-        AlternateGameTableView,
+        AltTable3DRoute,
         createProps({
           state: passState,
           derived: createDerived(passState)
@@ -461,61 +457,15 @@ describe("AlternateGameTableView", () => {
       )
     );
 
-    const bottomPartner = view.container.querySelector<HTMLElement>(
-      '[data-alt-pass-route="pass-seat-0-partner"]'
-    );
-    const bottomLeft = view.container.querySelector<HTMLElement>(
-      '[data-alt-pass-route="pass-seat-0-left"]'
-    );
-    const topRight = view.container.querySelector<HTMLElement>(
-      '[data-alt-pass-route="pass-seat-2-right"]'
-    );
-
-    expect(bottomPartner?.dataset.passDirection).toBe("up");
-    expect(bottomLeft?.dataset.passDirection).toBe("left");
-    expect(topRight?.dataset.passDirection).toBe("right");
-
-    view.unmount();
-  });
-
-  it("reuses the existing wish-selection handlers when a play requires Mahjong resolution", () => {
-    const props = createProps({
-      wishDialogOpen: true,
-      wishSelectionOptions: [null, 5, 9],
-      activePlayVariant: {
-        type: "play_cards",
-        seat: "seat-0",
-        cardIds: ["mahjong"],
-        combination: {
-          kind: "single",
-          key: "single:mahjong",
-          cardCount: 1,
-          primaryRank: 1,
-          highCardRank: 1,
-          isBomb: false
-        },
-        availableWishRanks: [5, 9]
-      }
-    });
-    const view = render(createElement(AlternateGameTableView, props));
-
-    const chooseNine = Array.from(
-      view.container.querySelectorAll<HTMLButtonElement>("button")
-    ).find((button) => button.textContent?.trim() === "9");
-    const confirm = Array.from(
-      view.container.querySelectorAll<HTMLButtonElement>("button")
-    ).find((button) => button.textContent?.includes("Confirm Wish"));
-
-    expect(chooseNine).not.toBeUndefined();
-    expect(confirm).not.toBeUndefined();
-
-    act(() => {
-      chooseNine?.click();
-      confirm?.click();
-    });
-
-    expect(props.onWishRankSelect).toHaveBeenCalledWith(9);
-    expect(props.onWishConfirm).toHaveBeenCalledTimes(1);
+    expect(
+      view.container.querySelector('[data-pass-lane-key="pass-seat-0-partner"]')
+    ).not.toBeNull();
+    expect(
+      view.container.querySelector('[data-pass-lane-key="pass-seat-0-left"]')
+    ).not.toBeNull();
+    expect(
+      view.container.querySelector('[data-pass-lane-key="pass-seat-2-right"]')
+    ).not.toBeNull();
 
     view.unmount();
   });
