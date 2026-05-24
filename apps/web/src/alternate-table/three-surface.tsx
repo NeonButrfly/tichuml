@@ -834,6 +834,45 @@ function AnchorDebug() {
   );
 }
 
+function TableBackdrop() {
+  return (
+    <>
+      <div className="alternate-three-surface__room" />
+      <div
+        className="alternate-three-surface__shadow"
+        style={{ left: "7%", top: "24%", width: "86%", height: "62%" }}
+      />
+      <div
+        className="alternate-three-surface__table-rim"
+        style={{ left: "5%", top: "19%", width: "90%", height: "66%" }}
+      />
+      <div
+        className="alternate-three-surface__table-face"
+        style={{ left: "9%", top: "23%", width: "82%", height: "58%" }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          left: "16%",
+          top: "29%",
+          width: "68%",
+          height: "46%",
+          borderRadius: "50%",
+          background:
+            "radial-gradient(circle at 50% 44%, rgba(255,255,255,0.07), transparent 46%), linear-gradient(180deg, #295847 0%, #1b4033 56%, #123027 100%)",
+          boxShadow:
+            "inset 0 0 0 2px rgba(212, 179, 108, 0.34), inset 0 0 0 16px rgba(10, 20, 16, 0.06)"
+        }}
+      />
+      <div
+        className="alternate-three-surface__table-sheen"
+        style={{ left: "11%", top: "24%", width: "78%", height: "54%" }}
+      />
+      <div className="alternate-three-surface__vignette" />
+    </>
+  );
+}
+
 function TableScene({
   model,
   layoutDebugEnabled,
@@ -857,7 +896,6 @@ function TableScene({
 
   return (
     <>
-      <color attach="background" args={["#2c1d15"]} />
       <fog attach="fog" args={["#2c1d15", 16, 30]} />
       <ambientLight intensity={0.84} color="#f5e2c4" />
       <hemisphereLight args={["#f2e5ce", "#2b1e18", 0.82]} />
@@ -875,11 +913,6 @@ function TableScene({
         shadow-bias={-0.00008}
       />
       <spotLight position={[-4.8, 7.8, 6.2]} intensity={0.5} angle={0.54} penumbra={0.82} color="#ffd8b1" />
-
-      <mesh position={[0, 5.3, -10.2]} receiveShadow>
-        <planeGeometry args={[34, 20]} />
-        <meshBasicMaterial color="#654738" />
-      </mesh>
 
       <group position={[0, 0, 0]}>
         <RoundedBox args={[TABLE.width, TABLE.topHeight, TABLE.depth]} radius={TABLE.cornerRadius} smoothness={8} position={[0, 0, 0]} castShadow receiveShadow>
@@ -1027,8 +1060,9 @@ function TableScene({
 function FallbackSurface() {
   return (
     <div className="alternate-three-surface" aria-hidden="true">
-      <div className="alternate-three-surface__room" />
-      <div className="alternate-three-surface__vignette" />
+      <div className="alternate-three-surface__backdrop">
+        <TableBackdrop />
+      </div>
     </div>
   );
 }
@@ -1045,6 +1079,9 @@ export function AlternateTableThreeSurface({
 
   return (
     <div className="alternate-three-surface" aria-hidden="true" data-alt-renderer="three">
+      <div className="alternate-three-surface__backdrop">
+        <TableBackdrop />
+      </div>
       <Canvas
         shadows
         dpr={[1, 1.75]}

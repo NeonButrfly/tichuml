@@ -826,3 +826,16 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 - Linked GitHub Issue: [#81](https://github.com/NeonButrfly/tichuml/issues/81)
 - Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
 - Status Source: GitHub issue state only.
+
+### 2026-05-24 - ALT route must never collapse into a blank stage when the 3D scene misframes
+
+- Prompt Signal: The latest runtime correction reported that the alternate
+  table showed action buttons but no visible table at all.
+- Interpreted Requirement: Keep the 3D ALT renderer path, but ensure the route
+  still presents a visible table surface even when the WebGL scene background
+  renders without the main table geometry in frame.
+- Affected Systems: `apps/web/src/alternate-table/three-surface.tsx`,
+  `apps/web/src/styles.css`.
+- Linked GitHub Issue: [#81](https://github.com/NeonButrfly/tichuml/issues/81)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.

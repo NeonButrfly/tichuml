@@ -6866,7 +6866,17 @@ body.normal-layout-locked {
     linear-gradient(180deg, #2b1c14 0%, #120d0b 100%);
 }
 
+.alternate-three-surface__backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
 .alternate-three-surface canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
   width: 100% !important;
   height: 100% !important;
   display: block;
