@@ -19,46 +19,60 @@ type Vec3 = [number, number, number];
 type CardTransform = {
   position: Vec3;
   rotation: Vec3;
+  scale?: number;
 };
 
-const TABLE_WORLD = {
-  width: 11.8,
-  depth: 8.15,
-  rimHeight: 0.86,
-  rimRadius: 0.44,
-  feltWidth: 9.64,
-  feltDepth: 6.14,
-  feltHeight: 0.18,
-  plaqueHeight: 0.4
+const TABLE = {
+  width: 12.2,
+  depth: 8.6,
+  topHeight: 0.32,
+  cornerRadius: 0.78,
+  feltWidth: 9.96,
+  feltDepth: 6.32,
+  feltY: 0.24,
+  trimY: 0.272
 } as const;
 
-const CARD_WORLD = {
-  width: 0.74,
-  height: 1.06,
-  thickness: 0.032,
+const CARD = {
+  width: 0.72,
+  height: 1.04,
+  thickness: 0.03,
   southLift: 0.12
 } as const;
 
-const SEAT_TRAYS = {
-  bottom: { position: [0, 0.78, 2.78] as Vec3, width: 7.72, depth: 0.76, rotationY: 0 },
-  top: { position: [0, 0.78, -2.86] as Vec3, width: 5.18, depth: 0.68, rotationY: Math.PI },
-  left: { position: [-4.34, 0.78, 0.04] as Vec3, width: 3.94, depth: 0.68, rotationY: Math.PI / 2 },
-  right: { position: [4.34, 0.78, 0.04] as Vec3, width: 3.94, depth: 0.68, rotationY: -Math.PI / 2 }
+const TRAYS = {
+  south: { position: [0, 0.5, 3.05] as Vec3, width: 8.12, depth: 0.74, rotationY: 0 },
+  north: { position: [0, 0.5, -2.78] as Vec3, width: 5.42, depth: 0.64, rotationY: Math.PI },
+  west: { position: [-4.72, 0.5, 0.06] as Vec3, width: 4.38, depth: 0.64, rotationY: Math.PI / 2 - 0.18 },
+  east: { position: [4.72, 0.5, 0.06] as Vec3, width: 4.38, depth: 0.64, rotationY: -Math.PI / 2 + 0.18 }
+} as const;
+
+const SIDE_TRAYS = {
+  left: TRAYS.west,
+  right: TRAYS.east
+} as const;
+
+const PLAQUES = {
+  south: { position: [0, 0.42, 4.0] as Vec3, rotation: [-0.36, 0, 0] as Vec3, size: [1.62, 0.68, 0.08] as [number, number, number] },
+  north: { position: [-2.82, 0.42, -2.56] as Vec3, rotation: [-0.12, 0.02, 0] as Vec3, size: [1.36, 0.58, 0.08] as [number, number, number] },
+  west: { position: [-3.88, 0.42, 2.0] as Vec3, rotation: [-0.24, 0.1, 0.02] as Vec3, size: [1.24, 0.58, 0.08] as [number, number, number] },
+  east: { position: [3.88, 0.42, 2.0] as Vec3, rotation: [-0.24, -0.1, -0.02] as Vec3, size: [1.24, 0.58, 0.08] as [number, number, number] },
+  score: { position: [2.88, 0.42, -2.56] as Vec3, rotation: [-0.12, -0.02, 0] as Vec3 }
 } as const;
 
 const PASS_ROUTE_ANCHORS: Record<string, CardTransform> = {
-  "bottom:left": { position: [-2.18, TABLE_WORLD.feltHeight + 0.03, 1.58], rotation: [-Math.PI / 2, 0, 0.36] },
-  "bottom:top": { position: [0, TABLE_WORLD.feltHeight + 0.03, 1.34], rotation: [-Math.PI / 2, 0, 0] },
-  "bottom:right": { position: [2.18, TABLE_WORLD.feltHeight + 0.03, 1.58], rotation: [-Math.PI / 2, 0, -0.36] },
-  "top:left": { position: [-1.72, TABLE_WORLD.feltHeight + 0.03, -1.44], rotation: [-Math.PI / 2, 0, -0.22] },
-  "top:bottom": { position: [0, TABLE_WORLD.feltHeight + 0.03, -1.26], rotation: [-Math.PI / 2, 0, 0] },
-  "top:right": { position: [1.72, TABLE_WORLD.feltHeight + 0.03, -1.44], rotation: [-Math.PI / 2, 0, 0.22] },
-  "left:top": { position: [-2.96, TABLE_WORLD.feltHeight + 0.03, -1.02], rotation: [-Math.PI / 2, 0, 0.82] },
-  "left:right": { position: [-2.52, TABLE_WORLD.feltHeight + 0.03, 0], rotation: [-Math.PI / 2, 0, Math.PI / 2] },
-  "left:bottom": { position: [-2.96, TABLE_WORLD.feltHeight + 0.03, 1.02], rotation: [-Math.PI / 2, 0, 2.26] },
-  "right:top": { position: [2.96, TABLE_WORLD.feltHeight + 0.03, -1.02], rotation: [-Math.PI / 2, 0, -0.82] },
-  "right:left": { position: [2.52, TABLE_WORLD.feltHeight + 0.03, 0], rotation: [-Math.PI / 2, 0, -Math.PI / 2] },
-  "right:bottom": { position: [2.96, TABLE_WORLD.feltHeight + 0.03, 1.02], rotation: [-Math.PI / 2, 0, -2.26] }
+  "bottom:left": { position: [-2.1, TABLE.feltY + 0.016, 1.38], rotation: [-Math.PI / 2, 0, 0.22] },
+  "bottom:top": { position: [0, TABLE.feltY + 0.016, 1.18], rotation: [-Math.PI / 2, 0, 0] },
+  "bottom:right": { position: [2.1, TABLE.feltY + 0.016, 1.38], rotation: [-Math.PI / 2, 0, -0.22] },
+  "top:left": { position: [-1.72, TABLE.feltY + 0.016, -1.26], rotation: [-Math.PI / 2, 0, -0.18] },
+  "top:bottom": { position: [0, TABLE.feltY + 0.016, -1.06], rotation: [-Math.PI / 2, 0, 0] },
+  "top:right": { position: [1.72, TABLE.feltY + 0.016, -1.26], rotation: [-Math.PI / 2, 0, 0.18] },
+  "left:top": { position: [-2.78, TABLE.feltY + 0.016, -0.92], rotation: [-Math.PI / 2, 0, 0.58] },
+  "left:right": { position: [-2.5, TABLE.feltY + 0.016, 0], rotation: [-Math.PI / 2, 0, Math.PI / 2] },
+  "left:bottom": { position: [-2.78, TABLE.feltY + 0.016, 0.94], rotation: [-Math.PI / 2, 0, 2.56] },
+  "right:top": { position: [2.78, TABLE.feltY + 0.016, -0.92], rotation: [-Math.PI / 2, 0, -0.58] },
+  "right:left": { position: [2.5, TABLE.feltY + 0.016, 0], rotation: [-Math.PI / 2, 0, -Math.PI / 2] },
+  "right:bottom": { position: [2.78, TABLE.feltY + 0.016, 0.94], rotation: [-Math.PI / 2, 0, -2.56] }
 };
 
 function supportsThreeCanvas() {
@@ -109,35 +123,35 @@ function drawRoundedRect(
 }
 
 function createWalnutTexture() {
-  return createCanvasTexture(1536, 1024, (context) => {
-    const gradient = context.createLinearGradient(0, 0, 0, 1024);
-    gradient.addColorStop(0, "#4a2e1d");
-    gradient.addColorStop(0.38, "#5a3823");
-    gradient.addColorStop(0.72, "#3d2417");
-    gradient.addColorStop(1, "#2a190f");
+  return createCanvasTexture(1600, 1200, (context) => {
+    const gradient = context.createLinearGradient(0, 0, 0, 1200);
+    gradient.addColorStop(0, "#6c472e");
+    gradient.addColorStop(0.35, "#7f5333");
+    gradient.addColorStop(0.7, "#694126");
+    gradient.addColorStop(1, "#51311e");
     context.fillStyle = gradient;
-    context.fillRect(0, 0, 1536, 1024);
+    context.fillRect(0, 0, 1600, 1200);
 
-    for (let index = 0; index < 42; index += 1) {
-      const y = (index / 41) * 1024;
-      context.strokeStyle = `rgba(255, 224, 178, ${0.018 + (index % 4) * 0.006})`;
-      context.lineWidth = 1.2 + (index % 3) * 0.7;
+    for (let index = 0; index < 68; index += 1) {
+      const y = (index / 67) * 1200;
+      context.strokeStyle = `rgba(255, 226, 180, ${0.018 + (index % 3) * 0.008})`;
+      context.lineWidth = 1.1 + (index % 4) * 0.5;
       context.beginPath();
       context.moveTo(0, y);
-      context.bezierCurveTo(260, y - 18, 980, y + 24, 1536, y - 6);
+      context.bezierCurveTo(240, y - 10, 980, y + 22, 1600, y - 4);
       context.stroke();
     }
 
-    for (let index = 0; index < 18; index += 1) {
-      const x = ((index * 109) % 1300) + 96;
-      const y = ((index * 149) % 760) + 120;
+    for (let index = 0; index < 24; index += 1) {
+      const x = ((index * 149) % 1400) + 120;
+      const y = ((index * 197) % 900) + 120;
       const rx = 34 + (index % 4) * 18;
-      const ry = 14 + (index % 5) * 8;
-      context.strokeStyle = "rgba(36, 21, 13, 0.32)";
-      context.lineWidth = 2;
+      const ry = 12 + (index % 3) * 8;
+      context.strokeStyle = "rgba(66, 35, 18, 0.28)";
+      context.lineWidth = 1.8;
       for (let ring = 0; ring < 4; ring += 1) {
         context.beginPath();
-        context.ellipse(x, y, rx + ring * 14, ry + ring * 8, 0, 0, Math.PI * 2);
+        context.ellipse(x, y, rx + ring * 12, ry + ring * 7, 0, 0, Math.PI * 2);
         context.stroke();
       }
     }
@@ -145,62 +159,80 @@ function createWalnutTexture() {
 }
 
 function createFeltTexture() {
-  return createCanvasTexture(1536, 1024, (context) => {
-    context.fillStyle = "#214636";
-    context.fillRect(0, 0, 1536, 1024);
+  return createCanvasTexture(1600, 1200, (context) => {
+    const felt = context.createLinearGradient(0, 0, 1600, 1200);
+    felt.addColorStop(0, "#244d3e");
+    felt.addColorStop(0.54, "#18392f");
+    felt.addColorStop(1, "#102920");
+    context.fillStyle = felt;
+    context.fillRect(0, 0, 1600, 1200);
 
-    for (let index = 0; index < 3600; index += 1) {
-      const x = (index * 73) % 1536;
-      const y = (index * 41) % 1024;
-      const alpha = 0.03 + (index % 5) * 0.006;
+    for (let index = 0; index < 6200; index += 1) {
+      const x = (index * 97) % 1600;
+      const y = (index * 53) % 1200;
+      const alpha = 0.018 + (index % 5) * 0.006;
       context.fillStyle = `rgba(255,255,255,${alpha})`;
       context.fillRect(x, y, 1, 1);
     }
 
-    context.strokeStyle = "rgba(201, 164, 96, 0.62)";
-    context.lineWidth = 6;
-    context.strokeRect(226, 132, 1084, 612);
+    context.strokeStyle = "rgba(201, 164, 96, 0.82)";
+    context.lineWidth = 4;
+    drawRoundedRect(context, 132, 96, 1336, 826, 28);
+    context.stroke();
     context.lineWidth = 2;
-    context.strokeRect(246, 152, 1044, 572);
+    drawRoundedRect(context, 160, 124, 1280, 770, 22);
+    context.stroke();
 
-    context.fillStyle = "rgba(201, 164, 96, 0.72)";
-    context.font = "700 126px Georgia";
+    context.strokeStyle = "rgba(201, 164, 96, 0.44)";
+    context.lineWidth = 3;
+    drawRoundedRect(context, 510, 260, 580, 384, 18);
+    context.stroke();
+
+    context.fillStyle = "rgba(201, 164, 96, 0.78)";
+    context.font = "700 116px Georgia";
     context.textAlign = "center";
-    context.fillText("TICHU", 768, 634);
+    context.fillText("TICHU", 800, 678);
 
-    context.font = "700 96px Georgia";
-    context.fillText("S", 520, 612);
-    context.fillText("S", 1016, 612);
+    context.strokeStyle = "rgba(201, 164, 96, 0.5)";
+    context.lineWidth = 8;
+    context.beginPath();
+    context.moveTo(454, 646);
+    context.bezierCurveTo(400, 594, 414, 510, 482, 474);
+    context.bezierCurveTo(548, 438, 612, 474, 614, 552);
+    context.stroke();
+    context.beginPath();
+    context.moveTo(1146, 646);
+    context.bezierCurveTo(1200, 594, 1186, 510, 1118, 474);
+    context.bezierCurveTo(1052, 438, 988, 474, 986, 552);
+    context.stroke();
   });
 }
 
 function createCardBackTexture() {
   return createCanvasTexture(512, 768, (context) => {
-    context.fillStyle = "#1b4c41";
+    const fill = context.createLinearGradient(0, 0, 0, 768);
+    fill.addColorStop(0, "#154c3d");
+    fill.addColorStop(1, "#10392e");
+    context.fillStyle = fill;
     context.fillRect(0, 0, 512, 768);
-    context.strokeStyle = "rgba(232, 216, 177, 0.9)";
+    context.strokeStyle = "rgba(232, 216, 177, 0.96)";
     context.lineWidth = 8;
-    context.strokeRect(26, 26, 460, 716);
+    context.strokeRect(24, 24, 464, 720);
     context.lineWidth = 2;
     context.strokeRect(44, 44, 424, 680);
+    context.strokeRect(64, 64, 384, 640);
 
     context.strokeStyle = "rgba(208, 175, 105, 0.78)";
     context.lineWidth = 4;
     context.beginPath();
-    context.arc(256, 384, 86, 0, Math.PI * 2);
+    context.arc(256, 384, 84, 0, Math.PI * 2);
     context.stroke();
     context.beginPath();
-    context.moveTo(170, 384);
-    context.lineTo(342, 384);
-    context.moveTo(256, 298);
-    context.lineTo(256, 470);
+    context.moveTo(176, 384);
+    context.lineTo(336, 384);
+    context.moveTo(256, 304);
+    context.lineTo(256, 464);
     context.stroke();
-
-    context.strokeStyle = "rgba(208, 175, 105, 0.36)";
-    context.lineWidth = 2;
-    for (let ring = 0; ring < 4; ring += 1) {
-      context.strokeRect(82 + ring * 14, 82 + ring * 14, 348 - ring * 28, 604 - ring * 28);
-    }
   });
 }
 
@@ -292,7 +324,6 @@ function drawDragonArt(context: CanvasRenderingContext2D, accent: string) {
   context.bezierCurveTo(320, 314, 310, 354, 332, 390);
   context.bezierCurveTo(358, 434, 402, 450, 432, 438);
   context.stroke();
-
   context.beginPath();
   context.arc(454, 206, 18, 0, Math.PI * 2);
   context.stroke();
@@ -308,7 +339,6 @@ function drawPhoenixArt(context: CanvasRenderingContext2D, accent: string) {
   context.bezierCurveTo(340, 312, 390, 324, 454, 324);
   context.bezierCurveTo(402, 288, 348, 238, 318, 180);
   context.stroke();
-
   context.beginPath();
   context.moveTo(256, 196);
   context.bezierCurveTo(248, 292, 232, 382, 210, 520);
@@ -347,8 +377,6 @@ function createCardFrontTexture(item: ImmersiveSceneCard) {
     context.fillStyle = paper;
     context.fillRect(0, 0, 512, 768);
 
-    context.fillStyle = "rgba(255,255,255,0.5)";
-    context.fillRect(22, 22, 468, 128);
     context.strokeStyle = "rgba(179, 166, 144, 0.95)";
     context.lineWidth = 6;
     drawRoundedRect(context, 16, 16, 480, 736, 34);
@@ -364,8 +392,6 @@ function createCardFrontTexture(item: ImmersiveSceneCard) {
     context.font = "700 40px Georgia";
     context.fillText(getCardCornerSuit(item.card), 44, 148);
 
-    context.save();
-    context.globalAlpha = 0.94;
     if (item.card.kind === "special") {
       if (item.card.special === "dragon") {
         drawDragonArt(context, accent);
@@ -379,13 +405,12 @@ function createCardFrontTexture(item: ImmersiveSceneCard) {
     } else {
       context.fillStyle = accent;
       context.textAlign = "center";
-      context.font = "700 168px Georgia";
-      context.fillText(getCardCornerSuit(item.card), 256, 426);
+      context.font = "700 170px Georgia";
+      context.fillText(getCardCornerSuit(item.card), 256, 430);
     }
-    context.restore();
 
     if (item.legal && item.position === "bottom") {
-      context.strokeStyle = "rgba(233, 197, 110, 0.55)";
+      context.strokeStyle = "rgba(233, 197, 110, 0.54)";
       context.lineWidth = 5;
       drawRoundedRect(context, 10, 10, 492, 748, 38);
       context.stroke();
@@ -396,17 +421,15 @@ function createCardFrontTexture(item: ImmersiveSceneCard) {
 function createPlaqueTexture(title: string, subtitle: string, active: boolean) {
   return createCanvasTexture(512, 220, (context) => {
     const fill = context.createLinearGradient(0, 0, 0, 220);
-    fill.addColorStop(0, active ? "#1f2322" : "#111313");
-    fill.addColorStop(1, active ? "#171a19" : "#0a0c0c");
+    fill.addColorStop(0, active ? "#1b2623" : "#111313");
+    fill.addColorStop(1, active ? "#111715" : "#090b0b");
     context.fillStyle = fill;
     drawRoundedRect(context, 10, 10, 492, 200, 26);
     context.fill();
-
     context.strokeStyle = active ? "#dcb46d" : "#92744a";
     context.lineWidth = 5;
     drawRoundedRect(context, 10, 10, 492, 200, 26);
     context.stroke();
-
     context.textAlign = "center";
     context.fillStyle = "#f1dfbf";
     context.font = "700 54px Georgia";
@@ -429,7 +452,6 @@ function createScoreTexture(we: number, they: number) {
     context.lineWidth = 4;
     drawRoundedRect(context, 8, 8, 444, 144, 24);
     context.stroke();
-
     context.textAlign = "center";
     context.fillStyle = "#d5b178";
     context.font = "700 28px Arial";
@@ -442,53 +464,51 @@ function createScoreTexture(we: number, they: number) {
   });
 }
 
-function useMaterialTexture(factory: () => THREE.Texture | null, deps: readonly unknown[]) {
+function useTexture(factory: () => THREE.Texture | null, deps: readonly unknown[]) {
   return useMemo(factory, deps);
 }
 
 function createCardMaterials(
   frontTexture: THREE.Texture | null,
   backTexture: THREE.Texture | null,
-  selected: boolean
+  selected: boolean,
+  faceDown: boolean
 ) {
   const edgeMaterial = new THREE.MeshStandardMaterial({
-    color: selected ? "#efe0b8" : "#ded3c4",
+    color: selected ? "#efe0b8" : "#ddd0c1",
     roughness: 0.74,
     metalness: 0.02
   });
   const frontMaterial = new THREE.MeshStandardMaterial({
-    map: frontTexture ?? undefined,
+    map: faceDown ? backTexture ?? undefined : frontTexture ?? undefined,
     color: "#ffffff",
-    roughness: 0.56,
-    metalness: 0.02
+    roughness: faceDown ? 0.42 : 0.58,
+    metalness: 0.03
   });
-  const backMaterial = new THREE.MeshStandardMaterial({
+  const rearMaterial = new THREE.MeshStandardMaterial({
     map: backTexture ?? undefined,
     color: "#ffffff",
-    roughness: 0.46,
+    roughness: 0.42,
     metalness: 0.04
   });
-  return [
-    edgeMaterial,
-    edgeMaterial,
-    edgeMaterial,
-    edgeMaterial,
-    frontMaterial,
-    backMaterial
-  ];
+  return [edgeMaterial, edgeMaterial, edgeMaterial, edgeMaterial, frontMaterial, rearMaterial];
+}
+
+function getSeatCards(cards: readonly ImmersiveSceneCard[], position: ImmersiveSceneCard["position"]) {
+  return cards.filter((card) => card.position === position);
 }
 
 function getSouthCardTransform(item: ImmersiveSceneCard, index: number, count: number): CardTransform {
   const midpoint = (count - 1) / 2;
   const offset = midpoint === 0 ? 0 : (index - midpoint) / Math.max(midpoint, 1);
-  const spread = clamp(0.48 - count * 0.006, 0.26, 0.48);
+  const spacing = clamp(0.25 - count * 0.0016, 0.16, 0.25);
   return {
     position: [
-      offset * spread * Math.max(4.1, count * 0.66),
-      1.26 + (item.selected ? CARD_WORLD.southLift : 0),
-      SEAT_TRAYS.bottom.position[2] + 0.02 + Math.abs(offset) * 0.08
+      offset * spacing * Math.max(3.15, count * 0.42),
+      0.96 + (item.selected ? CARD.southLift : 0),
+      TRAYS.south.position[2] - 0.02 + Math.abs(offset) * 0.02
     ],
-    rotation: [-0.04, 0, -offset * 0.14]
+    rotation: [-0.08, 0, -offset * 0.05]
   };
 }
 
@@ -497,44 +517,46 @@ function getNorthCardTransform(index: number, count: number): CardTransform {
   const offset = midpoint === 0 ? 0 : (index - midpoint) / Math.max(midpoint, 1);
   return {
     position: [
-      offset * 0.48 * Math.max(1.8, count * 0.3),
-      1.18,
-      SEAT_TRAYS.top.position[2] - Math.abs(offset) * 0.03
+      offset * 0.34 * Math.max(1.48, count * 0.18),
+      0.9,
+      TRAYS.north.position[2] + 0.02
     ],
-    rotation: [-0.03, Math.PI, offset * 0.1]
+    rotation: [0.02, Math.PI, offset * 0.04]
   };
 }
 
 function getSideCardTransform(position: "left" | "right", index: number, count: number): CardTransform {
   const midpoint = (count - 1) / 2;
   const offset = midpoint === 0 ? 0 : (index - midpoint) / Math.max(midpoint, 1);
-  const side = position === "left" ? -1 : 1;
+  const isLeft = position === "left";
+  const tray = SIDE_TRAYS[position];
   return {
     position: [
-      SEAT_TRAYS[position].position[0] + side * Math.abs(offset) * 0.02,
-      1.18,
-      offset * 0.48 * Math.max(1.58, count * 0.28)
+      tray.position[0],
+      0.9,
+      tray.position[2] + offset * 0.34 * Math.max(1.26, count * 0.16)
     ],
-    rotation: [-0.04, position === "left" ? Math.PI / 2 : -Math.PI / 2, side * offset * 0.11]
+    rotation: [0.04, isLeft ? Math.PI / 2 - 0.18 : -Math.PI / 2 + 0.18, (isLeft ? -1 : 1) * offset * 0.04]
   };
 }
 
 function getTrickCardTransform(item: ImmersiveSceneCard, index: number): CardTransform {
   const lane =
     item.position === "bottom"
-      ? { x: 0, z: 0.92, rz: 0.04 }
+      ? { x: 0, z: 1.02, rz: 0.03 }
       : item.position === "top"
-        ? { x: 0, z: -0.48, rz: -0.04 }
+        ? { x: 0, z: -0.74, rz: -0.03 }
         : item.position === "left"
-          ? { x: -0.88, z: 0.06, rz: 0.24 }
-          : { x: 0.88, z: 0.06, rz: -0.24 };
+          ? { x: -0.98, z: 0.02, rz: 0.16 }
+          : { x: 0.98, z: 0.02, rz: -0.16 };
   return {
     position: [
-      lane.x + (index - 0.5) * 0.18,
-      TABLE_WORLD.feltHeight + 0.028 + (item.winning ? 0.02 : 0),
-      lane.z + Math.abs(index - 0.5) * 0.06
+      lane.x + (index - 0.5) * 0.15,
+      TABLE.feltY + 0.02 + (item.winning ? 0.02 : 0),
+      lane.z + Math.abs(index - 0.5) * 0.03
     ],
-    rotation: [-Math.PI / 2, 0, lane.rz + index * 0.04]
+    rotation: [-Math.PI / 2, 0, lane.rz + index * 0.03],
+    scale: 0.9
   };
 }
 
@@ -543,13 +565,13 @@ function getPassRouteTransform(route: ImmersiveScenePassRoute): CardTransform {
   const anchor = PASS_ROUTE_ANCHORS[key];
   if (!anchor) {
     return {
-      position: [0, TABLE_WORLD.feltHeight + 0.03, 0],
+      position: [0, TABLE.feltY + 0.03, 0],
       rotation: [-Math.PI / 2, 0, 0]
     };
   }
   if (route.displayMode === "pickup") {
     return {
-      position: [anchor.position[0] * 0.84, anchor.position[1], anchor.position[2] * 0.58],
+      position: [anchor.position[0] * 0.82, anchor.position[1], anchor.position[2] * 0.52],
       rotation: anchor.rotation
     };
   }
@@ -567,7 +589,7 @@ function CardMesh3D({
   backTexture: THREE.Texture | null;
   onClick?: (() => void) | undefined;
 }) {
-  const frontTexture = useMaterialTexture(() => createCardFrontTexture(item), [
+  const frontTexture = useTexture(() => createCardFrontTexture(item), [
     item.card.id,
     item.faceDown,
     item.selected,
@@ -575,16 +597,20 @@ function CardMesh3D({
     item.position
   ]);
   const materials = useMemo(
-    () => createCardMaterials(frontTexture, backTexture, Boolean(item.selected)),
-    [backTexture, frontTexture, item.selected]
+    () => createCardMaterials(frontTexture, backTexture, Boolean(item.selected), Boolean(item.faceDown)),
+    [backTexture, frontTexture, item.faceDown, item.selected]
   );
 
   return (
-    <group position={transform.position} rotation={transform.rotation}>
+    <group
+      position={transform.position}
+      rotation={transform.rotation}
+      scale={transform.scale ? transform.scale : 1}
+    >
       {item.selected ? (
-        <mesh position={[0, 0, -CARD_WORLD.thickness * 1.4]}>
-          <planeGeometry args={[CARD_WORLD.width * 1.08, CARD_WORLD.height * 1.08]} />
-          <meshBasicMaterial color="#e8c778" transparent opacity={0.18} />
+        <mesh position={[0, 0, -CARD.thickness * 1.6]}>
+          <planeGeometry args={[CARD.width * 1.08, CARD.height * 1.08]} />
+          <meshBasicMaterial color="#e8c778" transparent opacity={0.16} />
         </mesh>
       ) : null}
       <mesh
@@ -613,7 +639,7 @@ function CardMesh3D({
           onClick();
         }}
       >
-        <boxGeometry args={[CARD_WORLD.width, CARD_WORLD.height, CARD_WORLD.thickness]} />
+        <boxGeometry args={[CARD.width, CARD.height, CARD.thickness]} />
       </mesh>
     </group>
   );
@@ -625,42 +651,39 @@ function PlaqueMesh({
   title,
   subtitle,
   active,
-  size = [1.9, 0.84, 0.08]
+  size
 }: {
   position: Vec3;
   rotation: Vec3;
   title: string;
   subtitle: string;
   active: boolean;
-  size?: [number, number, number];
+  size: [number, number, number];
 }) {
-  const texture = useMaterialTexture(
-    () => createPlaqueTexture(title, subtitle, active),
-    [title, subtitle, active]
-  );
+  const texture = useTexture(() => createPlaqueTexture(title, subtitle, active), [title, subtitle, active]);
   return (
     <group position={position} rotation={rotation}>
       <RoundedBox args={size} radius={0.06} smoothness={4} castShadow receiveShadow>
-        <meshStandardMaterial color={active ? "#171a1a" : "#0f1111"} roughness={0.48} metalness={0.18} />
+        <meshPhongMaterial color={active ? "#15211f" : "#0f1111"} specular="#594329" shininess={30} />
       </RoundedBox>
-      <mesh position={[0, 0, size[2] / 2 + 0.002]}>
+      <mesh position={[0, 0, size[2] / 2 + 0.003]}>
         <planeGeometry args={[size[0] * 0.96, size[1] * 0.92]} />
-        <meshStandardMaterial map={texture ?? undefined} color="#ffffff" roughness={0.36} metalness={0.08} />
+        <meshBasicMaterial map={texture ?? undefined} color="#ffffff" />
       </mesh>
     </group>
   );
 }
 
 function ScoreMesh({ we, they }: { we: number; they: number }) {
-  const texture = useMaterialTexture(() => createScoreTexture(we, they), [we, they]);
+  const texture = useTexture(() => createScoreTexture(we, they), [we, they]);
   return (
-    <group position={[-0.2, 0.56, 3.18]} rotation={[-0.34, 0, 0]}>
+    <group position={PLAQUES.score.position} rotation={PLAQUES.score.rotation}>
       <RoundedBox args={[2.54, 0.92, 0.08]} radius={0.08} smoothness={4} castShadow receiveShadow>
-        <meshStandardMaterial color="#101112" roughness={0.42} metalness={0.2} />
+        <meshPhongMaterial color="#101112" specular="#594329" shininess={28} />
       </RoundedBox>
       <mesh position={[0, 0, 0.043]}>
         <planeGeometry args={[2.42, 0.82]} />
-        <meshStandardMaterial map={texture ?? undefined} color="#ffffff" roughness={0.36} metalness={0.08} />
+        <meshBasicMaterial map={texture ?? undefined} color="#ffffff" />
       </mesh>
     </group>
   );
@@ -679,32 +702,21 @@ function CardTray({
 }) {
   return (
     <group position={position} rotation={[0, rotationY, 0]}>
-      <RoundedBox args={[width, 0.18, depth]} radius={0.08} smoothness={4} castShadow receiveShadow>
-        <meshStandardMaterial color="#5a3823" roughness={0.62} metalness={0.06} />
+      <RoundedBox args={[width, 0.12, depth]} radius={0.08} smoothness={4} castShadow receiveShadow>
+        <meshPhongMaterial color="#7b4b2c" specular="#5f3e26" shininess={24} />
       </RoundedBox>
-      <RoundedBox position={[0, 0.16, depth / 2 - 0.07]} args={[width, 0.28, 0.16]} radius={0.05} smoothness={4} castShadow receiveShadow>
-        <meshStandardMaterial color="#6a4429" roughness={0.58} metalness={0.06} />
+      <RoundedBox position={[0, 0.1, depth / 2 - 0.05]} args={[width, 0.16, 0.11]} radius={0.04} smoothness={4} castShadow receiveShadow>
+        <meshPhongMaterial color="#8a5632" specular="#6d4529" shininess={28} />
       </RoundedBox>
-      <RoundedBox position={[-width / 2 + 0.08, 0.14, 0]} args={[0.16, 0.24, depth]} radius={0.05} smoothness={4} castShadow receiveShadow>
-        <meshStandardMaterial color="#6a4429" roughness={0.58} metalness={0.06} />
+      <RoundedBox position={[-width / 2 + 0.06, 0.1, 0]} args={[0.11, 0.16, depth]} radius={0.04} smoothness={4} castShadow receiveShadow>
+        <meshPhongMaterial color="#8a5632" specular="#6d4529" shininess={28} />
       </RoundedBox>
-      <RoundedBox position={[width / 2 - 0.08, 0.14, 0]} args={[0.16, 0.24, depth]} radius={0.05} smoothness={4} castShadow receiveShadow>
-        <meshStandardMaterial color="#6a4429" roughness={0.58} metalness={0.06} />
+      <RoundedBox position={[width / 2 - 0.06, 0.1, 0]} args={[0.11, 0.16, depth]} radius={0.04} smoothness={4} castShadow receiveShadow>
+        <meshPhongMaterial color="#8a5632" specular="#6d4529" shininess={28} />
       </RoundedBox>
-      <RoundedBox position={[0, 0.02, 0]} args={[width * 0.94, 0.06, depth * 0.42]} radius={0.04} smoothness={4} receiveShadow>
-        <meshStandardMaterial color="#1b3f31" roughness={0.92} metalness={0.02} />
+      <RoundedBox position={[0, 0.02, 0]} args={[width * 0.94, 0.03, depth * 0.44]} radius={0.04} smoothness={4} receiveShadow>
+        <meshBasicMaterial color="#214f40" />
       </RoundedBox>
-    </group>
-  );
-}
-
-function FeltWatermark() {
-  return (
-    <group position={[0, TABLE_WORLD.feltHeight + 0.004, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-      <mesh>
-        <planeGeometry args={[TABLE_WORLD.feltWidth * 0.9, TABLE_WORLD.feltDepth * 0.9]} />
-        <meshBasicMaterial color="#c8a264" transparent opacity={0.055} />
-      </mesh>
     </group>
   );
 }
@@ -720,7 +732,7 @@ function PassSlotMesh({
   return (
     <group position={transform.position} rotation={transform.rotation}>
       <RoundedBox
-        args={[0.92, 0.02, 1.26]}
+        args={[0.86, 0.01, 1.08]}
         radius={0.04}
         smoothness={3}
         receiveShadow
@@ -747,37 +759,50 @@ function PassSlotMesh({
           onClick();
         }}
       >
-        <meshStandardMaterial
-          color={route.selected ? "#7b6540" : "#5b472d"}
-          roughness={0.86}
-          metalness={0.08}
-          opacity={route.occupied ? 0.86 : 0.56}
+        <meshPhongMaterial
+          color={route.selected ? "#bb9550" : "#8b6a36"}
+          specular="#dcc58d"
+          shininess={42}
+          opacity={route.occupied ? 0.8 : 0.3}
           transparent
         />
       </RoundedBox>
-      <mesh position={[0, 0.0125, 0]}>
-        <planeGeometry args={[0.78, 1.14]} />
+      <RoundedBox args={[0.72, 0.006, 0.94]} radius={0.04} smoothness={3} position={[0, 0.008, 0]}>
         <meshBasicMaterial
-          color={route.selected ? "#edcd89" : "#c8ab74"}
+          color={route.selected ? "#305846" : "#214032"}
+          opacity={route.occupied ? 0.82 : 0.58}
           transparent
-          opacity={route.occupied ? 0.12 : 0.08}
         />
+      </RoundedBox>
+    </group>
+  );
+}
+
+function CornerWell({ position }: { position: Vec3 }) {
+  return (
+    <group position={position} rotation={[-Math.PI / 2, 0, 0]}>
+      <mesh>
+        <ringGeometry args={[0.36, 0.64, 42]} />
+        <meshPhongMaterial color="#2d1c12" specular="#5e432b" shininess={28} />
+      </mesh>
+      <mesh position={[0.12, 0.12, 0.01]}>
+        <cylinderGeometry args={[0.1, 0.1, 0.03, 24]} />
+        <meshPhongMaterial color="#bf4d3a" specular="#f0d2cc" shininess={38} />
+      </mesh>
+      <mesh position={[-0.12, -0.08, 0.01]}>
+        <cylinderGeometry args={[0.1, 0.1, 0.03, 24]} />
+        <meshPhongMaterial color="#d6d2c9" specular="#ffffff" shininess={34} />
       </mesh>
     </group>
   );
 }
 
 function AnchorDebug() {
-  const points = [
-    SEAT_TRAYS.bottom.position,
-    SEAT_TRAYS.top.position,
-    SEAT_TRAYS.left.position,
-    SEAT_TRAYS.right.position
-  ] as Vec3[];
+  const seatPoints = [TRAYS.south.position, TRAYS.north.position, TRAYS.west.position, TRAYS.east.position] as Vec3[];
   const passPoints = Object.values(PASS_ROUTE_ANCHORS).map((anchor) => anchor.position);
   return (
     <group>
-      {points.map((point, index) => (
+      {seatPoints.map((point, index) => (
         <mesh key={`seat-${index}`} position={point}>
           <sphereGeometry args={[0.08, 16, 16]} />
           <meshBasicMaterial color="#ffd58d" />
@@ -791,16 +816,16 @@ function AnchorDebug() {
       ))}
       <Line
         points={[
-          [-TABLE_WORLD.width / 2, TABLE_WORLD.feltHeight + 0.02, 0],
-          [TABLE_WORLD.width / 2, TABLE_WORLD.feltHeight + 0.02, 0]
+          [-TABLE.width / 2, TABLE.feltY + 0.02, 0],
+          [TABLE.width / 2, TABLE.feltY + 0.02, 0]
         ]}
         color="#d1b065"
         lineWidth={1}
       />
       <Line
         points={[
-          [0, TABLE_WORLD.feltHeight + 0.02, -TABLE_WORLD.depth / 2],
-          [0, TABLE_WORLD.feltHeight + 0.02, TABLE_WORLD.depth / 2]
+          [0, TABLE.feltY + 0.02, -TABLE.depth / 2],
+          [0, TABLE.feltY + 0.02, TABLE.depth / 2]
         ]}
         color="#d1b065"
         lineWidth={1}
@@ -820,212 +845,181 @@ function TableScene({
   onSouthCardClick?: (cardId: string) => void;
   onPassRouteClick?: (routeKey: string) => void;
 }) {
-  const walnutTexture = useMaterialTexture(createWalnutTexture, []);
-  const feltTexture = useMaterialTexture(createFeltTexture, []);
-  const cardBackTexture = useMaterialTexture(createCardBackTexture, []);
+  const walnutTexture = useTexture(createWalnutTexture, []);
+  const feltTexture = useTexture(createFeltTexture, []);
+  const cardBackTexture = useTexture(createCardBackTexture, []);
+  const northCards = getSeatCards(model.remoteCards, "top");
+  const westCards = getSeatCards(model.remoteCards, "left");
+  const eastCards = getSeatCards(model.remoteCards, "right");
   const southCards = model.southCards;
-  const northCards = model.remoteCards.filter((card) => card.position === "top");
-  const westCards = model.remoteCards.filter((card) => card.position === "left");
-  const eastCards = model.remoteCards.filter((card) => card.position === "right");
-  const railDepth = (TABLE_WORLD.depth - TABLE_WORLD.feltDepth) / 2 + 0.18;
-  const railWidth = (TABLE_WORLD.width - TABLE_WORLD.feltWidth) / 2 + 0.18;
+  const railDepth = (TABLE.depth - TABLE.feltDepth) / 2 + 0.26;
+  const railWidth = (TABLE.width - TABLE.feltWidth) / 2 + 0.26;
 
   return (
     <>
-      <color attach="background" args={["#0c0908"]} />
-      <fog attach="fog" args={["#0c0908", 10, 22]} />
-      <ambientLight intensity={0.68} color="#f2dcb7" />
-      <hemisphereLight args={["#f5dfb8", "#2d221b", 0.94]} />
+      <color attach="background" args={["#2c1d15"]} />
+      <fog attach="fog" args={["#2c1d15", 16, 30]} />
+      <ambientLight intensity={0.84} color="#f5e2c4" />
+      <hemisphereLight args={["#f2e5ce", "#2b1e18", 0.82]} />
       <directionalLight
-        position={[4.6, 8.8, 6.4]}
-        intensity={1.8}
-        color="#ffd7a3"
+        position={[1.8, 11.6, 5.9]}
+        intensity={1.72}
+        color="#ffd8ab"
         castShadow
         shadow-mapSize-width={2048}
         shadow-mapSize-height={2048}
-        shadow-camera-left={-10}
-        shadow-camera-right={10}
-        shadow-camera-top={10}
-        shadow-camera-bottom={-10}
+        shadow-camera-left={-12}
+        shadow-camera-right={12}
+        shadow-camera-top={12}
+        shadow-camera-bottom={-12}
         shadow-bias={-0.00008}
       />
-      <spotLight position={[-5.2, 6.8, 5.2]} intensity={0.68} angle={0.54} penumbra={0.8} color="#ffd8b1" />
+      <spotLight position={[-4.8, 7.8, 6.2]} intensity={0.5} angle={0.54} penumbra={0.82} color="#ffd8b1" />
 
-      <mesh position={[0, 3.1, -7.4]} receiveShadow>
-        <planeGeometry args={[28, 15]} />
-        <meshStandardMaterial color="#5d4333" roughness={0.94} metalness={0.02} />
-      </mesh>
-      <mesh position={[-8.6, 1.8, -2.6]} rotation={[0, Math.PI / 3, 0]}>
-        <boxGeometry args={[2.4, 3.8, 2.6]} />
-        <meshStandardMaterial color="#1c1412" roughness={0.98} />
-      </mesh>
-      <mesh position={[8.8, 1.8, -2.4]} rotation={[0, -Math.PI / 3.2, 0]}>
-        <boxGeometry args={[2.4, 3.8, 2.6]} />
-        <meshStandardMaterial color="#1b1412" roughness={0.98} />
+      <mesh position={[0, 5.3, -10.2]} receiveShadow>
+        <planeGeometry args={[34, 20]} />
+        <meshBasicMaterial color="#654738" />
       </mesh>
 
-      <RoundedBox args={[TABLE_WORLD.width, 0.22, TABLE_WORLD.depth]} radius={TABLE_WORLD.rimRadius} smoothness={8} position={[0, -0.12, 0]} castShadow receiveShadow>
-        <meshStandardMaterial map={walnutTexture ?? undefined} color="#5b3924" roughness={0.68} metalness={0.08} />
-      </RoundedBox>
-      <RoundedBox
-        args={[TABLE_WORLD.width, 0.24, railDepth]}
-        radius={0.18}
-        smoothness={6}
-        position={[0, 0.12, -(TABLE_WORLD.feltDepth + railDepth) / 2]}
-        castShadow
-        receiveShadow
-      >
-        <meshStandardMaterial map={walnutTexture ?? undefined} color="#6a4328" roughness={0.62} metalness={0.08} />
-      </RoundedBox>
-      <RoundedBox
-        args={[TABLE_WORLD.width, 0.24, railDepth]}
-        radius={0.18}
-        smoothness={6}
-        position={[0, 0.12, (TABLE_WORLD.feltDepth + railDepth) / 2]}
-        castShadow
-        receiveShadow
-      >
-        <meshStandardMaterial map={walnutTexture ?? undefined} color="#6a4328" roughness={0.62} metalness={0.08} />
-      </RoundedBox>
-      <RoundedBox
-        args={[railWidth, 0.24, TABLE_WORLD.feltDepth]}
-        radius={0.18}
-        smoothness={6}
-        position={[(-TABLE_WORLD.feltWidth - railWidth) / 2, 0.12, 0]}
-        castShadow
-        receiveShadow
-      >
-        <meshStandardMaterial map={walnutTexture ?? undefined} color="#6a4328" roughness={0.62} metalness={0.08} />
-      </RoundedBox>
-      <RoundedBox
-        args={[railWidth, 0.24, TABLE_WORLD.feltDepth]}
-        radius={0.18}
-        smoothness={6}
-        position={[(TABLE_WORLD.feltWidth + railWidth) / 2, 0.12, 0]}
-        castShadow
-        receiveShadow
-      >
-        <meshStandardMaterial map={walnutTexture ?? undefined} color="#6a4328" roughness={0.62} metalness={0.08} />
-      </RoundedBox>
-      <mesh position={[0, 0.16, 0]} receiveShadow castShadow={false}>
-        <boxGeometry args={[TABLE_WORLD.feltWidth, 0.04, TABLE_WORLD.feltDepth]} />
-        <meshStandardMaterial color="#17684b" roughness={0.98} metalness={0.02} />
-      </mesh>
-      <mesh position={[0, 0.186, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[TABLE_WORLD.feltWidth * 0.985, TABLE_WORLD.feltDepth * 0.985]} />
-        <meshBasicMaterial map={feltTexture ?? undefined} color="#ffffff" transparent opacity={0.82} side={THREE.DoubleSide} />
-      </mesh>
-      <RoundedBox args={[TABLE_WORLD.feltWidth + 0.34, 0.04, TABLE_WORLD.feltDepth + 0.34]} radius={0.3} smoothness={6} position={[0, 0.15, 0]} receiveShadow>
-        <meshStandardMaterial color="#a88043" roughness={0.54} metalness={0.34} />
-      </RoundedBox>
+      <group position={[0, 0, 0]}>
+        <RoundedBox args={[TABLE.width, TABLE.topHeight, TABLE.depth]} radius={TABLE.cornerRadius} smoothness={8} position={[0, 0, 0]} castShadow receiveShadow>
+          <meshPhongMaterial map={walnutTexture ?? undefined} color="#855231" specular="#6b452b" shininess={26} />
+        </RoundedBox>
+        <RoundedBox args={[TABLE.width - 0.76, 0.08, TABLE.depth - 0.76]} radius={0.56} smoothness={6} position={[0, 0.18, 0]} castShadow receiveShadow>
+          <meshPhongMaterial color="#744726" specular="#634022" shininess={22} />
+        </RoundedBox>
 
-      {[
-        [-5.12, TABLE_WORLD.rimHeight / 2 + 0.02, -3.62],
-        [5.12, TABLE_WORLD.rimHeight / 2 + 0.02, -3.62],
-        [-5.12, TABLE_WORLD.rimHeight / 2 + 0.02, 3.62],
-        [5.12, TABLE_WORLD.rimHeight / 2 + 0.02, 3.62]
-      ].map((position, index) => (
-        <mesh key={`well-${index}`} position={position as Vec3} rotation={[-Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[0.34, 0.58, 42]} />
-          <meshStandardMaterial color="#2b1b12" roughness={0.74} metalness={0.14} />
+        <RoundedBox args={[TABLE.width, 0.2, railDepth]} radius={0.18} smoothness={6} position={[0, 0.22, -(TABLE.feltDepth + railDepth) / 2]} castShadow receiveShadow>
+          <meshPhongMaterial map={walnutTexture ?? undefined} color="#94613a" specular="#764a28" shininess={28} />
+        </RoundedBox>
+        <RoundedBox args={[TABLE.width, 0.2, railDepth]} radius={0.18} smoothness={6} position={[0, 0.22, (TABLE.feltDepth + railDepth) / 2]} castShadow receiveShadow>
+          <meshPhongMaterial map={walnutTexture ?? undefined} color="#94613a" specular="#764a28" shininess={28} />
+        </RoundedBox>
+        <RoundedBox args={[railWidth, 0.2, TABLE.feltDepth]} radius={0.18} smoothness={6} position={[(-TABLE.feltWidth - railWidth) / 2, 0.22, 0]} castShadow receiveShadow>
+          <meshPhongMaterial map={walnutTexture ?? undefined} color="#94613a" specular="#764a28" shininess={28} />
+        </RoundedBox>
+        <RoundedBox args={[railWidth, 0.2, TABLE.feltDepth]} radius={0.18} smoothness={6} position={[(TABLE.feltWidth + railWidth) / 2, 0.22, 0]} castShadow receiveShadow>
+          <meshPhongMaterial map={walnutTexture ?? undefined} color="#94613a" specular="#764a28" shininess={28} />
+        </RoundedBox>
+
+        <mesh position={[0, TABLE.feltY - 0.014, 0]} receiveShadow castShadow={false}>
+          <boxGeometry args={[TABLE.feltWidth, 0.026, TABLE.feltDepth]} />
+          <meshBasicMaterial color="#194b3b" />
         </mesh>
-      ))}
+        <mesh position={[0, TABLE.feltY, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[TABLE.feltWidth * 0.985, TABLE.feltDepth * 0.985]} />
+          <meshBasicMaterial map={feltTexture ?? undefined} color="#ffffff" side={THREE.DoubleSide} />
+        </mesh>
+        <RoundedBox args={[TABLE.feltWidth + 0.18, 0.026, TABLE.feltDepth + 0.18]} radius={0.24} smoothness={6} position={[0, TABLE.trimY, 0]} receiveShadow>
+          <meshPhongMaterial color="#c5a25a" specular="#efdca7" shininess={52} />
+        </RoundedBox>
 
-      <FeltWatermark />
-      <CardTray {...SEAT_TRAYS.bottom} />
-      <CardTray {...SEAT_TRAYS.top} />
-      <CardTray {...SEAT_TRAYS.left} />
-      <CardTray {...SEAT_TRAYS.right} />
+        {[
+          [-5.3, 0.38, -3.62],
+          [5.3, 0.38, -3.62],
+          [-5.3, 0.38, 3.62],
+          [5.3, 0.38, 3.62]
+        ].map((position, index) => (
+          <CornerWell key={`well-${index}`} position={position as Vec3} />
+        ))}
 
-      <PlaqueMesh position={[-3.44, 0.56, 2.58]} rotation={[-0.34, 0.16, 0.02]} title="WEST" subtitle={String(model.score.they)} active={false} size={[1.28, 0.62, 0.08]} />
-      <PlaqueMesh position={[3.44, 0.56, 2.58]} rotation={[-0.34, -0.16, -0.02]} title="EAST" subtitle={String(model.score.they)} active={false} size={[1.28, 0.62, 0.08]} />
-      <PlaqueMesh position={[0, 0.56, -2.62]} rotation={[-0.18, 0, 0]} title="NORTH" subtitle={String(model.score.we)} active={false} size={[1.46, 0.64, 0.08]} />
-      <PlaqueMesh position={[0, 0.44, 3.76]} rotation={[-0.5, 0, 0]} title="SOUTH" subtitle={String(model.score.we)} active={true} size={[1.6, 0.68, 0.08]} />
-      <ScoreMesh we={model.score.we} they={model.score.they} />
+        <CardTray {...TRAYS.south} />
+        <CardTray {...TRAYS.north} />
+        <CardTray {...TRAYS.west} />
+        <CardTray {...TRAYS.east} />
 
-      {northCards.map((item, index) => (
-        <CardMesh3D
-          key={item.key}
-          item={item}
-          transform={getNorthCardTransform(index, northCards.length)}
-          backTexture={cardBackTexture}
-        />
-      ))}
-      {westCards.map((item, index) => (
-        <CardMesh3D
-          key={item.key}
-          item={item}
-          transform={getSideCardTransform("left", index, westCards.length)}
-          backTexture={cardBackTexture}
-        />
-      ))}
-      {eastCards.map((item, index) => (
-        <CardMesh3D
-          key={item.key}
-          item={item}
-          transform={getSideCardTransform("right", index, eastCards.length)}
-          backTexture={cardBackTexture}
-        />
-      ))}
-      {model.trickCards.map((item, index) => (
-        <CardMesh3D
-          key={item.key}
-          item={item}
-          transform={getTrickCardTransform(item, index)}
-          backTexture={cardBackTexture}
-        />
-      ))}
-      {southCards.map((item, index) => (
-        <CardMesh3D
-          key={item.key}
-          item={item}
-          transform={getSouthCardTransform(item, index, southCards.length)}
-          backTexture={cardBackTexture}
-          onClick={
-            onSouthCardClick && !item.faceDown
-              ? () => onSouthCardClick(item.card.id)
-              : undefined
-          }
-        />
-      ))}
-      {model.passRoutes.map((route) => (
-        <group key={route.key}>
-          <PassSlotMesh
-            route={route}
-            onClick={
-              onPassRouteClick && route.interactive
-                ? () => onPassRouteClick(route.key)
-                : undefined
-            }
+        <PlaqueMesh position={PLAQUES.west.position} rotation={PLAQUES.west.rotation} title="WEST" subtitle={String(model.score.they)} active={false} size={PLAQUES.west.size} />
+        <PlaqueMesh position={PLAQUES.east.position} rotation={PLAQUES.east.rotation} title="EAST" subtitle={String(model.score.they)} active={false} size={PLAQUES.east.size} />
+        <PlaqueMesh position={PLAQUES.north.position} rotation={PLAQUES.north.rotation} title="NORTH" subtitle={String(model.score.we)} active={false} size={PLAQUES.north.size} />
+        <PlaqueMesh position={PLAQUES.south.position} rotation={PLAQUES.south.rotation} title="SOUTH" subtitle={String(model.score.we)} active={true} size={PLAQUES.south.size} />
+        <ScoreMesh we={model.score.we} they={model.score.they} />
+
+        <mesh position={[1.18, TABLE.feltY + 0.1, -0.22]} castShadow receiveShadow>
+          <boxGeometry args={[0.78, 0.16, 1.04]} />
+          <meshStandardMaterial map={cardBackTexture ?? undefined} color="#ffffff" roughness={0.44} metalness={0.04} />
+        </mesh>
+        <mesh position={[-1.14, TABLE.feltY + 0.08, -0.16]} rotation={[-0.02, -0.12, 0.02]} castShadow receiveShadow>
+          <boxGeometry args={[0.76, 0.04, 1.06]} />
+          <meshStandardMaterial color="#f4efe4" roughness={0.66} metalness={0.02} />
+        </mesh>
+
+        {northCards.map((item, index) => (
+          <CardMesh3D
+            key={item.key}
+            item={item}
+            transform={getNorthCardTransform(index, northCards.length)}
+            backTexture={cardBackTexture}
           />
-          {route.assignedCard ? (
-            <CardMesh3D
-              item={{
-                key: `${route.key}-assigned`,
-                card: route.assignedCard,
-                position: route.targetPosition,
-                pose: route.pose,
-                width: route.width,
-                height: route.height,
-                faceDown: route.faceDown
-              }}
-              transform={{
-                position: [
-                  getPassRouteTransform(route).position[0],
-                  TABLE_WORLD.feltHeight + 0.055,
-                  getPassRouteTransform(route).position[2]
-                ],
-                rotation: getPassRouteTransform(route).rotation
-              }}
-              backTexture={cardBackTexture}
+        ))}
+        {westCards.map((item, index) => (
+          <CardMesh3D
+            key={item.key}
+            item={item}
+            transform={getSideCardTransform("left", index, westCards.length)}
+            backTexture={cardBackTexture}
+          />
+        ))}
+        {eastCards.map((item, index) => (
+          <CardMesh3D
+            key={item.key}
+            item={item}
+            transform={getSideCardTransform("right", index, eastCards.length)}
+            backTexture={cardBackTexture}
+          />
+        ))}
+        {model.trickCards.map((item, index) => (
+          <CardMesh3D
+            key={item.key}
+            item={item}
+            transform={getTrickCardTransform(item, index)}
+            backTexture={cardBackTexture}
+          />
+        ))}
+        {southCards.map((item, index) => (
+          <CardMesh3D
+            key={item.key}
+            item={item}
+            transform={getSouthCardTransform(item, index, southCards.length)}
+            backTexture={cardBackTexture}
+            onClick={onSouthCardClick && !item.faceDown ? () => onSouthCardClick(item.card.id) : undefined}
+          />
+        ))}
+        {model.passRoutes.map((route) => (
+          <group key={route.key}>
+            <PassSlotMesh
+              route={route}
+              onClick={onPassRouteClick && route.interactive ? () => onPassRouteClick(route.key) : undefined}
             />
-          ) : null}
-        </group>
-      ))}
+            {route.assignedCard ? (
+              <CardMesh3D
+                item={{
+                  key: `${route.key}-assigned`,
+                  card: route.assignedCard,
+                  position: route.targetPosition,
+                  pose: route.pose,
+                  width: route.width,
+                  height: route.height,
+                  faceDown: route.faceDown
+                }}
+                transform={{
+                  position: [
+                    getPassRouteTransform(route).position[0],
+                    TABLE.feltY + 0.06,
+                    getPassRouteTransform(route).position[2]
+                  ],
+                  rotation: getPassRouteTransform(route).rotation,
+                  scale: 0.92
+                }}
+                backTexture={cardBackTexture}
+              />
+            ) : null}
+          </group>
+        ))}
 
-      {layoutDebugEnabled ? <AnchorDebug /> : null}
+        {layoutDebugEnabled ? <AnchorDebug /> : null}
+      </group>
 
-      <ContactShadows position={[0, 0.02, 0]} scale={22} opacity={0.34} blur={2.2} far={12} resolution={1024} color="#000000" />
+      <ContactShadows position={[0, 0.02, 0]} scale={24} opacity={0.34} blur={2.4} far={12} resolution={1024} color="#000000" />
     </>
   );
 }
@@ -1056,13 +1050,13 @@ export function AlternateTableThreeSurface({
         dpr={[1, 1.75]}
         gl={{ antialias: true, alpha: true }}
         camera={{
-          position: [0, 7.15, 14.1],
-          fov: 35,
+          position: [0, 8.2, 6.4],
+          fov: 24,
           near: 0.1,
           far: 40
         }}
         onCreated={({ camera }) => {
-          camera.lookAt(0, 0.98, -0.12);
+          camera.lookAt(0, 0.68, 0.22);
         }}
       >
         <TableScene
