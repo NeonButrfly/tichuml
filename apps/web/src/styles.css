@@ -6640,28 +6640,32 @@ body.normal-layout-locked {
 
 .alternate-controls {
   position: absolute;
-  left: 50%;
-  right: auto;
-  bottom: max(8px, env(safe-area-inset-bottom));
-  transform: translateX(-50%);
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 0 12px max(8px, env(safe-area-inset-bottom));
+  transform: none;
   z-index: 22;
-  width: min(420px, calc(100vw - 24px));
-  display: grid;
-  gap: 8px;
+  width: auto;
+  display: flex;
+  justify-content: center;
 }
 
 .alternate-controls__primary {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: center;
   gap: 8px;
   align-items: stretch;
+  width: min(100%, 860px);
 }
 
 .alternate-action-button,
 .alternate-utility-button,
 .alternate-wish-option {
   min-height: 48px;
-  padding: 0 14px;
+  min-width: 132px;
+  padding: 0 16px;
   border-radius: 12px;
   border: 1px solid rgba(227, 183, 108, 0.28);
   color: #f5ebd8;
@@ -6669,12 +6673,13 @@ body.normal-layout-locked {
   font-family: var(--font-display);
   font-size: 0.98rem;
   letter-spacing: 0.03em;
+  white-space: nowrap;
   cursor: pointer;
   box-shadow: 0 16px 28px rgba(0, 0, 0, 0.22);
 }
 
 .alternate-utility-button--full {
-  grid-column: 1 / -1;
+  min-width: 160px;
 }
 
 .alternate-action-button--primary {
@@ -6935,15 +6940,18 @@ body.normal-layout-locked {
 }
 
 .alternate-controls {
-  left: 50%;
-  right: auto;
-  bottom: max(8px, env(safe-area-inset-bottom));
-  transform: translateX(-50%);
-  width: min(420px, calc(100vw - 24px));
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 0 12px max(8px, env(safe-area-inset-bottom));
+  transform: none;
+  width: auto;
 }
 
 .alternate-controls__primary {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: center;
 }
 
 .alternate-action-button,
@@ -6982,9 +6990,10 @@ body.normal-layout-locked {
   }
 
   .alternate-controls {
-    left: 50%;
-    right: auto;
-    bottom: max(8px, env(safe-area-inset-bottom));
-    width: min(360px, calc(100vw - 20px));
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 0 10px max(6px, env(safe-area-inset-bottom));
+    width: auto;
   }
 }

@@ -812,3 +812,17 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 - Linked GitHub Issue: [#81](https://github.com/NeonButrfly/tichuml/issues/81)
 - Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
 - Status Source: GitHub issue state only.
+
+### 2026-05-24 - ALT action rail should stay on one bottom row at the screen edge
+
+- Prompt Signal: The follow-up correction rejected the remaining ALT control
+  layout because the action buttons were still stacking into multiple rows and
+  were not seated at the lowest edge of the viewport.
+- Interpreted Requirement: Keep the alternate table phase-aware actions, but
+  render them as one horizontal bottom rail pinned flush to the screen edge.
+  Do not reintroduce visible overlay panels or a `Clear` button.
+- Affected Systems: `apps/web/src/styles.css`,
+  `apps/web/src/alternate-game-table-view.tsx`.
+- Linked GitHub Issue: [#81](https://github.com/NeonButrfly/tichuml/issues/81)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.
