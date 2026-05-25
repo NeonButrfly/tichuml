@@ -2,9 +2,11 @@ import type { PassTarget } from "../table-model";
 import type { SeatVisualPosition } from "../table-layout";
 
 export const ALT_TABLE_CAMERA = {
-  position: [0, 8.4, 10.2] as const,
-  fov: 32
+  position: [0, 10.4, 18.6] as const,
+  fov: 40
 };
+
+export const ALT_TABLE_CAMERA_TARGET = [0, -0.3, 0.15] as const;
 
 export const ALT_TABLE_ROOT_POSITION = [0, -1.2, 0] as const;
 

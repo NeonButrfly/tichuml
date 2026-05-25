@@ -84,7 +84,14 @@ export function AltTable3DTableRoot({
         userData={{ meshRole: "felt-inset" }}
       >
         <planeGeometry args={[11.8, 8.6]} />
-        <meshStandardMaterial map={materials.felt} color="#28503b" roughness={0.94} metalness={0.01} />
+        <meshStandardMaterial
+          map={materials.felt}
+          color="#36684b"
+          emissive="#102219"
+          emissiveIntensity={0.16}
+          roughness={0.94}
+          metalness={0.01}
+        />
       </mesh>
 
       <mesh

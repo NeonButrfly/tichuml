@@ -9,8 +9,8 @@ ROOT = Path(__file__).resolve().parents[1]
 GENERATED = ROOT / "generated"
 RUNTIME = ROOT / "runtime"
 
-CARD_WIDTH = 420
-CARD_HEIGHT = 600
+CARD_WIDTH = 240
+CARD_HEIGHT = 336
 CARD_COLUMNS = 8
 CARD_ROWS = 7
 
@@ -171,10 +171,10 @@ def build_card_atlas() -> None:
 
 def main() -> None:
     ensure_runtime_dir()
-    paste_resized("walnut-source.png", "walnut-texture.png", (2048, 2048))
-    paste_resized("felt-source.png", "felt-texture.png", (2048, 2048))
-    paste_resized("tray-material-source.png", "tray-material-texture.png", (2048, 2048))
-    paste_resized("plaque-material-source.png", "plaque-material-texture.png", (1024, 1024))
+    paste_resized("walnut-source.png", "walnut-texture.png", (1024, 1024))
+    paste_resized("felt-source.png", "felt-texture.png", (1024, 1024))
+    paste_resized("tray-material-source.png", "tray-material-texture.png", (1024, 1024))
+    paste_resized("plaque-material-source.png", "plaque-material-texture.png", (512, 512))
     paste_resized("card-back-source.png", "card-back-texture.png", (CARD_WIDTH, CARD_HEIGHT))
     build_card_atlas()
 

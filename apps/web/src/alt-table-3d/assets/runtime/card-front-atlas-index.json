@@ -1,8 +1,8 @@
 {
   "columns": 8,
   "rows": 7,
-  "cardWidth": 420,
-  "cardHeight": 600,
+  "cardWidth": 240,
+  "cardHeight": 336,
   "cards": {
     "jade-2": {
       "index": 0,
@@ -10,503 +10,503 @@
       "row": 0,
       "x": 0,
       "y": 0,
-      "width": 420,
-      "height": 600
+      "width": 240,
+      "height": 336
     },
     "jade-3": {
       "index": 1,
       "column": 1,
       "row": 0,
-      "x": 420,
+      "x": 240,
       "y": 0,
-      "width": 420,
-      "height": 600
+      "width": 240,
+      "height": 336
     },
     "jade-4": {
       "index": 2,
       "column": 2,
       "row": 0,
-      "x": 840,
+      "x": 480,
       "y": 0,
-      "width": 420,
-      "height": 600
+      "width": 240,
+      "height": 336
     },
     "jade-5": {
       "index": 3,
       "column": 3,
       "row": 0,
-      "x": 1260,
+      "x": 720,
       "y": 0,
-      "width": 420,
-      "height": 600
+      "width": 240,
+      "height": 336
     },
     "jade-6": {
       "index": 4,
       "column": 4,
       "row": 0,
-      "x": 1680,
+      "x": 960,
       "y": 0,
-      "width": 420,
-      "height": 600
+      "width": 240,
+      "height": 336
     },
     "jade-7": {
       "index": 5,
       "column": 5,
       "row": 0,
-      "x": 2100,
+      "x": 1200,
       "y": 0,
-      "width": 420,
-      "height": 600
+      "width": 240,
+      "height": 336
     },
     "jade-8": {
       "index": 6,
       "column": 6,
       "row": 0,
-      "x": 2520,
+      "x": 1440,
       "y": 0,
-      "width": 420,
-      "height": 600
+      "width": 240,
+      "height": 336
     },
     "jade-9": {
       "index": 7,
       "column": 7,
       "row": 0,
-      "x": 2940,
+      "x": 1680,
       "y": 0,
-      "width": 420,
-      "height": 600
+      "width": 240,
+      "height": 336
     },
     "jade-10": {
       "index": 8,
       "column": 0,
       "row": 1,
       "x": 0,
-      "y": 600,
-      "width": 420,
-      "height": 600
+      "y": 336,
+      "width": 240,
+      "height": 336
     },
     "jade-11": {
       "index": 9,
       "column": 1,
       "row": 1,
-      "x": 420,
-      "y": 600,
-      "width": 420,
-      "height": 600
+      "x": 240,
+      "y": 336,
+      "width": 240,
+      "height": 336
     },
     "jade-12": {
       "index": 10,
       "column": 2,
       "row": 1,
-      "x": 840,
-      "y": 600,
-      "width": 420,
-      "height": 600
+      "x": 480,
+      "y": 336,
+      "width": 240,
+      "height": 336
     },
     "jade-13": {
       "index": 11,
       "column": 3,
       "row": 1,
-      "x": 1260,
-      "y": 600,
-      "width": 420,
-      "height": 600
+      "x": 720,
+      "y": 336,
+      "width": 240,
+      "height": 336
     },
     "jade-14": {
       "index": 12,
       "column": 4,
       "row": 1,
-      "x": 1680,
-      "y": 600,
-      "width": 420,
-      "height": 600
+      "x": 960,
+      "y": 336,
+      "width": 240,
+      "height": 336
     },
     "sword-2": {
       "index": 13,
       "column": 5,
       "row": 1,
-      "x": 2100,
-      "y": 600,
-      "width": 420,
-      "height": 600
+      "x": 1200,
+      "y": 336,
+      "width": 240,
+      "height": 336
     },
     "sword-3": {
       "index": 14,
       "column": 6,
       "row": 1,
-      "x": 2520,
-      "y": 600,
-      "width": 420,
-      "height": 600
+      "x": 1440,
+      "y": 336,
+      "width": 240,
+      "height": 336
     },
     "sword-4": {
       "index": 15,
       "column": 7,
       "row": 1,
-      "x": 2940,
-      "y": 600,
-      "width": 420,
-      "height": 600
+      "x": 1680,
+      "y": 336,
+      "width": 240,
+      "height": 336
     },
     "sword-5": {
       "index": 16,
       "column": 0,
       "row": 2,
       "x": 0,
-      "y": 1200,
-      "width": 420,
-      "height": 600
+      "y": 672,
+      "width": 240,
+      "height": 336
     },
     "sword-6": {
       "index": 17,
       "column": 1,
       "row": 2,
-      "x": 420,
-      "y": 1200,
-      "width": 420,
-      "height": 600
+      "x": 240,
+      "y": 672,
+      "width": 240,
+      "height": 336
     },
     "sword-7": {
       "index": 18,
       "column": 2,
       "row": 2,
-      "x": 840,
-      "y": 1200,
-      "width": 420,
-      "height": 600
+      "x": 480,
+      "y": 672,
+      "width": 240,
+      "height": 336
     },
     "sword-8": {
       "index": 19,
       "column": 3,
       "row": 2,
-      "x": 1260,
-      "y": 1200,
-      "width": 420,
-      "height": 600
+      "x": 720,
+      "y": 672,
+      "width": 240,
+      "height": 336
     },
     "sword-9": {
       "index": 20,
       "column": 4,
       "row": 2,
-      "x": 1680,
-      "y": 1200,
-      "width": 420,
-      "height": 600
+      "x": 960,
+      "y": 672,
+      "width": 240,
+      "height": 336
     },
     "sword-10": {
       "index": 21,
       "column": 5,
       "row": 2,
-      "x": 2100,
-      "y": 1200,
-      "width": 420,
-      "height": 600
+      "x": 1200,
+      "y": 672,
+      "width": 240,
+      "height": 336
     },
     "sword-11": {
       "index": 22,
       "column": 6,
       "row": 2,
-      "x": 2520,
-      "y": 1200,
-      "width": 420,
-      "height": 600
+      "x": 1440,
+      "y": 672,
+      "width": 240,
+      "height": 336
     },
     "sword-12": {
       "index": 23,
       "column": 7,
       "row": 2,
-      "x": 2940,
-      "y": 1200,
-      "width": 420,
-      "height": 600
+      "x": 1680,
+      "y": 672,
+      "width": 240,
+      "height": 336
     },
     "sword-13": {
       "index": 24,
       "column": 0,
       "row": 3,
       "x": 0,
-      "y": 1800,
-      "width": 420,
-      "height": 600
+      "y": 1008,
+      "width": 240,
+      "height": 336
     },
     "sword-14": {
       "index": 25,
       "column": 1,
       "row": 3,
-      "x": 420,
-      "y": 1800,
-      "width": 420,
-      "height": 600
+      "x": 240,
+      "y": 1008,
+      "width": 240,
+      "height": 336
     },
     "pagoda-2": {
       "index": 26,
       "column": 2,
       "row": 3,
-      "x": 840,
-      "y": 1800,
-      "width": 420,
-      "height": 600
+      "x": 480,
+      "y": 1008,
+      "width": 240,
+      "height": 336
     },
     "pagoda-3": {
       "index": 27,
       "column": 3,
       "row": 3,
-      "x": 1260,
-      "y": 1800,
-      "width": 420,
-      "height": 600
+      "x": 720,
+      "y": 1008,
+      "width": 240,
+      "height": 336
     },
     "pagoda-4": {
       "index": 28,
       "column": 4,
       "row": 3,
-      "x": 1680,
-      "y": 1800,
-      "width": 420,
-      "height": 600
+      "x": 960,
+      "y": 1008,
+      "width": 240,
+      "height": 336
     },
     "pagoda-5": {
       "index": 29,
       "column": 5,
       "row": 3,
-      "x": 2100,
-      "y": 1800,
-      "width": 420,
-      "height": 600
+      "x": 1200,
+      "y": 1008,
+      "width": 240,
+      "height": 336
     },
     "pagoda-6": {
       "index": 30,
       "column": 6,
       "row": 3,
-      "x": 2520,
-      "y": 1800,
-      "width": 420,
-      "height": 600
+      "x": 1440,
+      "y": 1008,
+      "width": 240,
+      "height": 336
     },
     "pagoda-7": {
       "index": 31,
       "column": 7,
       "row": 3,
-      "x": 2940,
-      "y": 1800,
-      "width": 420,
-      "height": 600
+      "x": 1680,
+      "y": 1008,
+      "width": 240,
+      "height": 336
     },
     "pagoda-8": {
       "index": 32,
       "column": 0,
       "row": 4,
       "x": 0,
-      "y": 2400,
-      "width": 420,
-      "height": 600
+      "y": 1344,
+      "width": 240,
+      "height": 336
     },
     "pagoda-9": {
       "index": 33,
       "column": 1,
       "row": 4,
-      "x": 420,
-      "y": 2400,
-      "width": 420,
-      "height": 600
+      "x": 240,
+      "y": 1344,
+      "width": 240,
+      "height": 336
     },
     "pagoda-10": {
       "index": 34,
       "column": 2,
       "row": 4,
-      "x": 840,
-      "y": 2400,
-      "width": 420,
-      "height": 600
+      "x": 480,
+      "y": 1344,
+      "width": 240,
+      "height": 336
     },
     "pagoda-11": {
       "index": 35,
       "column": 3,
       "row": 4,
-      "x": 1260,
-      "y": 2400,
-      "width": 420,
-      "height": 600
+      "x": 720,
+      "y": 1344,
+      "width": 240,
+      "height": 336
     },
     "pagoda-12": {
       "index": 36,
       "column": 4,
       "row": 4,
-      "x": 1680,
-      "y": 2400,
-      "width": 420,
-      "height": 600
+      "x": 960,
+      "y": 1344,
+      "width": 240,
+      "height": 336
     },
     "pagoda-13": {
       "index": 37,
       "column": 5,
       "row": 4,
-      "x": 2100,
-      "y": 2400,
-      "width": 420,
-      "height": 600
+      "x": 1200,
+      "y": 1344,
+      "width": 240,
+      "height": 336
     },
     "pagoda-14": {
       "index": 38,
       "column": 6,
       "row": 4,
-      "x": 2520,
-      "y": 2400,
-      "width": 420,
-      "height": 600
+      "x": 1440,
+      "y": 1344,
+      "width": 240,
+      "height": 336
     },
     "star-2": {
       "index": 39,
       "column": 7,
       "row": 4,
-      "x": 2940,
-      "y": 2400,
-      "width": 420,
-      "height": 600
+      "x": 1680,
+      "y": 1344,
+      "width": 240,
+      "height": 336
     },
     "star-3": {
       "index": 40,
       "column": 0,
       "row": 5,
       "x": 0,
-      "y": 3000,
-      "width": 420,
-      "height": 600
+      "y": 1680,
+      "width": 240,
+      "height": 336
     },
     "star-4": {
       "index": 41,
       "column": 1,
       "row": 5,
-      "x": 420,
-      "y": 3000,
-      "width": 420,
-      "height": 600
+      "x": 240,
+      "y": 1680,
+      "width": 240,
+      "height": 336
     },
     "star-5": {
       "index": 42,
       "column": 2,
       "row": 5,
-      "x": 840,
-      "y": 3000,
-      "width": 420,
-      "height": 600
+      "x": 480,
+      "y": 1680,
+      "width": 240,
+      "height": 336
     },
     "star-6": {
       "index": 43,
       "column": 3,
       "row": 5,
-      "x": 1260,
-      "y": 3000,
-      "width": 420,
-      "height": 600
+      "x": 720,
+      "y": 1680,
+      "width": 240,
+      "height": 336
     },
     "star-7": {
       "index": 44,
       "column": 4,
       "row": 5,
-      "x": 1680,
-      "y": 3000,
-      "width": 420,
-      "height": 600
+      "x": 960,
+      "y": 1680,
+      "width": 240,
+      "height": 336
     },
     "star-8": {
       "index": 45,
       "column": 5,
       "row": 5,
-      "x": 2100,
-      "y": 3000,
-      "width": 420,
-      "height": 600
+      "x": 1200,
+      "y": 1680,
+      "width": 240,
+      "height": 336
     },
     "star-9": {
       "index": 46,
       "column": 6,
       "row": 5,
-      "x": 2520,
-      "y": 3000,
-      "width": 420,
-      "height": 600
+      "x": 1440,
+      "y": 1680,
+      "width": 240,
+      "height": 336
     },
     "star-10": {
       "index": 47,
       "column": 7,
       "row": 5,
-      "x": 2940,
-      "y": 3000,
-      "width": 420,
-      "height": 600
+      "x": 1680,
+      "y": 1680,
+      "width": 240,
+      "height": 336
     },
     "star-11": {
       "index": 48,
       "column": 0,
       "row": 6,
       "x": 0,
-      "y": 3600,
-      "width": 420,
-      "height": 600
+      "y": 2016,
+      "width": 240,
+      "height": 336
     },
     "star-12": {
       "index": 49,
       "column": 1,
       "row": 6,
-      "x": 420,
-      "y": 3600,
-      "width": 420,
-      "height": 600
+      "x": 240,
+      "y": 2016,
+      "width": 240,
+      "height": 336
     },
     "star-13": {
       "index": 50,
       "column": 2,
       "row": 6,
-      "x": 840,
-      "y": 3600,
-      "width": 420,
-      "height": 600
+      "x": 480,
+      "y": 2016,
+      "width": 240,
+      "height": 336
     },
     "star-14": {
       "index": 51,
       "column": 3,
       "row": 6,
-      "x": 1260,
-      "y": 3600,
-      "width": 420,
-      "height": 600
+      "x": 720,
+      "y": 2016,
+      "width": 240,
+      "height": 336
     },
     "mahjong": {
       "index": 52,
       "column": 4,
       "row": 6,
-      "x": 1680,
-      "y": 3600,
-      "width": 420,
-      "height": 600
+      "x": 960,
+      "y": 2016,
+      "width": 240,
+      "height": 336
     },
     "dog": {
       "index": 53,
       "column": 5,
       "row": 6,
-      "x": 2100,
-      "y": 3600,
-      "width": 420,
-      "height": 600
+      "x": 1200,
+      "y": 2016,
+      "width": 240,
+      "height": 336
     },
     "phoenix": {
       "index": 54,
       "column": 6,
       "row": 6,
-      "x": 2520,
-      "y": 3600,
-      "width": 420,
-      "height": 600
+      "x": 1440,
+      "y": 2016,
+      "width": 240,
+      "height": 336
     },
     "dragon": {
       "index": 55,
       "column": 7,
       "row": 6,
-      "x": 2940,
-      "y": 3600,
-      "width": 420,
-      "height": 600
+      "x": 1680,
+      "y": 2016,
+      "width": 240,
+      "height": 336
     }
   }
 }
