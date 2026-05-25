@@ -12,6 +12,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "dev:web": "npm run dev -w @tichuml/web",
+    "verify:browser:alt": "tsx scripts/browser-verify.ts --start-dev-web",
     "dev:server": "npm run dev -w @tichuml/server",
     "start:server": "npm run start -w @tichuml/server",
     "bootstrap:windows": "powershell -ExecutionPolicy Bypass -File scripts/bootstrap.ps1",
@@ -62,6 +63,7 @@
     "eslint-plugin-react-refresh": "^0.4.21",
     "globals": "^16.0.0",
     "jsdom": "^26.1.0",
+    "playwright": "^1.60.0",
     "postgres": "^3.4.7",
     "prettier": "^3.5.3",
     "react": "^19.1.1",
@@ -71,6 +73,7 @@
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.29.1",
     "vite": "^7.1.5",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "playwright": "^1.60.0"
   }
 }

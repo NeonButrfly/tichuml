@@ -2,7 +2,12 @@ import type { Card, SeatId } from "@tichuml/engine";
 import { formatRank, type GameTableViewProps, type SeatView } from "../game-table-views";
 import type { PassTarget } from "../table-model";
 import type { SeatVisualPosition } from "../table-layout";
-import { getPassLanePosition, SEAT_CARD_ROTATIONS, SEAT_TRAY_POSITIONS } from "./AltTable3DLayout";
+import {
+  getPassLanePosition,
+  SEAT_CENTER_CARD_ROTATIONS,
+  SEAT_HAND_CARD_ROTATIONS,
+  SEAT_TRAY_POSITIONS
+} from "./AltTable3DLayout";
 
 export type AltTable3DCardNode = {
   key: string;
@@ -131,19 +136,20 @@ function getTichuBadge(seat: SeatView) {
 function buildSouthHandCards(props: GameTableViewProps): AltTable3DCardNode[] {
   const seat = getSeatByPosition(props.seatViews, "bottom");
   const centerX = 0;
-  const spacing = Math.min(0.46, 4.7 / Math.max(seat.cards.length, 1));
-  const rotationBase = SEAT_CARD_ROTATIONS.bottom;
+  const spacing = Math.min(0.76, 9.2 / Math.max(seat.cards.length, 1));
+  const rotationBase = SEAT_HAND_CARD_ROTATIONS.bottom;
 
   return props.sortedLocalHand.map((card, index) => {
     const totalWidth = spacing * Math.max(props.sortedLocalHand.length - 1, 0);
     const x = centerX - totalWidth / 2 + index * spacing;
-    const zCurve = Math.abs(index - (props.sortedLocalHand.length - 1) / 2) * -0.03;
+    const centeredIndex = index - (props.sortedLocalHand.length - 1) / 2;
+    const zCurve = Math.abs(centeredIndex) * -0.018;
     return {
       key: `south-${card.id}`,
       card,
       seat: "bottom",
-      position: [x, 0.96, 4.08 + zCurve],
-      rotation: [rotationBase[0], rotationBase[1], (x / 9.5) * -0.16],
+      position: [x, 1.38, 5.08 + zCurve],
+      rotation: [rotationBase[0], rotationBase[1], (x / 8.6) * -0.16],
       faceDown: false,
       selected: props.selectedCardIds.includes(card.id),
       interactive: props.localCanInteract,
@@ -156,20 +162,20 @@ function buildOpponentCards(props: GameTableViewProps): AltTable3DCardNode[] {
   return props.seatViews
     .filter((seat) => !seat.isLocalSeat)
     .flatMap((seat) => {
-      const count = Math.max(1, Math.min(seat.handCount, seat.position === "top" ? 9 : 7));
-      const spacing = seat.position === "top" ? 0.42 : 0.34;
+      const count = Math.max(1, Math.min(seat.handCount, seat.position === "top" ? 14 : 9));
+      const spacing = seat.position === "top" ? 0.54 : 0.36;
       const base = SEAT_TRAY_POSITIONS[seat.position];
-      const rotation = SEAT_CARD_ROTATIONS[seat.position];
+      const rotation = SEAT_HAND_CARD_ROTATIONS[seat.position];
 
       return Array.from({ length: count }, (_, index) => {
         const centered = index - (count - 1) / 2;
         const lateral = centered * spacing;
         const position =
           seat.position === "top"
-            ? ([lateral, 0.96, base[2] + 0.58] as [number, number, number])
+            ? ([lateral, 1.08, base[2] + 0.18] as [number, number, number])
             : seat.position === "left"
-              ? ([base[0] + 0.55, 0.96, lateral] as [number, number, number])
-              : ([base[0] - 0.55, 0.96, lateral] as [number, number, number]);
+              ? ([base[0] - 0.04, 1.06, lateral] as [number, number, number])
+              : ([base[0] + 0.04, 1.06, lateral] as [number, number, number]);
 
         return {
           key: `${seat.position}-back-${index}`,
@@ -203,18 +209,18 @@ function buildTrickCards(props: GameTableViewProps): AltTable3DCardNode[] {
       const spread = cardIds.length > 1 ? (cardIndex - (cardIds.length - 1) / 2) * 0.42 : 0;
       const seatOffset =
         position === "bottom"
-          ? [spread, 1.02, 1.55]
+          ? [1.65 + spread, 0.78, 0.78]
           : position === "top"
-            ? [spread, 1.02, -1.55]
+            ? [1.45 + spread, 0.78, 0.38]
             : position === "left"
-              ? [-1.76, 1.02, spread]
-              : [1.76, 1.02, spread];
+              ? [0.9, 0.78, 0.55 + spread]
+              : [2.28, 0.78, 0.55 + spread];
       return {
         key: `trick-${index}-${cardId}`,
         card,
         seat: position,
         position: seatOffset as [number, number, number],
-        rotation: SEAT_CARD_ROTATIONS[position],
+        rotation: SEAT_CENTER_CARD_ROTATIONS[position],
         faceDown: false,
         selected: false,
         interactive: false,
@@ -253,7 +259,7 @@ function buildPassLaneCards(props: GameTableViewProps): AltTable3DCardNode[] {
         card,
         seat: route.sourcePosition,
         position: [x, y + 0.04, z],
-        rotation: SEAT_CARD_ROTATIONS[route.sourcePosition],
+        rotation: SEAT_CENTER_CARD_ROTATIONS[route.sourcePosition],
         faceDown: route.faceDown,
         selected: false,
         interactive: false,

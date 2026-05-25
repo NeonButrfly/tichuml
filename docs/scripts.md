@@ -55,6 +55,7 @@ scripts/verify-scripts.sh
 | Stop training | `scripts/stop-training.ps1` | `scripts/stop-training.sh` |
 | Update backend | `scripts/update-backend.ps1` | `scripts/update-backend.sh` |
 | Validate training run | `scripts/validate-training-run.ps1` | `scripts/validate-training-run.sh` |
+| Verify ALT table browser view | `scripts/verify-alt-table.ps1` | `scripts/verify-alt-table.sh` |
 | Verify one sim game | `scripts/verify-sim-one-game.ps1` | `scripts/verify-sim-one-game.sh` |
 
 Linux-host-only backend operations currently remain shell-only because they are
@@ -150,3 +151,20 @@ powershell -ExecutionPolicy Bypass -File scripts\run-sim.ps1 -Games 1 -Provider 
 ```bash
 scripts/run-sim.sh --games 1 --provider local --telemetry false
 ```
+
+For deterministic ALT table browser verification from a local dev server:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\verify-alt-table.ps1
+```
+
+```bash
+scripts/verify-alt-table.sh --start-dev-web
+```
+
+The verifier starts a Vite dev server by default, opens the ALT route with the
+pass-select preview query, waits for the 3D scene markers plus South-hand
+markers to exist, then writes a screenshot and metadata JSON under the system
+temporary directory unless explicit output paths are provided. Use
+`-NoStartDevWeb` on PowerShell or `--no-start-dev-web` on shell when targeting
+an already running local or remote URL.

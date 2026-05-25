@@ -8,7 +8,7 @@ import {
 } from "../game-table-views";
 import "./alt-table-3d.css";
 import { AltTable3DScene } from "./AltTable3DScene";
-import { createAltTable3DSceneModel, formatSouthHandSummary } from "./AltTable3DModel";
+import { createAltTable3DSceneModel } from "./AltTable3DModel";
 
 function WishOptionButton({
   value,
@@ -111,13 +111,6 @@ export function AltTable3DRoute(props: GameTableViewProps) {
           {model.opponentCards.map((card) => (
             <span key={card.key} data-scene-card="opponent-mesh" data-card-id={card.cardId} />
           ))}
-        </div>
-
-        <div className="alt-table-3d__status-strip">
-          <span>{model.phaseLabel}</span>
-          <span>{`WE ${model.score.we}`}</span>
-          <span>{`THEY ${model.score.they}`}</span>
-          <span>{formatSouthHandSummary(model.southCards)}</span>
         </div>
 
         {props.localDragonRecipients.length > 0 && (

@@ -29,9 +29,9 @@ describe("alternate table route guards", () => {
   });
 
   it("keeps south card rendering mesh-backed instead of DOM-only card placeholders", () => {
-    expect(cardMeshSource).toContain("<mesh");
-    expect(cardMeshSource).toContain("<boxGeometry");
-    expect(cardMeshSource).toContain("MeshStandardMaterial");
+    expect(cardMeshSource).toContain("meshRole: \"card-face\"");
+    expect(cardMeshSource).toContain("meshRole: \"card-back\"");
+    expect(cardMeshSource).toContain("<planeGeometry");
     expect(cardMeshSource).not.toContain("button");
     expect(cardMeshSource).not.toContain("div");
   });
