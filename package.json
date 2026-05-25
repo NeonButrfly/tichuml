@@ -73,7 +73,6 @@
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.29.1",
     "vite": "^7.1.5",
-    "vitest": "^3.2.4",
-    "playwright": "^1.60.0"
+    "vitest": "^3.2.4"
   }
 }

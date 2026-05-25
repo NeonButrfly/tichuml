@@ -14,6 +14,36 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 
 ## Entries
 
+### 2026-05-24 - ALT route should first ship as an empty photorealistic 3D table shell
+
+- Prompt Signal: The latest ALT-table prompt narrowed the scope on purpose and
+  supplied an empty-table reference image. The requirement was to stop showing
+  any cards, deck, score chrome, or action HUD and instead match the empty
+  photorealistic tray-table layout with only the walnut frame, green felt,
+  raised seat rails, seat plaques, gold felt border accents, and warm
+  cinematic lighting.
+- Interpreted Requirement: Keep the regular table untouched and keep issue
+  [#81](https://github.com/NeonButrfly/tichuml/issues/81) as the canonical ALT
+  tracking issue, but pivot the alternate route into a clean empty React 3D
+  table shell first. The ALT scene should render only the physical table and
+  plaques through the isolated `alt-table-3d` path, using locally generated
+  canvas textures and no gameplay sample state.
+- Affected Systems: `apps/web/src/alt-table-3d/AltTable3DRoute.tsx`,
+  `apps/web/src/alt-table-3d/AltTichuTable3D.tsx`,
+  `apps/web/src/alt-table-3d/EmptyPhotorealisticTableScene.tsx`,
+  `apps/web/src/alt-table-3d/TableMeshes.tsx`,
+  `apps/web/src/alt-table-3d/RailMeshes.tsx`,
+  `apps/web/src/alt-table-3d/LightingRig.tsx`,
+  `apps/web/src/alt-table-3d/generatedTextures.ts`,
+  `apps/web/src/alt-table-3d/sceneConstants.ts`,
+  `apps/web/src/alt-table-3d/README.md`,
+  `tests/integration/alternate-table-view.test.ts`,
+  `tests/integration/alternate-table-route-guards.test.ts`,
+  `scripts/browser-verify.ts`.
+- Linked GitHub Issue: [#81](https://github.com/NeonButrfly/tichuml/issues/81)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.
+
 ### 2026-05-23 - The photorealistic ALT table must keep the full scene inside the viewport
 
 - Prompt Signal: After the 3D tray rebuild, the next visual feedback said

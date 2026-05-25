@@ -16,6 +16,8 @@ type Options = {
   startDevWeb: boolean;
   devPort: number;
   browserPath?: string;
+  width: number;
+  height: number;
 };
 
 function printHelp() {
@@ -26,7 +28,7 @@ Usage:
   tsx scripts/browser-verify.ts [options]
 
 Options:
-  --url <url>                 Page to verify. Defaults to a local ALT preview URL.
+  --url <url>                 Page to verify. Defaults to the empty ALT table route.
   --output <path>             Screenshot output path. Defaults to a temp PNG.
   --metadata <path>           Metadata JSON path. Defaults next to the screenshot.
   --wait-selector <selector>  DOM selector that must exist before capture.
@@ -36,6 +38,8 @@ Options:
   --start-dev-web             Start a local Vite dev server automatically.
   --dev-port <port>           Port used when --start-dev-web is set. Default: 4275
   --browser-path <path>       Explicit browser executable path.
+  --width <px>                Viewport width. Default: 1536
+  --height <px>               Viewport height. Default: 1024
   --help                      Show this message.
 `);
 }
@@ -46,7 +50,9 @@ function parseArgs(argv: readonly string[]): Options {
     waitTimeoutMs: 45_000,
     settleMs: 1_500,
     startDevWeb: false,
-    devPort: 4275
+    devPort: 4275,
+    width: 1536,
+    height: 1024
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -90,6 +96,14 @@ function parseArgs(argv: readonly string[]): Options {
         break;
       case "--browser-path":
         options.browserPath = next;
+        index += 1;
+        break;
+      case "--width":
+        options.width = Number.parseInt(next, 10);
+        index += 1;
+        break;
+      case "--height":
+        options.height = Number.parseInt(next, 10);
         index += 1;
         break;
       case "--help":
@@ -243,7 +257,7 @@ async function captureAltTable(options: Options) {
 
   const targetUrl =
     options.url ??
-    `http://127.0.0.1:${options.devPort}/?table=alt&preview=pass-select`;
+    `http://127.0.0.1:${options.devPort}/?table=alt`;
 
   try {
     if (options.startDevWeb) {
@@ -258,7 +272,9 @@ async function captureAltTable(options: Options) {
     });
 
     try {
-      const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
+      const page = await browser.newPage({
+        viewport: { width: options.width, height: options.height }
+      });
       await page.goto(targetUrl, {
         waitUntil: "domcontentloaded",
         timeout: options.waitTimeoutMs
@@ -271,10 +287,12 @@ async function captureAltTable(options: Options) {
             return false;
           }
 
-          const seatTrays = document.querySelectorAll("[data-scene-node='seat-tray']").length;
-          const southCards = document.querySelectorAll("[data-scene-card='south-mesh']").length;
+          const seatRails = document.querySelectorAll("[data-scene-node='seat-rail']").length;
+          const seatLabels = document.querySelectorAll("[data-scene-node='seat-label']").length;
+          const cards = document.querySelectorAll("[data-scene-card]").length;
+          const buttons = document.querySelectorAll("button").length;
           const loadingText = document.body.textContent?.includes("Starting New Game") ?? false;
-          return seatTrays === 4 && southCards > 0 && !loadingText;
+          return seatRails === 4 && seatLabels === 4 && cards === 0 && buttons === 0 && !loadingText;
         },
         options.waitSelector,
         { timeout: options.waitTimeoutMs }
@@ -283,10 +301,10 @@ async function captureAltTable(options: Options) {
       await delay(options.settleMs);
 
       const summary = await page.evaluate(() => ({
-        seatTrays: document.querySelectorAll("[data-scene-node='seat-tray']").length,
-        passLanes: document.querySelectorAll("[data-scene-node='pass-lane']").length,
-        southCards: document.querySelectorAll("[data-scene-card='south-mesh']").length,
-        opponentCards: document.querySelectorAll("[data-scene-card='opponent-mesh']").length,
+        seatRails: document.querySelectorAll("[data-scene-node='seat-rail']").length,
+        seatLabels: document.querySelectorAll("[data-scene-node='seat-label']").length,
+        cardMarkers: document.querySelectorAll("[data-scene-card]").length,
+        buttons: document.querySelectorAll("button").length,
         loadingTextVisible: document.body.textContent?.includes("Starting New Game") ?? false,
         title: document.title
       }));
@@ -306,6 +324,10 @@ async function captureAltTable(options: Options) {
             waitSelector: options.waitSelector,
             waitTimeoutMs: options.waitTimeoutMs,
             settleMs: options.settleMs,
+            viewport: {
+              width: options.width,
+              height: options.height
+            },
             summary
           },
           null,
