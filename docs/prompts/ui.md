@@ -27,7 +27,9 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
   tracking issue, but pivot the alternate route into a clean empty React 3D
   table shell first. The ALT scene should render only the physical table and
   plaques through the isolated `alt-table-3d` path, using locally generated
-  canvas textures and no gameplay sample state.
+  canvas textures, the Game Studio `react-three-fiber-game` path for React
+  scene composition, the `game-ui-frontend` low-chrome HUD rules, and no
+  gameplay sample state.
 - Affected Systems: `apps/web/src/alt-table-3d/AltTable3DRoute.tsx`,
   `apps/web/src/alt-table-3d/AltTichuTable3D.tsx`,
   `apps/web/src/alt-table-3d/EmptyPhotorealisticTableScene.tsx`,
