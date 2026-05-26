@@ -1,0 +1,94 @@
+{
+  "name": "tichu_v6",
+  "version": "6.2.0",
+  "design_px": {
+    "w": 1536,
+    "h": 1024
+  },
+  "paths": {
+    "table": "t/plate.png",
+    "passing_anchors": "p/a.json",
+    "passing_overlay_prod": "p/o.png",
+    "passing_slots_only": "p/s.png",
+    "passing_arrows_only": "p/r.png",
+    "passing_debug": "p/d.png",
+    "cards_map": "c/map.json",
+    "card_std_root": "c/std",
+    "card_sp_root": "c/sp",
+    "card_back_root": "c/back",
+    "codex_prompt": "codex.md",
+    "verify": "x/verify.py"
+  },
+  "direction_map": {
+    "north_pass_left": "left",
+    "north_pass_across": "south",
+    "north_pass_right": "right",
+    "south_pass_left": "left",
+    "south_pass_across": "north",
+    "south_pass_right": "right",
+    "west_pass_north": "north",
+    "west_pass_across": "east",
+    "west_pass_south": "south",
+    "east_pass_north": "north",
+    "east_pass_across": "west",
+    "east_pass_south": "south"
+  },
+  "orientation_map": {
+    "north_pass_left": "landscape",
+    "north_pass_across": "portrait",
+    "north_pass_right": "landscape",
+    "south_pass_left": "landscape",
+    "south_pass_across": "portrait",
+    "south_pass_right": "landscape",
+    "west_pass_north": "portrait",
+    "west_pass_across": "landscape",
+    "west_pass_south": "portrait",
+    "east_pass_north": "portrait",
+    "east_pass_across": "landscape",
+    "east_pass_south": "portrait"
+  },
+  "rotation_map": {
+    "north_pass_left": 0,
+    "north_pass_across": 0,
+    "north_pass_right": 0,
+    "south_pass_left": 0,
+    "south_pass_across": 0,
+    "south_pass_right": 0,
+    "west_pass_north": -90,
+    "west_pass_across": 90,
+    "west_pass_south": 90,
+    "east_pass_north": -90,
+    "east_pass_across": 90,
+    "east_pass_south": 90
+  },
+  "card_suits": {
+    "sw": "swords",
+    "pg": "pagodas",
+    "jd": "jades",
+    "st": "stars"
+  },
+  "card_ranks": [
+    "A",
+    "K",
+    "Q",
+    "J",
+    "10",
+    "9",
+    "8",
+    "7",
+    "6",
+    "5",
+    "4",
+    "3",
+    "2"
+  ],
+  "clean_pack": true,
+  "notes": [
+    "short paths only",
+    "no old/bad table reference image",
+    "passing side lanes corrected per user rotation rules"
+  ],
+  "root": ".",
+  "zip_root": "flat",
+  "zip_name": "tichu_v6.zip"
+}

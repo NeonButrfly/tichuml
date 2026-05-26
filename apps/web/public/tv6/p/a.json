@@ -1,0 +1,707 @@
+{
+  "name": "tichu_v6",
+  "version": "6.2.0",
+  "design_px": {
+    "w": 1536,
+    "h": 1024
+  },
+  "root": ".",
+  "table": "t/plate.png",
+  "overlays": {
+    "slots": "p/s.png",
+    "arrows": "p/r.png",
+    "prod": "p/o.png",
+    "debug": "p/d.png"
+  },
+  "direction_map": {
+    "north_pass_left": "left",
+    "north_pass_across": "south",
+    "north_pass_right": "right",
+    "south_pass_left": "left",
+    "south_pass_across": "north",
+    "south_pass_right": "right",
+    "west_pass_north": "north",
+    "west_pass_across": "east",
+    "west_pass_south": "south",
+    "east_pass_north": "north",
+    "east_pass_across": "west",
+    "east_pass_south": "south"
+  },
+  "orientation_map": {
+    "north_pass_left": "landscape",
+    "north_pass_across": "portrait",
+    "north_pass_right": "landscape",
+    "south_pass_left": "landscape",
+    "south_pass_across": "portrait",
+    "south_pass_right": "landscape",
+    "west_pass_north": "portrait",
+    "west_pass_across": "landscape",
+    "west_pass_south": "portrait",
+    "east_pass_north": "portrait",
+    "east_pass_across": "landscape",
+    "east_pass_south": "portrait"
+  },
+  "rotation_map": {
+    "north_pass_left": 0,
+    "north_pass_across": 0,
+    "north_pass_right": 0,
+    "south_pass_left": 0,
+    "south_pass_across": 0,
+    "south_pass_right": 0,
+    "west_pass_north": -90,
+    "west_pass_across": 90,
+    "west_pass_south": 90,
+    "east_pass_north": -90,
+    "east_pass_across": 90,
+    "east_pass_south": 90
+  },
+  "requirements": [
+    "Use p/a.json as the only passing-anchor source of truth.",
+    "There are exactly 12 passing lanes.",
+    "East/west north and south lanes are vertical/portrait.",
+    "East/west across lanes are horizontal/landscape.",
+    "Do not infer rotations from older v5 files.",
+    "Use slot_rotation_deg/user_rotation_deg from this file for lane/card transform where needed."
+  ],
+  "anchors": [
+    {
+      "idx": 1,
+      "id": "north_pass_left",
+      "seat": "north",
+      "lane": "left",
+      "arrow_direction": "left",
+      "points_to": "left",
+      "slot_orientation": "landscape",
+      "slot_rotation_deg": 0,
+      "user_rotation_deg": 0,
+      "card_rotation_hint_deg": 90,
+      "bbox_px": {
+        "x": 565,
+        "y": 170,
+        "w": 142,
+        "h": 78
+      },
+      "center_px": {
+        "x": 636.0,
+        "y": 209.0
+      },
+      "polygon_px": [
+        {
+          "x": 565,
+          "y": 170
+        },
+        {
+          "x": 707,
+          "y": 170
+        },
+        {
+          "x": 707,
+          "y": 248
+        },
+        {
+          "x": 565,
+          "y": 248
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.367839,
+        "y": 0.166016,
+        "w": 0.092448,
+        "h": 0.076172
+      },
+      "center_norm": {
+        "x": 0.414062,
+        "y": 0.204102
+      },
+      "mask": "p/m/01.png",
+      "slot_img": "p/i/01.png",
+      "note": "north left lane points left"
+    },
+    {
+      "idx": 2,
+      "id": "north_pass_across",
+      "seat": "north",
+      "lane": "across",
+      "arrow_direction": "south",
+      "points_to": "south",
+      "slot_orientation": "portrait",
+      "slot_rotation_deg": 0,
+      "user_rotation_deg": 0,
+      "card_rotation_hint_deg": 0,
+      "bbox_px": {
+        "x": 729,
+        "y": 170,
+        "w": 78,
+        "h": 122
+      },
+      "center_px": {
+        "x": 768.0,
+        "y": 231.0
+      },
+      "polygon_px": [
+        {
+          "x": 729,
+          "y": 170
+        },
+        {
+          "x": 807,
+          "y": 170
+        },
+        {
+          "x": 807,
+          "y": 292
+        },
+        {
+          "x": 729,
+          "y": 292
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.474609,
+        "y": 0.166016,
+        "w": 0.050781,
+        "h": 0.119141
+      },
+      "center_norm": {
+        "x": 0.5,
+        "y": 0.225586
+      },
+      "mask": "p/m/02.png",
+      "slot_img": "p/i/02.png",
+      "note": "north across lane points south"
+    },
+    {
+      "idx": 3,
+      "id": "north_pass_right",
+      "seat": "north",
+      "lane": "right",
+      "arrow_direction": "right",
+      "points_to": "right",
+      "slot_orientation": "landscape",
+      "slot_rotation_deg": 0,
+      "user_rotation_deg": 0,
+      "card_rotation_hint_deg": -90,
+      "bbox_px": {
+        "x": 829,
+        "y": 170,
+        "w": 142,
+        "h": 78
+      },
+      "center_px": {
+        "x": 900.0,
+        "y": 209.0
+      },
+      "polygon_px": [
+        {
+          "x": 829,
+          "y": 170
+        },
+        {
+          "x": 971,
+          "y": 170
+        },
+        {
+          "x": 971,
+          "y": 248
+        },
+        {
+          "x": 829,
+          "y": 248
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.539714,
+        "y": 0.166016,
+        "w": 0.092448,
+        "h": 0.076172
+      },
+      "center_norm": {
+        "x": 0.585938,
+        "y": 0.204102
+      },
+      "mask": "p/m/03.png",
+      "slot_img": "p/i/03.png",
+      "note": "north right lane points right"
+    },
+    {
+      "idx": 4,
+      "id": "south_pass_left",
+      "seat": "south",
+      "lane": "left",
+      "arrow_direction": "left",
+      "points_to": "left",
+      "slot_orientation": "landscape",
+      "slot_rotation_deg": 0,
+      "user_rotation_deg": 0,
+      "card_rotation_hint_deg": 90,
+      "bbox_px": {
+        "x": 565,
+        "y": 555,
+        "w": 142,
+        "h": 78
+      },
+      "center_px": {
+        "x": 636.0,
+        "y": 594.0
+      },
+      "polygon_px": [
+        {
+          "x": 565,
+          "y": 555
+        },
+        {
+          "x": 707,
+          "y": 555
+        },
+        {
+          "x": 707,
+          "y": 633
+        },
+        {
+          "x": 565,
+          "y": 633
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.367839,
+        "y": 0.541992,
+        "w": 0.092448,
+        "h": 0.076172
+      },
+      "center_norm": {
+        "x": 0.414062,
+        "y": 0.580078
+      },
+      "mask": "p/m/04.png",
+      "slot_img": "p/i/04.png",
+      "note": "south left lane points left"
+    },
+    {
+      "idx": 5,
+      "id": "south_pass_across",
+      "seat": "south",
+      "lane": "across",
+      "arrow_direction": "north",
+      "points_to": "north",
+      "slot_orientation": "portrait",
+      "slot_rotation_deg": 0,
+      "user_rotation_deg": 0,
+      "card_rotation_hint_deg": 180,
+      "bbox_px": {
+        "x": 729,
+        "y": 510,
+        "w": 78,
+        "h": 122
+      },
+      "center_px": {
+        "x": 768.0,
+        "y": 571.0
+      },
+      "polygon_px": [
+        {
+          "x": 729,
+          "y": 510
+        },
+        {
+          "x": 807,
+          "y": 510
+        },
+        {
+          "x": 807,
+          "y": 632
+        },
+        {
+          "x": 729,
+          "y": 632
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.474609,
+        "y": 0.498047,
+        "w": 0.050781,
+        "h": 0.119141
+      },
+      "center_norm": {
+        "x": 0.5,
+        "y": 0.557617
+      },
+      "mask": "p/m/05.png",
+      "slot_img": "p/i/05.png",
+      "note": "south across lane points north"
+    },
+    {
+      "idx": 6,
+      "id": "south_pass_right",
+      "seat": "south",
+      "lane": "right",
+      "arrow_direction": "right",
+      "points_to": "right",
+      "slot_orientation": "landscape",
+      "slot_rotation_deg": 0,
+      "user_rotation_deg": 0,
+      "card_rotation_hint_deg": -90,
+      "bbox_px": {
+        "x": 829,
+        "y": 555,
+        "w": 142,
+        "h": 78
+      },
+      "center_px": {
+        "x": 900.0,
+        "y": 594.0
+      },
+      "polygon_px": [
+        {
+          "x": 829,
+          "y": 555
+        },
+        {
+          "x": 971,
+          "y": 555
+        },
+        {
+          "x": 971,
+          "y": 633
+        },
+        {
+          "x": 829,
+          "y": 633
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.539714,
+        "y": 0.541992,
+        "w": 0.092448,
+        "h": 0.076172
+      },
+      "center_norm": {
+        "x": 0.585938,
+        "y": 0.580078
+      },
+      "mask": "p/m/06.png",
+      "slot_img": "p/i/06.png",
+      "note": "south right lane points right"
+    },
+    {
+      "idx": 7,
+      "id": "west_pass_north",
+      "seat": "west",
+      "lane": "north",
+      "arrow_direction": "north",
+      "points_to": "north",
+      "slot_orientation": "portrait",
+      "slot_rotation_deg": -90,
+      "user_rotation_deg": -90,
+      "card_rotation_hint_deg": -90,
+      "bbox_px": {
+        "x": 245,
+        "y": 230,
+        "w": 78,
+        "h": 122
+      },
+      "center_px": {
+        "x": 284.0,
+        "y": 291.0
+      },
+      "polygon_px": [
+        {
+          "x": 245,
+          "y": 230
+        },
+        {
+          "x": 323,
+          "y": 230
+        },
+        {
+          "x": 323,
+          "y": 352
+        },
+        {
+          "x": 245,
+          "y": 352
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.159505,
+        "y": 0.224609,
+        "w": 0.050781,
+        "h": 0.119141
+      },
+      "center_norm": {
+        "x": 0.184896,
+        "y": 0.28418
+      },
+      "mask": "p/m/07.png",
+      "slot_img": "p/i/07.png",
+      "note": "west to north: vertical, rotate -90"
+    },
+    {
+      "idx": 8,
+      "id": "west_pass_across",
+      "seat": "west",
+      "lane": "across",
+      "arrow_direction": "east",
+      "points_to": "east",
+      "slot_orientation": "landscape",
+      "slot_rotation_deg": 90,
+      "user_rotation_deg": 90,
+      "card_rotation_hint_deg": 90,
+      "bbox_px": {
+        "x": 245,
+        "y": 382,
+        "w": 142,
+        "h": 78
+      },
+      "center_px": {
+        "x": 316.0,
+        "y": 421.0
+      },
+      "polygon_px": [
+        {
+          "x": 245,
+          "y": 382
+        },
+        {
+          "x": 387,
+          "y": 382
+        },
+        {
+          "x": 387,
+          "y": 460
+        },
+        {
+          "x": 245,
+          "y": 460
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.159505,
+        "y": 0.373047,
+        "w": 0.092448,
+        "h": 0.076172
+      },
+      "center_norm": {
+        "x": 0.205729,
+        "y": 0.411133
+      },
+      "mask": "p/m/08.png",
+      "slot_img": "p/i/08.png",
+      "note": "west across/to east: horizontal, rotate +90"
+    },
+    {
+      "idx": 9,
+      "id": "west_pass_south",
+      "seat": "west",
+      "lane": "south",
+      "arrow_direction": "south",
+      "points_to": "south",
+      "slot_orientation": "portrait",
+      "slot_rotation_deg": 90,
+      "user_rotation_deg": 90,
+      "card_rotation_hint_deg": 90,
+      "bbox_px": {
+        "x": 245,
+        "y": 490,
+        "w": 78,
+        "h": 122
+      },
+      "center_px": {
+        "x": 284.0,
+        "y": 551.0
+      },
+      "polygon_px": [
+        {
+          "x": 245,
+          "y": 490
+        },
+        {
+          "x": 323,
+          "y": 490
+        },
+        {
+          "x": 323,
+          "y": 612
+        },
+        {
+          "x": 245,
+          "y": 612
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.159505,
+        "y": 0.478516,
+        "w": 0.050781,
+        "h": 0.119141
+      },
+      "center_norm": {
+        "x": 0.184896,
+        "y": 0.538086
+      },
+      "mask": "p/m/09.png",
+      "slot_img": "p/i/09.png",
+      "note": "west to south: vertical, rotate +90"
+    },
+    {
+      "idx": 10,
+      "id": "east_pass_north",
+      "seat": "east",
+      "lane": "north",
+      "arrow_direction": "north",
+      "points_to": "north",
+      "slot_orientation": "portrait",
+      "slot_rotation_deg": -90,
+      "user_rotation_deg": -90,
+      "card_rotation_hint_deg": -90,
+      "bbox_px": {
+        "x": 1164,
+        "y": 230,
+        "w": 78,
+        "h": 122
+      },
+      "center_px": {
+        "x": 1203.0,
+        "y": 291.0
+      },
+      "polygon_px": [
+        {
+          "x": 1164,
+          "y": 230
+        },
+        {
+          "x": 1242,
+          "y": 230
+        },
+        {
+          "x": 1242,
+          "y": 352
+        },
+        {
+          "x": 1164,
+          "y": 352
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.757812,
+        "y": 0.224609,
+        "w": 0.050781,
+        "h": 0.119141
+      },
+      "center_norm": {
+        "x": 0.783203,
+        "y": 0.28418
+      },
+      "mask": "p/m/10.png",
+      "slot_img": "p/i/10.png",
+      "note": "east to north: vertical, rotate -90"
+    },
+    {
+      "idx": 11,
+      "id": "east_pass_across",
+      "seat": "east",
+      "lane": "across",
+      "arrow_direction": "west",
+      "points_to": "west",
+      "slot_orientation": "landscape",
+      "slot_rotation_deg": 90,
+      "user_rotation_deg": 90,
+      "card_rotation_hint_deg": 90,
+      "bbox_px": {
+        "x": 1100,
+        "y": 382,
+        "w": 142,
+        "h": 78
+      },
+      "center_px": {
+        "x": 1171.0,
+        "y": 421.0
+      },
+      "polygon_px": [
+        {
+          "x": 1100,
+          "y": 382
+        },
+        {
+          "x": 1242,
+          "y": 382
+        },
+        {
+          "x": 1242,
+          "y": 460
+        },
+        {
+          "x": 1100,
+          "y": 460
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.716146,
+        "y": 0.373047,
+        "w": 0.092448,
+        "h": 0.076172
+      },
+      "center_norm": {
+        "x": 0.76237,
+        "y": 0.411133
+      },
+      "mask": "p/m/11.png",
+      "slot_img": "p/i/11.png",
+      "note": "east across/to west: horizontal, rotate +90"
+    },
+    {
+      "idx": 12,
+      "id": "east_pass_south",
+      "seat": "east",
+      "lane": "south",
+      "arrow_direction": "south",
+      "points_to": "south",
+      "slot_orientation": "portrait",
+      "slot_rotation_deg": 90,
+      "user_rotation_deg": 90,
+      "card_rotation_hint_deg": 90,
+      "bbox_px": {
+        "x": 1164,
+        "y": 490,
+        "w": 78,
+        "h": 122
+      },
+      "center_px": {
+        "x": 1203.0,
+        "y": 551.0
+      },
+      "polygon_px": [
+        {
+          "x": 1164,
+          "y": 490
+        },
+        {
+          "x": 1242,
+          "y": 490
+        },
+        {
+          "x": 1242,
+          "y": 612
+        },
+        {
+          "x": 1164,
+          "y": 612
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.757812,
+        "y": 0.478516,
+        "w": 0.050781,
+        "h": 0.119141
+      },
+      "center_norm": {
+        "x": 0.783203,
+        "y": 0.538086
+      },
+      "mask": "p/m/12.png",
+      "slot_img": "p/i/12.png",
+      "note": "east to south: vertical, rotate +90"
+    }
+  ],
+  "clean_pack": true,
+  "zip": "tichu_v6.zip",
+  "note": "Zip root is flat. There is no extra tichu_v6/ folder inside the archive. Put extracted contents under your repo asset root as tichu_v6/."
+}

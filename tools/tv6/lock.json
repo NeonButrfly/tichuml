@@ -1,0 +1,97 @@
+{
+  "name": "tichu_v6_lock",
+  "version": "6.2.0",
+  "design": {
+    "w": 1536,
+    "h": 1024
+  },
+  "root": "assets/tichu_v6",
+  "paths": {
+    "table": "t/plate.png",
+    "anchors": "p/a.json",
+    "prod_overlay": "p/o.png",
+    "slots": "p/s.png",
+    "arrows": "p/r.png",
+    "debug": "p/d.png",
+    "cards": "c/map.json"
+  },
+  "direction": {
+    "north_pass_left": "left",
+    "north_pass_across": "south",
+    "north_pass_right": "right",
+    "south_pass_left": "left",
+    "south_pass_across": "north",
+    "south_pass_right": "right",
+    "west_pass_north": "north",
+    "west_pass_across": "east",
+    "west_pass_south": "south",
+    "east_pass_north": "north",
+    "east_pass_across": "west",
+    "east_pass_south": "south"
+  },
+  "orientation": {
+    "north_pass_left": "landscape",
+    "north_pass_across": "portrait",
+    "north_pass_right": "landscape",
+    "south_pass_left": "landscape",
+    "south_pass_across": "portrait",
+    "south_pass_right": "landscape",
+    "west_pass_north": "portrait",
+    "west_pass_across": "landscape",
+    "west_pass_south": "portrait",
+    "east_pass_north": "portrait",
+    "east_pass_across": "landscape",
+    "east_pass_south": "portrait"
+  },
+  "rotation": {
+    "north_pass_left": 0,
+    "north_pass_across": 0,
+    "north_pass_right": 0,
+    "south_pass_left": 0,
+    "south_pass_across": 0,
+    "south_pass_right": 0,
+    "west_pass_north": -90,
+    "west_pass_across": 90,
+    "west_pass_south": 90,
+    "east_pass_north": -90,
+    "east_pass_across": 90,
+    "east_pass_south": 90
+  },
+  "flow": {
+    "first_deal": 8,
+    "grand_tichu_window": "after_first_deal_before_second_deal",
+    "second_deal": 6,
+    "final_hand": 14,
+    "pass_count": 3,
+    "deck_count": 56
+  },
+  "must": {
+    "anchors": 12,
+    "standard_cards": 52,
+    "special_cards": 4,
+    "backs": 2,
+    "table_px": [
+      1536,
+      1024
+    ],
+    "overlay_px": [
+      1536,
+      1024
+    ]
+  },
+  "sha256": {
+    "t/plate.png": "e8e4a59c5de6eca563e083c3b0f5618abfa359917fc8cc1c413aa0a2669c4916",
+    "p/a.json": "000a62625d2c2406c6e0136179a19758dacdbb909a36819a8a066dc09e2f5a8e",
+    "p/o.png": "edf5edb3df56337499cd8b4620f9fe0a73c15397213480928dbfec1d485128d7",
+    "p/s.png": "323ff450bebb994b109f834366ea2184fe6db11a1bd8b5879a165ae90508a4e0",
+    "p/r.png": "645cb928db0ce2b93773c4f20610fe72978649dbff7a060dfaecc913f12a88e0",
+    "p/d.png": "86e23ec3cad0526131ce4c4e2adab152ca80a0f5fed34a0105749e7e81689a6b",
+    "c/map.json": "a2698ba0578785c337ea68e8b66413179b104205404629df5d6cce97aa4560fd"
+  },
+  "rules": [
+    "Do not rebuild table with CSS/WebGL/canvas/3D; render t/plate.png as base image.",
+    "Use p/a.json as only passing source of truth.",
+    "East/west north+south lanes are vertical; east/west across lanes are horizontal.",
+    "No red/sample/debug assets in production except explicit dev debug toggle."
+  ]
+}
