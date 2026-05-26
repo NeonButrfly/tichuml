@@ -1,0 +1,12 @@
+{
+  "asset_root": "/tv7",
+  "design": {
+    "w": 1536,
+    "h": 1024
+  },
+  "table": "t/plate.png",
+  "passing": "p/a.json",
+  "cards": "h/a.json",
+  "card_map": "c/map.json",
+  "notes": "v7 adds card layout anchors as a first-class layer like passing lanes."
+}

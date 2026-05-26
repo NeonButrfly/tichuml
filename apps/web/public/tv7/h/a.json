@@ -1,0 +1,3312 @@
+{
+  "name": "tichu_v7_card_layer",
+  "version": "7.0.0",
+  "design_px": {
+    "w": 1536,
+    "h": 1024
+  },
+  "root": ".",
+  "table": "t/plate.png",
+  "reference_table": "t/ref.png",
+  "card_anchor_layer": {
+    "anchors": "h/a.json",
+    "slots": "h/s.png",
+    "debug": "h/d.png",
+    "preview_table": "h/prev/table.png",
+    "preview_black": "h/prev/black.png"
+  },
+  "passing_anchor_layer": "p/a.json",
+  "cards": "c/map.json",
+  "requirements": [
+    "Card locations are dynamic layers, exactly like passing lanes.",
+    "Use h/a.json as the card layout source of truth.",
+    "Do not use generic flex/row/column hand layout inside the table.",
+    "All hand/deck/discard cards must be positioned by anchors from h/a.json through the 1536x1024 contain-fit transform.",
+    "The table image is not gameplay state. It is a static plate plus card anchor coordinates.",
+    "If table/prototype art shows baked cards, dynamic cards must cover the prototype footprints using h/a.json anchors."
+  ],
+  "zones": {
+    "south_hand": {
+      "kind": "fan",
+      "seat": "south",
+      "count": 14,
+      "note": "Large foreground hand. Use exact anchor list; do not flex-row outside this zone."
+    },
+    "north_hand": {
+      "kind": "rack",
+      "seat": "north",
+      "count": 14,
+      "note": "Top rack/back prototype. Opponent cards should be backs unless demo face-up mode."
+    },
+    "west_hand": {
+      "kind": "side_rack",
+      "seat": "west",
+      "count": 14,
+      "note": "Left rail rack prototype. No generic margin column."
+    },
+    "east_hand": {
+      "kind": "side_rack",
+      "seat": "east",
+      "count": 14,
+      "note": "Right rail rack prototype. No generic margin column."
+    },
+    "deck": {
+      "kind": "pile",
+      "count": 1
+    },
+    "discard": {
+      "kind": "pile",
+      "count": 1
+    }
+  },
+  "anchors": [
+    {
+      "idx": 1,
+      "id": "south_01",
+      "zone": "south_hand",
+      "kind": "hand",
+      "seat": "south",
+      "slot": 1,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "face",
+      "orientation": "portrait",
+      "rotation_deg": -8,
+      "w_px": 128,
+      "h_px": 208,
+      "center_px": {
+        "x": 245,
+        "y": 815.0
+      },
+      "bbox_px": {
+        "x": 167.149,
+        "y": 703.105,
+        "w": 155.702,
+        "h": 223.79
+      },
+      "polygon_px": [
+        {
+          "x": 167.149,
+          "y": 720.919
+        },
+        {
+          "x": 293.903,
+          "y": 703.105
+        },
+        {
+          "x": 322.851,
+          "y": 909.081
+        },
+        {
+          "x": 196.097,
+          "y": 926.895
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.108821,
+        "y": 0.686626,
+        "w": 0.101368,
+        "h": 0.218545
+      },
+      "center_norm": {
+        "x": 0.159505,
+        "y": 0.795898
+      },
+      "mask": "h/m/01.png",
+      "slot_img": "h/i/01.png",
+      "note": "south foreground fan prototype slot"
+    },
+    {
+      "idx": 2,
+      "id": "south_02",
+      "zone": "south_hand",
+      "kind": "hand",
+      "seat": "south",
+      "slot": 2,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "face",
+      "orientation": "portrait",
+      "rotation_deg": -6,
+      "w_px": 128,
+      "h_px": 208,
+      "center_px": {
+        "x": 330,
+        "y": 803.034
+      },
+      "bbox_px": {
+        "x": 255.48,
+        "y": 692.914,
+        "w": 149.04,
+        "h": 220.24
+      },
+      "polygon_px": [
+        {
+          "x": 255.48,
+          "y": 706.294
+        },
+        {
+          "x": 382.778,
+          "y": 692.914
+        },
+        {
+          "x": 404.52,
+          "y": 899.775
+        },
+        {
+          "x": 277.222,
+          "y": 913.154
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.166328,
+        "y": 0.676674,
+        "w": 0.097031,
+        "h": 0.215078
+      },
+      "center_norm": {
+        "x": 0.214844,
+        "y": 0.784213
+      },
+      "mask": "h/m/02.png",
+      "slot_img": "h/i/02.png",
+      "note": "south foreground fan prototype slot"
+    },
+    {
+      "idx": 3,
+      "id": "south_03",
+      "zone": "south_hand",
+      "kind": "hand",
+      "seat": "south",
+      "slot": 3,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "face",
+      "orientation": "portrait",
+      "rotation_deg": -4,
+      "w_px": 128,
+      "h_px": 208,
+      "center_px": {
+        "x": 415,
+        "y": 791.764
+      },
+      "bbox_px": {
+        "x": 343.901,
+        "y": 683.553,
+        "w": 142.198,
+        "h": 216.422
+      },
+      "polygon_px": [
+        {
+          "x": 343.901,
+          "y": 692.482
+        },
+        {
+          "x": 471.589,
+          "y": 683.553
+        },
+        {
+          "x": 486.099,
+          "y": 891.046
+        },
+        {
+          "x": 358.411,
+          "y": 899.975
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.223894,
+        "y": 0.667532,
+        "w": 0.092577,
+        "h": 0.21135
+      },
+      "center_norm": {
+        "x": 0.270182,
+        "y": 0.773207
+      },
+      "mask": "h/m/03.png",
+      "slot_img": "h/i/03.png",
+      "note": "south foreground fan prototype slot"
+    },
+    {
+      "idx": 4,
+      "id": "south_04",
+      "zone": "south_hand",
+      "kind": "hand",
+      "seat": "south",
+      "slot": 4,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "face",
+      "orientation": "portrait",
+      "rotation_deg": -2,
+      "w_px": 128,
+      "h_px": 208,
+      "center_px": {
+        "x": 500,
+        "y": 781.844
+      },
+      "bbox_px": {
+        "x": 432.409,
+        "y": 675.674,
+        "w": 135.182,
+        "h": 212.34
+      },
+      "polygon_px": [
+        {
+          "x": 432.409,
+          "y": 680.141
+        },
+        {
+          "x": 560.331,
+          "y": 675.674
+        },
+        {
+          "x": 567.591,
+          "y": 883.547
+        },
+        {
+          "x": 439.669,
+          "y": 888.014
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.281516,
+        "y": 0.659838,
+        "w": 0.088009,
+        "h": 0.207363
+      },
+      "center_norm": {
+        "x": 0.325521,
+        "y": 0.763519
+      },
+      "mask": "h/m/04.png",
+      "slot_img": "h/i/04.png",
+      "note": "south foreground fan prototype slot"
+    },
+    {
+      "idx": 5,
+      "id": "south_05",
+      "zone": "south_hand",
+      "kind": "hand",
+      "seat": "south",
+      "slot": 5,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "face",
+      "orientation": "portrait",
+      "rotation_deg": -1,
+      "w_px": 128,
+      "h_px": 208,
+      "center_px": {
+        "x": 585,
+        "y": 773.851
+      },
+      "bbox_px": {
+        "x": 519.195,
+        "y": 668.75,
+        "w": 131.61,
+        "h": 210.202
+      },
+      "polygon_px": [
+        {
+          "x": 519.195,
+          "y": 670.984
+        },
+        {
+          "x": 647.175,
+          "y": 668.75
+        },
+        {
+          "x": 650.805,
+          "y": 876.718
+        },
+        {
+          "x": 522.825,
+          "y": 878.952
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.338018,
+        "y": 0.653076,
+        "w": 0.085684,
+        "h": 0.205275
+      },
+      "center_norm": {
+        "x": 0.380859,
+        "y": 0.755714
+      },
+      "mask": "h/m/05.png",
+      "slot_img": "h/i/05.png",
+      "note": "south foreground fan prototype slot"
+    },
+    {
+      "idx": 6,
+      "id": "south_06",
+      "zone": "south_hand",
+      "kind": "hand",
+      "seat": "south",
+      "slot": 6,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "face",
+      "orientation": "portrait",
+      "rotation_deg": 0,
+      "w_px": 128,
+      "h_px": 208,
+      "center_px": {
+        "x": 670,
+        "y": 768.249
+      },
+      "bbox_px": {
+        "x": 606.0,
+        "y": 664.249,
+        "w": 128.0,
+        "h": 208.0
+      },
+      "polygon_px": [
+        {
+          "x": 606.0,
+          "y": 664.249
+        },
+        {
+          "x": 734.0,
+          "y": 664.249
+        },
+        {
+          "x": 734.0,
+          "y": 872.249
+        },
+        {
+          "x": 606.0,
+          "y": 872.249
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.394531,
+        "y": 0.648681,
+        "w": 0.083333,
+        "h": 0.203125
+      },
+      "center_norm": {
+        "x": 0.436198,
+        "y": 0.750243
+      },
+      "mask": "h/m/06.png",
+      "slot_img": "h/i/06.png",
+      "note": "south foreground fan prototype slot"
+    },
+    {
+      "idx": 7,
+      "id": "south_07",
+      "zone": "south_hand",
+      "kind": "hand",
+      "seat": "south",
+      "slot": 7,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "face",
+      "orientation": "portrait",
+      "rotation_deg": 0,
+      "w_px": 128,
+      "h_px": 208,
+      "center_px": {
+        "x": 755,
+        "y": 765.365
+      },
+      "bbox_px": {
+        "x": 691.0,
+        "y": 661.365,
+        "w": 128.0,
+        "h": 208.0
+      },
+      "polygon_px": [
+        {
+          "x": 691.0,
+          "y": 661.365
+        },
+        {
+          "x": 819.0,
+          "y": 661.365
+        },
+        {
+          "x": 819.0,
+          "y": 869.365
+        },
+        {
+          "x": 691.0,
+          "y": 869.365
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.44987,
+        "y": 0.645864,
+        "w": 0.083333,
+        "h": 0.203125
+      },
+      "center_norm": {
+        "x": 0.491536,
+        "y": 0.747426
+      },
+      "mask": "h/m/07.png",
+      "slot_img": "h/i/07.png",
+      "note": "south foreground fan prototype slot"
+    },
+    {
+      "idx": 8,
+      "id": "south_08",
+      "zone": "south_hand",
+      "kind": "hand",
+      "seat": "south",
+      "slot": 8,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "face",
+      "orientation": "portrait",
+      "rotation_deg": 0,
+      "w_px": 128,
+      "h_px": 208,
+      "center_px": {
+        "x": 840,
+        "y": 765.365
+      },
+      "bbox_px": {
+        "x": 776.0,
+        "y": 661.365,
+        "w": 128.0,
+        "h": 208.0
+      },
+      "polygon_px": [
+        {
+          "x": 776.0,
+          "y": 661.365
+        },
+        {
+          "x": 904.0,
+          "y": 661.365
+        },
+        {
+          "x": 904.0,
+          "y": 869.365
+        },
+        {
+          "x": 776.0,
+          "y": 869.365
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.505208,
+        "y": 0.645864,
+        "w": 0.083333,
+        "h": 0.203125
+      },
+      "center_norm": {
+        "x": 0.546875,
+        "y": 0.747426
+      },
+      "mask": "h/m/08.png",
+      "slot_img": "h/i/08.png",
+      "note": "south foreground fan prototype slot"
+    },
+    {
+      "idx": 9,
+      "id": "south_09",
+      "zone": "south_hand",
+      "kind": "hand",
+      "seat": "south",
+      "slot": 9,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "face",
+      "orientation": "portrait",
+      "rotation_deg": 1,
+      "w_px": 128,
+      "h_px": 208,
+      "center_px": {
+        "x": 925,
+        "y": 768.249
+      },
+      "bbox_px": {
+        "x": 859.195,
+        "y": 663.148,
+        "w": 131.61,
+        "h": 210.202
+      },
+      "polygon_px": [
+        {
+          "x": 862.825,
+          "y": 663.148
+        },
+        {
+          "x": 990.805,
+          "y": 665.382
+        },
+        {
+          "x": 987.175,
+          "y": 873.35
+        },
+        {
+          "x": 859.195,
+          "y": 871.116
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.559372,
+        "y": 0.647605,
+        "w": 0.085684,
+        "h": 0.205275
+      },
+      "center_norm": {
+        "x": 0.602214,
+        "y": 0.750243
+      },
+      "mask": "h/m/09.png",
+      "slot_img": "h/i/09.png",
+      "note": "south foreground fan prototype slot"
+    },
+    {
+      "idx": 10,
+      "id": "south_10",
+      "zone": "south_hand",
+      "kind": "hand",
+      "seat": "south",
+      "slot": 10,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "face",
+      "orientation": "portrait",
+      "rotation_deg": 2,
+      "w_px": 128,
+      "h_px": 208,
+      "center_px": {
+        "x": 1010,
+        "y": 773.851
+      },
+      "bbox_px": {
+        "x": 942.409,
+        "y": 667.681,
+        "w": 135.182,
+        "h": 212.34
+      },
+      "polygon_px": [
+        {
+          "x": 949.669,
+          "y": 667.681
+        },
+        {
+          "x": 1077.591,
+          "y": 672.148
+        },
+        {
+          "x": 1070.331,
+          "y": 880.021
+        },
+        {
+          "x": 942.409,
+          "y": 875.554
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.613548,
+        "y": 0.652032,
+        "w": 0.088009,
+        "h": 0.207363
+      },
+      "center_norm": {
+        "x": 0.657552,
+        "y": 0.755714
+      },
+      "mask": "h/m/10.png",
+      "slot_img": "h/i/10.png",
+      "note": "south foreground fan prototype slot"
+    },
+    {
+      "idx": 11,
+      "id": "south_11",
+      "zone": "south_hand",
+      "kind": "hand",
+      "seat": "south",
+      "slot": 11,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "face",
+      "orientation": "portrait",
+      "rotation_deg": 4,
+      "w_px": 128,
+      "h_px": 208,
+      "center_px": {
+        "x": 1095,
+        "y": 781.844
+      },
+      "bbox_px": {
+        "x": 1023.901,
+        "y": 673.633,
+        "w": 142.198,
+        "h": 216.422
+      },
+      "polygon_px": [
+        {
+          "x": 1038.411,
+          "y": 673.633
+        },
+        {
+          "x": 1166.099,
+          "y": 682.562
+        },
+        {
+          "x": 1151.589,
+          "y": 890.055
+        },
+        {
+          "x": 1023.901,
+          "y": 881.126
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.666602,
+        "y": 0.657845,
+        "w": 0.092577,
+        "h": 0.21135
+      },
+      "center_norm": {
+        "x": 0.712891,
+        "y": 0.763519
+      },
+      "mask": "h/m/11.png",
+      "slot_img": "h/i/11.png",
+      "note": "south foreground fan prototype slot"
+    },
+    {
+      "idx": 12,
+      "id": "south_12",
+      "zone": "south_hand",
+      "kind": "hand",
+      "seat": "south",
+      "slot": 12,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "face",
+      "orientation": "portrait",
+      "rotation_deg": 6,
+      "w_px": 128,
+      "h_px": 208,
+      "center_px": {
+        "x": 1180,
+        "y": 791.764
+      },
+      "bbox_px": {
+        "x": 1105.48,
+        "y": 681.644,
+        "w": 149.04,
+        "h": 220.24
+      },
+      "polygon_px": [
+        {
+          "x": 1127.222,
+          "y": 681.644
+        },
+        {
+          "x": 1254.52,
+          "y": 695.023
+        },
+        {
+          "x": 1232.778,
+          "y": 901.884
+        },
+        {
+          "x": 1105.48,
+          "y": 888.504
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.719714,
+        "y": 0.665668,
+        "w": 0.097031,
+        "h": 0.215078
+      },
+      "center_norm": {
+        "x": 0.768229,
+        "y": 0.773207
+      },
+      "mask": "h/m/12.png",
+      "slot_img": "h/i/12.png",
+      "note": "south foreground fan prototype slot"
+    },
+    {
+      "idx": 13,
+      "id": "south_13",
+      "zone": "south_hand",
+      "kind": "hand",
+      "seat": "south",
+      "slot": 13,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "face",
+      "orientation": "portrait",
+      "rotation_deg": 8,
+      "w_px": 128,
+      "h_px": 208,
+      "center_px": {
+        "x": 1265,
+        "y": 803.034
+      },
+      "bbox_px": {
+        "x": 1187.149,
+        "y": 691.139,
+        "w": 155.702,
+        "h": 223.79
+      },
+      "polygon_px": [
+        {
+          "x": 1216.097,
+          "y": 691.139
+        },
+        {
+          "x": 1342.851,
+          "y": 708.953
+        },
+        {
+          "x": 1313.903,
+          "y": 914.929
+        },
+        {
+          "x": 1187.149,
+          "y": 897.115
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.772883,
+        "y": 0.67494,
+        "w": 0.101368,
+        "h": 0.218545
+      },
+      "center_norm": {
+        "x": 0.823568,
+        "y": 0.784213
+      },
+      "mask": "h/m/13.png",
+      "slot_img": "h/i/13.png",
+      "note": "south foreground fan prototype slot"
+    },
+    {
+      "idx": 14,
+      "id": "south_14",
+      "zone": "south_hand",
+      "kind": "hand",
+      "seat": "south",
+      "slot": 14,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "face",
+      "orientation": "portrait",
+      "rotation_deg": 10,
+      "w_px": 128,
+      "h_px": 208,
+      "center_px": {
+        "x": 1350,
+        "y": 815.0
+      },
+      "bbox_px": {
+        "x": 1268.913,
+        "y": 701.467,
+        "w": 162.174,
+        "h": 227.066
+      },
+      "polygon_px": [
+        {
+          "x": 1305.032,
+          "y": 701.467
+        },
+        {
+          "x": 1431.087,
+          "y": 723.693
+        },
+        {
+          "x": 1394.968,
+          "y": 928.533
+        },
+        {
+          "x": 1268.913,
+          "y": 906.307
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.826115,
+        "y": 0.685026,
+        "w": 0.105582,
+        "h": 0.221744
+      },
+      "center_norm": {
+        "x": 0.878906,
+        "y": 0.795898
+      },
+      "mask": "h/m/14.png",
+      "slot_img": "h/i/14.png",
+      "note": "south foreground fan prototype slot"
+    },
+    {
+      "idx": 15,
+      "id": "north_01",
+      "zone": "north_hand",
+      "kind": "hand",
+      "seat": "north",
+      "slot": 1,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": 0,
+      "w_px": 56,
+      "h_px": 88,
+      "center_px": {
+        "x": 535.0,
+        "y": 61
+      },
+      "bbox_px": {
+        "x": 507.0,
+        "y": 17.0,
+        "w": 56.0,
+        "h": 88.0
+      },
+      "polygon_px": [
+        {
+          "x": 507.0,
+          "y": 17.0
+        },
+        {
+          "x": 563.0,
+          "y": 17.0
+        },
+        {
+          "x": 563.0,
+          "y": 105.0
+        },
+        {
+          "x": 507.0,
+          "y": 105.0
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.330078,
+        "y": 0.016602,
+        "w": 0.036458,
+        "h": 0.085938
+      },
+      "center_norm": {
+        "x": 0.348307,
+        "y": 0.05957
+      },
+      "mask": "h/m/15.png",
+      "slot_img": "h/i/15.png",
+      "note": "north rack prototype slot"
+    },
+    {
+      "idx": 16,
+      "id": "north_02",
+      "zone": "north_hand",
+      "kind": "hand",
+      "seat": "north",
+      "slot": 2,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": 0,
+      "w_px": 56,
+      "h_px": 88,
+      "center_px": {
+        "x": 571.154,
+        "y": 61
+      },
+      "bbox_px": {
+        "x": 543.154,
+        "y": 17.0,
+        "w": 56.0,
+        "h": 88.0
+      },
+      "polygon_px": [
+        {
+          "x": 543.154,
+          "y": 17.0
+        },
+        {
+          "x": 599.154,
+          "y": 17.0
+        },
+        {
+          "x": 599.154,
+          "y": 105.0
+        },
+        {
+          "x": 543.154,
+          "y": 105.0
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.353616,
+        "y": 0.016602,
+        "w": 0.036458,
+        "h": 0.085938
+      },
+      "center_norm": {
+        "x": 0.371845,
+        "y": 0.05957
+      },
+      "mask": "h/m/16.png",
+      "slot_img": "h/i/16.png",
+      "note": "north rack prototype slot"
+    },
+    {
+      "idx": 17,
+      "id": "north_03",
+      "zone": "north_hand",
+      "kind": "hand",
+      "seat": "north",
+      "slot": 3,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": 0,
+      "w_px": 56,
+      "h_px": 88,
+      "center_px": {
+        "x": 607.308,
+        "y": 61
+      },
+      "bbox_px": {
+        "x": 579.308,
+        "y": 17.0,
+        "w": 56.0,
+        "h": 88.0
+      },
+      "polygon_px": [
+        {
+          "x": 579.308,
+          "y": 17.0
+        },
+        {
+          "x": 635.308,
+          "y": 17.0
+        },
+        {
+          "x": 635.308,
+          "y": 105.0
+        },
+        {
+          "x": 579.308,
+          "y": 105.0
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.377154,
+        "y": 0.016602,
+        "w": 0.036458,
+        "h": 0.085938
+      },
+      "center_norm": {
+        "x": 0.395383,
+        "y": 0.05957
+      },
+      "mask": "h/m/17.png",
+      "slot_img": "h/i/17.png",
+      "note": "north rack prototype slot"
+    },
+    {
+      "idx": 18,
+      "id": "north_04",
+      "zone": "north_hand",
+      "kind": "hand",
+      "seat": "north",
+      "slot": 4,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": 0,
+      "w_px": 56,
+      "h_px": 88,
+      "center_px": {
+        "x": 643.462,
+        "y": 61
+      },
+      "bbox_px": {
+        "x": 615.462,
+        "y": 17.0,
+        "w": 56.0,
+        "h": 88.0
+      },
+      "polygon_px": [
+        {
+          "x": 615.462,
+          "y": 17.0
+        },
+        {
+          "x": 671.462,
+          "y": 17.0
+        },
+        {
+          "x": 671.462,
+          "y": 105.0
+        },
+        {
+          "x": 615.462,
+          "y": 105.0
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.400691,
+        "y": 0.016602,
+        "w": 0.036458,
+        "h": 0.085938
+      },
+      "center_norm": {
+        "x": 0.41892,
+        "y": 0.05957
+      },
+      "mask": "h/m/18.png",
+      "slot_img": "h/i/18.png",
+      "note": "north rack prototype slot"
+    },
+    {
+      "idx": 19,
+      "id": "north_05",
+      "zone": "north_hand",
+      "kind": "hand",
+      "seat": "north",
+      "slot": 5,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": 0,
+      "w_px": 56,
+      "h_px": 88,
+      "center_px": {
+        "x": 679.615,
+        "y": 61
+      },
+      "bbox_px": {
+        "x": 651.615,
+        "y": 17.0,
+        "w": 56.0,
+        "h": 88.0
+      },
+      "polygon_px": [
+        {
+          "x": 651.615,
+          "y": 17.0
+        },
+        {
+          "x": 707.615,
+          "y": 17.0
+        },
+        {
+          "x": 707.615,
+          "y": 105.0
+        },
+        {
+          "x": 651.615,
+          "y": 105.0
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.424229,
+        "y": 0.016602,
+        "w": 0.036458,
+        "h": 0.085938
+      },
+      "center_norm": {
+        "x": 0.442458,
+        "y": 0.05957
+      },
+      "mask": "h/m/19.png",
+      "slot_img": "h/i/19.png",
+      "note": "north rack prototype slot"
+    },
+    {
+      "idx": 20,
+      "id": "north_06",
+      "zone": "north_hand",
+      "kind": "hand",
+      "seat": "north",
+      "slot": 6,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": 0,
+      "w_px": 56,
+      "h_px": 88,
+      "center_px": {
+        "x": 715.769,
+        "y": 61
+      },
+      "bbox_px": {
+        "x": 687.769,
+        "y": 17.0,
+        "w": 56.0,
+        "h": 88.0
+      },
+      "polygon_px": [
+        {
+          "x": 687.769,
+          "y": 17.0
+        },
+        {
+          "x": 743.769,
+          "y": 17.0
+        },
+        {
+          "x": 743.769,
+          "y": 105.0
+        },
+        {
+          "x": 687.769,
+          "y": 105.0
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.447766,
+        "y": 0.016602,
+        "w": 0.036458,
+        "h": 0.085938
+      },
+      "center_norm": {
+        "x": 0.465996,
+        "y": 0.05957
+      },
+      "mask": "h/m/20.png",
+      "slot_img": "h/i/20.png",
+      "note": "north rack prototype slot"
+    },
+    {
+      "idx": 21,
+      "id": "north_07",
+      "zone": "north_hand",
+      "kind": "hand",
+      "seat": "north",
+      "slot": 7,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": 0,
+      "w_px": 56,
+      "h_px": 88,
+      "center_px": {
+        "x": 751.923,
+        "y": 61
+      },
+      "bbox_px": {
+        "x": 723.923,
+        "y": 17.0,
+        "w": 56.0,
+        "h": 88.0
+      },
+      "polygon_px": [
+        {
+          "x": 723.923,
+          "y": 17.0
+        },
+        {
+          "x": 779.923,
+          "y": 17.0
+        },
+        {
+          "x": 779.923,
+          "y": 105.0
+        },
+        {
+          "x": 723.923,
+          "y": 105.0
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.471304,
+        "y": 0.016602,
+        "w": 0.036458,
+        "h": 0.085938
+      },
+      "center_norm": {
+        "x": 0.489533,
+        "y": 0.05957
+      },
+      "mask": "h/m/21.png",
+      "slot_img": "h/i/21.png",
+      "note": "north rack prototype slot"
+    },
+    {
+      "idx": 22,
+      "id": "north_08",
+      "zone": "north_hand",
+      "kind": "hand",
+      "seat": "north",
+      "slot": 8,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": 0,
+      "w_px": 56,
+      "h_px": 88,
+      "center_px": {
+        "x": 788.077,
+        "y": 61
+      },
+      "bbox_px": {
+        "x": 760.077,
+        "y": 17.0,
+        "w": 56.0,
+        "h": 88.0
+      },
+      "polygon_px": [
+        {
+          "x": 760.077,
+          "y": 17.0
+        },
+        {
+          "x": 816.077,
+          "y": 17.0
+        },
+        {
+          "x": 816.077,
+          "y": 105.0
+        },
+        {
+          "x": 760.077,
+          "y": 105.0
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.494842,
+        "y": 0.016602,
+        "w": 0.036458,
+        "h": 0.085938
+      },
+      "center_norm": {
+        "x": 0.513071,
+        "y": 0.05957
+      },
+      "mask": "h/m/22.png",
+      "slot_img": "h/i/22.png",
+      "note": "north rack prototype slot"
+    },
+    {
+      "idx": 23,
+      "id": "north_09",
+      "zone": "north_hand",
+      "kind": "hand",
+      "seat": "north",
+      "slot": 9,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": 0,
+      "w_px": 56,
+      "h_px": 88,
+      "center_px": {
+        "x": 824.231,
+        "y": 61
+      },
+      "bbox_px": {
+        "x": 796.231,
+        "y": 17.0,
+        "w": 56.0,
+        "h": 88.0
+      },
+      "polygon_px": [
+        {
+          "x": 796.231,
+          "y": 17.0
+        },
+        {
+          "x": 852.231,
+          "y": 17.0
+        },
+        {
+          "x": 852.231,
+          "y": 105.0
+        },
+        {
+          "x": 796.231,
+          "y": 105.0
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.51838,
+        "y": 0.016602,
+        "w": 0.036458,
+        "h": 0.085938
+      },
+      "center_norm": {
+        "x": 0.536609,
+        "y": 0.05957
+      },
+      "mask": "h/m/23.png",
+      "slot_img": "h/i/23.png",
+      "note": "north rack prototype slot"
+    },
+    {
+      "idx": 24,
+      "id": "north_10",
+      "zone": "north_hand",
+      "kind": "hand",
+      "seat": "north",
+      "slot": 10,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": 0,
+      "w_px": 56,
+      "h_px": 88,
+      "center_px": {
+        "x": 860.385,
+        "y": 61
+      },
+      "bbox_px": {
+        "x": 832.385,
+        "y": 17.0,
+        "w": 56.0,
+        "h": 88.0
+      },
+      "polygon_px": [
+        {
+          "x": 832.385,
+          "y": 17.0
+        },
+        {
+          "x": 888.385,
+          "y": 17.0
+        },
+        {
+          "x": 888.385,
+          "y": 105.0
+        },
+        {
+          "x": 832.385,
+          "y": 105.0
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.541917,
+        "y": 0.016602,
+        "w": 0.036458,
+        "h": 0.085938
+      },
+      "center_norm": {
+        "x": 0.560146,
+        "y": 0.05957
+      },
+      "mask": "h/m/24.png",
+      "slot_img": "h/i/24.png",
+      "note": "north rack prototype slot"
+    },
+    {
+      "idx": 25,
+      "id": "north_11",
+      "zone": "north_hand",
+      "kind": "hand",
+      "seat": "north",
+      "slot": 11,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": 0,
+      "w_px": 56,
+      "h_px": 88,
+      "center_px": {
+        "x": 896.538,
+        "y": 61
+      },
+      "bbox_px": {
+        "x": 868.538,
+        "y": 17.0,
+        "w": 56.0,
+        "h": 88.0
+      },
+      "polygon_px": [
+        {
+          "x": 868.538,
+          "y": 17.0
+        },
+        {
+          "x": 924.538,
+          "y": 17.0
+        },
+        {
+          "x": 924.538,
+          "y": 105.0
+        },
+        {
+          "x": 868.538,
+          "y": 105.0
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.565454,
+        "y": 0.016602,
+        "w": 0.036458,
+        "h": 0.085938
+      },
+      "center_norm": {
+        "x": 0.583684,
+        "y": 0.05957
+      },
+      "mask": "h/m/25.png",
+      "slot_img": "h/i/25.png",
+      "note": "north rack prototype slot"
+    },
+    {
+      "idx": 26,
+      "id": "north_12",
+      "zone": "north_hand",
+      "kind": "hand",
+      "seat": "north",
+      "slot": 12,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": 0,
+      "w_px": 56,
+      "h_px": 88,
+      "center_px": {
+        "x": 932.692,
+        "y": 61
+      },
+      "bbox_px": {
+        "x": 904.692,
+        "y": 17.0,
+        "w": 56.0,
+        "h": 88.0
+      },
+      "polygon_px": [
+        {
+          "x": 904.692,
+          "y": 17.0
+        },
+        {
+          "x": 960.692,
+          "y": 17.0
+        },
+        {
+          "x": 960.692,
+          "y": 105.0
+        },
+        {
+          "x": 904.692,
+          "y": 105.0
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.588992,
+        "y": 0.016602,
+        "w": 0.036458,
+        "h": 0.085938
+      },
+      "center_norm": {
+        "x": 0.607222,
+        "y": 0.05957
+      },
+      "mask": "h/m/26.png",
+      "slot_img": "h/i/26.png",
+      "note": "north rack prototype slot"
+    },
+    {
+      "idx": 27,
+      "id": "north_13",
+      "zone": "north_hand",
+      "kind": "hand",
+      "seat": "north",
+      "slot": 13,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": 0,
+      "w_px": 56,
+      "h_px": 88,
+      "center_px": {
+        "x": 968.846,
+        "y": 61
+      },
+      "bbox_px": {
+        "x": 940.846,
+        "y": 17.0,
+        "w": 56.0,
+        "h": 88.0
+      },
+      "polygon_px": [
+        {
+          "x": 940.846,
+          "y": 17.0
+        },
+        {
+          "x": 996.846,
+          "y": 17.0
+        },
+        {
+          "x": 996.846,
+          "y": 105.0
+        },
+        {
+          "x": 940.846,
+          "y": 105.0
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.61253,
+        "y": 0.016602,
+        "w": 0.036458,
+        "h": 0.085938
+      },
+      "center_norm": {
+        "x": 0.630759,
+        "y": 0.05957
+      },
+      "mask": "h/m/27.png",
+      "slot_img": "h/i/27.png",
+      "note": "north rack prototype slot"
+    },
+    {
+      "idx": 28,
+      "id": "north_14",
+      "zone": "north_hand",
+      "kind": "hand",
+      "seat": "north",
+      "slot": 14,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": 0,
+      "w_px": 56,
+      "h_px": 88,
+      "center_px": {
+        "x": 1005.0,
+        "y": 61
+      },
+      "bbox_px": {
+        "x": 977.0,
+        "y": 17.0,
+        "w": 56.0,
+        "h": 88.0
+      },
+      "polygon_px": [
+        {
+          "x": 977.0,
+          "y": 17.0
+        },
+        {
+          "x": 1033.0,
+          "y": 17.0
+        },
+        {
+          "x": 1033.0,
+          "y": 105.0
+        },
+        {
+          "x": 977.0,
+          "y": 105.0
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.636068,
+        "y": 0.016602,
+        "w": 0.036458,
+        "h": 0.085938
+      },
+      "center_norm": {
+        "x": 0.654297,
+        "y": 0.05957
+      },
+      "mask": "h/m/28.png",
+      "slot_img": "h/i/28.png",
+      "note": "north rack prototype slot"
+    },
+    {
+      "idx": 29,
+      "id": "west_01",
+      "zone": "west_hand",
+      "kind": "hand",
+      "seat": "west",
+      "slot": 1,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": -90,
+      "w_px": 52,
+      "h_px": 80,
+      "center_px": {
+        "x": 145,
+        "y": 178.0
+      },
+      "bbox_px": {
+        "x": 105.0,
+        "y": 152.0,
+        "w": 80.0,
+        "h": 52.0
+      },
+      "polygon_px": [
+        {
+          "x": 105.0,
+          "y": 204.0
+        },
+        {
+          "x": 105.0,
+          "y": 152.0
+        },
+        {
+          "x": 185.0,
+          "y": 152.0
+        },
+        {
+          "x": 185.0,
+          "y": 204.0
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.068359,
+        "y": 0.148438,
+        "w": 0.052083,
+        "h": 0.050781
+      },
+      "center_norm": {
+        "x": 0.094401,
+        "y": 0.173828
+      },
+      "mask": "h/m/29.png",
+      "slot_img": "h/i/29.png",
+      "note": "west side rack prototype slot"
+    },
+    {
+      "idx": 30,
+      "id": "west_02",
+      "zone": "west_hand",
+      "kind": "hand",
+      "seat": "west",
+      "slot": 2,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": -90,
+      "w_px": 52,
+      "h_px": 80,
+      "center_px": {
+        "x": 145,
+        "y": 203.385
+      },
+      "bbox_px": {
+        "x": 105.0,
+        "y": 177.385,
+        "w": 80.0,
+        "h": 52.0
+      },
+      "polygon_px": [
+        {
+          "x": 105.0,
+          "y": 229.385
+        },
+        {
+          "x": 105.0,
+          "y": 177.385
+        },
+        {
+          "x": 185.0,
+          "y": 177.385
+        },
+        {
+          "x": 185.0,
+          "y": 229.385
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.068359,
+        "y": 0.173228,
+        "w": 0.052083,
+        "h": 0.050781
+      },
+      "center_norm": {
+        "x": 0.094401,
+        "y": 0.198618
+      },
+      "mask": "h/m/30.png",
+      "slot_img": "h/i/30.png",
+      "note": "west side rack prototype slot"
+    },
+    {
+      "idx": 31,
+      "id": "west_03",
+      "zone": "west_hand",
+      "kind": "hand",
+      "seat": "west",
+      "slot": 3,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": -90,
+      "w_px": 52,
+      "h_px": 80,
+      "center_px": {
+        "x": 145,
+        "y": 228.769
+      },
+      "bbox_px": {
+        "x": 105.0,
+        "y": 202.769,
+        "w": 80.0,
+        "h": 52.0
+      },
+      "polygon_px": [
+        {
+          "x": 105.0,
+          "y": 254.769
+        },
+        {
+          "x": 105.0,
+          "y": 202.769
+        },
+        {
+          "x": 185.0,
+          "y": 202.769
+        },
+        {
+          "x": 185.0,
+          "y": 254.769
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.068359,
+        "y": 0.198017,
+        "w": 0.052083,
+        "h": 0.050781
+      },
+      "center_norm": {
+        "x": 0.094401,
+        "y": 0.223407
+      },
+      "mask": "h/m/31.png",
+      "slot_img": "h/i/31.png",
+      "note": "west side rack prototype slot"
+    },
+    {
+      "idx": 32,
+      "id": "west_04",
+      "zone": "west_hand",
+      "kind": "hand",
+      "seat": "west",
+      "slot": 4,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": -90,
+      "w_px": 52,
+      "h_px": 80,
+      "center_px": {
+        "x": 145,
+        "y": 254.154
+      },
+      "bbox_px": {
+        "x": 105.0,
+        "y": 228.154,
+        "w": 80.0,
+        "h": 52.0
+      },
+      "polygon_px": [
+        {
+          "x": 105.0,
+          "y": 280.154
+        },
+        {
+          "x": 105.0,
+          "y": 228.154
+        },
+        {
+          "x": 185.0,
+          "y": 228.154
+        },
+        {
+          "x": 185.0,
+          "y": 280.154
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.068359,
+        "y": 0.222807,
+        "w": 0.052083,
+        "h": 0.050781
+      },
+      "center_norm": {
+        "x": 0.094401,
+        "y": 0.248197
+      },
+      "mask": "h/m/32.png",
+      "slot_img": "h/i/32.png",
+      "note": "west side rack prototype slot"
+    },
+    {
+      "idx": 33,
+      "id": "west_05",
+      "zone": "west_hand",
+      "kind": "hand",
+      "seat": "west",
+      "slot": 5,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": -90,
+      "w_px": 52,
+      "h_px": 80,
+      "center_px": {
+        "x": 145,
+        "y": 279.538
+      },
+      "bbox_px": {
+        "x": 105.0,
+        "y": 253.538,
+        "w": 80.0,
+        "h": 52.0
+      },
+      "polygon_px": [
+        {
+          "x": 105.0,
+          "y": 305.538
+        },
+        {
+          "x": 105.0,
+          "y": 253.538
+        },
+        {
+          "x": 185.0,
+          "y": 253.538
+        },
+        {
+          "x": 185.0,
+          "y": 305.538
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.068359,
+        "y": 0.247596,
+        "w": 0.052083,
+        "h": 0.050781
+      },
+      "center_norm": {
+        "x": 0.094401,
+        "y": 0.272987
+      },
+      "mask": "h/m/33.png",
+      "slot_img": "h/i/33.png",
+      "note": "west side rack prototype slot"
+    },
+    {
+      "idx": 34,
+      "id": "west_06",
+      "zone": "west_hand",
+      "kind": "hand",
+      "seat": "west",
+      "slot": 6,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": -90,
+      "w_px": 52,
+      "h_px": 80,
+      "center_px": {
+        "x": 145,
+        "y": 304.923
+      },
+      "bbox_px": {
+        "x": 105.0,
+        "y": 278.923,
+        "w": 80.0,
+        "h": 52.0
+      },
+      "polygon_px": [
+        {
+          "x": 105.0,
+          "y": 330.923
+        },
+        {
+          "x": 105.0,
+          "y": 278.923
+        },
+        {
+          "x": 185.0,
+          "y": 278.923
+        },
+        {
+          "x": 185.0,
+          "y": 330.923
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.068359,
+        "y": 0.272386,
+        "w": 0.052083,
+        "h": 0.050781
+      },
+      "center_norm": {
+        "x": 0.094401,
+        "y": 0.297776
+      },
+      "mask": "h/m/34.png",
+      "slot_img": "h/i/34.png",
+      "note": "west side rack prototype slot"
+    },
+    {
+      "idx": 35,
+      "id": "west_07",
+      "zone": "west_hand",
+      "kind": "hand",
+      "seat": "west",
+      "slot": 7,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": -90,
+      "w_px": 52,
+      "h_px": 80,
+      "center_px": {
+        "x": 145,
+        "y": 330.308
+      },
+      "bbox_px": {
+        "x": 105.0,
+        "y": 304.308,
+        "w": 80.0,
+        "h": 52.0
+      },
+      "polygon_px": [
+        {
+          "x": 105.0,
+          "y": 356.308
+        },
+        {
+          "x": 105.0,
+          "y": 304.308
+        },
+        {
+          "x": 185.0,
+          "y": 304.308
+        },
+        {
+          "x": 185.0,
+          "y": 356.308
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.068359,
+        "y": 0.297176,
+        "w": 0.052083,
+        "h": 0.050781
+      },
+      "center_norm": {
+        "x": 0.094401,
+        "y": 0.322566
+      },
+      "mask": "h/m/35.png",
+      "slot_img": "h/i/35.png",
+      "note": "west side rack prototype slot"
+    },
+    {
+      "idx": 36,
+      "id": "west_08",
+      "zone": "west_hand",
+      "kind": "hand",
+      "seat": "west",
+      "slot": 8,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": -90,
+      "w_px": 52,
+      "h_px": 80,
+      "center_px": {
+        "x": 145,
+        "y": 355.692
+      },
+      "bbox_px": {
+        "x": 105.0,
+        "y": 329.692,
+        "w": 80.0,
+        "h": 52.0
+      },
+      "polygon_px": [
+        {
+          "x": 105.0,
+          "y": 381.692
+        },
+        {
+          "x": 105.0,
+          "y": 329.692
+        },
+        {
+          "x": 185.0,
+          "y": 329.692
+        },
+        {
+          "x": 185.0,
+          "y": 381.692
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.068359,
+        "y": 0.321965,
+        "w": 0.052083,
+        "h": 0.050781
+      },
+      "center_norm": {
+        "x": 0.094401,
+        "y": 0.347356
+      },
+      "mask": "h/m/36.png",
+      "slot_img": "h/i/36.png",
+      "note": "west side rack prototype slot"
+    },
+    {
+      "idx": 37,
+      "id": "west_09",
+      "zone": "west_hand",
+      "kind": "hand",
+      "seat": "west",
+      "slot": 9,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": -90,
+      "w_px": 52,
+      "h_px": 80,
+      "center_px": {
+        "x": 145,
+        "y": 381.077
+      },
+      "bbox_px": {
+        "x": 105.0,
+        "y": 355.077,
+        "w": 80.0,
+        "h": 52.0
+      },
+      "polygon_px": [
+        {
+          "x": 105.0,
+          "y": 407.077
+        },
+        {
+          "x": 105.0,
+          "y": 355.077
+        },
+        {
+          "x": 185.0,
+          "y": 355.077
+        },
+        {
+          "x": 185.0,
+          "y": 407.077
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.068359,
+        "y": 0.346755,
+        "w": 0.052083,
+        "h": 0.050781
+      },
+      "center_norm": {
+        "x": 0.094401,
+        "y": 0.372145
+      },
+      "mask": "h/m/37.png",
+      "slot_img": "h/i/37.png",
+      "note": "west side rack prototype slot"
+    },
+    {
+      "idx": 38,
+      "id": "west_10",
+      "zone": "west_hand",
+      "kind": "hand",
+      "seat": "west",
+      "slot": 10,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": -90,
+      "w_px": 52,
+      "h_px": 80,
+      "center_px": {
+        "x": 145,
+        "y": 406.462
+      },
+      "bbox_px": {
+        "x": 105.0,
+        "y": 380.462,
+        "w": 80.0,
+        "h": 52.0
+      },
+      "polygon_px": [
+        {
+          "x": 105.0,
+          "y": 432.462
+        },
+        {
+          "x": 105.0,
+          "y": 380.462
+        },
+        {
+          "x": 185.0,
+          "y": 380.462
+        },
+        {
+          "x": 185.0,
+          "y": 432.462
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.068359,
+        "y": 0.371545,
+        "w": 0.052083,
+        "h": 0.050781
+      },
+      "center_norm": {
+        "x": 0.094401,
+        "y": 0.396935
+      },
+      "mask": "h/m/38.png",
+      "slot_img": "h/i/38.png",
+      "note": "west side rack prototype slot"
+    },
+    {
+      "idx": 39,
+      "id": "west_11",
+      "zone": "west_hand",
+      "kind": "hand",
+      "seat": "west",
+      "slot": 11,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": -90,
+      "w_px": 52,
+      "h_px": 80,
+      "center_px": {
+        "x": 145,
+        "y": 431.846
+      },
+      "bbox_px": {
+        "x": 105.0,
+        "y": 405.846,
+        "w": 80.0,
+        "h": 52.0
+      },
+      "polygon_px": [
+        {
+          "x": 105.0,
+          "y": 457.846
+        },
+        {
+          "x": 105.0,
+          "y": 405.846
+        },
+        {
+          "x": 185.0,
+          "y": 405.846
+        },
+        {
+          "x": 185.0,
+          "y": 457.846
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.068359,
+        "y": 0.396334,
+        "w": 0.052083,
+        "h": 0.050781
+      },
+      "center_norm": {
+        "x": 0.094401,
+        "y": 0.421725
+      },
+      "mask": "h/m/39.png",
+      "slot_img": "h/i/39.png",
+      "note": "west side rack prototype slot"
+    },
+    {
+      "idx": 40,
+      "id": "west_12",
+      "zone": "west_hand",
+      "kind": "hand",
+      "seat": "west",
+      "slot": 12,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": -90,
+      "w_px": 52,
+      "h_px": 80,
+      "center_px": {
+        "x": 145,
+        "y": 457.231
+      },
+      "bbox_px": {
+        "x": 105.0,
+        "y": 431.231,
+        "w": 80.0,
+        "h": 52.0
+      },
+      "polygon_px": [
+        {
+          "x": 105.0,
+          "y": 483.231
+        },
+        {
+          "x": 105.0,
+          "y": 431.231
+        },
+        {
+          "x": 185.0,
+          "y": 431.231
+        },
+        {
+          "x": 185.0,
+          "y": 483.231
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.068359,
+        "y": 0.421124,
+        "w": 0.052083,
+        "h": 0.050781
+      },
+      "center_norm": {
+        "x": 0.094401,
+        "y": 0.446514
+      },
+      "mask": "h/m/40.png",
+      "slot_img": "h/i/40.png",
+      "note": "west side rack prototype slot"
+    },
+    {
+      "idx": 41,
+      "id": "west_13",
+      "zone": "west_hand",
+      "kind": "hand",
+      "seat": "west",
+      "slot": 13,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": -90,
+      "w_px": 52,
+      "h_px": 80,
+      "center_px": {
+        "x": 145,
+        "y": 482.615
+      },
+      "bbox_px": {
+        "x": 105.0,
+        "y": 456.615,
+        "w": 80.0,
+        "h": 52.0
+      },
+      "polygon_px": [
+        {
+          "x": 105.0,
+          "y": 508.615
+        },
+        {
+          "x": 105.0,
+          "y": 456.615
+        },
+        {
+          "x": 185.0,
+          "y": 456.615
+        },
+        {
+          "x": 185.0,
+          "y": 508.615
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.068359,
+        "y": 0.445913,
+        "w": 0.052083,
+        "h": 0.050781
+      },
+      "center_norm": {
+        "x": 0.094401,
+        "y": 0.471304
+      },
+      "mask": "h/m/41.png",
+      "slot_img": "h/i/41.png",
+      "note": "west side rack prototype slot"
+    },
+    {
+      "idx": 42,
+      "id": "west_14",
+      "zone": "west_hand",
+      "kind": "hand",
+      "seat": "west",
+      "slot": 14,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": -90,
+      "w_px": 52,
+      "h_px": 80,
+      "center_px": {
+        "x": 145,
+        "y": 508.0
+      },
+      "bbox_px": {
+        "x": 105.0,
+        "y": 482.0,
+        "w": 80.0,
+        "h": 52.0
+      },
+      "polygon_px": [
+        {
+          "x": 105.0,
+          "y": 534.0
+        },
+        {
+          "x": 105.0,
+          "y": 482.0
+        },
+        {
+          "x": 185.0,
+          "y": 482.0
+        },
+        {
+          "x": 185.0,
+          "y": 534.0
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.068359,
+        "y": 0.470703,
+        "w": 0.052083,
+        "h": 0.050781
+      },
+      "center_norm": {
+        "x": 0.094401,
+        "y": 0.496094
+      },
+      "mask": "h/m/42.png",
+      "slot_img": "h/i/42.png",
+      "note": "west side rack prototype slot"
+    },
+    {
+      "idx": 43,
+      "id": "east_01",
+      "zone": "east_hand",
+      "kind": "hand",
+      "seat": "east",
+      "slot": 1,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": 90,
+      "w_px": 52,
+      "h_px": 80,
+      "center_px": {
+        "x": 1392,
+        "y": 178.0
+      },
+      "bbox_px": {
+        "x": 1352.0,
+        "y": 152.0,
+        "w": 80.0,
+        "h": 52.0
+      },
+      "polygon_px": [
+        {
+          "x": 1432.0,
+          "y": 152.0
+        },
+        {
+          "x": 1432.0,
+          "y": 204.0
+        },
+        {
+          "x": 1352.0,
+          "y": 204.0
+        },
+        {
+          "x": 1352.0,
+          "y": 152.0
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.880208,
+        "y": 0.148438,
+        "w": 0.052083,
+        "h": 0.050781
+      },
+      "center_norm": {
+        "x": 0.90625,
+        "y": 0.173828
+      },
+      "mask": "h/m/43.png",
+      "slot_img": "h/i/43.png",
+      "note": "east side rack prototype slot"
+    },
+    {
+      "idx": 44,
+      "id": "east_02",
+      "zone": "east_hand",
+      "kind": "hand",
+      "seat": "east",
+      "slot": 2,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": 90,
+      "w_px": 52,
+      "h_px": 80,
+      "center_px": {
+        "x": 1392,
+        "y": 203.385
+      },
+      "bbox_px": {
+        "x": 1352.0,
+        "y": 177.385,
+        "w": 80.0,
+        "h": 52.0
+      },
+      "polygon_px": [
+        {
+          "x": 1432.0,
+          "y": 177.385
+        },
+        {
+          "x": 1432.0,
+          "y": 229.385
+        },
+        {
+          "x": 1352.0,
+          "y": 229.385
+        },
+        {
+          "x": 1352.0,
+          "y": 177.385
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.880208,
+        "y": 0.173228,
+        "w": 0.052083,
+        "h": 0.050781
+      },
+      "center_norm": {
+        "x": 0.90625,
+        "y": 0.198618
+      },
+      "mask": "h/m/44.png",
+      "slot_img": "h/i/44.png",
+      "note": "east side rack prototype slot"
+    },
+    {
+      "idx": 45,
+      "id": "east_03",
+      "zone": "east_hand",
+      "kind": "hand",
+      "seat": "east",
+      "slot": 3,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": 90,
+      "w_px": 52,
+      "h_px": 80,
+      "center_px": {
+        "x": 1392,
+        "y": 228.769
+      },
+      "bbox_px": {
+        "x": 1352.0,
+        "y": 202.769,
+        "w": 80.0,
+        "h": 52.0
+      },
+      "polygon_px": [
+        {
+          "x": 1432.0,
+          "y": 202.769
+        },
+        {
+          "x": 1432.0,
+          "y": 254.769
+        },
+        {
+          "x": 1352.0,
+          "y": 254.769
+        },
+        {
+          "x": 1352.0,
+          "y": 202.769
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.880208,
+        "y": 0.198017,
+        "w": 0.052083,
+        "h": 0.050781
+      },
+      "center_norm": {
+        "x": 0.90625,
+        "y": 0.223407
+      },
+      "mask": "h/m/45.png",
+      "slot_img": "h/i/45.png",
+      "note": "east side rack prototype slot"
+    },
+    {
+      "idx": 46,
+      "id": "east_04",
+      "zone": "east_hand",
+      "kind": "hand",
+      "seat": "east",
+      "slot": 4,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": 90,
+      "w_px": 52,
+      "h_px": 80,
+      "center_px": {
+        "x": 1392,
+        "y": 254.154
+      },
+      "bbox_px": {
+        "x": 1352.0,
+        "y": 228.154,
+        "w": 80.0,
+        "h": 52.0
+      },
+      "polygon_px": [
+        {
+          "x": 1432.0,
+          "y": 228.154
+        },
+        {
+          "x": 1432.0,
+          "y": 280.154
+        },
+        {
+          "x": 1352.0,
+          "y": 280.154
+        },
+        {
+          "x": 1352.0,
+          "y": 228.154
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.880208,
+        "y": 0.222807,
+        "w": 0.052083,
+        "h": 0.050781
+      },
+      "center_norm": {
+        "x": 0.90625,
+        "y": 0.248197
+      },
+      "mask": "h/m/46.png",
+      "slot_img": "h/i/46.png",
+      "note": "east side rack prototype slot"
+    },
+    {
+      "idx": 47,
+      "id": "east_05",
+      "zone": "east_hand",
+      "kind": "hand",
+      "seat": "east",
+      "slot": 5,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": 90,
+      "w_px": 52,
+      "h_px": 80,
+      "center_px": {
+        "x": 1392,
+        "y": 279.538
+      },
+      "bbox_px": {
+        "x": 1352.0,
+        "y": 253.538,
+        "w": 80.0,
+        "h": 52.0
+      },
+      "polygon_px": [
+        {
+          "x": 1432.0,
+          "y": 253.538
+        },
+        {
+          "x": 1432.0,
+          "y": 305.538
+        },
+        {
+          "x": 1352.0,
+          "y": 305.538
+        },
+        {
+          "x": 1352.0,
+          "y": 253.538
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.880208,
+        "y": 0.247596,
+        "w": 0.052083,
+        "h": 0.050781
+      },
+      "center_norm": {
+        "x": 0.90625,
+        "y": 0.272987
+      },
+      "mask": "h/m/47.png",
+      "slot_img": "h/i/47.png",
+      "note": "east side rack prototype slot"
+    },
+    {
+      "idx": 48,
+      "id": "east_06",
+      "zone": "east_hand",
+      "kind": "hand",
+      "seat": "east",
+      "slot": 6,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": 90,
+      "w_px": 52,
+      "h_px": 80,
+      "center_px": {
+        "x": 1392,
+        "y": 304.923
+      },
+      "bbox_px": {
+        "x": 1352.0,
+        "y": 278.923,
+        "w": 80.0,
+        "h": 52.0
+      },
+      "polygon_px": [
+        {
+          "x": 1432.0,
+          "y": 278.923
+        },
+        {
+          "x": 1432.0,
+          "y": 330.923
+        },
+        {
+          "x": 1352.0,
+          "y": 330.923
+        },
+        {
+          "x": 1352.0,
+          "y": 278.923
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.880208,
+        "y": 0.272386,
+        "w": 0.052083,
+        "h": 0.050781
+      },
+      "center_norm": {
+        "x": 0.90625,
+        "y": 0.297776
+      },
+      "mask": "h/m/48.png",
+      "slot_img": "h/i/48.png",
+      "note": "east side rack prototype slot"
+    },
+    {
+      "idx": 49,
+      "id": "east_07",
+      "zone": "east_hand",
+      "kind": "hand",
+      "seat": "east",
+      "slot": 7,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": 90,
+      "w_px": 52,
+      "h_px": 80,
+      "center_px": {
+        "x": 1392,
+        "y": 330.308
+      },
+      "bbox_px": {
+        "x": 1352.0,
+        "y": 304.308,
+        "w": 80.0,
+        "h": 52.0
+      },
+      "polygon_px": [
+        {
+          "x": 1432.0,
+          "y": 304.308
+        },
+        {
+          "x": 1432.0,
+          "y": 356.308
+        },
+        {
+          "x": 1352.0,
+          "y": 356.308
+        },
+        {
+          "x": 1352.0,
+          "y": 304.308
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.880208,
+        "y": 0.297176,
+        "w": 0.052083,
+        "h": 0.050781
+      },
+      "center_norm": {
+        "x": 0.90625,
+        "y": 0.322566
+      },
+      "mask": "h/m/49.png",
+      "slot_img": "h/i/49.png",
+      "note": "east side rack prototype slot"
+    },
+    {
+      "idx": 50,
+      "id": "east_08",
+      "zone": "east_hand",
+      "kind": "hand",
+      "seat": "east",
+      "slot": 8,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": 90,
+      "w_px": 52,
+      "h_px": 80,
+      "center_px": {
+        "x": 1392,
+        "y": 355.692
+      },
+      "bbox_px": {
+        "x": 1352.0,
+        "y": 329.692,
+        "w": 80.0,
+        "h": 52.0
+      },
+      "polygon_px": [
+        {
+          "x": 1432.0,
+          "y": 329.692
+        },
+        {
+          "x": 1432.0,
+          "y": 381.692
+        },
+        {
+          "x": 1352.0,
+          "y": 381.692
+        },
+        {
+          "x": 1352.0,
+          "y": 329.692
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.880208,
+        "y": 0.321965,
+        "w": 0.052083,
+        "h": 0.050781
+      },
+      "center_norm": {
+        "x": 0.90625,
+        "y": 0.347356
+      },
+      "mask": "h/m/50.png",
+      "slot_img": "h/i/50.png",
+      "note": "east side rack prototype slot"
+    },
+    {
+      "idx": 51,
+      "id": "east_09",
+      "zone": "east_hand",
+      "kind": "hand",
+      "seat": "east",
+      "slot": 9,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": 90,
+      "w_px": 52,
+      "h_px": 80,
+      "center_px": {
+        "x": 1392,
+        "y": 381.077
+      },
+      "bbox_px": {
+        "x": 1352.0,
+        "y": 355.077,
+        "w": 80.0,
+        "h": 52.0
+      },
+      "polygon_px": [
+        {
+          "x": 1432.0,
+          "y": 355.077
+        },
+        {
+          "x": 1432.0,
+          "y": 407.077
+        },
+        {
+          "x": 1352.0,
+          "y": 407.077
+        },
+        {
+          "x": 1352.0,
+          "y": 355.077
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.880208,
+        "y": 0.346755,
+        "w": 0.052083,
+        "h": 0.050781
+      },
+      "center_norm": {
+        "x": 0.90625,
+        "y": 0.372145
+      },
+      "mask": "h/m/51.png",
+      "slot_img": "h/i/51.png",
+      "note": "east side rack prototype slot"
+    },
+    {
+      "idx": 52,
+      "id": "east_10",
+      "zone": "east_hand",
+      "kind": "hand",
+      "seat": "east",
+      "slot": 10,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": 90,
+      "w_px": 52,
+      "h_px": 80,
+      "center_px": {
+        "x": 1392,
+        "y": 406.462
+      },
+      "bbox_px": {
+        "x": 1352.0,
+        "y": 380.462,
+        "w": 80.0,
+        "h": 52.0
+      },
+      "polygon_px": [
+        {
+          "x": 1432.0,
+          "y": 380.462
+        },
+        {
+          "x": 1432.0,
+          "y": 432.462
+        },
+        {
+          "x": 1352.0,
+          "y": 432.462
+        },
+        {
+          "x": 1352.0,
+          "y": 380.462
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.880208,
+        "y": 0.371545,
+        "w": 0.052083,
+        "h": 0.050781
+      },
+      "center_norm": {
+        "x": 0.90625,
+        "y": 0.396935
+      },
+      "mask": "h/m/52.png",
+      "slot_img": "h/i/52.png",
+      "note": "east side rack prototype slot"
+    },
+    {
+      "idx": 53,
+      "id": "east_11",
+      "zone": "east_hand",
+      "kind": "hand",
+      "seat": "east",
+      "slot": 11,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": 90,
+      "w_px": 52,
+      "h_px": 80,
+      "center_px": {
+        "x": 1392,
+        "y": 431.846
+      },
+      "bbox_px": {
+        "x": 1352.0,
+        "y": 405.846,
+        "w": 80.0,
+        "h": 52.0
+      },
+      "polygon_px": [
+        {
+          "x": 1432.0,
+          "y": 405.846
+        },
+        {
+          "x": 1432.0,
+          "y": 457.846
+        },
+        {
+          "x": 1352.0,
+          "y": 457.846
+        },
+        {
+          "x": 1352.0,
+          "y": 405.846
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.880208,
+        "y": 0.396334,
+        "w": 0.052083,
+        "h": 0.050781
+      },
+      "center_norm": {
+        "x": 0.90625,
+        "y": 0.421725
+      },
+      "mask": "h/m/53.png",
+      "slot_img": "h/i/53.png",
+      "note": "east side rack prototype slot"
+    },
+    {
+      "idx": 54,
+      "id": "east_12",
+      "zone": "east_hand",
+      "kind": "hand",
+      "seat": "east",
+      "slot": 12,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": 90,
+      "w_px": 52,
+      "h_px": 80,
+      "center_px": {
+        "x": 1392,
+        "y": 457.231
+      },
+      "bbox_px": {
+        "x": 1352.0,
+        "y": 431.231,
+        "w": 80.0,
+        "h": 52.0
+      },
+      "polygon_px": [
+        {
+          "x": 1432.0,
+          "y": 431.231
+        },
+        {
+          "x": 1432.0,
+          "y": 483.231
+        },
+        {
+          "x": 1352.0,
+          "y": 483.231
+        },
+        {
+          "x": 1352.0,
+          "y": 431.231
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.880208,
+        "y": 0.421124,
+        "w": 0.052083,
+        "h": 0.050781
+      },
+      "center_norm": {
+        "x": 0.90625,
+        "y": 0.446514
+      },
+      "mask": "h/m/54.png",
+      "slot_img": "h/i/54.png",
+      "note": "east side rack prototype slot"
+    },
+    {
+      "idx": 55,
+      "id": "east_13",
+      "zone": "east_hand",
+      "kind": "hand",
+      "seat": "east",
+      "slot": 13,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": 90,
+      "w_px": 52,
+      "h_px": 80,
+      "center_px": {
+        "x": 1392,
+        "y": 482.615
+      },
+      "bbox_px": {
+        "x": 1352.0,
+        "y": 456.615,
+        "w": 80.0,
+        "h": 52.0
+      },
+      "polygon_px": [
+        {
+          "x": 1432.0,
+          "y": 456.615
+        },
+        {
+          "x": 1432.0,
+          "y": 508.615
+        },
+        {
+          "x": 1352.0,
+          "y": 508.615
+        },
+        {
+          "x": 1352.0,
+          "y": 456.615
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.880208,
+        "y": 0.445913,
+        "w": 0.052083,
+        "h": 0.050781
+      },
+      "center_norm": {
+        "x": 0.90625,
+        "y": 0.471304
+      },
+      "mask": "h/m/55.png",
+      "slot_img": "h/i/55.png",
+      "note": "east side rack prototype slot"
+    },
+    {
+      "idx": 56,
+      "id": "east_14",
+      "zone": "east_hand",
+      "kind": "hand",
+      "seat": "east",
+      "slot": 14,
+      "layout_source": "prototype_layer",
+      "role": "hand",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": 90,
+      "w_px": 52,
+      "h_px": 80,
+      "center_px": {
+        "x": 1392,
+        "y": 508.0
+      },
+      "bbox_px": {
+        "x": 1352.0,
+        "y": 482.0,
+        "w": 80.0,
+        "h": 52.0
+      },
+      "polygon_px": [
+        {
+          "x": 1432.0,
+          "y": 482.0
+        },
+        {
+          "x": 1432.0,
+          "y": 534.0
+        },
+        {
+          "x": 1352.0,
+          "y": 534.0
+        },
+        {
+          "x": 1352.0,
+          "y": 482.0
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.880208,
+        "y": 0.470703,
+        "w": 0.052083,
+        "h": 0.050781
+      },
+      "center_norm": {
+        "x": 0.90625,
+        "y": 0.496094
+      },
+      "mask": "h/m/56.png",
+      "slot_img": "h/i/56.png",
+      "note": "east side rack prototype slot"
+    },
+    {
+      "idx": 57,
+      "id": "deck",
+      "zone": "deck",
+      "kind": "deck",
+      "seat": null,
+      "slot": 1,
+      "layout_source": "prototype_layer",
+      "role": "deck",
+      "face_policy": "back",
+      "orientation": "portrait",
+      "rotation_deg": 0,
+      "w_px": 132,
+      "h_px": 172,
+      "center_px": {
+        "x": 642,
+        "y": 454
+      },
+      "bbox_px": {
+        "x": 576.0,
+        "y": 368.0,
+        "w": 132.0,
+        "h": 172.0
+      },
+      "polygon_px": [
+        {
+          "x": 576.0,
+          "y": 368.0
+        },
+        {
+          "x": 708.0,
+          "y": 368.0
+        },
+        {
+          "x": 708.0,
+          "y": 540.0
+        },
+        {
+          "x": 576.0,
+          "y": 540.0
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.375,
+        "y": 0.359375,
+        "w": 0.085938,
+        "h": 0.167969
+      },
+      "center_norm": {
+        "x": 0.417969,
+        "y": 0.443359
+      },
+      "mask": "h/m/57.png",
+      "slot_img": "h/i/57.png",
+      "note": "deck pile prototype"
+    },
+    {
+      "idx": 58,
+      "id": "discard",
+      "zone": "discard",
+      "kind": "discard",
+      "seat": null,
+      "slot": 1,
+      "layout_source": "prototype_layer",
+      "role": "discard",
+      "face_policy": "face",
+      "orientation": "portrait",
+      "rotation_deg": 0,
+      "w_px": 124,
+      "h_px": 170,
+      "center_px": {
+        "x": 887,
+        "y": 448
+      },
+      "bbox_px": {
+        "x": 825.0,
+        "y": 363.0,
+        "w": 124.0,
+        "h": 170.0
+      },
+      "polygon_px": [
+        {
+          "x": 825.0,
+          "y": 363.0
+        },
+        {
+          "x": 949.0,
+          "y": 363.0
+        },
+        {
+          "x": 949.0,
+          "y": 533.0
+        },
+        {
+          "x": 825.0,
+          "y": 533.0
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.537109,
+        "y": 0.354492,
+        "w": 0.080729,
+        "h": 0.166016
+      },
+      "center_norm": {
+        "x": 0.577474,
+        "y": 0.4375
+      },
+      "mask": "h/m/58.png",
+      "slot_img": "h/i/58.png",
+      "note": "discard pile prototype"
+    }
+  ]
+}

@@ -1,0 +1,96 @@
+{
+  "name": "tichu_v7_lock",
+  "design_px": {
+    "w": 1536,
+    "h": 1024
+  },
+  "asset_root": "/tv7",
+  "files": {
+    "table": "t/plate.png",
+    "table_ref": "t/ref.png",
+    "pass_anchors": "p/a.json",
+    "pass_overlay": "p/o.png",
+    "card_anchors": "h/a.json",
+    "card_overlay": "h/s.png",
+    "card_map": "c/map.json"
+  },
+  "passing": {
+    "north_pass_left": {
+      "dir": "left",
+      "orientation": "landscape",
+      "rotation": 0
+    },
+    "north_pass_across": {
+      "dir": "south",
+      "orientation": "portrait",
+      "rotation": 0
+    },
+    "north_pass_right": {
+      "dir": "right",
+      "orientation": "landscape",
+      "rotation": 0
+    },
+    "south_pass_left": {
+      "dir": "left",
+      "orientation": "landscape",
+      "rotation": 0
+    },
+    "south_pass_across": {
+      "dir": "north",
+      "orientation": "portrait",
+      "rotation": 0
+    },
+    "south_pass_right": {
+      "dir": "right",
+      "orientation": "landscape",
+      "rotation": 0
+    },
+    "east_pass_north": {
+      "dir": "north",
+      "orientation": "portrait",
+      "rotation": -90
+    },
+    "east_pass_across": {
+      "dir": "west",
+      "orientation": "landscape",
+      "rotation": 90
+    },
+    "east_pass_south": {
+      "dir": "south",
+      "orientation": "portrait",
+      "rotation": 90
+    },
+    "west_pass_north": {
+      "dir": "north",
+      "orientation": "portrait",
+      "rotation": -90
+    },
+    "west_pass_across": {
+      "dir": "east",
+      "orientation": "landscape",
+      "rotation": 90
+    },
+    "west_pass_south": {
+      "dir": "south",
+      "orientation": "portrait",
+      "rotation": 90
+    }
+  },
+  "cards": {
+    "hand_anchor_count": 56,
+    "pile_anchor_count": 2,
+    "total_anchor_count": 58,
+    "zones": {
+      "south_hand": 14,
+      "north_hand": 14,
+      "east_hand": 14,
+      "west_hand": 14,
+      "deck": 1,
+      "discard": 1
+    },
+    "layout_source": "prototype_layer",
+    "notes": [
+      "Use h/a.json, not CSS flex, as the card layout source of truth."
+    ]
+  }
+}
