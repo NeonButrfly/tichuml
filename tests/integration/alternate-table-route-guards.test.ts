@@ -12,7 +12,7 @@ const tableSource = readFileSync(
   "utf8"
 );
 const runtimeSource = readFileSync(
-  resolve("apps/web/src/alt-table-3d/tv6-runtime.ts"),
+  resolve("apps/web/src/alt-table-3d/tv7-runtime.ts"),
   "utf8"
 );
 const stylesSource = readFileSync(
@@ -23,22 +23,33 @@ const browserVerifySource = readFileSync(resolve("scripts/browser-verify.ts"), "
 
 describe("alternate table route guards", () => {
   it("routes the ALT table through the dedicated route while keeping the normal table intact", () => {
-    expect(appSource).toContain('import { AltTable3DRoute } from "./alt-table-3d/AltTable3DRoute";');
+    expect(appSource).toContain(
+      'import { AltTable3DRoute } from "./alt-table-3d/AltTable3DRoute";'
+    );
     expect(appSource).toContain("<AltTable3DRoute {...viewProps} />");
     expect(appSource).toContain("<NormalGameTableView {...viewProps} />");
     expect(appSource).not.toContain("AlternateGameTableView");
   });
 
-  it("locks the production tv6 asset paths to the approved short public runtime root", () => {
-    expect(runtimeSource).toContain('export const TV6_ASSET_ROOT = "/tv6";');
-    expect(runtimeSource).toContain('export const TV6_TABLE_PLATE_SRC = `${TV6_ASSET_ROOT}/t/plate.png`;');
-    expect(runtimeSource).toContain('export const TV6_PASSING_OVERLAY_SRC = `${TV6_ASSET_ROOT}/p/o.png`;');
-    expect(runtimeSource).toContain('export const TV6_PASSING_ANCHOR_JSON_SRC = `${TV6_ASSET_ROOT}/p/a.json`;');
-    expect(routeSource).not.toContain("/assets/tichu_table");
-    expect(tableSource).not.toContain("/assets/tichu_table");
+  it("locks the production tv7 asset paths to the approved short public runtime root", () => {
+    expect(runtimeSource).toContain('export const TV7_ASSET_ROOT = "/tv7";');
+    expect(runtimeSource).toContain(
+      'export const TV7_TABLE_PLATE_SRC = `${TV7_ASSET_ROOT}/t/plate.png`;'
+    );
+    expect(runtimeSource).toContain(
+      'export const TV7_PASSING_OVERLAY_SRC = `${TV7_ASSET_ROOT}/p/o.png`;'
+    );
+    expect(runtimeSource).toContain(
+      'export const TV7_PASSING_ANCHOR_JSON_SRC = `${TV7_ASSET_ROOT}/p/a.json`;'
+    );
+    expect(runtimeSource).toContain(
+      'export const TV7_CARD_ANCHOR_JSON_SRC = `${TV7_ASSET_ROOT}/h/a.json`;'
+    );
+    expect(routeSource).not.toContain("/tv6");
+    expect(tableSource).not.toContain("/tv6");
   });
 
-  it("forbids procedural and 3D table renderers on the active alt-table implementation", () => {
+  it("forbids procedural, generic hand-row, and 3D table renderers on the active alt-table implementation", () => {
     for (const forbidden of [
       "@react-three/fiber",
       "Canvas",
@@ -49,7 +60,6 @@ describe("alternate table route guards", () => {
       "rotateX",
       "rotateY",
       "perspective",
-      "fog",
       "mesh",
       "geometry",
       "rail"
@@ -58,8 +68,11 @@ describe("alternate table route guards", () => {
       expect(stylesSource).not.toContain(forbidden);
     }
 
-    expect(routeSource).toContain('import { AltTichuTable3D } from "./AltTichuTable3D";');
-    expect(browserVerifySource).toContain("__TICHU_ALT_SNAPSHOT__");
-    expect(browserVerifySource).toContain("tools/tv6/check.mjs");
+    expect(tableSource).not.toContain("HAND_LAYOUT");
+    expect(tableSource).not.toContain("data-seat-hand");
+    expect(tableSource).toContain('data-layout-source": "prototype_layer"');
+    expect(runtimeSource).toContain("prototype_layer");
+    expect(browserVerifySource).toContain("__tichuV7Snapshot");
+    expect(browserVerifySource).toContain("apps/web/public/tv7/x/check.mjs");
   });
 });

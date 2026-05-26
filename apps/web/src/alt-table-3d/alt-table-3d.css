@@ -2,9 +2,7 @@
   position: fixed;
   inset: 0;
   overflow: hidden;
-  background:
-    radial-gradient(circle at top, rgba(16, 48, 30, 0.38), transparent 32%),
-    linear-gradient(180deg, #051109 0%, #020703 100%);
+  background: #07110a;
 }
 
 .alt-table-3d-route--loading {
@@ -18,21 +16,20 @@
   padding: 1rem 1.25rem;
   border: 1px solid rgba(201, 167, 105, 0.4);
   border-radius: 1rem;
-  background: rgba(5, 17, 9, 0.82);
+  background: rgba(5, 17, 9, 0.84);
   color: #eef6eb;
 }
 
 .alt-table-stage {
   position: relative;
-  height: 100vh;
   width: 100vw;
+  height: 100vh;
   overflow: hidden;
 }
 
 .alt-table-board {
   position: absolute;
   overflow: hidden;
-  box-shadow: 0 18px 54px rgba(0, 0, 0, 0.45);
 }
 
 .alt-table-board__plate,
@@ -47,18 +44,17 @@
 
 .alt-table-status {
   position: fixed;
-  z-index: 12;
+  z-index: 20;
   left: 1rem;
   top: 1rem;
   display: grid;
   gap: 0.55rem;
-  min-width: 16rem;
+  min-width: 18rem;
   padding: 0.9rem 1rem;
   border: 1px solid rgba(201, 167, 105, 0.42);
   border-radius: 1rem;
-  background: rgba(4, 12, 8, 0.84);
+  background: rgba(4, 12, 8, 0.86);
   color: #f4e7c7;
-  backdrop-filter: blur(8px);
 }
 
 .alt-table-status__header,
@@ -80,7 +76,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 4.2rem;
+  min-width: 6rem;
   padding: 0.2rem 0.6rem;
   border-radius: 999px;
   background: rgba(201, 167, 105, 0.2);
@@ -99,39 +95,32 @@
   cursor: pointer;
 }
 
-.alt-table-status button:hover {
+.alt-table-status button:hover:not(:disabled) {
   background: rgba(197, 154, 64, 0.32);
 }
 
-.alt-table-seat {
-  position: absolute;
+.alt-table-status button:disabled {
+  opacity: 0.48;
+  cursor: default;
 }
 
-.alt-table-seat--row {
-  height: 11rem;
-}
-
-.alt-table-seat--column {
-  width: 7rem;
-}
-
-.alt-table-card-button {
+.alt-table-card,
+.alt-table-pass-card {
   position: absolute;
   padding: 0;
   border: none;
   background: transparent;
+}
+
+.alt-table-card--interactive {
   cursor: pointer;
-  transition:
-    transform 120ms ease,
-    filter 120ms ease;
 }
 
-.alt-table-card-button--selected {
-  transform: translateY(-16px);
-  filter: drop-shadow(0 12px 20px rgba(0, 0, 0, 0.38));
+.alt-table-card--selected {
+  filter: drop-shadow(0 14px 20px rgba(0, 0, 0, 0.36));
 }
 
-.alt-table-card-image,
+.alt-table-card__image,
 .alt-table-pass-card__image {
   display: block;
   width: 100%;
@@ -155,12 +144,16 @@
 
 .alt-table-pass-target--hovered,
 .alt-table-pass-target:hover {
-  background: rgba(234, 194, 98, 0.2);
+  background: rgba(234, 194, 98, 0.18);
   box-shadow: inset 0 0 0 2px rgba(253, 226, 144, 0.65);
 }
 
 .alt-table-pass-target--filled {
   background: rgba(255, 241, 181, 0.08);
+}
+
+.alt-table-pass-target--locked {
+  cursor: default;
 }
 
 .alt-table-pass-target__hint {
@@ -170,12 +163,6 @@
   color: rgba(255, 245, 216, 0.78);
   font-size: 0.65rem;
   text-align: center;
-}
-
-.alt-table-pass-card {
-  display: block;
-  max-width: 100%;
-  max-height: 100%;
 }
 
 @media (max-width: 900px) {

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -10,51 +10,83 @@ import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 
-type AltSnapshot = {
+type PassMapValue = {
+  dir: string;
+  orientation: string;
+  rot: number;
+};
+
+type CardAnchor = {
+  id: string;
+  zone: string;
+  seat: string | null;
+  bbox_px: { x: number; y: number; w: number; h: number };
+};
+
+type PassAnchor = {
+  id: string;
+  arrow_direction: string;
+  slot_orientation: string;
+  slot_rotation_deg: number;
+  bbox_px: { x: number; y: number; w: number; h: number };
+};
+
+type Tv7Snapshot = {
+  assetRoot: string;
   phase: string;
   design: {
+    width: number;
+    height: number;
     scale: number;
     offsetX: number;
     offsetY: number;
-    w?: number;
-    h?: number;
-    width?: number;
-    height?: number;
   };
   table: {
     src: string;
-    naturalW: number;
-    naturalH: number;
-    uses3d: boolean;
-    usesCanvas: boolean;
-    usesCssTable: boolean;
+    designW: number;
+    designH: number;
+    rendered: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      scale: number;
+    };
   };
-  tablePlate: string;
-  passingOverlay: string;
-  anchorJson: string;
-  passOverlay: {
+  cardLayout: {
     src: string;
-    visible: boolean;
+    layoutSource: string;
+    anchors: Array<{
+      id: string;
+      zone: string;
+      seat: string | null;
+      bbox_px: { x: number; y: number; w: number; h: number };
+      screen_bbox: { x: number; y: number; width: number; height: number };
+    }>;
   };
-  passAnchors: Array<{
-    id: string;
-    arrow_direction: string;
-    slot_orientation: string;
-    slot_rotation_deg: number;
-    bbox_px: { x: number; y: number; w: number; h: number };
-    screen_bbox: { x: number; y: number; width: number; height: number };
-  }>;
+  passing: {
+    overlaySrc: string;
+    anchors: Array<{
+      id: string;
+      arrow_direction: string;
+      orientation: string;
+      rotation: number;
+      bbox_px: { x: number; y: number; w: number; h: number };
+      screen_bbox: { x: number; y: number; width: number; height: number };
+    }>;
+  };
   cards: {
-    usesImages: boolean;
-    usesPlaceholders: boolean;
+    usingImageAssets: boolean;
+    placeholders: boolean;
+    layoutSource: string;
+    bySeat: Record<string, number>;
     sampleSrcs: string[];
   };
-  flow: {
-    firstDeal: number;
-    secondDeal: number;
-    passCount: number;
+  deal: {
+    phase: string;
+    counts: Record<string, number>;
+    history: string[];
   };
-  handCounts: Record<string, number>;
 };
 
 type Options = {
@@ -72,7 +104,7 @@ type Options = {
   height: number;
 };
 
-const expectedPassMap = {
+const expectedPassMap: Record<string, PassMapValue> = {
   north_pass_left: { dir: "left", orientation: "landscape", rot: 0 },
   north_pass_across: { dir: "south", orientation: "portrait", rot: 0 },
   north_pass_right: { dir: "right", orientation: "landscape", rot: 0 },
@@ -85,7 +117,7 @@ const expectedPassMap = {
   west_pass_north: { dir: "north", orientation: "portrait", rot: -90 },
   west_pass_across: { dir: "east", orientation: "landscape", rot: 90 },
   west_pass_south: { dir: "south", orientation: "portrait", rot: 90 }
-} as const;
+};
 
 function printHelp() {
   console.log(`browser-verify.ts
@@ -95,12 +127,12 @@ Usage:
   tsx scripts/browser-verify.ts [options]
 
 Options:
-  --url <url>                 Page to verify. Defaults to the tv6 ALT table route.
+  --url <url>                 Page to verify. Defaults to the tv7 ALT table route.
   --output <path>             Screenshot output path. Defaults to a temp PNG.
   --metadata <path>           Metadata JSON path. Defaults next to the screenshot.
   --snapshot <path>           Runtime snapshot JSON path. Defaults next to the screenshot.
   --wait-selector <selector>  DOM selector that must exist before verification.
-                              Default: [data-alt-table-root='tv6']
+                              Default: [data-alt-table-root='tv7']
   --wait-timeout-ms <ms>      Max wait for the table route. Default: 45000
   --settle-ms <ms>            Extra wait after initial load. Default: 300
   --start-dev-web             Start a local Vite dev server automatically.
@@ -114,7 +146,7 @@ Options:
 
 function parseArgs(argv: readonly string[]): Options {
   const options: Options = {
-    waitSelector: "[data-alt-table-root='tv6']",
+    waitSelector: "[data-alt-table-root='tv7']",
     waitTimeoutMs: 45_000,
     settleMs: 300,
     startDevWeb: false,
@@ -233,6 +265,15 @@ async function waitForHttpOk(url: string, timeoutMs: number) {
   );
 }
 
+async function canReachHttpOk(url: string, timeoutMs: number) {
+  try {
+    await waitForHttpOk(url, timeoutMs);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function resolveBrowserPath(explicitPath?: string) {
   if (explicitPath) {
     if (!existsSync(explicitPath)) {
@@ -245,8 +286,8 @@ function resolveBrowserPath(explicitPath?: string) {
     const candidates = [
       "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
       "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
-      "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
-      "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe"
+      "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+      "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe"
     ];
     const match = candidates.find((candidate) => existsSync(candidate));
     if (match) {
@@ -328,17 +369,18 @@ function startDevServer(repoRoot: string, port: number) {
 }
 
 function stopDevServer(
-  devServer: {
-    child: ChildProcessWithoutNullStreams;
-    getLogs(): { stdout: string; stderr: string };
-  } | undefined
+  devServer:
+    | {
+        child: ChildProcessWithoutNullStreams;
+        getLogs(): { stdout: string; stderr: string };
+      }
+    | undefined
 ) {
   if (!devServer) {
     return;
   }
 
   const pid = devServer.child.pid;
-
   if (process.platform === "win32" && typeof pid === "number") {
     spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"], {
       encoding: "utf8",
@@ -348,6 +390,12 @@ function stopDevServer(
   }
 
   devServer.child.kill("SIGTERM");
+}
+
+function assertCondition(condition: unknown, message: string): asserts condition {
+  if (!condition) {
+    throw new Error(message);
+  }
 }
 
 async function expectPhase(page: import("playwright").Page, phase: string, timeoutMs: number) {
@@ -360,43 +408,59 @@ async function expectPhase(page: import("playwright").Page, phase: string, timeo
   );
 }
 
-async function readSnapshot(page: import("playwright").Page): Promise<AltSnapshot> {
+async function readSnapshot(page: import("playwright").Page): Promise<Tv7Snapshot> {
   const snapshot = await page.evaluate(() => {
-    const value = (window as Window & {
-      __TICHU_ALT_SNAPSHOT__?: AltSnapshot;
-    }).__TICHU_ALT_SNAPSHOT__;
-    return value ?? null;
+    const snapshotFactory = (window as Window & {
+      __tichuV7Snapshot?: () => unknown;
+    }).__tichuV7Snapshot;
+    return typeof snapshotFactory === "function" ? snapshotFactory() : null;
   });
 
   if (!snapshot) {
-    throw new Error("window.__TICHU_ALT_SNAPSHOT__ was not available.");
+    throw new Error("window.__tichuV7Snapshot was not available.");
   }
 
-  return snapshot;
+  return snapshot as Tv7Snapshot;
 }
 
-function assertCondition(condition: unknown, message: string): asserts condition {
-  if (!condition) {
-    throw new Error(message);
-  }
+function readFixtureJson<T>(repoRoot: string, relativePath: string): T {
+  return JSON.parse(
+    readFileSync(path.join(repoRoot, relativePath), "utf8")
+  ) as T;
+}
+
+function compareRectWithinOnePixel(
+  actual: { x: number; y: number; width: number; height: number },
+  expected: { x: number; y: number; width: number; height: number },
+  label: string
+) {
+  assertCondition(
+    Math.abs(actual.x - expected.x) <= 1 &&
+      Math.abs(actual.y - expected.y) <= 1 &&
+      Math.abs(actual.width - expected.width) <= 1 &&
+      Math.abs(actual.height - expected.height) <= 1,
+    `${label} drifted away from its authored anchor.`
+  );
 }
 
 async function verifyAtDesignViewport(
   page: import("playwright").Page,
-  timeoutMs: number
+  timeoutMs: number,
+  cardAnchors: CardAnchor[],
+  passAnchors: PassAnchor[]
 ) {
   await expectPhase(page, "deal8", timeoutMs);
+
   const tableImage = page.locator("img[data-table-layer='plate']");
   await tableImage.waitFor({ state: "visible", timeout: timeoutMs });
-
   const naturalSize = await tableImage.evaluate((image) => ({
     src: image.getAttribute("src"),
     naturalWidth: image.naturalWidth,
     naturalHeight: image.naturalHeight
   }));
   assertCondition(
-    naturalSize.src?.endsWith("/tv6/t/plate.png"),
-    `Expected table plate /tv6/t/plate.png, got ${naturalSize.src ?? "null"}.`
+    naturalSize.src?.endsWith("/tv7/t/plate.png"),
+    `Expected table plate /tv7/t/plate.png, got ${naturalSize.src ?? "null"}.`
   );
   assertCondition(
     naturalSize.naturalWidth === 1536 && naturalSize.naturalHeight === 1024,
@@ -404,11 +468,11 @@ async function verifyAtDesignViewport(
   );
 
   for (const seat of ["north", "east", "south", "west"] as const) {
-    const cardCount = await page.locator(`[data-seat-hand='${seat}'] img`).count();
-    assertCondition(cardCount === 8, `Expected ${seat} to show 8 cards in deal8, got ${cardCount}.`);
+    const count = await page.locator(`[data-zone='${seat}_hand']`).count();
+    assertCondition(count === 8, `Expected ${seat} to show 8 cards in deal8, got ${count}.`);
   }
 
-  await expectPhase(page, "gt", timeoutMs);
+  await expectPhase(page, "grand_tichu", timeoutMs);
   await page.locator("button[data-alt-action='skip-gt']").click();
   await expectPhase(page, "deal6", timeoutMs);
   await expectPhase(page, "passing", timeoutMs);
@@ -416,100 +480,184 @@ async function verifyAtDesignViewport(
   const overlay = page.locator("img[data-table-layer='passing-overlay']");
   await overlay.waitFor({ state: "visible", timeout: timeoutMs });
 
-  const passTargets = page.locator("[data-pass-id]");
+  for (const seat of ["north", "east", "south", "west"] as const) {
+    const count = await page.locator(`[data-zone='${seat}_hand']`).count();
+    assertCondition(count === 14, `Expected ${seat} to show 14 cards in passing, got ${count}.`);
+  }
+
+  const passTargets = page.locator("[data-pass-id][data-arrow-direction]");
   assertCondition((await passTargets.count()) === 12, "Expected exactly 12 passing targets.");
 
-  for (const [anchorId, expected] of Object.entries(expectedPassMap)) {
-    const target = page.locator(`[data-pass-id='${anchorId}']`);
+  for (const [id, expected] of Object.entries(expectedPassMap)) {
+    const target = page.locator(`[data-pass-id='${id}'][data-arrow-direction]`);
     await target.waitFor({ state: "visible", timeout: timeoutMs });
     const attrs = await target.evaluate((node) => ({
       direction: node.getAttribute("data-arrow-direction"),
       orientation: node.getAttribute("data-orientation"),
       rotation: node.getAttribute("data-rotation")
     }));
-    assertCondition(
-      attrs.direction === expected.dir,
-      `${anchorId} direction mismatch: ${attrs.direction} != ${expected.dir}`
-    );
-    assertCondition(
-      attrs.orientation === expected.orientation,
-      `${anchorId} orientation mismatch: ${attrs.orientation} != ${expected.orientation}`
-    );
-    assertCondition(
-      Number(attrs.rotation) === expected.rot,
-      `${anchorId} rotation mismatch: ${attrs.rotation} != ${expected.rot}`
-    );
+    assertCondition(attrs.direction === expected.dir, `${id} direction mismatch.`);
+    assertCondition(attrs.orientation === expected.orientation, `${id} orientation mismatch.`);
+    assertCondition(Number(attrs.rotation) === expected.rot, `${id} rotation mismatch.`);
   }
 
-  const southCards = page.locator("[data-seat-hand='south'] button[data-card-id]");
+  const eastAcrossTarget = await page
+    .locator("[data-pass-id='east_pass_across'][data-arrow-direction]")
+    .boundingBox();
+  const eastNorthTarget = await page
+    .locator("[data-pass-id='east_pass_north'][data-arrow-direction]")
+    .boundingBox();
+  const westAcrossTarget = await page
+    .locator("[data-pass-id='west_pass_across'][data-arrow-direction]")
+    .boundingBox();
+  const westSouthTarget = await page
+    .locator("[data-pass-id='west_pass_south'][data-arrow-direction]")
+    .boundingBox();
+  assertCondition(
+    Boolean(
+      eastAcrossTarget &&
+        eastNorthTarget &&
+        westAcrossTarget &&
+        westSouthTarget &&
+        eastAcrossTarget.width > eastAcrossTarget.height &&
+        westAcrossTarget.width > westAcrossTarget.height &&
+        eastNorthTarget.height > eastNorthTarget.width &&
+        westSouthTarget.height > westSouthTarget.width
+    ),
+    "Side-seat pass orientation sanity check failed."
+  );
+
+  const southCards = page.locator("[data-zone='south_hand'][data-card-id]");
   for (let index = 0; index < 3; index += 1) {
     await southCards.nth(index).click();
   }
-  for (const anchorId of [
+
+  const confirmButton = page.locator("button[data-alt-action='confirm-pass']");
+  assertCondition(
+    await confirmButton.isDisabled(),
+    "Confirm pass should stay disabled until the three south lanes are assigned."
+  );
+
+  for (const passId of [
     "south_pass_left",
     "south_pass_across",
     "south_pass_right"
   ] as const) {
-    await page.locator(`[data-pass-id='${anchorId}']`).click();
+  await page.locator(`[data-pass-id='${passId}'][data-arrow-direction]`).click();
   }
 
   const southAssignedCount = await page.locator(
     "[data-pass-id^='south_pass_'] [data-pass-card-img='true']"
   ).count();
+  assertCondition(southAssignedCount === 3, "Expected 3 south pass cards to be assigned.");
   assertCondition(
-    southAssignedCount === 3,
-    `Expected 3 assigned south pass cards, got ${southAssignedCount}.`
+    !(await confirmButton.isDisabled()),
+    "Confirm pass should enable once the three south lanes are assigned."
   );
 
   await page.locator("button[data-alt-action='auto-demo-pass']").click();
-  const allAssignedCount = await page.locator(
+  const totalAssignedCount = await page.locator(
     "[data-pass-id] [data-pass-card-img='true']"
   ).count();
-  assertCondition(
-    allAssignedCount === 12,
-    `Expected auto demo pass to fill all 12 lanes, got ${allAssignedCount}.`
-  );
+  assertCondition(totalAssignedCount === 12, "Auto demo pass should fill all 12 lanes.");
 
   const cardSources = await page
-    .locator("[data-pass-id] [data-pass-card-img='true']")
-    .evaluateAll((images) =>
-      images.map((image) => image.getAttribute("src") ?? "")
-    );
+    .locator("[data-card-id] img, [data-pass-card-img='true']")
+    .evaluateAll((images) => images.map((image) => image.getAttribute("src") ?? ""));
   assertCondition(
-    cardSources.every((src) => src.startsWith("/tv6/c/")),
-    "Expected all pass cards to render from /tv6/c/ image assets."
+    cardSources.every((src) => src.startsWith("/tv7/c/")),
+    "Every rendered card image must come from /tv7/c/."
   );
 
   const snapshot = await readSnapshot(page);
-  assertCondition(snapshot.tablePlate === "/tv6/t/plate.png", "Snapshot tablePlate mismatch.");
-  assertCondition(
-    snapshot.passingOverlay === "/tv6/p/o.png",
-    "Snapshot passingOverlay mismatch."
-  );
-  assertCondition(snapshot.anchorJson === "/tv6/p/a.json", "Snapshot anchorJson mismatch.");
-  assertCondition(snapshot.handCounts.north === 14, "North hand count should be 14 in passing.");
-  assertCondition(snapshot.handCounts.east === 14, "East hand count should be 14 in passing.");
-  assertCondition(snapshot.handCounts.south === 14, "South hand count should be 14 in passing.");
-  assertCondition(snapshot.handCounts.west === 14, "West hand count should be 14 in passing.");
+  assertCondition(snapshot.assetRoot === "/tv7", "Snapshot assetRoot mismatch.");
+  assertCondition(snapshot.table.src === "/tv7/t/plate.png", "Snapshot table path mismatch.");
+  assertCondition(snapshot.cardLayout.src === "/tv7/h/a.json", "Snapshot card anchor path mismatch.");
+  assertCondition(snapshot.passing.overlaySrc === "/tv7/p/o.png", "Snapshot overlay path mismatch.");
+  assertCondition(snapshot.phase === "passing", "Snapshot phase mismatch.");
+  assertCondition(snapshot.cards.usingImageAssets === true, "Snapshot cards must use image assets.");
+  assertCondition(snapshot.cards.placeholders === false, "Snapshot placeholders must be false.");
+  assertCondition(snapshot.cards.layoutSource === "prototype_layer", "Snapshot card layout source mismatch.");
+  assertCondition(snapshot.deal.counts.north === 14, "North count should be 14 in passing.");
+  assertCondition(snapshot.deal.counts.east === 14, "East count should be 14 in passing.");
+  assertCondition(snapshot.deal.counts.south === 14, "South count should be 14 in passing.");
+  assertCondition(snapshot.deal.counts.west === 14, "West count should be 14 in passing.");
+  assertCondition(snapshot.deal.counts.deckRemaining === 0, "Deck should be empty in passing.");
+  assertCondition(snapshot.passing.anchors.length === 12, "Snapshot must expose 12 passing anchors.");
 
-  for (const anchor of snapshot.passAnchors) {
-    const expected = expectedPassMap[anchor.id as keyof typeof expectedPassMap];
-    assertCondition(Boolean(expected), `Unexpected snapshot anchor ${anchor.id}.`);
+  for (const anchor of snapshot.passing.anchors) {
+    const expected = expectedPassMap[anchor.id];
+    assertCondition(Boolean(expected), `Unexpected pass anchor ${anchor.id}.`);
     assertCondition(anchor.arrow_direction === expected.dir, `${anchor.id} snapshot direction mismatch.`);
-    assertCondition(
-      anchor.slot_orientation === expected.orientation,
-      `${anchor.id} snapshot orientation mismatch.`
+    assertCondition(anchor.orientation === expected.orientation, `${anchor.id} snapshot orientation mismatch.`);
+    assertCondition(anchor.rotation === expected.rot, `${anchor.id} snapshot rotation mismatch.`);
+  }
+
+  const passAnchorById = new Map(passAnchors.map((anchor) => [anchor.id, anchor]));
+  for (const passAnchor of passAnchors) {
+    const targetRect = await page
+      .locator(`[data-pass-id='${passAnchor.id}'][data-arrow-direction]`)
+      .boundingBox();
+    assertCondition(Boolean(targetRect), `Missing bounding box for pass target ${passAnchor.id}.`);
+    compareRectWithinOnePixel(
+      {
+        x: targetRect?.x ?? 0,
+        y: targetRect?.y ?? 0,
+        width: targetRect?.width ?? 0,
+        height: targetRect?.height ?? 0
+      },
+      {
+        x: passAnchor.bbox_px.x,
+        y: passAnchor.bbox_px.y,
+        width: passAnchor.bbox_px.w,
+        height: passAnchor.bbox_px.h
+      },
+      `Pass target ${passAnchor.id}`
     );
-    assertCondition(
-      anchor.slot_rotation_deg === expected.rot,
-      `${anchor.id} snapshot rotation mismatch.`
+
+    const snapshotPassAnchor = snapshot.passing.anchors.find(
+      (anchor) => anchor.id === passAnchor.id
     );
-    assertCondition(
-      Math.abs(anchor.screen_bbox.x - anchor.bbox_px.x) <= 1 &&
-        Math.abs(anchor.screen_bbox.y - anchor.bbox_px.y) <= 1 &&
-        Math.abs(anchor.screen_bbox.width - anchor.bbox_px.w) <= 1 &&
-        Math.abs(anchor.screen_bbox.height - anchor.bbox_px.h) <= 1,
-      `${anchor.id} screen bbox diverged from design bbox at 1536x1024.`
+    assertCondition(Boolean(snapshotPassAnchor), `Snapshot missing ${passAnchor.id}.`);
+    const expected = passAnchorById.get(passAnchor.id);
+    assertCondition(Boolean(expected), `Pass fixture missing ${passAnchor.id}.`);
+    compareRectWithinOnePixel(
+      snapshotPassAnchor!.screen_bbox,
+      {
+        x: passAnchor.bbox_px.x,
+        y: passAnchor.bbox_px.y,
+        width: passAnchor.bbox_px.w,
+        height: passAnchor.bbox_px.h
+      },
+      `Snapshot pass anchor ${passAnchor.id}`
+    );
+  }
+
+  const sampleCardChecks = ["south_04", "south_14", "north_01", "east_08", "west_14"];
+  for (const anchorId of sampleCardChecks) {
+    const anchor = cardAnchors.find((candidate) => candidate.id === anchorId);
+    assertCondition(Boolean(anchor), `Missing card fixture anchor ${anchorId}.`);
+    const zoneAnchors = cardAnchors.filter((candidate) => candidate.zone === anchor!.zone);
+    const zoneIndex = zoneAnchors.findIndex((candidate) => candidate.id === anchorId);
+    const node = page.locator(
+      `[data-zone='${anchor!.zone}'][data-card-id]`
+    ).nth(zoneIndex);
+    const rect = await node.boundingBox();
+    assertCondition(Boolean(rect), `Missing card node for ${anchorId}.`);
+    compareRectWithinOnePixel(
+      {
+        x: rect?.x ?? 0,
+        y: rect?.y ?? 0,
+        width: rect?.width ?? 0,
+        height: rect?.height ?? 0
+      },
+      {
+        x: anchor!.bbox_px.x,
+        y: anchor!.bbox_px.y,
+        width: anchor!.bbox_px.w,
+        height: anchor!.bbox_px.h
+      },
+      `Card ${anchorId}`
     );
   }
 
@@ -517,12 +665,14 @@ async function verifyAtDesignViewport(
 }
 
 async function verifyAtResponsiveViewport(
-  page: import("playwright").Page
+  page: import("playwright").Page,
+  cardAnchors: CardAnchor[]
 ) {
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.waitForTimeout(250);
   const snapshot = await readSnapshot(page);
   const expectedScale = Math.min(1280 / 1536, 720 / 1024);
+
   assertCondition(
     Math.abs(snapshot.design.scale - expectedScale) < 0.0001,
     `Responsive scale mismatch: ${snapshot.design.scale} != ${expectedScale}.`
@@ -530,35 +680,68 @@ async function verifyAtResponsiveViewport(
 
   const tableRect = await page.locator("img[data-table-layer='plate']").boundingBox();
   assertCondition(Boolean(tableRect), "Table plate did not produce a bounding box.");
-  assertCondition(
-    Math.abs((tableRect?.width ?? 0) - 1536 * snapshot.design.scale) <= 1 &&
-      Math.abs((tableRect?.height ?? 0) - 1024 * snapshot.design.scale) <= 1,
-    "Responsive table size drifted away from contain-fit transform."
+  compareRectWithinOnePixel(
+    {
+      x: tableRect?.x ?? 0,
+      y: tableRect?.y ?? 0,
+      width: tableRect?.width ?? 0,
+      height: tableRect?.height ?? 0
+    },
+    snapshot.table.rendered,
+    "Responsive table"
   );
 
   const overlayRect = await page
     .locator("img[data-table-layer='passing-overlay']")
     .boundingBox();
   assertCondition(Boolean(overlayRect), "Passing overlay did not produce a bounding box.");
-  assertCondition(
-    Math.abs((overlayRect?.x ?? 0) - snapshot.design.offsetX) <= 1 &&
-      Math.abs((overlayRect?.y ?? 0) - snapshot.design.offsetY) <= 1,
-    "Responsive overlay drifted away from contain-fit offsets."
+  compareRectWithinOnePixel(
+    {
+      x: overlayRect?.x ?? 0,
+      y: overlayRect?.y ?? 0,
+      width: overlayRect?.width ?? 0,
+      height: overlayRect?.height ?? 0
+    },
+    snapshot.table.rendered,
+    "Responsive overlay"
   );
 
-  const sampleTargetRect = await page
-    .locator("[data-pass-id='east_pass_across']")
-    .boundingBox();
-  const sampleSnapshot = snapshot.passAnchors.find(
+  const responsivePass = snapshot.passing.anchors.find(
     (anchor) => anchor.id === "east_pass_across"
   );
-  assertCondition(Boolean(sampleTargetRect && sampleSnapshot), "Missing east_pass_across responsive data.");
+  const responsivePassRect = await page
+    .locator("[data-pass-id='east_pass_across'][data-arrow-direction]")
+    .boundingBox();
+  assertCondition(Boolean(responsivePass && responsivePassRect), "Missing responsive pass target.");
+  compareRectWithinOnePixel(
+    {
+      x: responsivePassRect?.x ?? 0,
+      y: responsivePassRect?.y ?? 0,
+      width: responsivePassRect?.width ?? 0,
+      height: responsivePassRect?.height ?? 0
+    },
+    responsivePass!.screen_bbox,
+    "Responsive east_pass_across"
+  );
+
   assertCondition(
-    Math.abs((sampleTargetRect?.x ?? 0) - (sampleSnapshot?.screen_bbox.x ?? 0)) <= 1 &&
-      Math.abs((sampleTargetRect?.y ?? 0) - (sampleSnapshot?.screen_bbox.y ?? 0)) <= 1 &&
-      Math.abs((sampleTargetRect?.width ?? 0) - (sampleSnapshot?.screen_bbox.width ?? 0)) <= 1 &&
-      Math.abs((sampleTargetRect?.height ?? 0) - (sampleSnapshot?.screen_bbox.height ?? 0)) <= 1,
-    "Responsive pass target drifted away from shared transform."
+    Boolean(cardAnchors.find((anchor) => anchor.id === "south_04")),
+    "Missing south_04 card anchor."
+  );
+  const cardSnapshotAnchor = snapshot.cardLayout.anchors.find(
+    (anchor) => anchor.id === "south_04"
+  );
+  const cardRect = await page.locator("[data-zone='south_hand'][data-card-id]").nth(3).boundingBox();
+  assertCondition(Boolean(cardSnapshotAnchor && cardRect), "Missing responsive south hand card.");
+  compareRectWithinOnePixel(
+    {
+      x: cardRect?.x ?? 0,
+      y: cardRect?.y ?? 0,
+      width: cardRect?.width ?? 0,
+      height: cardRect?.height ?? 0
+    },
+    cardSnapshotAnchor!.screen_bbox,
+    "Responsive south_04"
   );
 }
 
@@ -571,6 +754,15 @@ async function captureAltTable(options: Options) {
   mkdirSync(path.dirname(metadataPath), { recursive: true });
   mkdirSync(path.dirname(snapshotPath), { recursive: true });
 
+  const handFixture = readFixtureJson<{ anchors: CardAnchor[] }>(
+    repoRoot,
+    "apps/web/public/tv7/h/a.json"
+  );
+  const passFixture = readFixtureJson<{ anchors: PassAnchor[] }>(
+    repoRoot,
+    "apps/web/public/tv7/p/a.json"
+  );
+
   let devServer:
     | {
         child: ChildProcessWithoutNullStreams;
@@ -579,11 +771,15 @@ async function captureAltTable(options: Options) {
     | undefined;
 
   const targetUrl = options.url ?? `http://127.0.0.1:${options.devPort}/?table=alt`;
+  const targetOrigin = new URL(targetUrl).origin;
 
   try {
     if (options.startDevWeb) {
-      devServer = startDevServer(repoRoot, options.devPort);
-      await waitForHttpOk(`http://127.0.0.1:${options.devPort}/`, options.waitTimeoutMs);
+      const alreadyRunning = await canReachHttpOk(targetOrigin, 2_500);
+      if (!alreadyRunning) {
+        devServer = startDevServer(repoRoot, options.devPort);
+        await waitForHttpOk(targetOrigin, options.waitTimeoutMs);
+      }
     }
 
     const browserPath = resolveBrowserPath(options.browserPath);
@@ -606,29 +802,24 @@ async function captureAltTable(options: Options) {
       });
       await delay(options.settleMs);
 
-      const designViewportSnapshot = await verifyAtDesignViewport(
+      const designSnapshot = await verifyAtDesignViewport(
         page,
-        options.waitTimeoutMs
+        options.waitTimeoutMs,
+        handFixture.anchors,
+        passFixture.anchors
       );
-      await verifyAtResponsiveViewport(page);
+      await verifyAtResponsiveViewport(page, handFixture.anchors);
 
       await page.screenshot({
         path: outputPath,
         fullPage: true
       });
 
-      writeFileSync(snapshotPath, JSON.stringify(designViewportSnapshot, null, 2));
+      writeFileSync(snapshotPath, JSON.stringify(designSnapshot, null, 2));
 
       const guard = spawnSync(
         "node",
-        [
-          "tools/tv6/check.mjs",
-          "apps/web/public/tv6",
-          "--lock",
-          "tools/tv6/lock.json",
-          "--snap",
-          snapshotPath
-        ],
+        ["apps/web/public/tv7/x/check.mjs", "apps/web/public/tv7", "--snap", snapshotPath],
         {
           cwd: repoRoot,
           encoding: "utf8",
@@ -638,7 +829,7 @@ async function captureAltTable(options: Options) {
 
       if (guard.status !== 0) {
         throw new Error(
-          `tv6 guard failed for browser snapshot.\n${guard.stdout}\n${guard.stderr}`.trim()
+          `tv7 guard failed for browser snapshot.\n${guard.stdout}\n${guard.stderr}`.trim()
         );
       }
 
@@ -657,8 +848,8 @@ async function captureAltTable(options: Options) {
           height: options.height
         },
         guardStdout: guard.stdout.trim(),
-        phase: designViewportSnapshot.phase,
-        handCounts: designViewportSnapshot.handCounts
+        phase: designSnapshot.phase,
+        deal: designSnapshot.deal
       };
 
       writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));

@@ -15,36 +15,54 @@ type FetchJsonResponse = {
   json: () => Promise<unknown>;
 };
 
-type AltSnapshot = {
-  tablePlate: string;
-  passingOverlay: string;
-  anchorJson: string;
+type Tv7Snapshot = {
+  assetRoot: string;
   phase: string;
-  design: {
-    scale: number;
-    offsetX: number;
-    offsetY: number;
-    width: number;
-    height: number;
+  table: {
+    src: string;
+    rendered: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      scale: number;
+    };
   };
-  handCounts: Record<string, number>;
-  anchors: Array<{
-    id: string;
-    arrow_direction: string;
-    orientation: string;
-    rotation: number;
-    bbox_px: { x: number; y: number; w: number; h: number };
-    screen_bbox: { x: number; y: number; width: number; height: number };
-  }>;
+  cardLayout: {
+    src: string;
+    layoutSource: string;
+    anchors: Array<{
+      id: string;
+      zone: string;
+      screen_bbox: { x: number; y: number; width: number; height: number };
+    }>;
+  };
+  passing: {
+    overlaySrc: string;
+    anchors: Array<{
+      id: string;
+      arrow_direction: string;
+      orientation: string;
+      rotation: number;
+      screen_bbox: { x: number; y: number; width: number; height: number };
+    }>;
+  };
   cards: {
     usingImageAssets: boolean;
     placeholders: boolean;
+    layoutSource: string;
+    bySeat: Record<string, number>;
     sampleSrcs: string[];
+  };
+  deal: {
+    phase: string;
+    counts: Record<string, number>;
+    history: string[];
   };
 };
 
-const anchorPayload = JSON.parse(
-  readFileSync(resolve("apps/web/public/tv6/p/a.json"), "utf8")
+const passPayload = JSON.parse(
+  readFileSync(resolve("apps/web/public/tv7/p/a.json"), "utf8")
 ) as {
   anchors: Array<{
     id: string;
@@ -55,8 +73,18 @@ const anchorPayload = JSON.parse(
   }>;
 };
 
+const handPayload = JSON.parse(
+  readFileSync(resolve("apps/web/public/tv7/h/a.json"), "utf8")
+) as {
+  anchors: Array<{
+    id: string;
+    zone: string;
+    bbox_px: { x: number; y: number; w: number; h: number };
+  }>;
+};
+
 const cardMapPayload = JSON.parse(
-  readFileSync(resolve("apps/web/public/tv6/c/map.json"), "utf8")
+  readFileSync(resolve("apps/web/public/tv7/c/map.json"), "utf8")
 ) as Record<string, unknown>;
 
 const expectedPassMap = {
@@ -89,14 +117,14 @@ class MockImage {
     this.#src = value;
     const pathname = new URL(value, "http://localhost").pathname;
 
-    if (pathname === "/tv6/t/plate.png" || pathname === "/tv6/p/o.png") {
+    if (pathname === "/tv7/t/plate.png" || pathname === "/tv7/p/o.png") {
       this.naturalWidth = 1536;
       this.naturalHeight = 1024;
       queueMicrotask(() => this.onload?.());
       return;
     }
 
-    if (pathname.startsWith("/tv6/c/")) {
+    if (pathname.startsWith("/tv7/c/")) {
       this.naturalWidth = 240;
       this.naturalHeight = 390;
       queueMicrotask(() => this.onload?.());
@@ -162,7 +190,7 @@ beforeEach(() => {
     configurable: true,
     value: 1024
   });
-  Object.defineProperty(window, "__TICHU_ALT_SNAPSHOT__", {
+  Object.defineProperty(window, "__tichuV7Snapshot", {
     configurable: true,
     writable: true,
     value: null
@@ -172,15 +200,23 @@ beforeEach(() => {
     "fetch",
     vi.fn(async (input: string | URL): Promise<FetchJsonResponse> => {
       const pathname = new URL(String(input), "http://localhost").pathname;
-      if (pathname === "/tv6/p/a.json") {
+      if (pathname === "/tv7/p/a.json") {
         return {
           ok: true,
           status: 200,
-          json: async () => anchorPayload
+          json: async () => passPayload
         };
       }
 
-      if (pathname === "/tv6/c/map.json") {
+      if (pathname === "/tv7/h/a.json") {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => handPayload
+        };
+      }
+
+      if (pathname === "/tv7/c/map.json") {
         return {
           ok: true,
           status: 200,
@@ -205,7 +241,7 @@ afterEach(() => {
 });
 
 describe("AltTable3DRoute", () => {
-  it("renders the tv6 table flow with dynamic pass targets, image cards, and runtime snapshot data", async () => {
+  it("renders the tv7 table flow with authored card anchors, dynamic pass targets, and a runtime snapshot", async () => {
     const { AltTable3DRoute } = await import(
       "../../apps/web/src/alt-table-3d/AltTable3DRoute"
     );
@@ -217,16 +253,31 @@ describe("AltTable3DRoute", () => {
       "img[data-table-layer='plate']"
     ) as HTMLImageElement | null;
     expect(tableImage).not.toBeNull();
-    expect(tableImage?.getAttribute("src")).toBe("/tv6/t/plate.png");
+    expect(tableImage?.getAttribute("src")).toBe("/tv7/t/plate.png");
 
+    expect(queryByText(view.container, "ready")).toBeTruthy();
+    expect(view.container.querySelectorAll("[data-zone='south_hand']")).toHaveLength(0);
+    expect(view.container.querySelectorAll("[data-zone='north_hand']")).toHaveLength(0);
+
+    await advance(250);
     expect(queryByText(view.container, "deal8")).toBeTruthy();
-    expect(view.container.querySelectorAll("[data-seat-hand='north'] img")).toHaveLength(8);
-    expect(view.container.querySelectorAll("[data-seat-hand='east'] img")).toHaveLength(8);
-    expect(view.container.querySelectorAll("[data-seat-hand='south'] img")).toHaveLength(8);
-    expect(view.container.querySelectorAll("[data-seat-hand='west'] img")).toHaveLength(8);
+    expect(view.container.querySelectorAll("[data-zone='north_hand']")).toHaveLength(8);
+    expect(view.container.querySelectorAll("[data-zone='east_hand']")).toHaveLength(8);
+    expect(view.container.querySelectorAll("[data-zone='south_hand']")).toHaveLength(8);
+    expect(view.container.querySelectorAll("[data-zone='west_hand']")).toHaveLength(8);
 
-    await advance(1400);
-    expect(queryByText(view.container, "gt")).toBeTruthy();
+    const southDeal8Cards = Array.from(
+      view.container.querySelectorAll("[data-zone='south_hand'][data-card-id]")
+    ) as HTMLElement[];
+    expect(
+      southDeal8Cards.every(
+        (card) => card.getAttribute("data-layout-source") === "prototype_layer"
+      )
+    ).toBe(true);
+    expect(view.container.querySelector("[data-seat-hand='south']")).toBeNull();
+
+    await advance(1200);
+    expect(queryByText(view.container, "grand_tichu")).toBeTruthy();
 
     const skipGtButton = view.container.querySelector(
       "button[data-alt-action='skip-gt']"
@@ -237,12 +288,24 @@ describe("AltTable3DRoute", () => {
     await flushUi();
     expect(queryByText(view.container, "deal6")).toBeTruthy();
 
-    await advance(1400);
+    await advance(1200);
     expect(queryByText(view.container, "passing")).toBeTruthy();
     expect(view.container.querySelector("img[data-table-layer='passing-overlay']")).not.toBeNull();
+    expect(view.container.querySelectorAll("[data-zone='north_hand']")).toHaveLength(14);
+    expect(view.container.querySelectorAll("[data-zone='east_hand']")).toHaveLength(14);
+    expect(view.container.querySelectorAll("[data-zone='south_hand']")).toHaveLength(14);
+    expect(view.container.querySelectorAll("[data-zone='west_hand']")).toHaveLength(14);
+
+    const allCardImages = Array.from(
+      view.container.querySelectorAll("[data-card-id] img")
+    ) as HTMLImageElement[];
+    expect(allCardImages.length).toBeGreaterThan(0);
+    expect(
+      allCardImages.every((image) => image.getAttribute("src")?.startsWith("/tv7/c/"))
+    ).toBe(true);
 
     const passTargets = Array.from(
-      view.container.querySelectorAll("[data-pass-id]")
+      view.container.querySelectorAll("[data-pass-id][data-arrow-direction]")
     ) as HTMLElement[];
     expect(passTargets).toHaveLength(12);
 
@@ -255,25 +318,47 @@ describe("AltTable3DRoute", () => {
       expect(Number(target.dataset.rotation)).toBe(expected.rot);
     }
 
+    const eastAcross = view.container.querySelector(
+      "[data-pass-id='east_pass_across'][data-arrow-direction]"
+    ) as HTMLElement | null;
+    const eastNorth = view.container.querySelector(
+      "[data-pass-id='east_pass_north'][data-arrow-direction]"
+    ) as HTMLElement | null;
+    const westAcross = view.container.querySelector(
+      "[data-pass-id='west_pass_across'][data-arrow-direction]"
+    ) as HTMLElement | null;
+    const westSouth = view.container.querySelector(
+      "[data-pass-id='west_pass_south'][data-arrow-direction]"
+    ) as HTMLElement | null;
+    expect(Number(eastAcross?.dataset.rotation)).toBe(90);
+    expect(Number(westAcross?.dataset.rotation)).toBe(90);
+    expect(Number(eastNorth?.dataset.rotation)).toBe(-90);
+    expect(Number(westSouth?.dataset.rotation)).toBe(90);
+
+    const confirmPassButton = view.container.querySelector(
+      "button[data-alt-action='confirm-pass']"
+    ) as HTMLButtonElement | null;
+    expect(confirmPassButton?.disabled).toBe(true);
+
     const southCards = Array.from(
-      view.container.querySelectorAll("[data-seat-hand='south'] button[data-card-id]")
+      view.container.querySelectorAll("[data-zone='south_hand'][data-card-id]")
     ) as HTMLButtonElement[];
-    expect(southCards.length).toBeGreaterThanOrEqual(3);
     await clickElement(southCards[0]);
     await clickElement(southCards[1]);
     await clickElement(southCards[2]);
     await flushUi();
 
     const southTargets = [
-      view.container.querySelector("[data-pass-id='south_pass_left']"),
-      view.container.querySelector("[data-pass-id='south_pass_across']"),
-      view.container.querySelector("[data-pass-id='south_pass_right']")
+      view.container.querySelector("[data-pass-id='south_pass_left'][data-arrow-direction]"),
+      view.container.querySelector("[data-pass-id='south_pass_across'][data-arrow-direction]"),
+      view.container.querySelector("[data-pass-id='south_pass_right'][data-arrow-direction]")
     ] as HTMLButtonElement[];
     await clickElement(southTargets[0]);
     await clickElement(southTargets[1]);
     await clickElement(southTargets[2]);
     await flushUi();
 
+    expect(confirmPassButton?.disabled).toBe(false);
     expect(
       view.container.querySelectorAll(
         "[data-pass-id^='south_pass_'] [data-pass-card-img='true']"
@@ -291,52 +376,54 @@ describe("AltTable3DRoute", () => {
       view.container.querySelectorAll("[data-pass-id] [data-pass-card-img='true']")
     ).toHaveLength(12);
 
-    const confirmPassButton = view.container.querySelector(
-      "button[data-alt-action='confirm-pass']"
-    ) as HTMLButtonElement | null;
-    expect(confirmPassButton).not.toBeNull();
-    await clickElement(confirmPassButton);
+    const snapshotFactory = (window as typeof window & {
+      __tichuV7Snapshot?: () => Tv7Snapshot;
+    }).__tichuV7Snapshot;
+    expect(typeof snapshotFactory).toBe("function");
 
-    await flushUi();
-    expect(queryByText(view.container, "passed")).toBeTruthy();
-    expect(view.container.querySelector("img[data-table-layer='passing-overlay']")).toBeNull();
-
-    const snapshot = (window as typeof window & {
-      __TICHU_ALT_SNAPSHOT__?: AltSnapshot;
-    }).__TICHU_ALT_SNAPSHOT__;
-    expect(snapshot?.tablePlate).toBe("/tv6/t/plate.png");
-    expect(snapshot?.passingOverlay).toBe("/tv6/p/o.png");
-    expect(snapshot?.anchorJson).toBe("/tv6/p/a.json");
-    expect(snapshot?.design.width).toBe(1536);
-    expect(snapshot?.design.height).toBe(1024);
-    expect(snapshot?.handCounts.south).toBe(14);
-    expect(snapshot?.anchors).toHaveLength(12);
+    const snapshot = snapshotFactory?.();
+    expect(snapshot?.assetRoot).toBe("/tv7");
+    expect(snapshot?.table.src).toBe("/tv7/t/plate.png");
+    expect(snapshot?.cardLayout.src).toBe("/tv7/h/a.json");
+    expect(snapshot?.cardLayout.layoutSource).toBe("prototype_layer");
+    expect(snapshot?.passing.overlaySrc).toBe("/tv7/p/o.png");
+    expect(snapshot?.phase).toBe("passing");
     expect(snapshot?.cards.usingImageAssets).toBe(true);
     expect(snapshot?.cards.placeholders).toBe(false);
-    expect(snapshot?.cards.sampleSrcs.every((src) => src.startsWith("/tv6/c/"))).toBe(
+    expect(snapshot?.deal.counts.north).toBe(14);
+    expect(snapshot?.deal.counts.east).toBe(14);
+    expect(snapshot?.deal.counts.south).toBe(14);
+    expect(snapshot?.deal.counts.west).toBe(14);
+    expect(snapshot?.deal.counts.deckRemaining).toBe(0);
+    expect(snapshot?.passing.anchors).toHaveLength(12);
+    expect(snapshot?.cardLayout.anchors).toHaveLength(58);
+    expect(snapshot?.cards.sampleSrcs.every((src) => src.startsWith("/tv7/c/"))).toBe(
       true
     );
 
-    const snapshotAnchor = snapshot?.anchors.find(
+    const snapshotPass = snapshot?.passing.anchors.find(
       (anchor) => anchor.id === "east_pass_across"
     );
-    expect(snapshotAnchor?.arrow_direction).toBe("west");
-    expect(snapshotAnchor?.orientation).toBe("landscape");
-    expect(snapshotAnchor?.rotation).toBe(90);
+    expect(snapshotPass?.arrow_direction).toBe("west");
+    expect(snapshotPass?.orientation).toBe("landscape");
+    expect(snapshotPass?.rotation).toBe(90);
+    expect(snapshotPass?.screen_bbox.x).toBeCloseTo(
+      passPayload.anchors.find((anchor) => anchor.id === "east_pass_across")?.bbox_px.x ?? 0,
+      0
+    );
 
-    const designAnchor = anchorPayload.anchors.find(
-      (anchor) => anchor.id === "east_pass_across"
+    const snapshotCard = snapshot?.cardLayout.anchors.find(
+      (anchor) => anchor.id === "south_01"
     );
-    expect(snapshotAnchor?.screen_bbox.x).toBeCloseTo(designAnchor?.bbox_px.x ?? 0, 0);
-    expect(snapshotAnchor?.screen_bbox.y).toBeCloseTo(designAnchor?.bbox_px.y ?? 0, 0);
-    expect(snapshotAnchor?.screen_bbox.width).toBeCloseTo(
-      designAnchor?.bbox_px.w ?? 0,
+    expect(snapshotCard?.screen_bbox.x).toBeCloseTo(
+      handPayload.anchors.find((anchor) => anchor.id === "south_01")?.bbox_px.x ?? 0,
       0
     );
-    expect(snapshotAnchor?.screen_bbox.height).toBeCloseTo(
-      designAnchor?.bbox_px.h ?? 0,
-      0
-    );
+
+    await clickElement(confirmPassButton);
+    await flushUi();
+    expect(queryByText(view.container, "passed")).toBeTruthy();
+    expect(view.container.querySelector("img[data-table-layer='passing-overlay']")).toBeNull();
 
     view.unmount();
   });

@@ -14,6 +14,38 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 
 ## Entries
 
+### 2026-05-26 - ALT table must restart clean on the tv7 authored card-layer pack
+
+- Prompt Signal: The latest ALT-table prompt replaced the tv6 contract with a
+  new `tv7` asset pack already committed under `apps/web/public/tv7/`. The
+  prompt explicitly required a clean rebuild that keeps the ALT table as a 2D
+  layered scene, uses `/tv7/t/plate.png` as the base plate, `/tv7/p/o.png` as
+  the passing overlay, `/tv7/p/a.json` as the only passing-anchor source, and
+  `/tv7/h/a.json` as the only hand/deck/discard anchor source. The key visual
+  correction was that gameplay cards must stop rendering as generic rows and
+  instead be positioned from the authored prototype-layer anchors exactly like
+  pass targets.
+- Interpreted Requirement: Issue
+  [#84](https://github.com/NeonButrfly/tichuml/issues/84) is the canonical
+  tracker for the tv7 ALT rebuild. The `?table=alt` route must render only the
+  authored `/tv7` image layers, use one shared 1536x1024 contain-fit transform
+  for the plate, pass targets, and card anchors, deal through
+  `ready -> deal8 -> grand_tichu -> deal6 -> passing -> passed`, expose
+  `window.__tichuV7Snapshot`, and fail fast if assets, pass locks, card anchors,
+  or image-card rendering drift from the committed tv7 pack.
+- Affected Systems: `apps/web/public/tv7/`,
+  `apps/web/src/alt-table-3d/AltTable3DRoute.tsx`,
+  `apps/web/src/alt-table-3d/AltTichuTable3D.tsx`,
+  `apps/web/src/alt-table-3d/tv7-runtime.ts`,
+  `apps/web/src/alt-table-3d/alt-table-3d.css`,
+  `scripts/browser-verify.ts`,
+  `tests/integration/alternate-table-view.test.ts`,
+  `tests/integration/alternate-table-route-guards.test.ts`,
+  `tests/integration/tv7-alt-table-assets.test.ts`.
+- Linked GitHub Issue: [#84](https://github.com/NeonButrfly/tichuml/issues/84)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.
+
 ### 2026-05-26 - ALT table must restart as a strict tv6 2D layered scene
 
 - Prompt Signal: The latest ALT-table prompt explicitly rejected continuing the
