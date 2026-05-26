@@ -15,11 +15,12 @@ export function AltTichuTable3D() {
         gl={{ antialias: true }}
         onCreated={({ gl }) => {
           gl.toneMapping = ACESFilmicToneMapping;
-          gl.toneMappingExposure = 1.26;
+          gl.toneMappingExposure = 1.56;
           gl.setClearColor(new Color(ALT_TABLE_BACKGROUND));
         }}
       >
         <color attach="background" args={[ALT_TABLE_BACKGROUND]} />
+        <fog attach="fog" args={[ALT_TABLE_BACKGROUND, 10, 22]} />
         <CameraRig />
         <LightingRig />
         <EmptyPhotorealisticTableScene />

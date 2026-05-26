@@ -29,12 +29,12 @@
       rgba(255, 190, 90, 0.06),
       transparent 22%,
       transparent 75%,
-      rgba(20, 5, 0, 0.18)
+      rgba(20, 5, 0, 0.1)
     ),
     radial-gradient(
       circle at 50% 44%,
       rgba(0, 0, 0, 0) 0%,
       rgba(0, 0, 0, 0.04) 48%,
-      rgba(0, 0, 0, 0.42) 100%
+      rgba(0, 0, 0, 0.24) 100%
     );
 }
