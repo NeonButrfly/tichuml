@@ -2,39 +2,186 @@
   position: fixed;
   inset: 0;
   overflow: hidden;
-  background: #070301;
+  background:
+    radial-gradient(circle at top, rgba(16, 48, 30, 0.38), transparent 32%),
+    linear-gradient(180deg, #051109 0%, #020703 100%);
 }
 
-.alt-table-3d-shell {
+.alt-table-3d-route--loading {
+  display: grid;
+  place-items: center;
+}
+
+.alt-table-loading {
+  display: grid;
+  gap: 0.5rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid rgba(201, 167, 105, 0.4);
+  border-radius: 1rem;
+  background: rgba(5, 17, 9, 0.82);
+  color: #eef6eb;
+}
+
+.alt-table-stage {
   position: relative;
   height: 100vh;
   width: 100vw;
   overflow: hidden;
-  background: #070301;
 }
 
-.alt-table-3d-shell canvas {
+.alt-table-board {
+  position: absolute;
+  overflow: hidden;
+  box-shadow: 0 18px 54px rgba(0, 0, 0, 0.45);
+}
+
+.alt-table-board__plate,
+.alt-table-board__overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+}
+
+.alt-table-status {
+  position: fixed;
+  z-index: 12;
+  left: 1rem;
+  top: 1rem;
+  display: grid;
+  gap: 0.55rem;
+  min-width: 16rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid rgba(201, 167, 105, 0.42);
+  border-radius: 1rem;
+  background: rgba(4, 12, 8, 0.84);
+  color: #f4e7c7;
+  backdrop-filter: blur(8px);
+}
+
+.alt-table-status__header,
+.alt-table-status__counts,
+.alt-table-status__flow,
+.alt-table-status__selection,
+.alt-table-status__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.7rem;
+  align-items: center;
+}
+
+.alt-table-status__header {
+  justify-content: space-between;
+}
+
+.alt-table-status__header span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 4.2rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  background: rgba(201, 167, 105, 0.2);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.76rem;
+}
+
+.alt-table-status button {
+  appearance: none;
+  border: 1px solid rgba(214, 182, 107, 0.5);
+  border-radius: 999px;
+  padding: 0.5rem 0.9rem;
+  background: rgba(197, 154, 64, 0.18);
+  color: #fff5d8;
+  cursor: pointer;
+}
+
+.alt-table-status button:hover {
+  background: rgba(197, 154, 64, 0.32);
+}
+
+.alt-table-seat {
+  position: absolute;
+}
+
+.alt-table-seat--row {
+  height: 11rem;
+}
+
+.alt-table-seat--column {
+  width: 7rem;
+}
+
+.alt-table-card-button {
+  position: absolute;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  transition:
+    transform 120ms ease,
+    filter 120ms ease;
+}
+
+.alt-table-card-button--selected {
+  transform: translateY(-16px);
+  filter: drop-shadow(0 12px 20px rgba(0, 0, 0, 0.38));
+}
+
+.alt-table-card-image,
+.alt-table-pass-card__image {
   display: block;
   width: 100%;
   height: 100%;
+  object-fit: contain;
+  pointer-events: none;
 }
 
-.alt-table-3d__vignette {
+.alt-table-pass-target {
   position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background:
-    linear-gradient(
-      to bottom,
-      rgba(255, 190, 90, 0.06),
-      transparent 22%,
-      transparent 75%,
-      rgba(20, 5, 0, 0.1)
-    ),
-    radial-gradient(
-      circle at 50% 44%,
-      rgba(0, 0, 0, 0) 0%,
-      rgba(0, 0, 0, 0.04) 48%,
-      rgba(0, 0, 0, 0.24) 100%
-    );
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  background: rgba(211, 170, 74, 0.08);
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.alt-table-pass-target--hovered,
+.alt-table-pass-target:hover {
+  background: rgba(234, 194, 98, 0.2);
+  box-shadow: inset 0 0 0 2px rgba(253, 226, 144, 0.65);
+}
+
+.alt-table-pass-target--filled {
+  background: rgba(255, 241, 181, 0.08);
+}
+
+.alt-table-pass-target__hint {
+  padding: 0.2rem 0.35rem;
+  border-radius: 0.35rem;
+  background: rgba(0, 0, 0, 0.36);
+  color: rgba(255, 245, 216, 0.78);
+  font-size: 0.65rem;
+  text-align: center;
+}
+
+.alt-table-pass-card {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+@media (max-width: 900px) {
+  .alt-table-status {
+    left: 0.75rem;
+    right: 0.75rem;
+    min-width: auto;
+  }
 }

@@ -14,6 +14,41 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 
 ## Entries
 
+### 2026-05-26 - ALT table must restart as a strict tv6 2D layered scene
+
+- Prompt Signal: The latest ALT-table prompt explicitly rejected continuing the
+  prior 3D/procedural direction and required a clean restart on the short `tv6`
+  asset pack already committed under `apps/web/public/tv6/`. The prompt locked
+  the production table image to `/tv6/t/plate.png`, the production passing
+  overlay to `/tv6/p/o.png`, the authoritative anchor JSON to `/tv6/p/a.json`,
+  one shared 1536x1024 contain-fit transform, a deterministic deal8 -> Grand
+  Tichu -> deal6 -> passing -> passed demo flow, runtime snapshot export, and
+  strict failure if any debug/old/procedural table path is used. It also
+  re-locked east and west across lanes as horizontal while east and west north
+  and south lanes remain vertical.
+- Interpreted Requirement: Issue
+  [#81](https://github.com/NeonButrfly/tichuml/issues/81) remains the
+  canonical ALT-table tracker, but its active implementation direction is now a
+  2D image-layered `/tv6` route rather than a React Three Fiber table. The ALT
+  route must render only the authored tv6 table/card assets, generate 12
+  passing targets directly from `p/a.json`, preserve exact lane
+  direction/orientation/rotation truth, expose `window.__TICHU_ALT_SNAPSHOT__`,
+  keep the route reachable through `?table=alt`, and bypass backend entropy so
+  the ALT demo stays inspectable even when the normal startup backend is down.
+- Affected Systems: `apps/web/public/tv6/`, `tools/tv6/`,
+  `apps/web/src/alt-table-3d/AltTable3DRoute.tsx`,
+  `apps/web/src/alt-table-3d/AltTichuTable3D.tsx`,
+  `apps/web/src/alt-table-3d/tv6-runtime.ts`,
+  `apps/web/src/alt-table-3d/alt-table-3d.css`,
+  `apps/web/src/App.tsx`,
+  `scripts/browser-verify.ts`,
+  `tests/integration/alternate-table-view.test.ts`,
+  `tests/integration/alternate-table-route-guards.test.ts`,
+  `tests/integration/tv6-alt-table-assets.test.ts`.
+- Linked GitHub Issue: [#81](https://github.com/NeonButrfly/tichuml/issues/81)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.
+
 ### 2026-05-25 - Live Tichu table must adopt the authored v5 direction-locked asset pack exactly
 
 - Prompt Signal: The latest table prompt required the repo to integrate the

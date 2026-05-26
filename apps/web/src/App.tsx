@@ -705,15 +705,19 @@ export function App() {
       roundIndex: number,
       carryState?: RoundCarryState
     ): Promise<RoundSession> => {
-      if (
-        import.meta.env.DEV &&
-        typeof window !== "undefined" &&
-        getAlternateTablePreviewModeFromSearch(window.location.search) === "pass-select"
-      ) {
-        return createAlternatePassSelectPreviewSession({
-          roundIndex,
-          carryState
-        });
+      if (typeof window !== "undefined") {
+        const search = window.location.search;
+        const alternatePreviewRequested =
+          getPlayerTableVariantFromSearch(search) === "alternate" ||
+          (import.meta.env.DEV &&
+            getAlternateTablePreviewModeFromSearch(search) === "pass-select");
+
+        if (alternatePreviewRequested) {
+          return createAlternatePassSelectPreviewSession({
+            roundIndex,
+            carryState
+          });
+        }
       }
 
       const generatedSeed = await generateSeedWithEntropy({
