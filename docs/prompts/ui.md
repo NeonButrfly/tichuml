@@ -14,6 +14,39 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 
 ## Entries
 
+### 2026-05-25 - Live Tichu table must adopt the authored v5 direction-locked asset pack exactly
+
+- Prompt Signal: The latest table prompt required the repo to integrate the
+  `tichu_table_v5_direction_locked_update` asset set as the reference-truth
+  live table. The prompt explicitly required the no-red table plate, the locked
+  v5 passing anchors and overlays, the wuxia per-card PNG art, one shared
+  1536x1024 contain-fit transform, and no redesign or alternate geometry. A
+  follow-up clarification locked the east and west pass cards so the north and
+  south lanes stay vertical while the across lanes stay horizontal.
+- Interpreted Requirement: Issue
+  [#76](https://github.com/NeonButrfly/tichuml/issues/76) remains the
+  canonical live-table tracking issue for this authored-asset integration,
+  with issue [#28](https://github.com/NeonButrfly/tichuml/issues/28) still
+  relevant background for directional pass-lane rendering. The normal gameplay
+  table must switch to the v5 direction-locked asset pack without changing the
+  underlying table geometry: production must use
+  `table_plate_no_red_sample_guides_1536x1024.png`, passing overlays must only
+  appear during exchange, the authoritative anchor JSON must drive all 12 lane
+  hit/visual regions, east/west north-south lanes must render vertically,
+  east/west across lanes must render horizontally, debug overlays must remain
+  development-only, and the deck must use the wuxia PNG card faces and backs
+  instead of placeholder art.
+- Affected Systems: `apps/web/src/assets/tichu_table_v5_direction_locked_update/`,
+  `apps/web/src/tichu-table-assets.ts`,
+  `apps/web/src/game-table-views.tsx`,
+  `apps/web/src/styles.css`,
+  `tests/integration/tichu-table-assets.test.ts`,
+  `tests/integration/normal-pass-anchor-render.test.ts`,
+  viewport/layout validation, and exchange-phase pass-lane rendering.
+- Linked GitHub Issue: [#76](https://github.com/NeonButrfly/tichuml/issues/76)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.
+
 ### 2026-05-24 - ALT route should first ship as an empty photorealistic 3D table shell
 
 - Prompt Signal: The latest ALT-table prompt narrowed the scope on purpose and

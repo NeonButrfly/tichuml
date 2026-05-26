@@ -1,0 +1,861 @@
+{
+  "name": "tichu_passing_phase_v5_direction_locked",
+  "version": "v5",
+  "viewport_px": {
+    "width": 1536,
+    "height": 1024,
+    "aspect_ratio": "3:2"
+  },
+  "base_table_plate_no_red_guides": "table_plate/table_plate_no_red_sample_guides_1536x1024.png",
+  "production_overlays": {
+    "slots_only": "passing_phase/v5_direction_locked/overlays/passing_lanes_v5_slots_only_gold_1536x1024.png",
+    "slots_with_arrows": "passing_phase/v5_direction_locked/overlays/passing_lanes_v5_slots_with_direction_arrows_gold_1536x1024.png",
+    "direction_only_transparent": "passing_phase/v5_direction_locked/overlays/passing_lanes_v5_direction_only_transparent_1536x1024.png"
+  },
+  "debug_overlays": {
+    "debug_labeled": "passing_phase/v5_direction_locked/overlays/passing_lanes_v5_debug_labeled_gold_1536x1024.png"
+  },
+  "hard_requirements": {
+    "do_not_bake_red_sample_boxes_into_table": true,
+    "red_boxes_are_not_assets": true,
+    "passing_phase_is_separate_overlay_and_anchor_set": true,
+    "slot_count": 12,
+    "slots_per_seat": 3,
+    "card_sized": true,
+    "requested_direction_map": {
+      "north": {
+        "left": "left",
+        "across": "south",
+        "right": "right"
+      },
+      "south": {
+        "left": "left",
+        "across": "north",
+        "right": "right"
+      },
+      "east": {
+        "north": "north",
+        "across": "west",
+        "south": "south"
+      },
+      "west": {
+        "north": "north",
+        "across": "east",
+        "south": "south"
+      }
+    },
+    "player_bottom_edge_alignment": {
+      "north": "up/top edge shared by all 3 north lanes",
+      "south": "down/bottom edge shared by all 3 south lanes",
+      "west": "left edge shared by all 3 west lanes",
+      "east": "right edge shared by all 3 east lanes"
+    },
+    "naming_policy": "seat_lane_role names are authoritative; do not infer left/right from camera/player rotation elsewhere."
+  },
+  "anchors": [
+    {
+      "id": "north_pass_left",
+      "seat": "north",
+      "lane_role": "left",
+      "arrow_direction": "left",
+      "compass_direction": "west",
+      "player_bottom_edge": "up",
+      "visual_orientation": "landscape",
+      "bbox_px": {
+        "x": 565,
+        "y": 170,
+        "width": 142,
+        "height": 78
+      },
+      "center_px": {
+        "x": 636.0,
+        "y": 209.0
+      },
+      "polygon_px": [
+        {
+          "x": 565,
+          "y": 170
+        },
+        {
+          "x": 707,
+          "y": 170
+        },
+        {
+          "x": 707,
+          "y": 248
+        },
+        {
+          "x": 565,
+          "y": 248
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.367839,
+        "y": 0.166016,
+        "width": 0.092448,
+        "height": 0.076172
+      },
+      "center_norm": {
+        "x": 0.414062,
+        "y": 0.204102
+      },
+      "polygon_norm": [
+        {
+          "x": 0.367839,
+          "y": 0.166016
+        },
+        {
+          "x": 0.460286,
+          "y": 0.166016
+        },
+        {
+          "x": 0.460286,
+          "y": 0.242188
+        },
+        {
+          "x": 0.367839,
+          "y": 0.242188
+        }
+      ],
+      "mask": "passing_phase/v5_direction_locked/masks/north_pass_left_mask.png",
+      "slot_overlay": "passing_phase/v5_direction_locked/slot_images/north_pass_left_slot_overlay.png"
+    },
+    {
+      "id": "north_pass_across",
+      "seat": "north",
+      "lane_role": "across",
+      "arrow_direction": "south",
+      "compass_direction": "south",
+      "player_bottom_edge": "up",
+      "visual_orientation": "portrait",
+      "bbox_px": {
+        "x": 729,
+        "y": 170,
+        "width": 78,
+        "height": 122
+      },
+      "center_px": {
+        "x": 768.0,
+        "y": 231.0
+      },
+      "polygon_px": [
+        {
+          "x": 729,
+          "y": 170
+        },
+        {
+          "x": 807,
+          "y": 170
+        },
+        {
+          "x": 807,
+          "y": 292
+        },
+        {
+          "x": 729,
+          "y": 292
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.474609,
+        "y": 0.166016,
+        "width": 0.050781,
+        "height": 0.119141
+      },
+      "center_norm": {
+        "x": 0.5,
+        "y": 0.225586
+      },
+      "polygon_norm": [
+        {
+          "x": 0.474609,
+          "y": 0.166016
+        },
+        {
+          "x": 0.525391,
+          "y": 0.166016
+        },
+        {
+          "x": 0.525391,
+          "y": 0.285156
+        },
+        {
+          "x": 0.474609,
+          "y": 0.285156
+        }
+      ],
+      "mask": "passing_phase/v5_direction_locked/masks/north_pass_across_mask.png",
+      "slot_overlay": "passing_phase/v5_direction_locked/slot_images/north_pass_across_slot_overlay.png"
+    },
+    {
+      "id": "north_pass_right",
+      "seat": "north",
+      "lane_role": "right",
+      "arrow_direction": "right",
+      "compass_direction": "east",
+      "player_bottom_edge": "up",
+      "visual_orientation": "landscape",
+      "bbox_px": {
+        "x": 829,
+        "y": 170,
+        "width": 142,
+        "height": 78
+      },
+      "center_px": {
+        "x": 900.0,
+        "y": 209.0
+      },
+      "polygon_px": [
+        {
+          "x": 829,
+          "y": 170
+        },
+        {
+          "x": 971,
+          "y": 170
+        },
+        {
+          "x": 971,
+          "y": 248
+        },
+        {
+          "x": 829,
+          "y": 248
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.539714,
+        "y": 0.166016,
+        "width": 0.092448,
+        "height": 0.076172
+      },
+      "center_norm": {
+        "x": 0.585938,
+        "y": 0.204102
+      },
+      "polygon_norm": [
+        {
+          "x": 0.539714,
+          "y": 0.166016
+        },
+        {
+          "x": 0.632161,
+          "y": 0.166016
+        },
+        {
+          "x": 0.632161,
+          "y": 0.242188
+        },
+        {
+          "x": 0.539714,
+          "y": 0.242188
+        }
+      ],
+      "mask": "passing_phase/v5_direction_locked/masks/north_pass_right_mask.png",
+      "slot_overlay": "passing_phase/v5_direction_locked/slot_images/north_pass_right_slot_overlay.png"
+    },
+    {
+      "id": "south_pass_left",
+      "seat": "south",
+      "lane_role": "left",
+      "arrow_direction": "left",
+      "compass_direction": "west",
+      "player_bottom_edge": "down",
+      "visual_orientation": "landscape",
+      "bbox_px": {
+        "x": 565,
+        "y": 555,
+        "width": 142,
+        "height": 78
+      },
+      "center_px": {
+        "x": 636.0,
+        "y": 594.0
+      },
+      "polygon_px": [
+        {
+          "x": 565,
+          "y": 555
+        },
+        {
+          "x": 707,
+          "y": 555
+        },
+        {
+          "x": 707,
+          "y": 633
+        },
+        {
+          "x": 565,
+          "y": 633
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.367839,
+        "y": 0.541992,
+        "width": 0.092448,
+        "height": 0.076172
+      },
+      "center_norm": {
+        "x": 0.414062,
+        "y": 0.580078
+      },
+      "polygon_norm": [
+        {
+          "x": 0.367839,
+          "y": 0.541992
+        },
+        {
+          "x": 0.460286,
+          "y": 0.541992
+        },
+        {
+          "x": 0.460286,
+          "y": 0.618164
+        },
+        {
+          "x": 0.367839,
+          "y": 0.618164
+        }
+      ],
+      "mask": "passing_phase/v5_direction_locked/masks/south_pass_left_mask.png",
+      "slot_overlay": "passing_phase/v5_direction_locked/slot_images/south_pass_left_slot_overlay.png"
+    },
+    {
+      "id": "south_pass_across",
+      "seat": "south",
+      "lane_role": "across",
+      "arrow_direction": "north",
+      "compass_direction": "north",
+      "player_bottom_edge": "down",
+      "visual_orientation": "portrait",
+      "bbox_px": {
+        "x": 729,
+        "y": 510,
+        "width": 78,
+        "height": 122
+      },
+      "center_px": {
+        "x": 768.0,
+        "y": 571.0
+      },
+      "polygon_px": [
+        {
+          "x": 729,
+          "y": 510
+        },
+        {
+          "x": 807,
+          "y": 510
+        },
+        {
+          "x": 807,
+          "y": 632
+        },
+        {
+          "x": 729,
+          "y": 632
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.474609,
+        "y": 0.498047,
+        "width": 0.050781,
+        "height": 0.119141
+      },
+      "center_norm": {
+        "x": 0.5,
+        "y": 0.557617
+      },
+      "polygon_norm": [
+        {
+          "x": 0.474609,
+          "y": 0.498047
+        },
+        {
+          "x": 0.525391,
+          "y": 0.498047
+        },
+        {
+          "x": 0.525391,
+          "y": 0.617188
+        },
+        {
+          "x": 0.474609,
+          "y": 0.617188
+        }
+      ],
+      "mask": "passing_phase/v5_direction_locked/masks/south_pass_across_mask.png",
+      "slot_overlay": "passing_phase/v5_direction_locked/slot_images/south_pass_across_slot_overlay.png"
+    },
+    {
+      "id": "south_pass_right",
+      "seat": "south",
+      "lane_role": "right",
+      "arrow_direction": "right",
+      "compass_direction": "east",
+      "player_bottom_edge": "down",
+      "visual_orientation": "landscape",
+      "bbox_px": {
+        "x": 829,
+        "y": 555,
+        "width": 142,
+        "height": 78
+      },
+      "center_px": {
+        "x": 900.0,
+        "y": 594.0
+      },
+      "polygon_px": [
+        {
+          "x": 829,
+          "y": 555
+        },
+        {
+          "x": 971,
+          "y": 555
+        },
+        {
+          "x": 971,
+          "y": 633
+        },
+        {
+          "x": 829,
+          "y": 633
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.539714,
+        "y": 0.541992,
+        "width": 0.092448,
+        "height": 0.076172
+      },
+      "center_norm": {
+        "x": 0.585938,
+        "y": 0.580078
+      },
+      "polygon_norm": [
+        {
+          "x": 0.539714,
+          "y": 0.541992
+        },
+        {
+          "x": 0.632161,
+          "y": 0.541992
+        },
+        {
+          "x": 0.632161,
+          "y": 0.618164
+        },
+        {
+          "x": 0.539714,
+          "y": 0.618164
+        }
+      ],
+      "mask": "passing_phase/v5_direction_locked/masks/south_pass_right_mask.png",
+      "slot_overlay": "passing_phase/v5_direction_locked/slot_images/south_pass_right_slot_overlay.png"
+    },
+    {
+      "id": "west_pass_north",
+      "seat": "west",
+      "lane_role": "north",
+      "arrow_direction": "north",
+      "compass_direction": "north",
+      "player_bottom_edge": "left",
+      "visual_orientation": "landscape",
+      "bbox_px": {
+        "x": 245,
+        "y": 242,
+        "width": 142,
+        "height": 78
+      },
+      "center_px": {
+        "x": 316.0,
+        "y": 281.0
+      },
+      "polygon_px": [
+        {
+          "x": 245,
+          "y": 242
+        },
+        {
+          "x": 387,
+          "y": 242
+        },
+        {
+          "x": 387,
+          "y": 320
+        },
+        {
+          "x": 245,
+          "y": 320
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.159505,
+        "y": 0.236328,
+        "width": 0.092448,
+        "height": 0.076172
+      },
+      "center_norm": {
+        "x": 0.205729,
+        "y": 0.274414
+      },
+      "polygon_norm": [
+        {
+          "x": 0.159505,
+          "y": 0.236328
+        },
+        {
+          "x": 0.251953,
+          "y": 0.236328
+        },
+        {
+          "x": 0.251953,
+          "y": 0.3125
+        },
+        {
+          "x": 0.159505,
+          "y": 0.3125
+        }
+      ],
+      "mask": "passing_phase/v5_direction_locked/masks/west_pass_north_mask.png",
+      "slot_overlay": "passing_phase/v5_direction_locked/slot_images/west_pass_north_slot_overlay.png"
+    },
+    {
+      "id": "west_pass_across",
+      "seat": "west",
+      "lane_role": "across",
+      "arrow_direction": "east",
+      "compass_direction": "east",
+      "player_bottom_edge": "left",
+      "visual_orientation": "portrait",
+      "bbox_px": {
+        "x": 245,
+        "y": 345,
+        "width": 78,
+        "height": 122
+      },
+      "center_px": {
+        "x": 284.0,
+        "y": 406.0
+      },
+      "polygon_px": [
+        {
+          "x": 245,
+          "y": 345
+        },
+        {
+          "x": 323,
+          "y": 345
+        },
+        {
+          "x": 323,
+          "y": 467
+        },
+        {
+          "x": 245,
+          "y": 467
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.159505,
+        "y": 0.336914,
+        "width": 0.050781,
+        "height": 0.119141
+      },
+      "center_norm": {
+        "x": 0.184896,
+        "y": 0.396484
+      },
+      "polygon_norm": [
+        {
+          "x": 0.159505,
+          "y": 0.336914
+        },
+        {
+          "x": 0.210286,
+          "y": 0.336914
+        },
+        {
+          "x": 0.210286,
+          "y": 0.456055
+        },
+        {
+          "x": 0.159505,
+          "y": 0.456055
+        }
+      ],
+      "mask": "passing_phase/v5_direction_locked/masks/west_pass_across_mask.png",
+      "slot_overlay": "passing_phase/v5_direction_locked/slot_images/west_pass_across_slot_overlay.png"
+    },
+    {
+      "id": "west_pass_south",
+      "seat": "west",
+      "lane_role": "south",
+      "arrow_direction": "south",
+      "compass_direction": "south",
+      "player_bottom_edge": "left",
+      "visual_orientation": "landscape",
+      "bbox_px": {
+        "x": 245,
+        "y": 490,
+        "width": 142,
+        "height": 78
+      },
+      "center_px": {
+        "x": 316.0,
+        "y": 529.0
+      },
+      "polygon_px": [
+        {
+          "x": 245,
+          "y": 490
+        },
+        {
+          "x": 387,
+          "y": 490
+        },
+        {
+          "x": 387,
+          "y": 568
+        },
+        {
+          "x": 245,
+          "y": 568
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.159505,
+        "y": 0.478516,
+        "width": 0.092448,
+        "height": 0.076172
+      },
+      "center_norm": {
+        "x": 0.205729,
+        "y": 0.516602
+      },
+      "polygon_norm": [
+        {
+          "x": 0.159505,
+          "y": 0.478516
+        },
+        {
+          "x": 0.251953,
+          "y": 0.478516
+        },
+        {
+          "x": 0.251953,
+          "y": 0.554688
+        },
+        {
+          "x": 0.159505,
+          "y": 0.554688
+        }
+      ],
+      "mask": "passing_phase/v5_direction_locked/masks/west_pass_south_mask.png",
+      "slot_overlay": "passing_phase/v5_direction_locked/slot_images/west_pass_south_slot_overlay.png"
+    },
+    {
+      "id": "east_pass_north",
+      "seat": "east",
+      "lane_role": "north",
+      "arrow_direction": "north",
+      "compass_direction": "north",
+      "player_bottom_edge": "right",
+      "visual_orientation": "landscape",
+      "bbox_px": {
+        "x": 1100,
+        "y": 242,
+        "width": 142,
+        "height": 78
+      },
+      "center_px": {
+        "x": 1171.0,
+        "y": 281.0
+      },
+      "polygon_px": [
+        {
+          "x": 1100,
+          "y": 242
+        },
+        {
+          "x": 1242,
+          "y": 242
+        },
+        {
+          "x": 1242,
+          "y": 320
+        },
+        {
+          "x": 1100,
+          "y": 320
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.716146,
+        "y": 0.236328,
+        "width": 0.092448,
+        "height": 0.076172
+      },
+      "center_norm": {
+        "x": 0.76237,
+        "y": 0.274414
+      },
+      "polygon_norm": [
+        {
+          "x": 0.716146,
+          "y": 0.236328
+        },
+        {
+          "x": 0.808594,
+          "y": 0.236328
+        },
+        {
+          "x": 0.808594,
+          "y": 0.3125
+        },
+        {
+          "x": 0.716146,
+          "y": 0.3125
+        }
+      ],
+      "mask": "passing_phase/v5_direction_locked/masks/east_pass_north_mask.png",
+      "slot_overlay": "passing_phase/v5_direction_locked/slot_images/east_pass_north_slot_overlay.png"
+    },
+    {
+      "id": "east_pass_across",
+      "seat": "east",
+      "lane_role": "across",
+      "arrow_direction": "west",
+      "compass_direction": "west",
+      "player_bottom_edge": "right",
+      "visual_orientation": "portrait",
+      "bbox_px": {
+        "x": 1164,
+        "y": 345,
+        "width": 78,
+        "height": 122
+      },
+      "center_px": {
+        "x": 1203.0,
+        "y": 406.0
+      },
+      "polygon_px": [
+        {
+          "x": 1164,
+          "y": 345
+        },
+        {
+          "x": 1242,
+          "y": 345
+        },
+        {
+          "x": 1242,
+          "y": 467
+        },
+        {
+          "x": 1164,
+          "y": 467
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.757812,
+        "y": 0.336914,
+        "width": 0.050781,
+        "height": 0.119141
+      },
+      "center_norm": {
+        "x": 0.783203,
+        "y": 0.396484
+      },
+      "polygon_norm": [
+        {
+          "x": 0.757812,
+          "y": 0.336914
+        },
+        {
+          "x": 0.808594,
+          "y": 0.336914
+        },
+        {
+          "x": 0.808594,
+          "y": 0.456055
+        },
+        {
+          "x": 0.757812,
+          "y": 0.456055
+        }
+      ],
+      "mask": "passing_phase/v5_direction_locked/masks/east_pass_across_mask.png",
+      "slot_overlay": "passing_phase/v5_direction_locked/slot_images/east_pass_across_slot_overlay.png"
+    },
+    {
+      "id": "east_pass_south",
+      "seat": "east",
+      "lane_role": "south",
+      "arrow_direction": "south",
+      "compass_direction": "south",
+      "player_bottom_edge": "right",
+      "visual_orientation": "landscape",
+      "bbox_px": {
+        "x": 1100,
+        "y": 490,
+        "width": 142,
+        "height": 78
+      },
+      "center_px": {
+        "x": 1171.0,
+        "y": 529.0
+      },
+      "polygon_px": [
+        {
+          "x": 1100,
+          "y": 490
+        },
+        {
+          "x": 1242,
+          "y": 490
+        },
+        {
+          "x": 1242,
+          "y": 568
+        },
+        {
+          "x": 1100,
+          "y": 568
+        }
+      ],
+      "bbox_norm": {
+        "x": 0.716146,
+        "y": 0.478516,
+        "width": 0.092448,
+        "height": 0.076172
+      },
+      "center_norm": {
+        "x": 0.76237,
+        "y": 0.516602
+      },
+      "polygon_norm": [
+        {
+          "x": 0.716146,
+          "y": 0.478516
+        },
+        {
+          "x": 0.808594,
+          "y": 0.478516
+        },
+        {
+          "x": 0.808594,
+          "y": 0.554688
+        },
+        {
+          "x": 0.716146,
+          "y": 0.554688
+        }
+      ],
+      "mask": "passing_phase/v5_direction_locked/masks/east_pass_south_mask.png",
+      "slot_overlay": "passing_phase/v5_direction_locked/slot_images/east_pass_south_slot_overlay.png"
+    }
+  ]
+}

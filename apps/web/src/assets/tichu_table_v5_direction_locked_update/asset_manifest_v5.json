@@ -1,0 +1,21 @@
+{
+  "package": "tichu_table_v5_direction_locked_update",
+  "created_for": "passing lane direction correction + wuxia individual card assets",
+  "viewport_px": [
+    1536,
+    1024
+  ],
+  "important_files": {
+    "slots_overlay": "passing_phase/v5_direction_locked/overlays/passing_lanes_v5_slots_only_gold_1536x1024.png",
+    "arrows_overlay": "passing_phase/v5_direction_locked/overlays/passing_lanes_v5_slots_with_direction_arrows_gold_1536x1024.png",
+    "anchors": "passing_phase/v5_direction_locked/anchors/passing_phase_v5_direction_locked_card_sized_anchors_1536x1024.json",
+    "clean_table_plate": "table_plate/table_plate_no_red_sample_guides_1536x1024.png",
+    "card_folder": "cards/wuxia_imagegen_v5/"
+  },
+  "counts": {
+    "passing_slots": 12,
+    "standard_cards": 52,
+    "special_cards": 4,
+    "backs": 2
+  }
+}
