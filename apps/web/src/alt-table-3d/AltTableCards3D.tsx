@@ -12,8 +12,7 @@ export type HiddenHandCard = {
   zone: string;
 };
 
-const CARD_WIDTH = 0.32;
-const CARD_HEIGHT = 0.448;
+const WORLD_UNITS_PER_PX = 11.4 / DESIGN_W;
 const CARD_FRAME = 0.012;
 const RACK_FLOOR_Y = 0.082;
 const TABLE_WORLD_W = 11.4;
@@ -41,6 +40,7 @@ function HiddenHandCardMesh(props: {
   texture: Texture;
 }) {
   const placement = resolveHiddenHandPlacement(props.card);
+  const size = getHiddenCardWorldSize(props.card.anchor);
 
   return (
     <group
@@ -49,11 +49,11 @@ function HiddenHandCardMesh(props: {
       data-seat={props.card.seat}
     >
       <mesh position={[0, 0, -CARD_FRAME]} renderOrder={2}>
-        <planeGeometry args={[CARD_WIDTH + CARD_FRAME, CARD_HEIGHT + CARD_FRAME]} />
+        <planeGeometry args={[size.width + CARD_FRAME, size.height + CARD_FRAME]} />
         <meshStandardMaterial color="#ede1bc" metalness={0.08} roughness={0.66} />
       </mesh>
       <mesh renderOrder={3}>
-        <planeGeometry args={[CARD_WIDTH, CARD_HEIGHT]} />
+        <planeGeometry args={[size.width, size.height]} />
         <meshStandardMaterial
           map={props.texture}
           metalness={0.06}
@@ -67,24 +67,44 @@ function HiddenHandCardMesh(props: {
 
 function resolveHiddenHandPlacement(card: HiddenHandCard) {
   const base = designToWorld(card.anchor.center_px.x, card.anchor.center_px.y);
+  const size = getHiddenCardWorldSize(card.anchor);
 
   switch (card.seat) {
     case "north":
       return {
-        position: [base[0], RACK_FLOOR_Y + CARD_HEIGHT / 2, base[2] - 0.12] as const,
-        rotation: [0.035, 0, 0] as const
+        position: [
+          base[0],
+          RACK_FLOOR_Y + size.height / 2,
+          base[2] - size.width * 0.38
+        ] as const,
+        rotation: [0.16, Math.PI, 0] as const
       };
     case "east":
       return {
-        position: [base[0] + 0.22, RACK_FLOOR_Y + CARD_HEIGHT / 2, base[2]] as const,
-        rotation: [0.015, -1.14, 0] as const
+        position: [
+          base[0] + size.width * 0.48,
+          RACK_FLOOR_Y + size.height / 2,
+          base[2]
+        ] as const,
+        rotation: [0.08, -1.42, 0] as const
       };
     case "west":
       return {
-        position: [base[0] - 0.22, RACK_FLOOR_Y + CARD_HEIGHT / 2, base[2]] as const,
-        rotation: [0.015, 1.14, 0] as const
+        position: [
+          base[0] - size.width * 0.48,
+          RACK_FLOOR_Y + size.height / 2,
+          base[2]
+        ] as const,
+        rotation: [0.08, 1.42, 0] as const
       };
   }
+}
+
+export function getHiddenCardWorldSize(anchor: Tv7CardAnchor) {
+  return {
+    width: anchor.w_px * WORLD_UNITS_PER_PX,
+    height: anchor.h_px * WORLD_UNITS_PER_PX
+  } as const;
 }
 
 export function designToWorld(x: number, y: number) {

@@ -79,7 +79,10 @@ const handPayload = JSON.parse(
   anchors: Array<{
     id: string;
     zone: string;
+    slot: number;
+    center_px: { x: number; y: number };
     bbox_px: { x: number; y: number; w: number; h: number };
+    rotation_deg: number;
   }>;
 };
 
@@ -298,6 +301,27 @@ describe("AltTable3DRoute", () => {
     expect(view.container.querySelectorAll("[data-zone='east_hand']")).toHaveLength(14);
     expect(view.container.querySelectorAll("[data-zone='south_hand']")).toHaveLength(14);
     expect(view.container.querySelectorAll("[data-zone='west_hand']")).toHaveLength(14);
+    const southAnchors = handPayload.anchors
+      .filter((anchor) => anchor.zone === "south_hand")
+      .sort((left, right) => left.slot - right.slot);
+    const southCards = Array.from(
+      view.container.querySelectorAll("[data-zone='south_hand'][data-card-id]")
+    ) as HTMLElement[];
+    expect(southCards).toHaveLength(14);
+    expect(southCards[0]?.style.left).toBe(`${southAnchors[0]?.center_px.x}px`);
+    expect(southCards[0]?.style.top).toBe(`${southAnchors[0]?.center_px.y}px`);
+    expect(southCards[0]?.style.transform).toContain(
+      `rotate(${southAnchors[0]?.rotation_deg}deg)`
+    );
+    expect(southCards.at(-1)?.style.left).toBe(
+      `${southAnchors[southAnchors.length - 1]?.center_px.x}px`
+    );
+    expect(southCards.at(-1)?.style.top).toBe(
+      `${southAnchors[southAnchors.length - 1]?.center_px.y}px`
+    );
+    expect(southCards.at(-1)?.style.transform).toContain(
+      `rotate(${southAnchors[southAnchors.length - 1]?.rotation_deg}deg)`
+    );
     expect(
       view.container.querySelectorAll("[data-render-mode='r3f-hidden-hand']")
     ).toHaveLength(42);
@@ -379,12 +403,12 @@ describe("AltTable3DRoute", () => {
     ) as HTMLButtonElement | null;
     expect(confirmPassButton?.disabled).toBe(true);
 
-    const southCards = Array.from(
+    const southHandButtons = Array.from(
       view.container.querySelectorAll("[data-zone='south_hand'][data-card-id]")
     ) as HTMLButtonElement[];
-    await clickElement(southCards[0]);
-    await clickElement(southCards[1]);
-    await clickElement(southCards[2]);
+    await clickElement(southHandButtons[0]);
+    await clickElement(southHandButtons[1]);
+    await clickElement(southHandButtons[2]);
     await flushUi();
 
     const southTargets = [

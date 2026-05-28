@@ -60,13 +60,14 @@ describe("alternate table route guards", () => {
   it("uses a dedicated R3F world-scene hidden-hand layer while preserving authored tv7 card anchors", () => {
     expect(tableSource).toContain('import { AltTableScene }');
     expect(tableSource).toContain("<AltTableScene");
+    expect(tableSource).not.toContain("resolveSouthHandLayout");
     expect(sceneSource).toContain("@react-three/fiber");
     expect(sceneSource).toContain("Canvas");
     expect(sceneSource).toContain("camera.lookAt(0, 0, 0)");
     expect(sceneSource).toContain("RackShell");
     expect(sceneSource).toContain("supportsWebGlCanvas");
-    expect(cards3dSource).toContain("CARD_WIDTH = 0.32");
-    expect(cards3dSource).toContain("CARD_HEIGHT = 0.448");
+    expect(cards3dSource).toContain("WORLD_UNITS_PER_PX");
+    expect(cards3dSource).toContain("getHiddenCardWorldSize");
     expect(cards3dSource).toContain("resolveHiddenHandPlacement");
     expect(stylesSource).toContain("alt-table-world-scene");
     expect(tableSource).not.toContain("HAND_LAYOUT");

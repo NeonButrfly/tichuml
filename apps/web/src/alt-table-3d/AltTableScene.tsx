@@ -1,12 +1,16 @@
 import { useMemo } from "react";
 import { Canvas, useLoader } from "@react-three/fiber";
 import { LinearFilter, SRGBColorSpace, TextureLoader } from "three";
-import { AltTableCards3D, designToWorld, getTableWorldSize, type HiddenHandCard } from "./AltTableCards3D";
+import {
+  AltTableCards3D,
+  designToWorld,
+  getHiddenCardWorldSize,
+  type HiddenHandCard
+} from "./AltTableCards3D";
 
 export function AltTableScene(props: {
   cards: HiddenHandCard[];
   backSrc: string;
-  tableSrc: string;
 }) {
   const canRender3d = useMemo(() => supportsWebGlCanvas(), []);
 
@@ -57,7 +61,7 @@ export function AltTableScene(props: {
             gl.setClearAlpha(0);
           }}
         >
-          <AltTableWorld backSrc={props.backSrc} cards={props.cards} tableSrc={props.tableSrc} />
+          <AltTableWorld backSrc={props.backSrc} cards={props.cards} />
         </Canvas>
       ) : null}
     </div>
@@ -67,21 +71,12 @@ export function AltTableScene(props: {
 function AltTableWorld(props: {
   cards: HiddenHandCard[];
   backSrc: string;
-  tableSrc: string;
 }) {
-  const [backTexture, tableTexture] = useLoader(TextureLoader, [
-    props.backSrc,
-    props.tableSrc
-  ]);
+  const backTexture = useLoader(TextureLoader, props.backSrc);
   backTexture.colorSpace = SRGBColorSpace;
   backTexture.minFilter = LinearFilter;
   backTexture.magFilter = LinearFilter;
   backTexture.needsUpdate = true;
-  tableTexture.colorSpace = SRGBColorSpace;
-  tableTexture.minFilter = LinearFilter;
-  tableTexture.magFilter = LinearFilter;
-  tableTexture.needsUpdate = true;
-  const tableSize = getTableWorldSize();
 
   return (
     <>
@@ -90,11 +85,6 @@ function AltTableWorld(props: {
       <directionalLight intensity={0.55} position={[-3.2, 6.4, -4.6]} />
 
       <group>
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.002, 0]}>
-          <planeGeometry args={[tableSize.width, tableSize.height]} />
-          <meshStandardMaterial map={tableTexture} metalness={0.04} roughness={0.9} />
-        </mesh>
-
         <RackShell cards={props.cards} seat="north" />
         <RackShell cards={props.cards} seat="east" />
         <RackShell cards={props.cards} seat="west" />
@@ -119,40 +109,52 @@ function RackShell(props: {
 
   const xs = seatCards.map((card) => designToWorld(card.anchor.center_px.x, card.anchor.center_px.y)[0]);
   const zs = seatCards.map((card) => designToWorld(card.anchor.center_px.x, card.anchor.center_px.y)[2]);
+  const sampleSize = getHiddenCardWorldSize(seatCards[Math.floor(seatCards.length / 2)]!.anchor);
   const minX = Math.min(...xs);
   const maxX = Math.max(...xs);
   const minZ = Math.min(...zs);
   const maxZ = Math.max(...zs);
 
   if (props.seat === "north") {
-    const width = maxX - minX + 0.9;
+    const width = maxX - minX + sampleSize.width * 1.75;
+    const depth = sampleSize.height * 0.94;
     const centerX = (minX + maxX) / 2;
-    const centerZ = minZ - 0.22;
+    const centerZ = minZ - sampleSize.width * 0.7;
     return (
       <group position={[centerX, 0.05, centerZ]}>
         <mesh>
-          <boxGeometry args={[width, 0.14, 0.68]} />
+          <boxGeometry args={[width, 0.14, depth]} />
           {commonMaterial}
         </mesh>
-        <mesh position={[0, 0.12, 0.18]}>
-          <boxGeometry args={[width - 0.28, 0.12, 0.14]} />
+        <mesh position={[0, 0.12, depth * 0.28]}>
+          <boxGeometry args={[width - 0.24, 0.12, 0.14]} />
           {commonMaterial}
         </mesh>
       </group>
     );
   }
 
-  const height = maxZ - minZ + 1;
+  const depth = sampleSize.width * 0.94;
+  const height = maxZ - minZ + sampleSize.width * 2.1;
   const centerZ = (minZ + maxZ) / 2;
-  const centerX = props.seat === "east" ? maxX + 0.18 : minX - 0.18;
+  const centerX =
+    props.seat === "east"
+      ? maxX + sampleSize.width * 0.58
+      : minX - sampleSize.width * 0.58;
   return (
     <group position={[centerX, 0.05, centerZ]}>
       <mesh>
-        <boxGeometry args={[0.68, 0.14, height]} />
+        <boxGeometry args={[depth, 0.14, height]} />
         {commonMaterial}
       </mesh>
-      <mesh position={[props.seat === "east" ? -0.18 : 0.18, 0.12, 0]}>
-        <boxGeometry args={[0.14, 0.12, height - 0.28]} />
+      <mesh
+        position={[
+          props.seat === "east" ? -depth * 0.26 : depth * 0.26,
+          0.12,
+          0
+        ]}
+      >
+        <boxGeometry args={[0.14, 0.12, height - sampleSize.width * 0.7]} />
         {commonMaterial}
       </mesh>
     </group>

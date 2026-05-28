@@ -578,7 +578,7 @@ export function AltTichuTable3D() {
             src={assets.tableMeta.src}
           />
 
-          <AltTableScene backSrc={backSrc} cards={hiddenHandCards} tableSrc={assets.tableMeta.src} />
+          <AltTableScene backSrc={backSrc} cards={hiddenHandCards} />
 
           {surfaceCards.map((renderedCard) => (
             <CardSprite
@@ -745,36 +745,8 @@ function resolveVisibleCardLayout(anchor: Tv7CardAnchor) {
   };
 }
 
-function resolveSouthHandLayout(config: {
-  handCount: number;
-  slotIndex: number;
-}) {
-  const offset = config.slotIndex - (config.handCount - 1) / 2;
-  return {
-    centerX: DESIGN_W / 2 + offset * 74,
-    centerY: 846 + Math.abs(offset) * 4,
-    width: 120,
-    height: 194,
-    rotationDeg: offset * 1.55
-  };
-}
-
-function resolveVisibleCardLayoutForSprite(config: {
-  anchor: Tv7CardAnchor;
-  handCount?: number;
-  slotIndex?: number;
-}) {
-  if (
-    config.anchor.zone === "south_hand" &&
-    typeof config.handCount === "number" &&
-    typeof config.slotIndex === "number"
-  ) {
-    return resolveSouthHandLayout({
-      handCount: config.handCount,
-      slotIndex: config.slotIndex
-    });
-  }
-  return resolveVisibleCardLayout(config.anchor);
+function resolveVisibleCardLayoutForSprite(anchor: Tv7CardAnchor) {
+  return resolveVisibleCardLayout(anchor);
 }
 
 function buildPassCardStyle(anchor: Tv7PassAnchor): CSSProperties {
@@ -848,14 +820,8 @@ function CardSprite(props: {
 function buildCardStyleFromProps(props: {
   anchor: Tv7CardAnchor;
   isSelected: boolean;
-  handCount?: number;
-  slotIndex?: number;
 }) {
-  const layout = resolveVisibleCardLayoutForSprite({
-    anchor: props.anchor,
-    handCount: props.handCount,
-    slotIndex: props.slotIndex
-  });
+  const layout = resolveVisibleCardLayoutForSprite(props.anchor);
   const translateY = props.isSelected ? -18 : 0;
   return {
     left: `${layout.centerX}px`,

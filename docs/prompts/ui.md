@@ -25,12 +25,13 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 - Interpreted Requirement: Issue
   [#85](https://github.com/NeonButrfly/tichuml/issues/85) is the canonical
   tracker for this follow-up. The `?table=alt` route should keep the committed
-  `tv7` table plate and anchor contract, leave the normal table untouched, and
-  move the hidden north/east/west hands off the flat DOM sprite layer and into
-  a dedicated React Three Fiber scene that seats those cards into the authored
-  rail regions while preserving the existing south-hand, pass-target, and
-  runtime-snapshot behavior.
-- Affected Systems: `apps/web/src/alt-table-3d/AltHiddenHands3D.tsx`,
+  `tv7` table plate and anchor contract, leave the normal table untouched, use
+  a dedicated React Three Fiber scene for the hidden north/east/west rack
+  cards, and keep the visible south hand on the authored `tv7` fan anchors
+  rather than custom spread overrides so the live ALT route stays closer to the
+  approved mockup.
+- Affected Systems: `apps/web/src/alt-table-3d/AltTableCards3D.tsx`,
+  `apps/web/src/alt-table-3d/AltTableScene.tsx`,
   `apps/web/src/alt-table-3d/AltTichuTable3D.tsx`,
   `apps/web/src/alt-table-3d/alt-table-3d.css`,
   `tests/integration/alternate-table-view.test.ts`,
