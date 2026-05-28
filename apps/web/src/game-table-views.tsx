@@ -159,6 +159,21 @@ import {
   resolveStandardCardSrc,
   toAssetHref
 } from "./tichu-table-assets";
+import {
+  computeNormalSpriteTransform,
+  getNormalSpriteRemoteCardBackSrc,
+  getNormalSpriteSelectedHandAnchors,
+  getNormalSpritePassDirection,
+  NORMAL_TABLE_SPRITE_BASE_SRC,
+  NORMAL_TABLE_SPRITE_DRAGON_SRC,
+  NORMAL_TABLE_SPRITE_PASS_OVERLAY_SRC,
+  projectNormalSpritePoint,
+  projectNormalSpritePolygon,
+  resolveNormalSpriteCardFaceSrc,
+  resolveNormalSpritePassAnchor,
+  resolveNormalSpriteTrickAnchor,
+  scaleNormalSpriteValue
+} from "./normal-table-sprite-assets";
 
 export type SeatView = {
   seat: SeatId;
@@ -1745,6 +1760,498 @@ export function shouldRenderNormalCenterZoneFelt(layoutEditorActive: boolean): b
   return layoutEditorActive;
 }
 
+function getSpriteSeatName(position: SeatVisualPosition) {
+  switch (position) {
+    case "top":
+      return "north";
+    case "right":
+      return "east";
+    case "bottom":
+      return "south";
+    case "left":
+      return "west";
+  }
+}
+
+function getSpriteTrickSeat(position: SeatVisualPosition) {
+  switch (position) {
+    case "top":
+      return "north";
+    case "right":
+      return "east";
+    case "bottom":
+      return "south";
+    case "left":
+      return "west";
+  }
+}
+
+function buildSpriteClipPath(
+  points: Array<{ x: number; y: number }>,
+  bounds: { x: number; y: number; w: number; h: number }
+) {
+  return `polygon(${points
+    .map((point) => {
+      const xPercent = ((point.x - bounds.x) / bounds.w) * 100;
+      const yPercent = ((point.y - bounds.y) / bounds.h) * 100;
+      return `${xPercent}% ${yPercent}%`;
+    })
+    .join(", ")})`;
+}
+
+function NormalSpriteCard({
+  src,
+  left,
+  top,
+  width,
+  height,
+  rotation,
+  zIndex,
+  className,
+  interactive = false,
+  draggable = false,
+  ariaLabel,
+  onClick,
+  onDragStart,
+  onDragEnd
+}: {
+  src: string;
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  rotation: number;
+  zIndex: number;
+  className?: string;
+  interactive?: boolean;
+  draggable?: boolean;
+  ariaLabel?: string;
+  onClick?: () => void;
+  onDragStart?: (event: ReactDragEvent<HTMLButtonElement>) => void;
+  onDragEnd?: () => void;
+}) {
+  const classes = [
+    "normal-sprite-card",
+    interactive ? "normal-sprite-card--interactive" : "",
+    className ?? ""
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const style = {
+    left: `${left}px`,
+    top: `${top}px`,
+    width: `${width}px`,
+    height: `${height}px`,
+    transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
+    zIndex
+  } satisfies CSSProperties;
+
+  if (interactive) {
+    return (
+      <button
+        type="button"
+        className={classes}
+        style={style}
+        aria-label={ariaLabel}
+        draggable={draggable}
+        onClick={onClick}
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+      >
+        <img className="normal-sprite-card__img" src={src} alt="" />
+      </button>
+    );
+  }
+
+  return (
+    <div className={classes} style={style} aria-hidden={ariaLabel ? undefined : true}>
+      <img className="normal-sprite-card__img" src={src} alt="" />
+    </div>
+  );
+}
+
+function NormalSpritePlayArea(
+  props: Pick<
+    GameTableViewProps,
+    | "state"
+    | "seatViews"
+    | "sortedLocalHand"
+    | "localCanInteract"
+    | "localPassInteractionEnabled"
+    | "localLegalCardIds"
+    | "selectedCardIds"
+    | "passRouteViews"
+    | "selectedPassTarget"
+    | "displayedTrick"
+    | "seatRelativePlays"
+    | "pickupStageViews"
+    | "cardLookup"
+    | "onLocalCardClick"
+    | "onPassTargetSelect"
+    | "onPassLaneDrop"
+    | "onPassLaneCardClick"
+    | "onPassLaneCardDragStart"
+    | "onPassLaneCardDragEnd"
+  > & {
+    layoutMetrics: NormalViewportLayoutMetrics;
+  }
+) {
+  const boardBounds = getBoardBounds(props.layoutMetrics);
+  const fittedTransform = computeNormalSpriteTransform({
+    viewportWidth: boardBounds.width,
+    viewportHeight: boardBounds.height
+  });
+  const transform = {
+    ...fittedTransform,
+    offsetX: boardBounds.left + fittedTransform.offsetX,
+    offsetY: boardBounds.top + fittedTransform.offsetY
+  };
+  const remoteBackSrc = getNormalSpriteRemoteCardBackSrc();
+  const exchangePhaseActive = isExchangePhase(props.state.phase);
+  const selectionLift = Math.max(18, Math.round(scaleNormalSpriteValue(22, transform)));
+
+  return (
+    <div className="normal-sprite-table" data-layout-container="sprite-table">
+      <img
+        className="normal-sprite-table__layer normal-sprite-table__layer--base"
+        src={NORMAL_TABLE_SPRITE_BASE_SRC}
+        alt=""
+        style={{
+          left: `${transform.offsetX}px`,
+          top: `${transform.offsetY}px`,
+          width: `${scaleNormalSpriteValue(1536, transform)}px`,
+          height: `${scaleNormalSpriteValue(1024, transform)}px`
+        }}
+      />
+      <img
+        className="normal-sprite-table__layer normal-sprite-table__layer--dragon"
+        src={NORMAL_TABLE_SPRITE_DRAGON_SRC}
+        alt=""
+        style={{
+          left: `${transform.offsetX}px`,
+          top: `${transform.offsetY}px`,
+          width: `${scaleNormalSpriteValue(1536, transform)}px`,
+          height: `${scaleNormalSpriteValue(1024, transform)}px`
+        }}
+      />
+
+      {props.seatViews.flatMap((seatView) => {
+        const spriteSeat = getSpriteSeatName(seatView.position);
+        const handCards = seatView.isLocalSeat
+          ? props.sortedLocalHand
+          : seatView.position === "right"
+            ? [...seatView.cards].reverse()
+            : seatView.cards;
+        const anchors = getNormalSpriteSelectedHandAnchors({
+          seat: spriteSeat,
+          count: handCards.length
+        });
+
+        return handCards.map((card, index) => {
+          const anchor = anchors[index];
+          if (!anchor) {
+            return null;
+          }
+
+          const center = projectNormalSpritePoint(anchor.center_px, transform);
+          const width = scaleNormalSpriteValue(anchor.w_px, transform);
+          const height = scaleNormalSpriteValue(anchor.h_px, transform);
+          const selected = seatView.isLocalSeat && props.selectedCardIds.includes(card.id);
+          const toneClass = seatView.isLocalSeat
+            ? props.localLegalCardIds.has(card.id)
+              ? "normal-sprite-card--legal"
+              : "normal-sprite-card--muted"
+            : "";
+          const src = seatView.isLocalSeat
+            ? resolveNormalSpriteCardFaceSrc(card)
+            : remoteBackSrc;
+
+          return (
+            <NormalSpriteCard
+              key={`${seatView.seat}-${card.id}-${index}`}
+              src={src}
+              left={center.x}
+              top={center.y - (selected ? selectionLift : 0)}
+              width={width}
+              height={height}
+              rotation={anchor.rotation_deg}
+              zIndex={anchor.z_index + (selected ? 30 : 0)}
+              className={[
+                `normal-sprite-card--${seatView.position}`,
+                seatView.isLocalSeat ? "normal-sprite-card--local" : "normal-sprite-card--remote",
+                selected ? "normal-sprite-card--selected" : "",
+                toneClass
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              interactive={seatView.isLocalSeat && props.localCanInteract}
+              draggable={seatView.isLocalSeat && props.localPassInteractionEnabled}
+              ariaLabel={
+                seatView.isLocalSeat
+                  ? `${seatView.title} ${card.id}`
+                  : `${seatView.title} facedown card`
+              }
+              onClick={
+                seatView.isLocalSeat ? () => props.onLocalCardClick(card.id) : undefined
+              }
+              onDragStart={
+                seatView.isLocalSeat && props.localPassInteractionEnabled
+                  ? (event) => {
+                      event.dataTransfer.effectAllowed = "move";
+                      event.dataTransfer.setData(
+                        "application/x-tichu-pass-card",
+                        card.id
+                      );
+                    }
+                  : undefined
+              }
+            />
+          );
+        });
+      })}
+
+      {props.displayedTrick &&
+        props.seatRelativePlays.flatMap(({ seat, position, plays }) => {
+          const anchor = resolveNormalSpriteTrickAnchor(getSpriteTrickSeat(position));
+          if (!anchor || plays.length === 0) {
+            return [];
+          }
+
+          const origin = projectNormalSpritePoint(anchor.center_px, transform);
+          const cardWidth = scaleNormalSpriteValue(anchor.w_px, transform);
+          const cardHeight = scaleNormalSpriteValue(anchor.h_px, transform);
+          const playOffsetStep = Math.max(18, Math.round(cardWidth * 0.22));
+          const comboOffsetStep = Math.max(16, Math.round(cardWidth * 0.32));
+
+          return plays.flatMap((entry, playIndex) => {
+            const playOffset =
+              (plays.length - 1 - playIndex) * playOffsetStep;
+            return entry.combination.cardIds.map((cardId, cardIndex) => {
+              const comboOffset =
+                (cardIndex - (entry.combination.cardIds.length - 1) / 2) *
+                comboOffsetStep;
+              const left =
+                position === "left" || position === "right"
+                  ? origin.x
+                  : origin.x + comboOffset;
+              const top =
+                position === "left" || position === "right"
+                  ? origin.y + comboOffset
+                  : origin.y;
+              const groupLeft =
+                position === "left"
+                  ? left + playOffset
+                  : position === "right"
+                    ? left - playOffset
+                    : left;
+              const groupTop =
+                position === "top"
+                  ? top + playOffset
+                  : position === "bottom"
+                    ? top - playOffset
+                    : top;
+
+              return (
+                <NormalSpriteCard
+                  key={`${seat}-${entry.combination.key}-${cardId}-${playIndex}-${cardIndex}`}
+                  src={resolveNormalSpriteCardFaceSrc(
+                    resolveCard(cardId, props.cardLookup)
+                  )}
+                  left={groupLeft}
+                  top={groupTop}
+                  width={cardWidth}
+                  height={cardHeight}
+                  rotation={anchor.rotation_deg}
+                  zIndex={anchor.z_index + playIndex * 8 + cardIndex}
+                  className="normal-sprite-card--trick"
+                />
+              );
+            });
+          });
+        })}
+
+      {props.pickupStageViews.flatMap((group) => {
+        const anchor = resolveNormalSpriteTrickAnchor(getSpriteTrickSeat(group.position));
+        if (!anchor) {
+          return [];
+        }
+
+        const origin = projectNormalSpritePoint(anchor.center_px, transform);
+        const cardWidth = scaleNormalSpriteValue(anchor.w_px, transform);
+        const cardHeight = scaleNormalSpriteValue(anchor.h_px, transform);
+        const comboOffsetStep = Math.max(16, Math.round(cardWidth * 0.28));
+
+        return group.cardIds.map((cardId, cardIndex) => {
+          const comboOffset =
+            (cardIndex - (group.cardIds.length - 1) / 2) * comboOffsetStep;
+
+          return (
+            <NormalSpriteCard
+              key={`pickup-${group.seat}-${cardId}-${cardIndex}`}
+              src={resolveNormalSpriteCardFaceSrc(resolveCard(cardId, props.cardLookup))}
+              left={group.position === "left" || group.position === "right" ? origin.x : origin.x + comboOffset}
+              top={group.position === "left" || group.position === "right" ? origin.y + comboOffset : origin.y}
+              width={cardWidth}
+              height={cardHeight}
+              rotation={anchor.rotation_deg}
+              zIndex={anchor.z_index + cardIndex}
+              className="normal-sprite-card--pickup"
+            />
+          );
+        });
+      })}
+
+      {exchangePhaseActive && (
+        <img
+          className="normal-sprite-table__layer normal-sprite-table__layer--pass"
+          src={NORMAL_TABLE_SPRITE_PASS_OVERLAY_SRC}
+          alt=""
+          style={{
+            left: `${transform.offsetX}px`,
+            top: `${transform.offsetY}px`,
+            width: `${scaleNormalSpriteValue(1536, transform)}px`,
+            height: `${scaleNormalSpriteValue(1024, transform)}px`
+          }}
+        />
+      )}
+
+      {props.passRouteViews.map((route) => {
+        const targetPosition = getSeatVisualPosition(route.targetSeat);
+        const anchor = resolveNormalSpritePassAnchor({
+          sourcePosition: route.sourcePosition,
+          targetPosition
+        });
+        if (!anchor) {
+          return null;
+        }
+
+        const projectedBounds = {
+          x: transform.offsetX + anchor.bbox_px.x * transform.scale,
+          y: transform.offsetY + anchor.bbox_px.y * transform.scale,
+          w: scaleNormalSpriteValue(anchor.bbox_px.w, transform),
+          h: scaleNormalSpriteValue(anchor.bbox_px.h, transform)
+        };
+        const projectedPolygon = projectNormalSpritePolygon(
+          anchor.polygon_px,
+          transform
+        );
+        const cardCenter = projectNormalSpritePoint(anchor.center_px, transform);
+        const cardWidth = scaleNormalSpriteValue(anchor.w_px, transform);
+        const cardHeight = scaleNormalSpriteValue(anchor.h_px, transform);
+        const cardSrc = route.visibleCardId
+          ? resolveNormalSpriteCardFaceSrc(
+              resolveCard(route.visibleCardId, props.cardLookup)
+            )
+          : route.occupied
+            ? remoteBackSrc
+            : null;
+        const selected = route.interactive && route.target === props.selectedPassTarget;
+        const slotStyle = {
+          left: `${projectedBounds.x}px`,
+          top: `${projectedBounds.y}px`,
+          width: `${projectedBounds.w}px`,
+          height: `${projectedBounds.h}px`,
+          clipPath: buildSpriteClipPath(projectedPolygon, projectedBounds)
+        } satisfies CSSProperties;
+        const laneDirection = getNormalSpritePassDirection(anchor);
+        const slotClassName = [
+          "normal-sprite-pass-slot",
+          `normal-sprite-pass-slot--${laneDirection}`,
+          route.faceDown ? "normal-sprite-pass-slot--back" : "",
+          route.occupied ? "normal-sprite-pass-slot--occupied" : "",
+          selected ? "normal-sprite-pass-slot--selected" : "",
+          route.interactive ? "normal-sprite-pass-slot--interactive" : ""
+        ]
+          .filter(Boolean)
+          .join(" ");
+
+        return (
+          <div key={route.key} className="normal-sprite-pass-lane">
+            {route.interactive ? (
+              <button
+                type="button"
+                className={slotClassName}
+                style={slotStyle}
+                aria-label={`${formatPassDirectionLabel(laneDirection)} pass to ${formatSeatShort(route.targetSeat)}`}
+                onClick={() => props.onPassTargetSelect(route.target)}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const cardId = event.dataTransfer.getData(
+                    "application/x-tichu-pass-card"
+                  );
+                  if (cardId) {
+                    props.onPassLaneDrop(route.target, cardId);
+                  }
+                }}
+              />
+            ) : (
+              <div
+                className={slotClassName}
+                style={slotStyle}
+                aria-label={`${formatSeatShort(route.sourceSeat)} ${formatPassTarget(route.target)} staged card`}
+              />
+            )}
+
+            {cardSrc && (
+              <NormalSpriteCard
+                src={cardSrc}
+                left={cardCenter.x}
+                top={cardCenter.y}
+                width={cardWidth}
+                height={cardHeight}
+                rotation={anchor.card_rotation_deg}
+                zIndex={anchor.z_index + 10}
+                className={[
+                  "normal-sprite-card--pass",
+                  route.visibleCardId ? "" : "normal-sprite-card--back"
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                interactive={route.interactive && Boolean(route.visibleCardId)}
+                draggable={route.interactive && Boolean(route.visibleCardId)}
+                ariaLabel={`${formatPassDirectionLabel(laneDirection)} pass card`}
+                onClick={
+                  route.interactive && route.visibleCardId
+                    ? () => props.onPassLaneCardClick(route.target)
+                    : undefined
+                }
+                onDragStart={
+                  route.interactive && route.visibleCardId
+                    ? (event) => {
+                        event.dataTransfer.effectAllowed = "move";
+                        event.dataTransfer.setData(
+                          "application/x-tichu-pass-card",
+                          route.visibleCardId!
+                        );
+                        props.onPassLaneCardDragStart(
+                          route.target,
+                          route.visibleCardId!
+                        );
+                      }
+                    : undefined
+                }
+                onDragEnd={
+                  route.interactive && route.visibleCardId
+                    ? () =>
+                        props.onPassLaneCardDragEnd(
+                          route.target,
+                          route.visibleCardId!
+                        )
+                    : undefined
+                }
+              />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function TableSurface(
   props: Pick<
   GameTableViewProps,
@@ -1944,9 +2451,11 @@ function NormalSeatOverlayLayer({
   seatViews,
   sortedLocalHand,
   layoutMetrics,
-  normalTableLayout
+  normalTableLayout,
+  showSeatLabels = true
 }: Pick<GameTableViewProps, "seatViews" | "sortedLocalHand" | "normalTableLayout"> & {
   layoutMetrics: NormalViewportLayoutMetrics;
+  showSeatLabels?: boolean;
 }) {
   return (
     <div className="normal-seat-overlays" aria-hidden="true">
@@ -1995,7 +2504,7 @@ function NormalSeatOverlayLayer({
 
         return (
           <div key={`overlay-${seatView.seat}`}>
-            {!renderInlineSideLabel && (
+            {showSeatLabels && !renderInlineSideLabel && (
               <div
                 className={[
                   "normal-seat-overlay__label",
@@ -5061,125 +5570,149 @@ export function NormalGameTableView(props: GameTableViewProps) {
               }
             />
           </div>
+          {!props.layoutEditorActive ? (
+            <NormalSpritePlayArea
+              layoutMetrics={layoutMetrics}
+              state={props.state}
+              seatViews={props.seatViews}
+              sortedLocalHand={props.sortedLocalHand}
+              localCanInteract={props.localCanInteract}
+              localPassInteractionEnabled={props.localPassInteractionEnabled}
+              localLegalCardIds={props.localLegalCardIds}
+              selectedCardIds={props.selectedCardIds}
+              passRouteViews={props.passRouteViews}
+              selectedPassTarget={props.selectedPassTarget}
+              displayedTrick={props.displayedTrick}
+              seatRelativePlays={props.seatRelativePlays}
+              pickupStageViews={props.pickupStageViews}
+              cardLookup={props.cardLookup}
+              onLocalCardClick={props.onLocalCardClick}
+              onPassTargetSelect={props.onPassTargetSelect}
+              onPassLaneDrop={props.onPassLaneDrop}
+              onPassLaneCardClick={props.onPassLaneCardClick}
+              onPassLaneCardDragStart={props.onPassLaneCardDragStart}
+              onPassLaneCardDragEnd={props.onPassLaneCardDragEnd}
+            />
+          ) : (
+            <div className="normal-grid" data-layout-container="table-grid">
+              <section
+                className={getNormalCenterZoneClassName(props.layoutEditorActive)}
+                data-layout-container="center-zone"
+                style={playSurfaceRegionStyle}
+              >
+                {shouldRenderNormalCenterZoneFelt(props.layoutEditorActive) && (
+                  <div className="normal-table__felt" />
+                )}
+                <TableSurface
+                  variant="normal"
+                  normalTableLayout={props.normalTableLayout}
+                  state={props.state}
+                  derived={props.derived}
+                  controlHint={props.controlHint}
+                  displayedTrick={props.displayedTrick}
+                  trickIsResolving={props.trickIsResolving}
+                  seatRelativePlays={props.seatRelativePlays}
+                  tablePassGroups={props.tablePassGroups}
+                  cardLookup={props.cardLookup}
+                />
+              </section>
 
-          <div className="normal-grid" data-layout-container="table-grid">
-            <section
-              className={getNormalCenterZoneClassName(props.layoutEditorActive)}
-              data-layout-container="center-zone"
-              style={playSurfaceRegionStyle}
-            >
-              {shouldRenderNormalCenterZoneFelt(props.layoutEditorActive) && (
-                <div className="normal-table__felt" />
-              )}
-              <TableSurface
-                variant="normal"
-                normalTableLayout={props.normalTableLayout}
-                state={props.state}
-                derived={props.derived}
-                controlHint={props.controlHint}
-                displayedTrick={props.displayedTrick}
-                trickIsResolving={props.trickIsResolving}
-                seatRelativePlays={props.seatRelativePlays}
-                tablePassGroups={props.tablePassGroups}
-                cardLookup={props.cardLookup}
+              <NormalSeat
+                regionStyle={seatRegionStyleByPosition.top}
+                layoutMetrics={layoutMetrics}
+                seatView={seatByPosition.top}
+                sortedLocalHand={props.sortedLocalHand}
+                localCanInteract={props.localCanInteract}
+                localPassInteractionEnabled={props.localPassInteractionEnabled}
+                localLegalCardIds={props.localLegalCardIds}
+                selectedCardIds={props.selectedCardIds}
+                onLocalCardClick={props.onLocalCardClick}
               />
-            </section>
 
-            <NormalSeat
-              regionStyle={seatRegionStyleByPosition.top}
-              layoutMetrics={layoutMetrics}
-              seatView={seatByPosition.top}
-              sortedLocalHand={props.sortedLocalHand}
-              localCanInteract={props.localCanInteract}
-              localPassInteractionEnabled={props.localPassInteractionEnabled}
-              localLegalCardIds={props.localLegalCardIds}
-              selectedCardIds={props.selectedCardIds}
-              onLocalCardClick={props.onLocalCardClick}
-            />
+              <NormalSeat
+                regionStyle={seatRegionStyleByPosition.left}
+                layoutMetrics={layoutMetrics}
+                seatView={seatByPosition.left}
+                sortedLocalHand={props.sortedLocalHand}
+                localCanInteract={props.localCanInteract}
+                localPassInteractionEnabled={props.localPassInteractionEnabled}
+                localLegalCardIds={props.localLegalCardIds}
+                selectedCardIds={props.selectedCardIds}
+                onLocalCardClick={props.onLocalCardClick}
+              />
 
-            <NormalSeat
-              regionStyle={seatRegionStyleByPosition.left}
-              layoutMetrics={layoutMetrics}
-              seatView={seatByPosition.left}
-              sortedLocalHand={props.sortedLocalHand}
-              localCanInteract={props.localCanInteract}
-              localPassInteractionEnabled={props.localPassInteractionEnabled}
-              localLegalCardIds={props.localLegalCardIds}
-              selectedCardIds={props.selectedCardIds}
-              onLocalCardClick={props.onLocalCardClick}
-            />
+              <NormalSeat
+                regionStyle={seatRegionStyleByPosition.right}
+                layoutMetrics={layoutMetrics}
+                seatView={seatByPosition.right}
+                sortedLocalHand={props.sortedLocalHand}
+                localCanInteract={props.localCanInteract}
+                localPassInteractionEnabled={props.localPassInteractionEnabled}
+                localLegalCardIds={props.localLegalCardIds}
+                selectedCardIds={props.selectedCardIds}
+                onLocalCardClick={props.onLocalCardClick}
+              />
 
-            <NormalSeat
-              regionStyle={seatRegionStyleByPosition.right}
-              layoutMetrics={layoutMetrics}
-              seatView={seatByPosition.right}
-              sortedLocalHand={props.sortedLocalHand}
-              localCanInteract={props.localCanInteract}
-              localPassInteractionEnabled={props.localPassInteractionEnabled}
-              localLegalCardIds={props.localLegalCardIds}
-              selectedCardIds={props.selectedCardIds}
-              onLocalCardClick={props.onLocalCardClick}
-            />
+              <NormalSeat
+                regionStyle={seatRegionStyleByPosition.bottom}
+                layoutMetrics={layoutMetrics}
+                seatView={seatByPosition.bottom}
+                sortedLocalHand={props.sortedLocalHand}
+                localCanInteract={props.localCanInteract}
+                localPassInteractionEnabled={props.localPassInteractionEnabled}
+                localLegalCardIds={props.localLegalCardIds}
+                selectedCardIds={props.selectedCardIds}
+                onLocalCardClick={props.onLocalCardClick}
+              />
+            </div>
+          )}
 
-            <NormalSeat
-              regionStyle={seatRegionStyleByPosition.bottom}
-              layoutMetrics={layoutMetrics}
-              seatView={seatByPosition.bottom}
-              sortedLocalHand={props.sortedLocalHand}
-              localCanInteract={props.localCanInteract}
-              localPassInteractionEnabled={props.localPassInteractionEnabled}
-              localLegalCardIds={props.localLegalCardIds}
-              selectedCardIds={props.selectedCardIds}
-              onLocalCardClick={props.onLocalCardClick}
-            />
+          <section
+            className="normal-bottom-controls"
+            data-layout-container="action-band"
+            data-action-row="true"
+            style={actionRowRegionStyle}
+          >
+            {props.matchingPlayActions.length > 1 && (
+              <div className="normal-inline-controls">
+                <div className="variant-row variant-row--normal">
+                  {props.matchingPlayActions.map((action) => {
+                    const key = buildPlayVariantKey(action);
+                    const activeKey = props.activePlayVariant
+                      ? buildPlayVariantKey(props.activePlayVariant)
+                      : key;
 
-            <section
-              className="normal-bottom-controls"
-              data-layout-container="action-band"
-              data-action-row="true"
-              style={actionRowRegionStyle}
-            >
-              {props.matchingPlayActions.length > 1 && (
-                <div className="normal-inline-controls">
-                  <div className="variant-row variant-row--normal">
-                    {props.matchingPlayActions.map((action) => {
-                      const key = buildPlayVariantKey(action);
-                      const activeKey = props.activePlayVariant
-                        ? buildPlayVariantKey(props.activePlayVariant)
-                        : key;
-
-                      return (
-                        <button
-                          key={key}
-                          type="button"
-                          className={
-                            key === activeKey
-                              ? "variant-pill is-active"
-                              : "variant-pill"
-                          }
-                          onClick={() => props.onVariantSelect(key)}
-                        >
-                          {formatCombinationKind(action.combination.kind)}
-                          {action.phoenixAsRank
-                            ? ` as ${formatRank(action.phoenixAsRank)}`
-                            : ""}
-                        </button>
-                      );
-                    })}
-                  </div>
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        className={
+                          key === activeKey
+                            ? "variant-pill is-active"
+                            : "variant-pill"
+                        }
+                        onClick={() => props.onVariantSelect(key)}
+                      >
+                        {formatCombinationKind(action.combination.kind)}
+                        {action.phoenixAsRank
+                          ? ` as ${formatRank(action.phoenixAsRank)}`
+                          : ""}
+                      </button>
+                    );
+                  })}
                 </div>
-              )}
+              </div>
+            )}
 
-              <NormalActionStrip
-                normalActionRail={props.normalActionRail}
-                localDragonRecipients={props.localDragonRecipients}
-                onDragonRecipientSelect={props.onDragonRecipientSelect}
-                onNormalAction={props.onNormalAction}
-              />
-            </section>
-          </div>
+            <NormalActionStrip
+              normalActionRail={props.normalActionRail}
+              localDragonRecipients={props.localDragonRecipients}
+              onDragonRecipientSelect={props.onDragonRecipientSelect}
+              onNormalAction={props.onNormalAction}
+            />
+          </section>
 
-          {showPassOverlay && (
+          {props.layoutEditorActive && showPassOverlay && (
             <img
               className="normal-pass-overlay"
               src={PRODUCTION_PASSING_OVERLAY_SRC}
@@ -5187,7 +5720,7 @@ export function NormalGameTableView(props: GameTableViewProps) {
               aria-hidden="true"
             />
           )}
-          {passDebugOverlaySrc && (
+          {props.layoutEditorActive && passDebugOverlaySrc && (
             <img
               className="normal-pass-overlay normal-pass-overlay--debug"
               src={passDebugOverlaySrc}
@@ -5201,28 +5734,33 @@ export function NormalGameTableView(props: GameTableViewProps) {
             sortedLocalHand={props.sortedLocalHand}
             layoutMetrics={layoutMetrics}
             normalTableLayout={props.normalTableLayout}
+            showSeatLabels={props.layoutEditorActive}
           />
 
-          <NormalPassStagingRegions
-            passRouteViews={props.passRouteViews}
-            selectedPassTarget={props.selectedPassTarget}
-            cardLookup={props.cardLookup}
-            onPassTargetSelect={props.onPassTargetSelect}
-            onPassLaneDrop={props.onPassLaneDrop}
-            onPassLaneCardClick={props.onPassLaneCardClick}
-            onPassLaneCardDragStart={props.onPassLaneCardDragStart}
-            onPassLaneCardDragEnd={props.onPassLaneCardDragEnd}
-          />
+          {props.layoutEditorActive && (
+            <>
+              <NormalPassStagingRegions
+                passRouteViews={props.passRouteViews}
+                selectedPassTarget={props.selectedPassTarget}
+                cardLookup={props.cardLookup}
+                onPassTargetSelect={props.onPassTargetSelect}
+                onPassLaneDrop={props.onPassLaneDrop}
+                onPassLaneCardClick={props.onPassLaneCardClick}
+                onPassLaneCardDragStart={props.onPassLaneCardDragStart}
+                onPassLaneCardDragEnd={props.onPassLaneCardDragEnd}
+              />
 
-          <NormalTrickStagingRegions
-            normalTableLayout={props.normalTableLayout}
-            layoutMetrics={layoutMetrics}
-            displayedTrick={props.displayedTrick}
-            seatRelativePlays={props.seatRelativePlays}
-            pickupStageViews={props.pickupStageViews}
-            dogLeadAnimation={props.dogLeadAnimation}
-            cardLookup={props.cardLookup}
-          />
+              <NormalTrickStagingRegions
+                normalTableLayout={props.normalTableLayout}
+                layoutMetrics={layoutMetrics}
+                displayedTrick={props.displayedTrick}
+                seatRelativePlays={props.seatRelativePlays}
+                pickupStageViews={props.pickupStageViews}
+                dogLeadAnimation={props.dogLeadAnimation}
+                cardLookup={props.cardLookup}
+              />
+            </>
+          )}
 
           {props.layoutEditorActive && (
             <NormalLayoutEditor

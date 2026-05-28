@@ -81,6 +81,27 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 - Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
 - Status Source: GitHub issue state only.
 
+### 2026-05-27 - Live play area must match the provided sprite-table reference
+
+- Prompt Signal: The latest live-table request supplied a concrete reference
+  image and required the play area to render like that image while keeping the
+  physical base table language. The user explicitly required sprite-based cards
+  that look exactly like the reference instead of CSS-drawn placeholder cards.
+- Interpreted Requirement: Issue
+  [#76](https://github.com/NeonButrfly/tichuml/issues/76) remains the
+  canonical tracker for this surface work. The normal live table should render
+  from the authored `tv_ed` asset pack, keep the physical base table and dragon
+  motif, use real card-face and card-back sprites for the player-visible play
+  area, and align north/east/west racks plus the south fan from authored anchor
+  data rather than synthetic flex-card rows.
+- Affected Systems: `apps/web/src/game-table-views.tsx`,
+  `apps/web/src/normal-table-sprite-assets.ts`,
+  `apps/web/src/styles.css`, `apps/web/public/tv_ed/*`,
+  `tests/integration/normal-table-sprite-assets.test.ts`.
+- Linked GitHub Issue: [#76](https://github.com/NeonButrfly/tichuml/issues/76)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.
+
 ### 2026-05-25 - Live Tichu table must adopt the authored v5 direction-locked asset pack exactly
 
 - Prompt Signal: The latest table prompt required the repo to integrate the
@@ -313,7 +334,6 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 - Linked GitHub Issue: [#74](https://github.com/NeonButrfly/tichuml/issues/74)
 - Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
 - Status Source: GitHub issue state only.
-
 ### 2026-05-03 - Trick-play auto-advance must never enter the browser with a missing active seat
 
 - Prompt Signal: Live gameplay was reaching `trick_play` with the runtime error
