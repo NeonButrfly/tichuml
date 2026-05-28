@@ -17,7 +17,9 @@ type HiddenSeat = Exclude<DemoSeat, "south">;
 export type HiddenHandCard = {
   anchor: Tv7CardAnchor;
   card: DemoCard;
+  handCount: number;
   seat: HiddenSeat;
+  slotIndex: number;
   zone: string;
 };
 
@@ -95,7 +97,7 @@ function HiddenHandsScene(props: {
       {props.cards.map((card) => (
         <HiddenHandCardMesh
           key={`${card.zone}-${card.card.id}`}
-          anchor={card.anchor}
+          card={card}
           seat={card.seat}
           texture={texture}
         />
@@ -105,11 +107,11 @@ function HiddenHandsScene(props: {
 }
 
 function HiddenHandCardMesh(props: {
-  anchor: Tv7CardAnchor;
+  card: HiddenHandCard;
   seat: HiddenSeat;
   texture: Texture;
 }) {
-  const placement = resolveHiddenHandPlacement(props.anchor, props.seat);
+  const placement = resolveHiddenHandPlacement(props.card, props.seat);
 
   return (
     <group
@@ -128,40 +130,42 @@ function HiddenHandCardMesh(props: {
   );
 }
 
-function resolveHiddenHandPlacement(anchor: Tv7CardAnchor, seat: HiddenSeat) {
+function resolveHiddenHandPlacement(card: HiddenHandCard, seat: HiddenSeat) {
+  const offset = card.slotIndex - (card.handCount - 1) / 2;
+
   switch (seat) {
     case "north":
       return {
-        centerX: anchor.center_px.x,
-        centerY: anchor.center_px.y - 10,
-        width: anchor.w_px * 1.55,
-        height: anchor.h_px * 1.55,
-        rotateX: -0.24,
+        centerX: DESIGN_W / 2 + offset * 34,
+        centerY: 42,
+        width: 84,
+        height: 128,
+        rotateX: -0.08,
         rotateY: 0,
         rotateZ: 0,
-        depth: 12 + anchor.slot * 0.05
+        depth: 8 + card.slotIndex * 0.02
       };
     case "east":
       return {
-        centerX: anchor.center_px.x + 48,
-        centerY: anchor.center_px.y + 4,
-        width: anchor.w_px * 1.65,
-        height: anchor.h_px * 1.65,
+        centerX: 1498,
+        centerY: 342 + offset * 21,
+        width: 74,
+        height: 116,
         rotateX: 0,
-        rotateY: 0.42,
+        rotateY: 0.56,
         rotateZ: 0,
-        depth: 10 + anchor.slot * 0.05
+        depth: 8 + card.slotIndex * 0.02
       };
     case "west":
       return {
-        centerX: anchor.center_px.x - 48,
-        centerY: anchor.center_px.y + 4,
-        width: anchor.w_px * 1.65,
-        height: anchor.h_px * 1.65,
+        centerX: 174,
+        centerY: 342 + offset * 21,
+        width: 74,
+        height: 116,
         rotateX: 0,
-        rotateY: -0.42,
+        rotateY: -0.56,
         rotateZ: 0,
-        depth: 10 + anchor.slot * 0.05
+        depth: 8 + card.slotIndex * 0.02
       };
   }
 }

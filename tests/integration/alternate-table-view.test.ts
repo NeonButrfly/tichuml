@@ -454,8 +454,8 @@ describe("AltTable3DRoute", () => {
     const snapshotCard = snapshot?.cardLayout.anchors.find(
       (anchor) => anchor.id === "south_01"
     );
-    expect(snapshotCard?.screen_bbox.x).toBeCloseTo(
-      handPayload.anchors.find((anchor) => anchor.id === "south_01")?.bbox_px.x ?? 0,
+    expect(snapshotCard?.screen_bbox.width).toBeCloseTo(
+      handPayload.anchors.find((anchor) => anchor.id === "south_01")?.bbox_px.w ?? 0,
       0
     );
 

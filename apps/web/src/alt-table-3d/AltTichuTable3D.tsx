@@ -48,8 +48,10 @@ type AltTableWindow = Window & {
 type RenderedCard = {
   anchor: Tv7CardAnchor;
   card: DemoCard;
+  handCount: number;
   src: string;
   seat: DemoSeat | null;
+  slotIndex: number;
   zone: string;
   isSelected: boolean;
   isInteractive: boolean;
@@ -246,8 +248,10 @@ export function AltTichuTable3D() {
         cards.push({
           anchor,
           card,
+          handCount: hand.length,
           src: anchor.face_policy === "back" ? backSrc : card.src,
           seat,
+          slotIndex: index,
           zone,
           isSelected: selectedSouthCardIds.includes(card.id),
           isInteractive: seat === "south" && phase === "passing"
@@ -269,7 +273,9 @@ export function AltTichuTable3D() {
           {
             anchor: card.anchor,
             card: card.card,
+            handCount: card.handCount,
             seat: card.seat,
+            slotIndex: card.slotIndex,
             zone: card.zone
           }
         ];
@@ -574,9 +580,11 @@ export function AltTichuTable3D() {
               key={`${renderedCard.zone}-${renderedCard.card.id}`}
               anchor={renderedCard.anchor}
               card={renderedCard.card}
+              handCount={renderedCard.handCount}
               isInteractive={renderedCard.isInteractive}
               isSelected={renderedCard.isSelected}
               passId={null}
+              slotIndex={renderedCard.slotIndex}
               src={renderedCard.src}
               zone={renderedCard.zone}
               onClick={
@@ -698,16 +706,46 @@ function buildPassTargetStyle(anchor: Tv7PassAnchor): CSSProperties {
   };
 }
 
-function buildCardStyle(anchor: Tv7CardAnchor, selected: boolean): CSSProperties {
-  const translateY = selected ? -18 : 0;
+function resolveVisibleCardLayout(anchor: Tv7CardAnchor) {
   return {
-    left: `${anchor.center_px.x}px`,
-    top: `${anchor.center_px.y}px`,
-    width: `${anchor.w_px}px`,
-    height: `${anchor.h_px}px`,
-    transform: `translate(-50%, calc(-50% + ${translateY}px)) rotate(${anchor.rotation_deg}deg)`,
-    transformOrigin: "center center"
+    centerX: anchor.center_px.x,
+    centerY: anchor.center_px.y,
+    width: anchor.w_px,
+    height: anchor.h_px,
+    rotationDeg: anchor.rotation_deg
   };
+}
+
+function resolveSouthHandLayout(config: {
+  handCount: number;
+  slotIndex: number;
+}) {
+  const offset = config.slotIndex - (config.handCount - 1) / 2;
+  return {
+    centerX: DESIGN_W / 2 + offset * 74,
+    centerY: 846 + Math.abs(offset) * 4,
+    width: 120,
+    height: 194,
+    rotationDeg: offset * 1.55
+  };
+}
+
+function resolveVisibleCardLayoutForSprite(config: {
+  anchor: Tv7CardAnchor;
+  handCount?: number;
+  slotIndex?: number;
+}) {
+  if (
+    config.anchor.zone === "south_hand" &&
+    typeof config.handCount === "number" &&
+    typeof config.slotIndex === "number"
+  ) {
+    return resolveSouthHandLayout({
+      handCount: config.handCount,
+      slotIndex: config.slotIndex
+    });
+  }
+  return resolveVisibleCardLayout(config.anchor);
 }
 
 function buildPassCardStyle(anchor: Tv7PassAnchor): CSSProperties {
@@ -727,9 +765,11 @@ function CardSprite(props: {
   card: DemoCard;
   src: string;
   zone: string;
+  handCount?: number;
   isSelected: boolean;
   isInteractive: boolean;
   passId: string | null;
+  slotIndex?: number;
   onClick?: () => void;
   onDragStart?: () => void;
 }) {
@@ -762,7 +802,7 @@ function CardSprite(props: {
           event.dataTransfer.setData("text/plain", props.card.id);
           props.onDragStart?.();
         }}
-        style={buildCardStyle(props.anchor, props.isSelected)}
+        style={buildCardStyleFromProps(props)}
       >
         <img alt={props.card.label} className="alt-table-card__image" src={props.src} />
       </button>
@@ -770,10 +810,32 @@ function CardSprite(props: {
   }
 
   return (
-    <div {...commonProps} style={buildCardStyle(props.anchor, props.isSelected)}>
+    <div {...commonProps} style={buildCardStyleFromProps(props)}>
       <img alt={props.card.label} className="alt-table-card__image" src={props.src} />
     </div>
   );
+}
+
+function buildCardStyleFromProps(props: {
+  anchor: Tv7CardAnchor;
+  isSelected: boolean;
+  handCount?: number;
+  slotIndex?: number;
+}) {
+  const layout = resolveVisibleCardLayoutForSprite({
+    anchor: props.anchor,
+    handCount: props.handCount,
+    slotIndex: props.slotIndex
+  });
+  const translateY = props.isSelected ? -18 : 0;
+  return {
+    left: `${layout.centerX}px`,
+    top: `${layout.centerY}px`,
+    width: `${layout.width}px`,
+    height: `${layout.height}px`,
+    transform: `translate(-50%, calc(-50% + ${translateY}px)) rotate(${layout.rotationDeg}deg)`,
+    transformOrigin: "center center"
+  } satisfies CSSProperties;
 }
 
 function PassCardSprite(props: {
