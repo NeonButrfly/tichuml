@@ -578,7 +578,7 @@ export function AltTichuTable3D() {
             src={assets.tableMeta.src}
           />
 
-          <AltTableScene backSrc={backSrc} cards={hiddenHandCards} />
+          <AltTableScene backSrc={backSrc} cards={hiddenHandCards} tableSrc={assets.tableMeta.src} />
 
           {surfaceCards.map((renderedCard) => (
             <CardSprite

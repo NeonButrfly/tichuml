@@ -1,5 +1,5 @@
 import { DoubleSide, type Texture } from "three";
-import type { DemoCard, DemoSeat, Tv7CardAnchor } from "./tv7-runtime";
+import { DESIGN_H, DESIGN_W, type DemoCard, type DemoSeat, type Tv7CardAnchor } from "./tv7-runtime";
 
 export type HiddenSeat = Exclude<DemoSeat, "south">;
 
@@ -16,6 +16,8 @@ const CARD_WIDTH = 0.32;
 const CARD_HEIGHT = 0.448;
 const CARD_FRAME = 0.012;
 const RACK_FLOOR_Y = 0.082;
+const TABLE_WORLD_W = 11.4;
+const TABLE_WORLD_H = 7.6;
 
 export function AltTableCards3D(props: {
   cards: HiddenHandCard[];
@@ -64,23 +66,38 @@ function HiddenHandCardMesh(props: {
 }
 
 function resolveHiddenHandPlacement(card: HiddenHandCard) {
-  const offset = card.slotIndex - (card.handCount - 1) / 2;
+  const base = designToWorld(card.anchor.center_px.x, card.anchor.center_px.y);
 
   switch (card.seat) {
     case "north":
       return {
-        position: [offset * 0.24, RACK_FLOOR_Y + CARD_HEIGHT / 2, -2.9] as const,
+        position: [base[0], RACK_FLOOR_Y + CARD_HEIGHT / 2, base[2] - 0.12] as const,
         rotation: [0.035, 0, 0] as const
       };
     case "east":
       return {
-        position: [4.22, RACK_FLOOR_Y + CARD_HEIGHT / 2, offset * 0.2] as const,
+        position: [base[0] + 0.22, RACK_FLOOR_Y + CARD_HEIGHT / 2, base[2]] as const,
         rotation: [0.015, -1.14, 0] as const
       };
     case "west":
       return {
-        position: [-4.22, RACK_FLOOR_Y + CARD_HEIGHT / 2, offset * 0.2] as const,
+        position: [base[0] - 0.22, RACK_FLOOR_Y + CARD_HEIGHT / 2, base[2]] as const,
         rotation: [0.015, 1.14, 0] as const
       };
   }
+}
+
+export function designToWorld(x: number, y: number) {
+  return [
+    ((x / DESIGN_W) - 0.5) * TABLE_WORLD_W,
+    0,
+    ((y / DESIGN_H) - 0.5) * TABLE_WORLD_H
+  ] as const;
+}
+
+export function getTableWorldSize() {
+  return {
+    width: TABLE_WORLD_W,
+    height: TABLE_WORLD_H
+  } as const;
 }

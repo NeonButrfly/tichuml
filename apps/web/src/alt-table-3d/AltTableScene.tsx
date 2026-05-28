@@ -1,11 +1,12 @@
 import { useMemo } from "react";
 import { Canvas, useLoader } from "@react-three/fiber";
 import { LinearFilter, SRGBColorSpace, TextureLoader } from "three";
-import { AltTableCards3D, type HiddenHandCard } from "./AltTableCards3D";
+import { AltTableCards3D, designToWorld, getTableWorldSize, type HiddenHandCard } from "./AltTableCards3D";
 
 export function AltTableScene(props: {
   cards: HiddenHandCard[];
   backSrc: string;
+  tableSrc: string;
 }) {
   const canRender3d = useMemo(() => supportsWebGlCanvas(), []);
 
@@ -56,7 +57,7 @@ export function AltTableScene(props: {
             gl.setClearAlpha(0);
           }}
         >
-          <AltTableWorld backSrc={props.backSrc} cards={props.cards} />
+          <AltTableWorld backSrc={props.backSrc} cards={props.cards} tableSrc={props.tableSrc} />
         </Canvas>
       ) : null}
     </div>
@@ -66,12 +67,21 @@ export function AltTableScene(props: {
 function AltTableWorld(props: {
   cards: HiddenHandCard[];
   backSrc: string;
+  tableSrc: string;
 }) {
-  const texture = useLoader(TextureLoader, props.backSrc);
-  texture.colorSpace = SRGBColorSpace;
-  texture.minFilter = LinearFilter;
-  texture.magFilter = LinearFilter;
-  texture.needsUpdate = true;
+  const [backTexture, tableTexture] = useLoader(TextureLoader, [
+    props.backSrc,
+    props.tableSrc
+  ]);
+  backTexture.colorSpace = SRGBColorSpace;
+  backTexture.minFilter = LinearFilter;
+  backTexture.magFilter = LinearFilter;
+  backTexture.needsUpdate = true;
+  tableTexture.colorSpace = SRGBColorSpace;
+  tableTexture.minFilter = LinearFilter;
+  tableTexture.magFilter = LinearFilter;
+  tableTexture.needsUpdate = true;
+  const tableSize = getTableWorldSize();
 
   return (
     <>
@@ -81,57 +91,68 @@ function AltTableWorld(props: {
 
       <group>
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.002, 0]}>
-          <planeGeometry args={[11.4, 7.5]} />
-          <meshStandardMaterial
-            color="#163126"
-            metalness={0.02}
-            roughness={0.96}
-            opacity={0.08}
-            transparent
-          />
+          <planeGeometry args={[tableSize.width, tableSize.height]} />
+          <meshStandardMaterial map={tableTexture} metalness={0.04} roughness={0.9} />
         </mesh>
 
-        <RackShell seat="north" />
-        <RackShell seat="east" />
-        <RackShell seat="west" />
+        <RackShell cards={props.cards} seat="north" />
+        <RackShell cards={props.cards} seat="east" />
+        <RackShell cards={props.cards} seat="west" />
 
-        <AltTableCards3D cards={props.cards} texture={texture} />
+        <AltTableCards3D cards={props.cards} texture={backTexture} />
       </group>
     </>
   );
 }
 
 function RackShell(props: {
+  cards: HiddenHandCard[];
   seat: "north" | "east" | "west";
 }) {
   const commonMaterial = (
     <meshStandardMaterial color="#6b4125" metalness={0.12} roughness={0.7} />
   );
+  const seatCards = props.cards.filter((card) => card.seat === props.seat);
+  if (seatCards.length === 0) {
+    return null;
+  }
+
+  const xs = seatCards.map((card) => designToWorld(card.anchor.center_px.x, card.anchor.center_px.y)[0]);
+  const zs = seatCards.map((card) => designToWorld(card.anchor.center_px.x, card.anchor.center_px.y)[2]);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minZ = Math.min(...zs);
+  const maxZ = Math.max(...zs);
 
   if (props.seat === "north") {
+    const width = maxX - minX + 0.9;
+    const centerX = (minX + maxX) / 2;
+    const centerZ = minZ - 0.22;
     return (
-      <group position={[0, 0.05, -3.14]}>
+      <group position={[centerX, 0.05, centerZ]}>
         <mesh>
-          <boxGeometry args={[3.9, 0.14, 0.68]} />
+          <boxGeometry args={[width, 0.14, 0.68]} />
           {commonMaterial}
         </mesh>
         <mesh position={[0, 0.12, 0.18]}>
-          <boxGeometry args={[3.66, 0.12, 0.14]} />
+          <boxGeometry args={[width - 0.28, 0.12, 0.14]} />
           {commonMaterial}
         </mesh>
       </group>
     );
   }
 
-  const sideX = props.seat === "east" ? 4.42 : -4.42;
+  const height = maxZ - minZ + 1;
+  const centerZ = (minZ + maxZ) / 2;
+  const centerX = props.seat === "east" ? maxX + 0.18 : minX - 0.18;
   return (
-    <group position={[sideX, 0.05, 0]}>
+    <group position={[centerX, 0.05, centerZ]}>
       <mesh>
-        <boxGeometry args={[0.68, 0.14, 3.45]} />
+        <boxGeometry args={[0.68, 0.14, height]} />
         {commonMaterial}
       </mesh>
       <mesh position={[props.seat === "east" ? -0.18 : 0.18, 0.12, 0]}>
-        <boxGeometry args={[0.14, 0.12, 3.18]} />
+        <boxGeometry args={[0.14, 0.12, height - 0.28]} />
         {commonMaterial}
       </mesh>
     </group>
