@@ -2,7 +2,8 @@ import handAnchorData from "../public/tv_ed/h/a.json";
 import passAnchorData from "../public/tv_ed/p/a.json";
 import trickAnchorData from "../public/tv_ed/k/a.json";
 import cardMapData from "../public/tv_ed/c/map.json";
-import type { Card } from "@tichuml/engine";
+import rackData from "../public/tv_ed/h/rack.json";
+import type { Card, SeatId } from "@tichuml/engine";
 import type { PassLaneDirection, SeatVisualPosition } from "./table-layout";
 
 export const NORMAL_TABLE_SPRITE_ROOT = "/tv_ed";
@@ -55,6 +56,13 @@ export type NormalSpriteTrickAnchor = {
   z_index: number;
 };
 
+export type NormalSpriteRack = {
+  id: string;
+  seat: "north" | "east" | "south" | "west";
+  bbox_px: { x: number; y: number; w: number; h: number };
+  card_channel_px?: { x: number; y: number; w: number; h: number };
+};
+
 export type NormalSpriteTransform = {
   scale: number;
   offsetX: number;
@@ -76,6 +84,7 @@ const suitKeyByCardSuit: Record<
 const handAnchors = handAnchorData.anchors as NormalSpriteHandAnchor[];
 const passAnchors = passAnchorData.anchors as NormalSpritePassAnchor[];
 const trickAnchors = trickAnchorData.anchors as NormalSpriteTrickAnchor[];
+const racks = rackData.racks as NormalSpriteRack[];
 
 const handAnchorsBySeat = {
   north: handAnchors.filter((anchor) => anchor.seat === "north"),
@@ -117,6 +126,8 @@ const passAnchorIdByRoute = {
 const passAnchorById = new Map(
   passAnchors.map((anchor) => [anchor.id, anchor] as const)
 );
+
+const rackBySeat = new Map(racks.map((rack) => [rack.seat, rack] as const));
 
 export function getNormalSpriteHandAnchors(
   seat: "north" | "east" | "south" | "west"
@@ -183,6 +194,12 @@ export function resolveNormalSpriteTrickAnchor(
   return trickAnchorBySeat.get(seat) ?? null;
 }
 
+export function resolveNormalSpriteRack(
+  seat: "north" | "east" | "south" | "west"
+) {
+  return rackBySeat.get(seat) ?? null;
+}
+
 export function getNormalSpritePassDirection(
   anchor: NormalSpritePassAnchor
 ): PassLaneDirection {
@@ -242,4 +259,53 @@ export function projectNormalSpritePolygon(
   transform: NormalSpriteTransform
 ) {
   return points.map((point) => projectNormalSpritePoint(point, transform));
+}
+
+export function getNormalSpriteHandScale(position: SeatVisualPosition) {
+  switch (position) {
+    case "top":
+      return 1.36;
+    case "left":
+    case "right":
+      return 1.34;
+    case "bottom":
+      return 1.28;
+  }
+}
+
+export function getNormalSpriteSeatwardOffset(config: {
+  position: SeatVisualPosition;
+  width: number;
+  height: number;
+}) {
+  switch (config.position) {
+    case "top":
+      return { x: 0, y: -config.height * 0.16 };
+    case "left":
+      return { x: -config.width * 0.28, y: 0 };
+    case "right":
+      return { x: config.width * 0.28, y: 0 };
+    case "bottom":
+      return { x: 0, y: config.height * 0.12 };
+  }
+}
+
+export function getNormalSpriteHiddenPassCount(config: {
+  seat: SeatId;
+  passRouteViews: Array<{ sourceSeat: SeatId; occupied: boolean }>;
+}) {
+  return config.passRouteViews.filter(
+    (route) => route.sourceSeat === config.seat && route.occupied
+  ).length;
+}
+
+export function shouldRenderNormalSpritePassCard(config: {
+  sourceSeat: SeatId;
+  occupied: boolean;
+  visibleCardId: string | null;
+}) {
+  return Boolean(
+    config.visibleCardId ||
+      (config.occupied && config.sourceSeat === "seat-0")
+  );
 }

@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   computeNormalSpriteTransform,
+  getNormalSpriteHiddenPassCount,
   getNormalSpritePassDirection,
   getNormalSpriteSelectedHandAnchors,
+  getNormalSpriteSeatwardOffset,
+  resolveNormalSpriteRack,
   resolveNormalSpriteCardFaceSrc,
   resolveNormalSpritePassAnchor,
-  resolveNormalSpriteTrickAnchor
+  resolveNormalSpriteTrickAnchor,
+  shouldRenderNormalSpritePassCard
 } from "../../apps/web/src/normal-table-sprite-assets";
 
 describe("normal table sprite assets", () => {
@@ -73,5 +77,53 @@ describe("normal table sprite assets", () => {
   it("exposes the authored trick anchors for live staging", () => {
     expect(resolveNormalSpriteTrickAnchor("center")?.id).toBe("trick_center");
     expect(resolveNormalSpriteTrickAnchor("south")?.center_px.y).toBe(580);
+  });
+
+  it("exposes the rack groove bounds and seatward offsets for rail-seated hands", () => {
+    expect(resolveNormalSpriteRack("north")?.card_channel_px?.w).toBe(616);
+    const offset = getNormalSpriteSeatwardOffset({
+      position: "top",
+      width: 40,
+      height: 60
+    });
+    expect(offset.x).toBe(0);
+    expect(offset.y).toBeCloseTo(-9.6);
+
+    const sideOffset = getNormalSpriteSeatwardOffset({
+      position: "left",
+      width: 46,
+      height: 74
+    });
+    expect(sideOffset.x).toBeCloseTo(-12.88);
+    expect(sideOffset.y).toBe(0);
+  });
+
+  it("keeps remote rack counts full during passing and suppresses hidden remote pass cards", () => {
+    expect(
+      getNormalSpriteHiddenPassCount({
+        seat: "seat-2",
+        passRouteViews: [
+          { sourceSeat: "seat-2", occupied: true },
+          { sourceSeat: "seat-2", occupied: true },
+          { sourceSeat: "seat-2", occupied: true },
+          { sourceSeat: "seat-1", occupied: true }
+        ]
+      })
+    ).toBe(3);
+
+    expect(
+      shouldRenderNormalSpritePassCard({
+        sourceSeat: "seat-2",
+        occupied: true,
+        visibleCardId: null
+      })
+    ).toBe(false);
+    expect(
+      shouldRenderNormalSpritePassCard({
+        sourceSeat: "seat-0",
+        occupied: true,
+        visibleCardId: null
+      })
+    ).toBe(true);
   });
 });

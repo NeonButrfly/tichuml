@@ -161,8 +161,11 @@ import {
 } from "./tichu-table-assets";
 import {
   computeNormalSpriteTransform,
+  getNormalSpriteHandScale,
+  getNormalSpriteHiddenPassCount,
   getNormalSpriteRemoteCardBackSrc,
   getNormalSpriteSelectedHandAnchors,
+  getNormalSpriteSeatwardOffset,
   getNormalSpritePassDirection,
   NORMAL_TABLE_SPRITE_BASE_SRC,
   NORMAL_TABLE_SPRITE_DRAGON_SRC,
@@ -171,8 +174,10 @@ import {
   projectNormalSpritePolygon,
   resolveNormalSpriteCardFaceSrc,
   resolveNormalSpritePassAnchor,
+  resolveNormalSpriteRack,
   resolveNormalSpriteTrickAnchor,
-  scaleNormalSpriteValue
+  scaleNormalSpriteValue,
+  shouldRenderNormalSpritePassCard
 } from "./normal-table-sprite-assets";
 
 export type SeatView = {
@@ -1808,6 +1813,7 @@ function NormalSpriteCard({
   rotation,
   zIndex,
   className,
+  clipRect,
   interactive = false,
   draggable = false,
   ariaLabel,
@@ -1823,6 +1829,7 @@ function NormalSpriteCard({
   rotation: number;
   zIndex: number;
   className?: string;
+  clipRect?: { left: number; top: number; width: number; height: number } | null;
   interactive?: boolean;
   draggable?: boolean;
   ariaLabel?: string;
@@ -1845,28 +1852,72 @@ function NormalSpriteCard({
     transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
     zIndex
   } satisfies CSSProperties;
+  const clippedStyle = clipRect
+    ? ({
+        ...style,
+        left: `${left - clipRect.left}px`,
+        top: `${top - clipRect.top}px`
+      } satisfies CSSProperties)
+    : style;
+  const clipWrapperStyle = clipRect
+    ? ({
+        left: `${clipRect.left}px`,
+        top: `${clipRect.top}px`,
+        width: `${clipRect.width}px`,
+        height: `${clipRect.height}px`,
+        zIndex
+      } satisfies CSSProperties)
+    : null;
+  const imageNode = <img className="normal-sprite-card__img" src={src} alt="" />;
 
   if (interactive) {
-    return (
+    const buttonNode = (
       <button
         type="button"
         className={classes}
-        style={style}
+        style={clipRect ? clippedStyle : style}
         aria-label={ariaLabel}
         draggable={draggable}
         onClick={onClick}
         onDragStart={onDragStart}
         onDragEnd={onDragEnd}
       >
-        <img className="normal-sprite-card__img" src={src} alt="" />
+        {imageNode}
       </button>
+    );
+
+    return clipRect ? (
+      <div
+        className={
+          interactive
+            ? "normal-sprite-card-clip normal-sprite-card-clip--interactive"
+            : "normal-sprite-card-clip"
+        }
+        style={clipWrapperStyle}
+      >
+        {buttonNode}
+      </div>
+    ) : (
+      buttonNode
     );
   }
 
-  return (
-    <div className={classes} style={style} aria-hidden={ariaLabel ? undefined : true}>
-      <img className="normal-sprite-card__img" src={src} alt="" />
+  const cardNode = (
+    <div
+      className={classes}
+      style={clipRect ? clippedStyle : style}
+      aria-hidden={ariaLabel ? undefined : true}
+    >
+      {imageNode}
     </div>
+  );
+
+  return clipRect ? (
+    <div className="normal-sprite-card-clip" style={clipWrapperStyle}>
+      {cardNode}
+    </div>
+  ) : (
+    cardNode
   );
 }
 
@@ -1937,15 +1988,40 @@ function NormalSpritePlayArea(
 
       {props.seatViews.flatMap((seatView) => {
         const spriteSeat = getSpriteSeatName(seatView.position);
-        const handCards = seatView.isLocalSeat
-          ? props.sortedLocalHand
-          : seatView.position === "right"
+        const hiddenPassCount =
+          !seatView.isLocalSeat && exchangePhaseActive
+            ? getNormalSpriteHiddenPassCount({
+                seat: seatView.seat,
+                passRouteViews: props.passRouteViews
+              })
+            : 0;
+        const remoteVisibleCards =
+          seatView.position === "right"
             ? [...seatView.cards].reverse()
             : seatView.cards;
+        const remoteRenderCards = Array.from({
+          length: remoteVisibleCards.length + hiddenPassCount
+        }).map((_, index) => remoteVisibleCards[index] ?? null);
+        const handCards = seatView.isLocalSeat
+          ? props.sortedLocalHand
+          : remoteRenderCards;
         const anchors = getNormalSpriteSelectedHandAnchors({
           seat: spriteSeat,
           count: handCards.length
         });
+        const rack = resolveNormalSpriteRack(spriteSeat);
+        const clipSource =
+          seatView.position === "bottom"
+            ? null
+            : rack?.card_channel_px ?? rack?.bbox_px ?? null;
+        const clipRect = clipSource
+          ? {
+              left: transform.offsetX + clipSource.x * transform.scale,
+              top: transform.offsetY + clipSource.y * transform.scale,
+              width: scaleNormalSpriteValue(clipSource.w, transform),
+              height: scaleNormalSpriteValue(clipSource.h, transform)
+            }
+          : null;
 
         return handCards.map((card, index) => {
           const anchor = anchors[index];
@@ -1954,28 +2030,38 @@ function NormalSpritePlayArea(
           }
 
           const center = projectNormalSpritePoint(anchor.center_px, transform);
-          const width = scaleNormalSpriteValue(anchor.w_px, transform);
-          const height = scaleNormalSpriteValue(anchor.h_px, transform);
-          const selected = seatView.isLocalSeat && props.selectedCardIds.includes(card.id);
+          const cardScale = getNormalSpriteHandScale(seatView.position);
+          const width = scaleNormalSpriteValue(anchor.w_px, transform) * cardScale;
+          const height = scaleNormalSpriteValue(anchor.h_px, transform) * cardScale;
+          const seatwardOffset = getNormalSpriteSeatwardOffset({
+            position: seatView.position,
+            width,
+            height
+          });
+          const selected =
+            seatView.isLocalSeat &&
+            card !== null &&
+            props.selectedCardIds.includes(card.id);
           const toneClass = seatView.isLocalSeat
-            ? props.localLegalCardIds.has(card.id)
+            ? card !== null && props.localLegalCardIds.has(card.id)
               ? "normal-sprite-card--legal"
               : "normal-sprite-card--muted"
             : "";
           const src = seatView.isLocalSeat
-            ? resolveNormalSpriteCardFaceSrc(card)
+            ? resolveNormalSpriteCardFaceSrc(card as Card)
             : remoteBackSrc;
 
           return (
             <NormalSpriteCard
-              key={`${seatView.seat}-${card.id}-${index}`}
+              key={`${seatView.seat}-${card?.id ?? `back-${index}`}-${index}`}
               src={src}
-              left={center.x}
-              top={center.y - (selected ? selectionLift : 0)}
+              left={center.x + seatwardOffset.x}
+              top={center.y + seatwardOffset.y - (selected ? selectionLift : 0)}
               width={width}
               height={height}
               rotation={anchor.rotation_deg}
               zIndex={anchor.z_index + (selected ? 30 : 0)}
+              clipRect={clipRect}
               className={[
                 `normal-sprite-card--${seatView.position}`,
                 seatView.isLocalSeat ? "normal-sprite-card--local" : "normal-sprite-card--remote",
@@ -1988,11 +2074,13 @@ function NormalSpritePlayArea(
               draggable={seatView.isLocalSeat && props.localPassInteractionEnabled}
               ariaLabel={
                 seatView.isLocalSeat
-                  ? `${seatView.title} ${card.id}`
+                  ? `${seatView.title} ${(card as Card).id}`
                   : `${seatView.title} facedown card`
               }
               onClick={
-                seatView.isLocalSeat ? () => props.onLocalCardClick(card.id) : undefined
+                seatView.isLocalSeat
+                  ? () => props.onLocalCardClick((card as Card).id)
+                  : undefined
               }
               onDragStart={
                 seatView.isLocalSeat && props.localPassInteractionEnabled
@@ -2000,7 +2088,7 @@ function NormalSpritePlayArea(
                       event.dataTransfer.effectAllowed = "move";
                       event.dataTransfer.setData(
                         "application/x-tichu-pass-card",
-                        card.id
+                        (card as Card).id
                       );
                     }
                   : undefined
@@ -2138,13 +2226,18 @@ function NormalSpritePlayArea(
         const cardCenter = projectNormalSpritePoint(anchor.center_px, transform);
         const cardWidth = scaleNormalSpriteValue(anchor.w_px, transform);
         const cardHeight = scaleNormalSpriteValue(anchor.h_px, transform);
-        const cardSrc = route.visibleCardId
-          ? resolveNormalSpriteCardFaceSrc(
-              resolveCard(route.visibleCardId, props.cardLookup)
-            )
-          : route.occupied
-            ? remoteBackSrc
-            : null;
+        const renderPassCard = shouldRenderNormalSpritePassCard({
+          sourceSeat: route.sourceSeat,
+          occupied: route.occupied,
+          visibleCardId: route.visibleCardId
+        });
+        const cardSrc = !renderPassCard
+          ? null
+          : route.visibleCardId
+            ? resolveNormalSpriteCardFaceSrc(
+                resolveCard(route.visibleCardId, props.cardLookup)
+              )
+            : remoteBackSrc;
         const selected = route.interactive && route.target === props.selectedPassTarget;
         const slotStyle = {
           left: `${projectedBounds.x}px`,
