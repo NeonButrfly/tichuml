@@ -1,0 +1,103 @@
+{
+  "version": "15.0.0",
+  "design_px": {
+    "w": 1536,
+    "h": 1024
+  },
+  "asset_root": "/tv15",
+  "iteration_reference": "tv14 cards math kept; p/a side targets corrected to angled rail geometry",
+  "table": {
+    "base": "t/base.png",
+    "dragon": "t/dragon.png",
+    "plate": "t/plate.png"
+  },
+  "layers": [
+    "t/base.png",
+    "t/dragon.png",
+    "dynamic hands/tricks",
+    "p/o.png during passing",
+    "assigned pass cards/ui"
+  ],
+  "passing": {
+    "path": "p/a.json",
+    "required_count": 12,
+    "direction_map": {
+      "north_pass_left": "left",
+      "north_pass_across": "south",
+      "north_pass_right": "right",
+      "south_pass_left": "left",
+      "south_pass_across": "north",
+      "south_pass_right": "right",
+      "west_pass_north": "north",
+      "west_pass_across": "east",
+      "west_pass_south": "south",
+      "east_pass_north": "north",
+      "east_pass_across": "west",
+      "east_pass_south": "south"
+    },
+    "orientation_map": {
+      "north_pass_left": "landscape",
+      "north_pass_across": "portrait",
+      "north_pass_right": "landscape",
+      "south_pass_left": "landscape",
+      "south_pass_across": "portrait",
+      "south_pass_right": "landscape",
+      "west_pass_north": "portrait",
+      "west_pass_across": "landscape",
+      "west_pass_south": "portrait",
+      "east_pass_north": "portrait",
+      "east_pass_across": "landscape",
+      "east_pass_south": "portrait"
+    },
+    "rotation_map": {
+      "north_pass_left": 0,
+      "north_pass_across": 0,
+      "north_pass_right": 0,
+      "south_pass_left": 0,
+      "south_pass_across": 0,
+      "south_pass_right": 0,
+      "west_pass_north": -90,
+      "west_pass_across": 90,
+      "west_pass_south": 90,
+      "east_pass_north": -90,
+      "east_pass_across": 90,
+      "east_pass_south": 90
+    },
+    "keyed_edges": {
+      "north": "top",
+      "south": "bottom",
+      "west": "left angled edge",
+      "east": "right angled edge"
+    },
+    "side_visual_rotation_deg": {
+      "west": -13,
+      "east": 13
+    },
+    "rules": [
+      "east/west side lanes are angled polygons following rail angle",
+      "polygon_px is source of truth for hit-testing and visual shape",
+      "bbox_px is only the envelope for angled side lanes"
+    ]
+  },
+  "hands": {
+    "path": "h/a.json",
+    "math_lock": "h/math.json",
+    "rack_path": "h/rack.json",
+    "required_count": 56,
+    "required_per_seat": 14,
+    "opponent_cards": "inside physical rack channels",
+    "south": "rail seated fan",
+    "card_math_locked": true
+  },
+  "tricks": {
+    "path": "k/a.json",
+    "virtual_only": true,
+    "required_count": 5
+  },
+  "rules": {
+    "dynamic_overlays_drawn_with_math": true,
+    "do_not_imagegen_dynamic_components": true,
+    "no_generic_rows": true,
+    "no_procedural_table": true
+  }
+}

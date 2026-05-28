@@ -1,0 +1,2546 @@
+{
+  "name": "tichu_v15_hand_card_anchors",
+  "version": "15.0.0",
+  "design_px": {
+    "w": 1536,
+    "h": 1024
+  },
+  "rules": {
+    "dynamic_components_are_math_drawn": true,
+    "no_generic_rows": true,
+    "north_east_west_cards_inside_racks": true,
+    "south_cards_rail_seated_fan": true,
+    "card_math_locked_from_v14_cards_preview": true,
+    "east_west_cards_angled_along_rail": true,
+    "north_cards_bottom_third_hidden_by_rack_in_runtime_clip": true
+  },
+  "counts": {
+    "north_hand": 14,
+    "east_hand": 14,
+    "south_hand": 14,
+    "west_hand": 14,
+    "total": 56
+  },
+  "anchors": [
+    {
+      "id": "n01",
+      "zone": "north_hand",
+      "seat": "north",
+      "index": 1,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 485.0,
+        "y": 62
+      },
+      "w_px": 38,
+      "h_px": 60,
+      "rotation_deg": 0,
+      "aspect_ratio": 0.6333,
+      "bbox_px": {
+        "x": 466.0,
+        "y": 32.0,
+        "w": 38.0,
+        "h": 60.0
+      },
+      "polygon_px": [
+        {
+          "x": 466.0,
+          "y": 32.0
+        },
+        {
+          "x": 504.0,
+          "y": 32.0
+        },
+        {
+          "x": 504.0,
+          "y": 92.0
+        },
+        {
+          "x": 466.0,
+          "y": 92.0
+        }
+      ],
+      "z_index": 40,
+      "card_orientation": "portrait",
+      "rack_id": "rack_north",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "top_two_thirds_visible_bottom_third_in_recess",
+      "visible_fraction_estimate": 0.67
+    },
+    {
+      "id": "n02",
+      "zone": "north_hand",
+      "seat": "north",
+      "index": 2,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 528.46,
+        "y": 62
+      },
+      "w_px": 38,
+      "h_px": 60,
+      "rotation_deg": 0,
+      "aspect_ratio": 0.6333,
+      "bbox_px": {
+        "x": 509.46,
+        "y": 32.0,
+        "w": 38.0,
+        "h": 60.0
+      },
+      "polygon_px": [
+        {
+          "x": 509.46,
+          "y": 32.0
+        },
+        {
+          "x": 547.46,
+          "y": 32.0
+        },
+        {
+          "x": 547.46,
+          "y": 92.0
+        },
+        {
+          "x": 509.46,
+          "y": 92.0
+        }
+      ],
+      "z_index": 41,
+      "card_orientation": "portrait",
+      "rack_id": "rack_north",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "top_two_thirds_visible_bottom_third_in_recess",
+      "visible_fraction_estimate": 0.67
+    },
+    {
+      "id": "n03",
+      "zone": "north_hand",
+      "seat": "north",
+      "index": 3,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 571.92,
+        "y": 62
+      },
+      "w_px": 38,
+      "h_px": 60,
+      "rotation_deg": 0,
+      "aspect_ratio": 0.6333,
+      "bbox_px": {
+        "x": 552.92,
+        "y": 32.0,
+        "w": 38.0,
+        "h": 60.0
+      },
+      "polygon_px": [
+        {
+          "x": 552.92,
+          "y": 32.0
+        },
+        {
+          "x": 590.92,
+          "y": 32.0
+        },
+        {
+          "x": 590.92,
+          "y": 92.0
+        },
+        {
+          "x": 552.92,
+          "y": 92.0
+        }
+      ],
+      "z_index": 42,
+      "card_orientation": "portrait",
+      "rack_id": "rack_north",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "top_two_thirds_visible_bottom_third_in_recess",
+      "visible_fraction_estimate": 0.67
+    },
+    {
+      "id": "n04",
+      "zone": "north_hand",
+      "seat": "north",
+      "index": 4,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 615.38,
+        "y": 62
+      },
+      "w_px": 38,
+      "h_px": 60,
+      "rotation_deg": 0,
+      "aspect_ratio": 0.6333,
+      "bbox_px": {
+        "x": 596.38,
+        "y": 32.0,
+        "w": 38.0,
+        "h": 60.0
+      },
+      "polygon_px": [
+        {
+          "x": 596.38,
+          "y": 32.0
+        },
+        {
+          "x": 634.38,
+          "y": 32.0
+        },
+        {
+          "x": 634.38,
+          "y": 92.0
+        },
+        {
+          "x": 596.38,
+          "y": 92.0
+        }
+      ],
+      "z_index": 43,
+      "card_orientation": "portrait",
+      "rack_id": "rack_north",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "top_two_thirds_visible_bottom_third_in_recess",
+      "visible_fraction_estimate": 0.67
+    },
+    {
+      "id": "n05",
+      "zone": "north_hand",
+      "seat": "north",
+      "index": 5,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 658.85,
+        "y": 62
+      },
+      "w_px": 38,
+      "h_px": 60,
+      "rotation_deg": 0,
+      "aspect_ratio": 0.6333,
+      "bbox_px": {
+        "x": 639.85,
+        "y": 32.0,
+        "w": 38.0,
+        "h": 60.0
+      },
+      "polygon_px": [
+        {
+          "x": 639.85,
+          "y": 32.0
+        },
+        {
+          "x": 677.85,
+          "y": 32.0
+        },
+        {
+          "x": 677.85,
+          "y": 92.0
+        },
+        {
+          "x": 639.85,
+          "y": 92.0
+        }
+      ],
+      "z_index": 44,
+      "card_orientation": "portrait",
+      "rack_id": "rack_north",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "top_two_thirds_visible_bottom_third_in_recess",
+      "visible_fraction_estimate": 0.67
+    },
+    {
+      "id": "n06",
+      "zone": "north_hand",
+      "seat": "north",
+      "index": 6,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 702.31,
+        "y": 62
+      },
+      "w_px": 38,
+      "h_px": 60,
+      "rotation_deg": 0,
+      "aspect_ratio": 0.6333,
+      "bbox_px": {
+        "x": 683.31,
+        "y": 32.0,
+        "w": 38.0,
+        "h": 60.0
+      },
+      "polygon_px": [
+        {
+          "x": 683.31,
+          "y": 32.0
+        },
+        {
+          "x": 721.31,
+          "y": 32.0
+        },
+        {
+          "x": 721.31,
+          "y": 92.0
+        },
+        {
+          "x": 683.31,
+          "y": 92.0
+        }
+      ],
+      "z_index": 45,
+      "card_orientation": "portrait",
+      "rack_id": "rack_north",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "top_two_thirds_visible_bottom_third_in_recess",
+      "visible_fraction_estimate": 0.67
+    },
+    {
+      "id": "n07",
+      "zone": "north_hand",
+      "seat": "north",
+      "index": 7,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 745.77,
+        "y": 62
+      },
+      "w_px": 38,
+      "h_px": 60,
+      "rotation_deg": 0,
+      "aspect_ratio": 0.6333,
+      "bbox_px": {
+        "x": 726.77,
+        "y": 32.0,
+        "w": 38.0,
+        "h": 60.0
+      },
+      "polygon_px": [
+        {
+          "x": 726.77,
+          "y": 32.0
+        },
+        {
+          "x": 764.77,
+          "y": 32.0
+        },
+        {
+          "x": 764.77,
+          "y": 92.0
+        },
+        {
+          "x": 726.77,
+          "y": 92.0
+        }
+      ],
+      "z_index": 46,
+      "card_orientation": "portrait",
+      "rack_id": "rack_north",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "top_two_thirds_visible_bottom_third_in_recess",
+      "visible_fraction_estimate": 0.67
+    },
+    {
+      "id": "n08",
+      "zone": "north_hand",
+      "seat": "north",
+      "index": 8,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 789.23,
+        "y": 62
+      },
+      "w_px": 38,
+      "h_px": 60,
+      "rotation_deg": 0,
+      "aspect_ratio": 0.6333,
+      "bbox_px": {
+        "x": 770.23,
+        "y": 32.0,
+        "w": 38.0,
+        "h": 60.0
+      },
+      "polygon_px": [
+        {
+          "x": 770.23,
+          "y": 32.0
+        },
+        {
+          "x": 808.23,
+          "y": 32.0
+        },
+        {
+          "x": 808.23,
+          "y": 92.0
+        },
+        {
+          "x": 770.23,
+          "y": 92.0
+        }
+      ],
+      "z_index": 47,
+      "card_orientation": "portrait",
+      "rack_id": "rack_north",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "top_two_thirds_visible_bottom_third_in_recess",
+      "visible_fraction_estimate": 0.67
+    },
+    {
+      "id": "n09",
+      "zone": "north_hand",
+      "seat": "north",
+      "index": 9,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 832.69,
+        "y": 62
+      },
+      "w_px": 38,
+      "h_px": 60,
+      "rotation_deg": 0,
+      "aspect_ratio": 0.6333,
+      "bbox_px": {
+        "x": 813.69,
+        "y": 32.0,
+        "w": 38.0,
+        "h": 60.0
+      },
+      "polygon_px": [
+        {
+          "x": 813.69,
+          "y": 32.0
+        },
+        {
+          "x": 851.69,
+          "y": 32.0
+        },
+        {
+          "x": 851.69,
+          "y": 92.0
+        },
+        {
+          "x": 813.69,
+          "y": 92.0
+        }
+      ],
+      "z_index": 48,
+      "card_orientation": "portrait",
+      "rack_id": "rack_north",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "top_two_thirds_visible_bottom_third_in_recess",
+      "visible_fraction_estimate": 0.67
+    },
+    {
+      "id": "n10",
+      "zone": "north_hand",
+      "seat": "north",
+      "index": 10,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 876.15,
+        "y": 62
+      },
+      "w_px": 38,
+      "h_px": 60,
+      "rotation_deg": 0,
+      "aspect_ratio": 0.6333,
+      "bbox_px": {
+        "x": 857.15,
+        "y": 32.0,
+        "w": 38.0,
+        "h": 60.0
+      },
+      "polygon_px": [
+        {
+          "x": 857.15,
+          "y": 32.0
+        },
+        {
+          "x": 895.15,
+          "y": 32.0
+        },
+        {
+          "x": 895.15,
+          "y": 92.0
+        },
+        {
+          "x": 857.15,
+          "y": 92.0
+        }
+      ],
+      "z_index": 49,
+      "card_orientation": "portrait",
+      "rack_id": "rack_north",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "top_two_thirds_visible_bottom_third_in_recess",
+      "visible_fraction_estimate": 0.67
+    },
+    {
+      "id": "n11",
+      "zone": "north_hand",
+      "seat": "north",
+      "index": 11,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 919.62,
+        "y": 62
+      },
+      "w_px": 38,
+      "h_px": 60,
+      "rotation_deg": 0,
+      "aspect_ratio": 0.6333,
+      "bbox_px": {
+        "x": 900.62,
+        "y": 32.0,
+        "w": 38.0,
+        "h": 60.0
+      },
+      "polygon_px": [
+        {
+          "x": 900.62,
+          "y": 32.0
+        },
+        {
+          "x": 938.62,
+          "y": 32.0
+        },
+        {
+          "x": 938.62,
+          "y": 92.0
+        },
+        {
+          "x": 900.62,
+          "y": 92.0
+        }
+      ],
+      "z_index": 50,
+      "card_orientation": "portrait",
+      "rack_id": "rack_north",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "top_two_thirds_visible_bottom_third_in_recess",
+      "visible_fraction_estimate": 0.67
+    },
+    {
+      "id": "n12",
+      "zone": "north_hand",
+      "seat": "north",
+      "index": 12,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 963.08,
+        "y": 62
+      },
+      "w_px": 38,
+      "h_px": 60,
+      "rotation_deg": 0,
+      "aspect_ratio": 0.6333,
+      "bbox_px": {
+        "x": 944.08,
+        "y": 32.0,
+        "w": 38.0,
+        "h": 60.0
+      },
+      "polygon_px": [
+        {
+          "x": 944.08,
+          "y": 32.0
+        },
+        {
+          "x": 982.08,
+          "y": 32.0
+        },
+        {
+          "x": 982.08,
+          "y": 92.0
+        },
+        {
+          "x": 944.08,
+          "y": 92.0
+        }
+      ],
+      "z_index": 51,
+      "card_orientation": "portrait",
+      "rack_id": "rack_north",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "top_two_thirds_visible_bottom_third_in_recess",
+      "visible_fraction_estimate": 0.67
+    },
+    {
+      "id": "n13",
+      "zone": "north_hand",
+      "seat": "north",
+      "index": 13,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 1006.54,
+        "y": 62
+      },
+      "w_px": 38,
+      "h_px": 60,
+      "rotation_deg": 0,
+      "aspect_ratio": 0.6333,
+      "bbox_px": {
+        "x": 987.54,
+        "y": 32.0,
+        "w": 38.0,
+        "h": 60.0
+      },
+      "polygon_px": [
+        {
+          "x": 987.54,
+          "y": 32.0
+        },
+        {
+          "x": 1025.54,
+          "y": 32.0
+        },
+        {
+          "x": 1025.54,
+          "y": 92.0
+        },
+        {
+          "x": 987.54,
+          "y": 92.0
+        }
+      ],
+      "z_index": 52,
+      "card_orientation": "portrait",
+      "rack_id": "rack_north",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "top_two_thirds_visible_bottom_third_in_recess",
+      "visible_fraction_estimate": 0.67
+    },
+    {
+      "id": "n14",
+      "zone": "north_hand",
+      "seat": "north",
+      "index": 14,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 1050.0,
+        "y": 62
+      },
+      "w_px": 38,
+      "h_px": 60,
+      "rotation_deg": 0,
+      "aspect_ratio": 0.6333,
+      "bbox_px": {
+        "x": 1031.0,
+        "y": 32.0,
+        "w": 38.0,
+        "h": 60.0
+      },
+      "polygon_px": [
+        {
+          "x": 1031.0,
+          "y": 32.0
+        },
+        {
+          "x": 1069.0,
+          "y": 32.0
+        },
+        {
+          "x": 1069.0,
+          "y": 92.0
+        },
+        {
+          "x": 1031.0,
+          "y": 92.0
+        }
+      ],
+      "z_index": 53,
+      "card_orientation": "portrait",
+      "rack_id": "rack_north",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "top_two_thirds_visible_bottom_third_in_recess",
+      "visible_fraction_estimate": 0.67
+    },
+    {
+      "id": "w01",
+      "zone": "west_hand",
+      "seat": "west",
+      "index": 1,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 88,
+        "y": 275.0
+      },
+      "w_px": 46,
+      "h_px": 74,
+      "rotation_deg": -13,
+      "aspect_ratio": 0.6216,
+      "bbox_px": {
+        "x": 57.27,
+        "y": 233.77,
+        "w": 61.46,
+        "h": 82.46
+      },
+      "polygon_px": [
+        {
+          "x": 57.27,
+          "y": 244.12
+        },
+        {
+          "x": 102.09,
+          "y": 233.77
+        },
+        {
+          "x": 118.73,
+          "y": 305.88
+        },
+        {
+          "x": 73.91,
+          "y": 316.23
+        }
+      ],
+      "z_index": 40,
+      "card_orientation": "portrait",
+      "rack_id": "rack_west",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "card inserted in side rail groove and angled with rail"
+    },
+    {
+      "id": "w02",
+      "zone": "west_hand",
+      "seat": "west",
+      "index": 2,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 88,
+        "y": 304.62
+      },
+      "w_px": 46,
+      "h_px": 74,
+      "rotation_deg": -13,
+      "aspect_ratio": 0.6216,
+      "bbox_px": {
+        "x": 57.27,
+        "y": 263.39,
+        "w": 61.46,
+        "h": 82.45
+      },
+      "polygon_px": [
+        {
+          "x": 57.27,
+          "y": 273.74
+        },
+        {
+          "x": 102.09,
+          "y": 263.39
+        },
+        {
+          "x": 118.73,
+          "y": 335.49
+        },
+        {
+          "x": 73.91,
+          "y": 345.84
+        }
+      ],
+      "z_index": 41,
+      "card_orientation": "portrait",
+      "rack_id": "rack_west",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "card inserted in side rail groove and angled with rail"
+    },
+    {
+      "id": "w03",
+      "zone": "west_hand",
+      "seat": "west",
+      "index": 3,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 88,
+        "y": 334.23
+      },
+      "w_px": 46,
+      "h_px": 74,
+      "rotation_deg": -13,
+      "aspect_ratio": 0.6216,
+      "bbox_px": {
+        "x": 57.27,
+        "y": 293.01,
+        "w": 61.46,
+        "h": 82.45
+      },
+      "polygon_px": [
+        {
+          "x": 57.27,
+          "y": 303.35
+        },
+        {
+          "x": 102.09,
+          "y": 293.01
+        },
+        {
+          "x": 118.73,
+          "y": 365.11
+        },
+        {
+          "x": 73.91,
+          "y": 375.46
+        }
+      ],
+      "z_index": 42,
+      "card_orientation": "portrait",
+      "rack_id": "rack_west",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "card inserted in side rail groove and angled with rail"
+    },
+    {
+      "id": "w04",
+      "zone": "west_hand",
+      "seat": "west",
+      "index": 4,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 88,
+        "y": 363.85
+      },
+      "w_px": 46,
+      "h_px": 74,
+      "rotation_deg": -13,
+      "aspect_ratio": 0.6216,
+      "bbox_px": {
+        "x": 57.27,
+        "y": 322.62,
+        "w": 61.46,
+        "h": 82.45
+      },
+      "polygon_px": [
+        {
+          "x": 57.27,
+          "y": 332.97
+        },
+        {
+          "x": 102.09,
+          "y": 322.62
+        },
+        {
+          "x": 118.73,
+          "y": 394.72
+        },
+        {
+          "x": 73.91,
+          "y": 405.07
+        }
+      ],
+      "z_index": 43,
+      "card_orientation": "portrait",
+      "rack_id": "rack_west",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "card inserted in side rail groove and angled with rail"
+    },
+    {
+      "id": "w05",
+      "zone": "west_hand",
+      "seat": "west",
+      "index": 5,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 88,
+        "y": 393.46
+      },
+      "w_px": 46,
+      "h_px": 74,
+      "rotation_deg": -13,
+      "aspect_ratio": 0.6216,
+      "bbox_px": {
+        "x": 57.27,
+        "y": 352.24,
+        "w": 61.46,
+        "h": 82.45
+      },
+      "polygon_px": [
+        {
+          "x": 57.27,
+          "y": 362.58
+        },
+        {
+          "x": 102.09,
+          "y": 352.24
+        },
+        {
+          "x": 118.73,
+          "y": 424.34
+        },
+        {
+          "x": 73.91,
+          "y": 434.69
+        }
+      ],
+      "z_index": 44,
+      "card_orientation": "portrait",
+      "rack_id": "rack_west",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "card inserted in side rail groove and angled with rail"
+    },
+    {
+      "id": "w06",
+      "zone": "west_hand",
+      "seat": "west",
+      "index": 6,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 88,
+        "y": 423.08
+      },
+      "w_px": 46,
+      "h_px": 74,
+      "rotation_deg": -13,
+      "aspect_ratio": 0.6216,
+      "bbox_px": {
+        "x": 57.27,
+        "y": 381.85,
+        "w": 61.46,
+        "h": 82.45
+      },
+      "polygon_px": [
+        {
+          "x": 57.27,
+          "y": 392.2
+        },
+        {
+          "x": 102.09,
+          "y": 381.85
+        },
+        {
+          "x": 118.73,
+          "y": 453.95
+        },
+        {
+          "x": 73.91,
+          "y": 464.3
+        }
+      ],
+      "z_index": 45,
+      "card_orientation": "portrait",
+      "rack_id": "rack_west",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "card inserted in side rail groove and angled with rail"
+    },
+    {
+      "id": "w07",
+      "zone": "west_hand",
+      "seat": "west",
+      "index": 7,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 88,
+        "y": 452.69
+      },
+      "w_px": 46,
+      "h_px": 74,
+      "rotation_deg": -13,
+      "aspect_ratio": 0.6216,
+      "bbox_px": {
+        "x": 57.27,
+        "y": 411.47,
+        "w": 61.46,
+        "h": 82.45
+      },
+      "polygon_px": [
+        {
+          "x": 57.27,
+          "y": 421.81
+        },
+        {
+          "x": 102.09,
+          "y": 411.47
+        },
+        {
+          "x": 118.73,
+          "y": 483.57
+        },
+        {
+          "x": 73.91,
+          "y": 493.92
+        }
+      ],
+      "z_index": 46,
+      "card_orientation": "portrait",
+      "rack_id": "rack_west",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "card inserted in side rail groove and angled with rail"
+    },
+    {
+      "id": "w08",
+      "zone": "west_hand",
+      "seat": "west",
+      "index": 8,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 88,
+        "y": 482.31
+      },
+      "w_px": 46,
+      "h_px": 74,
+      "rotation_deg": -13,
+      "aspect_ratio": 0.6216,
+      "bbox_px": {
+        "x": 57.27,
+        "y": 441.08,
+        "w": 61.46,
+        "h": 82.45
+      },
+      "polygon_px": [
+        {
+          "x": 57.27,
+          "y": 451.43
+        },
+        {
+          "x": 102.09,
+          "y": 441.08
+        },
+        {
+          "x": 118.73,
+          "y": 513.19
+        },
+        {
+          "x": 73.91,
+          "y": 523.53
+        }
+      ],
+      "z_index": 47,
+      "card_orientation": "portrait",
+      "rack_id": "rack_west",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "card inserted in side rail groove and angled with rail"
+    },
+    {
+      "id": "w09",
+      "zone": "west_hand",
+      "seat": "west",
+      "index": 9,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 88,
+        "y": 511.92
+      },
+      "w_px": 46,
+      "h_px": 74,
+      "rotation_deg": -13,
+      "aspect_ratio": 0.6216,
+      "bbox_px": {
+        "x": 57.27,
+        "y": 470.7,
+        "w": 61.46,
+        "h": 82.45
+      },
+      "polygon_px": [
+        {
+          "x": 57.27,
+          "y": 481.05
+        },
+        {
+          "x": 102.09,
+          "y": 470.7
+        },
+        {
+          "x": 118.73,
+          "y": 542.8
+        },
+        {
+          "x": 73.91,
+          "y": 553.15
+        }
+      ],
+      "z_index": 48,
+      "card_orientation": "portrait",
+      "rack_id": "rack_west",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "card inserted in side rail groove and angled with rail"
+    },
+    {
+      "id": "w10",
+      "zone": "west_hand",
+      "seat": "west",
+      "index": 10,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 88,
+        "y": 541.54
+      },
+      "w_px": 46,
+      "h_px": 74,
+      "rotation_deg": -13,
+      "aspect_ratio": 0.6216,
+      "bbox_px": {
+        "x": 57.27,
+        "y": 500.31,
+        "w": 61.46,
+        "h": 82.45
+      },
+      "polygon_px": [
+        {
+          "x": 57.27,
+          "y": 510.66
+        },
+        {
+          "x": 102.09,
+          "y": 500.31
+        },
+        {
+          "x": 118.73,
+          "y": 572.42
+        },
+        {
+          "x": 73.91,
+          "y": 582.76
+        }
+      ],
+      "z_index": 49,
+      "card_orientation": "portrait",
+      "rack_id": "rack_west",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "card inserted in side rail groove and angled with rail"
+    },
+    {
+      "id": "w11",
+      "zone": "west_hand",
+      "seat": "west",
+      "index": 11,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 88,
+        "y": 571.15
+      },
+      "w_px": 46,
+      "h_px": 74,
+      "rotation_deg": -13,
+      "aspect_ratio": 0.6216,
+      "bbox_px": {
+        "x": 57.27,
+        "y": 529.93,
+        "w": 61.46,
+        "h": 82.45
+      },
+      "polygon_px": [
+        {
+          "x": 57.27,
+          "y": 540.28
+        },
+        {
+          "x": 102.09,
+          "y": 529.93
+        },
+        {
+          "x": 118.73,
+          "y": 602.03
+        },
+        {
+          "x": 73.91,
+          "y": 612.38
+        }
+      ],
+      "z_index": 50,
+      "card_orientation": "portrait",
+      "rack_id": "rack_west",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "card inserted in side rail groove and angled with rail"
+    },
+    {
+      "id": "w12",
+      "zone": "west_hand",
+      "seat": "west",
+      "index": 12,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 88,
+        "y": 600.77
+      },
+      "w_px": 46,
+      "h_px": 74,
+      "rotation_deg": -13,
+      "aspect_ratio": 0.6216,
+      "bbox_px": {
+        "x": 57.27,
+        "y": 559.54,
+        "w": 61.46,
+        "h": 82.45
+      },
+      "polygon_px": [
+        {
+          "x": 57.27,
+          "y": 569.89
+        },
+        {
+          "x": 102.09,
+          "y": 559.54
+        },
+        {
+          "x": 118.73,
+          "y": 631.65
+        },
+        {
+          "x": 73.91,
+          "y": 641.99
+        }
+      ],
+      "z_index": 51,
+      "card_orientation": "portrait",
+      "rack_id": "rack_west",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "card inserted in side rail groove and angled with rail"
+    },
+    {
+      "id": "w13",
+      "zone": "west_hand",
+      "seat": "west",
+      "index": 13,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 88,
+        "y": 630.38
+      },
+      "w_px": 46,
+      "h_px": 74,
+      "rotation_deg": -13,
+      "aspect_ratio": 0.6216,
+      "bbox_px": {
+        "x": 57.27,
+        "y": 589.16,
+        "w": 61.46,
+        "h": 82.45
+      },
+      "polygon_px": [
+        {
+          "x": 57.27,
+          "y": 599.51
+        },
+        {
+          "x": 102.09,
+          "y": 589.16
+        },
+        {
+          "x": 118.73,
+          "y": 661.26
+        },
+        {
+          "x": 73.91,
+          "y": 671.61
+        }
+      ],
+      "z_index": 52,
+      "card_orientation": "portrait",
+      "rack_id": "rack_west",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "card inserted in side rail groove and angled with rail"
+    },
+    {
+      "id": "w14",
+      "zone": "west_hand",
+      "seat": "west",
+      "index": 14,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 88,
+        "y": 660.0
+      },
+      "w_px": 46,
+      "h_px": 74,
+      "rotation_deg": -13,
+      "aspect_ratio": 0.6216,
+      "bbox_px": {
+        "x": 57.27,
+        "y": 618.77,
+        "w": 61.46,
+        "h": 82.46
+      },
+      "polygon_px": [
+        {
+          "x": 57.27,
+          "y": 629.12
+        },
+        {
+          "x": 102.09,
+          "y": 618.77
+        },
+        {
+          "x": 118.73,
+          "y": 690.88
+        },
+        {
+          "x": 73.91,
+          "y": 701.23
+        }
+      ],
+      "z_index": 53,
+      "card_orientation": "portrait",
+      "rack_id": "rack_west",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "card inserted in side rail groove and angled with rail"
+    },
+    {
+      "id": "e01",
+      "zone": "east_hand",
+      "seat": "east",
+      "index": 1,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 1450,
+        "y": 275.0
+      },
+      "w_px": 46,
+      "h_px": 74,
+      "rotation_deg": 13,
+      "aspect_ratio": 0.6216,
+      "bbox_px": {
+        "x": 1419.27,
+        "y": 233.77,
+        "w": 61.46,
+        "h": 82.46
+      },
+      "polygon_px": [
+        {
+          "x": 1435.91,
+          "y": 233.77
+        },
+        {
+          "x": 1480.73,
+          "y": 244.12
+        },
+        {
+          "x": 1464.09,
+          "y": 316.23
+        },
+        {
+          "x": 1419.27,
+          "y": 305.88
+        }
+      ],
+      "z_index": 40,
+      "card_orientation": "portrait",
+      "rack_id": "rack_east",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "card inserted in side rail groove and angled with rail"
+    },
+    {
+      "id": "e02",
+      "zone": "east_hand",
+      "seat": "east",
+      "index": 2,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 1450,
+        "y": 304.62
+      },
+      "w_px": 46,
+      "h_px": 74,
+      "rotation_deg": 13,
+      "aspect_ratio": 0.6216,
+      "bbox_px": {
+        "x": 1419.27,
+        "y": 263.39,
+        "w": 61.46,
+        "h": 82.45
+      },
+      "polygon_px": [
+        {
+          "x": 1435.91,
+          "y": 263.39
+        },
+        {
+          "x": 1480.73,
+          "y": 273.74
+        },
+        {
+          "x": 1464.09,
+          "y": 345.84
+        },
+        {
+          "x": 1419.27,
+          "y": 335.49
+        }
+      ],
+      "z_index": 41,
+      "card_orientation": "portrait",
+      "rack_id": "rack_east",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "card inserted in side rail groove and angled with rail"
+    },
+    {
+      "id": "e03",
+      "zone": "east_hand",
+      "seat": "east",
+      "index": 3,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 1450,
+        "y": 334.23
+      },
+      "w_px": 46,
+      "h_px": 74,
+      "rotation_deg": 13,
+      "aspect_ratio": 0.6216,
+      "bbox_px": {
+        "x": 1419.27,
+        "y": 293.01,
+        "w": 61.46,
+        "h": 82.45
+      },
+      "polygon_px": [
+        {
+          "x": 1435.91,
+          "y": 293.01
+        },
+        {
+          "x": 1480.73,
+          "y": 303.35
+        },
+        {
+          "x": 1464.09,
+          "y": 375.46
+        },
+        {
+          "x": 1419.27,
+          "y": 365.11
+        }
+      ],
+      "z_index": 42,
+      "card_orientation": "portrait",
+      "rack_id": "rack_east",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "card inserted in side rail groove and angled with rail"
+    },
+    {
+      "id": "e04",
+      "zone": "east_hand",
+      "seat": "east",
+      "index": 4,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 1450,
+        "y": 363.85
+      },
+      "w_px": 46,
+      "h_px": 74,
+      "rotation_deg": 13,
+      "aspect_ratio": 0.6216,
+      "bbox_px": {
+        "x": 1419.27,
+        "y": 322.62,
+        "w": 61.46,
+        "h": 82.45
+      },
+      "polygon_px": [
+        {
+          "x": 1435.91,
+          "y": 322.62
+        },
+        {
+          "x": 1480.73,
+          "y": 332.97
+        },
+        {
+          "x": 1464.09,
+          "y": 405.07
+        },
+        {
+          "x": 1419.27,
+          "y": 394.72
+        }
+      ],
+      "z_index": 43,
+      "card_orientation": "portrait",
+      "rack_id": "rack_east",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "card inserted in side rail groove and angled with rail"
+    },
+    {
+      "id": "e05",
+      "zone": "east_hand",
+      "seat": "east",
+      "index": 5,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 1450,
+        "y": 393.46
+      },
+      "w_px": 46,
+      "h_px": 74,
+      "rotation_deg": 13,
+      "aspect_ratio": 0.6216,
+      "bbox_px": {
+        "x": 1419.27,
+        "y": 352.24,
+        "w": 61.46,
+        "h": 82.45
+      },
+      "polygon_px": [
+        {
+          "x": 1435.91,
+          "y": 352.24
+        },
+        {
+          "x": 1480.73,
+          "y": 362.58
+        },
+        {
+          "x": 1464.09,
+          "y": 434.69
+        },
+        {
+          "x": 1419.27,
+          "y": 424.34
+        }
+      ],
+      "z_index": 44,
+      "card_orientation": "portrait",
+      "rack_id": "rack_east",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "card inserted in side rail groove and angled with rail"
+    },
+    {
+      "id": "e06",
+      "zone": "east_hand",
+      "seat": "east",
+      "index": 6,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 1450,
+        "y": 423.08
+      },
+      "w_px": 46,
+      "h_px": 74,
+      "rotation_deg": 13,
+      "aspect_ratio": 0.6216,
+      "bbox_px": {
+        "x": 1419.27,
+        "y": 381.85,
+        "w": 61.46,
+        "h": 82.45
+      },
+      "polygon_px": [
+        {
+          "x": 1435.91,
+          "y": 381.85
+        },
+        {
+          "x": 1480.73,
+          "y": 392.2
+        },
+        {
+          "x": 1464.09,
+          "y": 464.3
+        },
+        {
+          "x": 1419.27,
+          "y": 453.95
+        }
+      ],
+      "z_index": 45,
+      "card_orientation": "portrait",
+      "rack_id": "rack_east",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "card inserted in side rail groove and angled with rail"
+    },
+    {
+      "id": "e07",
+      "zone": "east_hand",
+      "seat": "east",
+      "index": 7,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 1450,
+        "y": 452.69
+      },
+      "w_px": 46,
+      "h_px": 74,
+      "rotation_deg": 13,
+      "aspect_ratio": 0.6216,
+      "bbox_px": {
+        "x": 1419.27,
+        "y": 411.47,
+        "w": 61.46,
+        "h": 82.45
+      },
+      "polygon_px": [
+        {
+          "x": 1435.91,
+          "y": 411.47
+        },
+        {
+          "x": 1480.73,
+          "y": 421.81
+        },
+        {
+          "x": 1464.09,
+          "y": 493.92
+        },
+        {
+          "x": 1419.27,
+          "y": 483.57
+        }
+      ],
+      "z_index": 46,
+      "card_orientation": "portrait",
+      "rack_id": "rack_east",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "card inserted in side rail groove and angled with rail"
+    },
+    {
+      "id": "e08",
+      "zone": "east_hand",
+      "seat": "east",
+      "index": 8,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 1450,
+        "y": 482.31
+      },
+      "w_px": 46,
+      "h_px": 74,
+      "rotation_deg": 13,
+      "aspect_ratio": 0.6216,
+      "bbox_px": {
+        "x": 1419.27,
+        "y": 441.08,
+        "w": 61.46,
+        "h": 82.45
+      },
+      "polygon_px": [
+        {
+          "x": 1435.91,
+          "y": 441.08
+        },
+        {
+          "x": 1480.73,
+          "y": 451.43
+        },
+        {
+          "x": 1464.09,
+          "y": 523.53
+        },
+        {
+          "x": 1419.27,
+          "y": 513.19
+        }
+      ],
+      "z_index": 47,
+      "card_orientation": "portrait",
+      "rack_id": "rack_east",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "card inserted in side rail groove and angled with rail"
+    },
+    {
+      "id": "e09",
+      "zone": "east_hand",
+      "seat": "east",
+      "index": 9,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 1450,
+        "y": 511.92
+      },
+      "w_px": 46,
+      "h_px": 74,
+      "rotation_deg": 13,
+      "aspect_ratio": 0.6216,
+      "bbox_px": {
+        "x": 1419.27,
+        "y": 470.7,
+        "w": 61.46,
+        "h": 82.45
+      },
+      "polygon_px": [
+        {
+          "x": 1435.91,
+          "y": 470.7
+        },
+        {
+          "x": 1480.73,
+          "y": 481.05
+        },
+        {
+          "x": 1464.09,
+          "y": 553.15
+        },
+        {
+          "x": 1419.27,
+          "y": 542.8
+        }
+      ],
+      "z_index": 48,
+      "card_orientation": "portrait",
+      "rack_id": "rack_east",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "card inserted in side rail groove and angled with rail"
+    },
+    {
+      "id": "e10",
+      "zone": "east_hand",
+      "seat": "east",
+      "index": 10,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 1450,
+        "y": 541.54
+      },
+      "w_px": 46,
+      "h_px": 74,
+      "rotation_deg": 13,
+      "aspect_ratio": 0.6216,
+      "bbox_px": {
+        "x": 1419.27,
+        "y": 500.31,
+        "w": 61.46,
+        "h": 82.45
+      },
+      "polygon_px": [
+        {
+          "x": 1435.91,
+          "y": 500.31
+        },
+        {
+          "x": 1480.73,
+          "y": 510.66
+        },
+        {
+          "x": 1464.09,
+          "y": 582.76
+        },
+        {
+          "x": 1419.27,
+          "y": 572.42
+        }
+      ],
+      "z_index": 49,
+      "card_orientation": "portrait",
+      "rack_id": "rack_east",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "card inserted in side rail groove and angled with rail"
+    },
+    {
+      "id": "e11",
+      "zone": "east_hand",
+      "seat": "east",
+      "index": 11,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 1450,
+        "y": 571.15
+      },
+      "w_px": 46,
+      "h_px": 74,
+      "rotation_deg": 13,
+      "aspect_ratio": 0.6216,
+      "bbox_px": {
+        "x": 1419.27,
+        "y": 529.93,
+        "w": 61.46,
+        "h": 82.45
+      },
+      "polygon_px": [
+        {
+          "x": 1435.91,
+          "y": 529.93
+        },
+        {
+          "x": 1480.73,
+          "y": 540.28
+        },
+        {
+          "x": 1464.09,
+          "y": 612.38
+        },
+        {
+          "x": 1419.27,
+          "y": 602.03
+        }
+      ],
+      "z_index": 50,
+      "card_orientation": "portrait",
+      "rack_id": "rack_east",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "card inserted in side rail groove and angled with rail"
+    },
+    {
+      "id": "e12",
+      "zone": "east_hand",
+      "seat": "east",
+      "index": 12,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 1450,
+        "y": 600.77
+      },
+      "w_px": 46,
+      "h_px": 74,
+      "rotation_deg": 13,
+      "aspect_ratio": 0.6216,
+      "bbox_px": {
+        "x": 1419.27,
+        "y": 559.54,
+        "w": 61.46,
+        "h": 82.45
+      },
+      "polygon_px": [
+        {
+          "x": 1435.91,
+          "y": 559.54
+        },
+        {
+          "x": 1480.73,
+          "y": 569.89
+        },
+        {
+          "x": 1464.09,
+          "y": 641.99
+        },
+        {
+          "x": 1419.27,
+          "y": 631.65
+        }
+      ],
+      "z_index": 51,
+      "card_orientation": "portrait",
+      "rack_id": "rack_east",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "card inserted in side rail groove and angled with rail"
+    },
+    {
+      "id": "e13",
+      "zone": "east_hand",
+      "seat": "east",
+      "index": 13,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 1450,
+        "y": 630.38
+      },
+      "w_px": 46,
+      "h_px": 74,
+      "rotation_deg": 13,
+      "aspect_ratio": 0.6216,
+      "bbox_px": {
+        "x": 1419.27,
+        "y": 589.16,
+        "w": 61.46,
+        "h": 82.45
+      },
+      "polygon_px": [
+        {
+          "x": 1435.91,
+          "y": 589.16
+        },
+        {
+          "x": 1480.73,
+          "y": 599.51
+        },
+        {
+          "x": 1464.09,
+          "y": 671.61
+        },
+        {
+          "x": 1419.27,
+          "y": 661.26
+        }
+      ],
+      "z_index": 52,
+      "card_orientation": "portrait",
+      "rack_id": "rack_east",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "card inserted in side rail groove and angled with rail"
+    },
+    {
+      "id": "e14",
+      "zone": "east_hand",
+      "seat": "east",
+      "index": 14,
+      "kind": "hand_card",
+      "layout_source": "rack_insert_layer",
+      "center_px": {
+        "x": 1450,
+        "y": 660.0
+      },
+      "w_px": 46,
+      "h_px": 74,
+      "rotation_deg": 13,
+      "aspect_ratio": 0.6216,
+      "bbox_px": {
+        "x": 1419.27,
+        "y": 618.77,
+        "w": 61.46,
+        "h": 82.46
+      },
+      "polygon_px": [
+        {
+          "x": 1435.91,
+          "y": 618.77
+        },
+        {
+          "x": 1480.73,
+          "y": 629.12
+        },
+        {
+          "x": 1464.09,
+          "y": 701.23
+        },
+        {
+          "x": 1419.27,
+          "y": 690.88
+        }
+      ],
+      "z_index": 53,
+      "card_orientation": "portrait",
+      "rack_id": "rack_east",
+      "contained_by_rack": true,
+      "rack_visibility_rule": "card inserted in side rail groove and angled with rail"
+    },
+    {
+      "id": "s01",
+      "zone": "south_hand",
+      "seat": "south",
+      "index": 1,
+      "kind": "hand_card",
+      "layout_source": "rail_seated_fan_layer",
+      "center_px": {
+        "x": 260.0,
+        "y": 840.0
+      },
+      "w_px": 106,
+      "h_px": 170,
+      "rotation_deg": -12,
+      "aspect_ratio": 0.6235,
+      "bbox_px": {
+        "x": 190.49,
+        "y": 745.84,
+        "w": 139.02,
+        "h": 188.32
+      },
+      "polygon_px": [
+        {
+          "x": 190.49,
+          "y": 767.88
+        },
+        {
+          "x": 294.17,
+          "y": 745.84
+        },
+        {
+          "x": 329.51,
+          "y": 912.12
+        },
+        {
+          "x": 225.83,
+          "y": 934.16
+        }
+      ],
+      "z_index": 100,
+      "card_orientation": "portrait",
+      "rack_id": "rack_south",
+      "contained_by_rack": false
+    },
+    {
+      "id": "s02",
+      "zone": "south_hand",
+      "seat": "south",
+      "index": 2,
+      "kind": "hand_card",
+      "layout_source": "rail_seated_fan_layer",
+      "center_px": {
+        "x": 337.31,
+        "y": 827.56
+      },
+      "w_px": 106,
+      "h_px": 170,
+      "rotation_deg": -9,
+      "aspect_ratio": 0.6235,
+      "bbox_px": {
+        "x": 271.66,
+        "y": 735.31,
+        "w": 131.29,
+        "h": 184.49
+      },
+      "polygon_px": [
+        {
+          "x": 271.66,
+          "y": 751.89
+        },
+        {
+          "x": 376.36,
+          "y": 735.31
+        },
+        {
+          "x": 402.95,
+          "y": 903.22
+        },
+        {
+          "x": 298.26,
+          "y": 919.8
+        }
+      ],
+      "z_index": 101,
+      "card_orientation": "portrait",
+      "rack_id": "rack_south",
+      "contained_by_rack": false
+    },
+    {
+      "id": "s03",
+      "zone": "south_hand",
+      "seat": "south",
+      "index": 3,
+      "kind": "hand_card",
+      "layout_source": "rail_seated_fan_layer",
+      "center_px": {
+        "x": 414.62,
+        "y": 815.83
+      },
+      "w_px": 106,
+      "h_px": 170,
+      "rotation_deg": -7,
+      "aspect_ratio": 0.6235,
+      "bbox_px": {
+        "x": 351.65,
+        "y": 725.01,
+        "w": 125.93,
+        "h": 181.65
+      },
+      "polygon_px": [
+        {
+          "x": 351.65,
+          "y": 737.93
+        },
+        {
+          "x": 456.86,
+          "y": 725.01
+        },
+        {
+          "x": 477.58,
+          "y": 893.74
+        },
+        {
+          "x": 372.37,
+          "y": 906.66
+        }
+      ],
+      "z_index": 102,
+      "card_orientation": "portrait",
+      "rack_id": "rack_south",
+      "contained_by_rack": false
+    },
+    {
+      "id": "s04",
+      "zone": "south_hand",
+      "seat": "south",
+      "index": 4,
+      "kind": "hand_card",
+      "layout_source": "rail_seated_fan_layer",
+      "center_px": {
+        "x": 491.92,
+        "y": 805.52
+      },
+      "w_px": 106,
+      "h_px": 170,
+      "rotation_deg": -5,
+      "aspect_ratio": 0.6235,
+      "bbox_px": {
+        "x": 431.72,
+        "y": 716.22,
+        "w": 120.41,
+        "h": 178.59
+      },
+      "polygon_px": [
+        {
+          "x": 431.72,
+          "y": 725.46
+        },
+        {
+          "x": 537.31,
+          "y": 716.22
+        },
+        {
+          "x": 552.13,
+          "y": 885.57
+        },
+        {
+          "x": 446.53,
+          "y": 894.81
+        }
+      ],
+      "z_index": 103,
+      "card_orientation": "portrait",
+      "rack_id": "rack_south",
+      "contained_by_rack": false
+    },
+    {
+      "id": "s05",
+      "zone": "south_hand",
+      "seat": "south",
+      "index": 5,
+      "kind": "hand_card",
+      "layout_source": "rail_seated_fan_layer",
+      "center_px": {
+        "x": 569.23,
+        "y": 797.2
+      },
+      "w_px": 106,
+      "h_px": 170,
+      "rotation_deg": -3,
+      "aspect_ratio": 0.6235,
+      "bbox_px": {
+        "x": 511.85,
+        "y": 709.55,
+        "w": 114.76,
+        "h": 175.31
+      },
+      "polygon_px": [
+        {
+          "x": 511.85,
+          "y": 715.1
+        },
+        {
+          "x": 617.71,
+          "y": 709.55
+        },
+        {
+          "x": 626.61,
+          "y": 879.31
+        },
+        {
+          "x": 520.75,
+          "y": 884.86
+        }
+      ],
+      "z_index": 104,
+      "card_orientation": "portrait",
+      "rack_id": "rack_south",
+      "contained_by_rack": false
+    },
+    {
+      "id": "s06",
+      "zone": "south_hand",
+      "seat": "south",
+      "index": 6,
+      "kind": "hand_card",
+      "layout_source": "rail_seated_fan_layer",
+      "center_px": {
+        "x": 646.54,
+        "y": 791.38
+      },
+      "w_px": 106,
+      "h_px": 170,
+      "rotation_deg": -1,
+      "aspect_ratio": 0.6235,
+      "bbox_px": {
+        "x": 592.06,
+        "y": 705.47,
+        "w": 108.95,
+        "h": 171.82
+      },
+      "polygon_px": [
+        {
+          "x": 592.06,
+          "y": 707.32
+        },
+        {
+          "x": 698.05,
+          "y": 705.47
+        },
+        {
+          "x": 701.01,
+          "y": 875.44
+        },
+        {
+          "x": 595.03,
+          "y": 877.29
+        }
+      ],
+      "z_index": 105,
+      "card_orientation": "portrait",
+      "rack_id": "rack_south",
+      "contained_by_rack": false
+    },
+    {
+      "id": "s07",
+      "zone": "south_hand",
+      "seat": "south",
+      "index": 7,
+      "kind": "hand_card",
+      "layout_source": "rail_seated_fan_layer",
+      "center_px": {
+        "x": 723.85,
+        "y": 788.38
+      },
+      "w_px": 106,
+      "h_px": 170,
+      "rotation_deg": 0,
+      "aspect_ratio": 0.6235,
+      "bbox_px": {
+        "x": 670.85,
+        "y": 703.38,
+        "w": 106.0,
+        "h": 170.0
+      },
+      "polygon_px": [
+        {
+          "x": 670.85,
+          "y": 703.38
+        },
+        {
+          "x": 776.85,
+          "y": 703.38
+        },
+        {
+          "x": 776.85,
+          "y": 873.38
+        },
+        {
+          "x": 670.85,
+          "y": 873.38
+        }
+      ],
+      "z_index": 106,
+      "card_orientation": "portrait",
+      "rack_id": "rack_south",
+      "contained_by_rack": false
+    },
+    {
+      "id": "s08",
+      "zone": "south_hand",
+      "seat": "south",
+      "index": 8,
+      "kind": "hand_card",
+      "layout_source": "rail_seated_fan_layer",
+      "center_px": {
+        "x": 801.15,
+        "y": 788.38
+      },
+      "w_px": 106,
+      "h_px": 170,
+      "rotation_deg": 1,
+      "aspect_ratio": 0.6235,
+      "bbox_px": {
+        "x": 746.68,
+        "y": 702.47,
+        "w": 108.95,
+        "h": 171.82
+      },
+      "polygon_px": [
+        {
+          "x": 749.65,
+          "y": 702.47
+        },
+        {
+          "x": 855.63,
+          "y": 704.32
+        },
+        {
+          "x": 852.66,
+          "y": 874.29
+        },
+        {
+          "x": 746.68,
+          "y": 872.44
+        }
+      ],
+      "z_index": 107,
+      "card_orientation": "portrait",
+      "rack_id": "rack_south",
+      "contained_by_rack": false
+    },
+    {
+      "id": "s09",
+      "zone": "south_hand",
+      "seat": "south",
+      "index": 9,
+      "kind": "hand_card",
+      "layout_source": "rail_seated_fan_layer",
+      "center_px": {
+        "x": 878.46,
+        "y": 791.38
+      },
+      "w_px": 106,
+      "h_px": 170,
+      "rotation_deg": 3,
+      "aspect_ratio": 0.6235,
+      "bbox_px": {
+        "x": 821.09,
+        "y": 703.72,
+        "w": 114.75,
+        "h": 175.32
+      },
+      "polygon_px": [
+        {
+          "x": 829.98,
+          "y": 703.72
+        },
+        {
+          "x": 935.84,
+          "y": 709.27
+        },
+        {
+          "x": 926.94,
+          "y": 879.04
+        },
+        {
+          "x": 821.09,
+          "y": 873.49
+        }
+      ],
+      "z_index": 108,
+      "card_orientation": "portrait",
+      "rack_id": "rack_south",
+      "contained_by_rack": false
+    },
+    {
+      "id": "s10",
+      "zone": "south_hand",
+      "seat": "south",
+      "index": 10,
+      "kind": "hand_card",
+      "layout_source": "rail_seated_fan_layer",
+      "center_px": {
+        "x": 955.77,
+        "y": 797.2
+      },
+      "w_px": 106,
+      "h_px": 170,
+      "rotation_deg": 5,
+      "aspect_ratio": 0.6235,
+      "bbox_px": {
+        "x": 895.56,
+        "y": 707.91,
+        "w": 120.42,
+        "h": 178.59
+      },
+      "polygon_px": [
+        {
+          "x": 910.38,
+          "y": 707.91
+        },
+        {
+          "x": 1015.98,
+          "y": 717.15
+        },
+        {
+          "x": 1001.16,
+          "y": 886.5
+        },
+        {
+          "x": 895.56,
+          "y": 877.26
+        }
+      ],
+      "z_index": 109,
+      "card_orientation": "portrait",
+      "rack_id": "rack_south",
+      "contained_by_rack": false
+    },
+    {
+      "id": "s11",
+      "zone": "south_hand",
+      "seat": "south",
+      "index": 11,
+      "kind": "hand_card",
+      "layout_source": "rail_seated_fan_layer",
+      "center_px": {
+        "x": 1033.08,
+        "y": 805.52
+      },
+      "w_px": 106,
+      "h_px": 170,
+      "rotation_deg": 7,
+      "aspect_ratio": 0.6235,
+      "bbox_px": {
+        "x": 970.11,
+        "y": 714.69,
+        "w": 125.93,
+        "h": 181.65
+      },
+      "polygon_px": [
+        {
+          "x": 990.83,
+          "y": 714.69
+        },
+        {
+          "x": 1096.04,
+          "y": 727.61
+        },
+        {
+          "x": 1075.32,
+          "y": 896.34
+        },
+        {
+          "x": 970.11,
+          "y": 883.42
+        }
+      ],
+      "z_index": 110,
+      "card_orientation": "portrait",
+      "rack_id": "rack_south",
+      "contained_by_rack": false
+    },
+    {
+      "id": "s12",
+      "zone": "south_hand",
+      "seat": "south",
+      "index": 12,
+      "kind": "hand_card",
+      "layout_source": "rail_seated_fan_layer",
+      "center_px": {
+        "x": 1110.38,
+        "y": 815.83
+      },
+      "w_px": 106,
+      "h_px": 170,
+      "rotation_deg": 9,
+      "aspect_ratio": 0.6235,
+      "bbox_px": {
+        "x": 1044.74,
+        "y": 723.59,
+        "w": 131.29,
+        "h": 184.49
+      },
+      "polygon_px": [
+        {
+          "x": 1071.33,
+          "y": 723.59
+        },
+        {
+          "x": 1176.03,
+          "y": 740.17
+        },
+        {
+          "x": 1149.44,
+          "y": 908.08
+        },
+        {
+          "x": 1044.74,
+          "y": 891.5
+        }
+      ],
+      "z_index": 111,
+      "card_orientation": "portrait",
+      "rack_id": "rack_south",
+      "contained_by_rack": false
+    },
+    {
+      "id": "s13",
+      "zone": "south_hand",
+      "seat": "south",
+      "index": 13,
+      "kind": "hand_card",
+      "layout_source": "rail_seated_fan_layer",
+      "center_px": {
+        "x": 1187.69,
+        "y": 827.56
+      },
+      "w_px": 106,
+      "h_px": 170,
+      "rotation_deg": 11,
+      "aspect_ratio": 0.6235,
+      "bbox_px": {
+        "x": 1119.45,
+        "y": 734.0,
+        "w": 136.49,
+        "h": 187.11
+      },
+      "polygon_px": [
+        {
+          "x": 1151.88,
+          "y": 734.0
+        },
+        {
+          "x": 1255.94,
+          "y": 754.23
+        },
+        {
+          "x": 1223.5,
+          "y": 921.11
+        },
+        {
+          "x": 1119.45,
+          "y": 900.88
+        }
+      ],
+      "z_index": 112,
+      "card_orientation": "portrait",
+      "rack_id": "rack_south",
+      "contained_by_rack": false
+    },
+    {
+      "id": "s14",
+      "zone": "south_hand",
+      "seat": "south",
+      "index": 14,
+      "kind": "hand_card",
+      "layout_source": "rail_seated_fan_layer",
+      "center_px": {
+        "x": 1265.0,
+        "y": 840.0
+      },
+      "w_px": 106,
+      "h_px": 170,
+      "rotation_deg": 13,
+      "aspect_ratio": 0.6235,
+      "bbox_px": {
+        "x": 1194.24,
+        "y": 745.26,
+        "w": 141.52,
+        "h": 189.48
+      },
+      "polygon_px": [
+        {
+          "x": 1232.48,
+          "y": 745.26
+        },
+        {
+          "x": 1335.76,
+          "y": 769.1
+        },
+        {
+          "x": 1297.52,
+          "y": 934.74
+        },
+        {
+          "x": 1194.24,
+          "y": 910.9
+        }
+      ],
+      "z_index": 113,
+      "card_orientation": "portrait",
+      "rack_id": "rack_south",
+      "contained_by_rack": false
+    }
+  ]
+}

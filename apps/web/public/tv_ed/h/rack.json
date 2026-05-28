@@ -1,0 +1,88 @@
+{
+  "name": "tichu_v15_racks",
+  "version": "15.0.0",
+  "design_px": {
+    "w": 1536,
+    "h": 1024
+  },
+  "rules": {
+    "north_east_west": "cards must be rack-insert anchors inside recessed channels",
+    "south": "fan seated on lower rail edge",
+    "dynamic_components_are_math_drawn": true,
+    "card_math_locked": true,
+    "north_bottom_third_hidden_by_rail": true,
+    "east_west_cards_follow_rail_angle": true
+  },
+  "racks": [
+    {
+      "id": "rack_north",
+      "seat": "north",
+      "zone": "north_hand",
+      "kind": "physical_recessed_rack",
+      "bbox_px": {
+        "x": 445,
+        "y": 34,
+        "w": 646,
+        "h": 72
+      },
+      "card_channel_px": {
+        "x": 460,
+        "y": 42,
+        "w": 616,
+        "h": 50
+      },
+      "rule": "north cards must sit inside the top recessed card groove"
+    },
+    {
+      "id": "rack_west",
+      "seat": "west",
+      "zone": "west_hand",
+      "kind": "physical_recessed_rack",
+      "bbox_px": {
+        "x": 48,
+        "y": 222,
+        "w": 105,
+        "h": 520
+      },
+      "card_channel_px": {
+        "x": 60,
+        "y": 244,
+        "w": 58,
+        "h": 455
+      },
+      "rule": "west cards must sit in the left recessed side groove"
+    },
+    {
+      "id": "rack_east",
+      "seat": "east",
+      "zone": "east_hand",
+      "kind": "physical_recessed_rack",
+      "bbox_px": {
+        "x": 1382,
+        "y": 222,
+        "w": 105,
+        "h": 520
+      },
+      "card_channel_px": {
+        "x": 1417,
+        "y": 244,
+        "w": 58,
+        "h": 455
+      },
+      "rule": "east cards must sit in the right recessed side groove"
+    },
+    {
+      "id": "rack_south",
+      "seat": "south",
+      "zone": "south_hand",
+      "kind": "south_fan_rail_zone",
+      "bbox_px": {
+        "x": 215,
+        "y": 620,
+        "w": 1110,
+        "h": 320
+      },
+      "rule": "south hand fan is seated against south rail; not a flex row"
+    }
+  ]
+}

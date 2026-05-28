@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tichu Anchor Editor</title>
+<style>
+  :root { color-scheme: dark; --bg:#0b0f0c; --panel:#101813; --gold:#f1b921; --cyan:#00d8ff; --blue:#31a8ff; --green:#4cff7a; --mag:#ff4cec; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:#070907; color:#eee; font:13px/1.35 system-ui, -apple-system, Segoe UI, sans-serif; display:grid; grid-template-columns: 1fr 340px; height:100vh; overflow:hidden; }
+  #stageWrap { position:relative; display:flex; align-items:center; justify-content:center; background:radial-gradient(circle at center,#141b13,#050605 70%); overflow:hidden; }
+  #stage { width:min(100vw, calc(100vh * 1.5)); max-width:calc(100vw - 340px); height:auto; border:1px solid #333; box-shadow:0 14px 50px #000; background:#000; }
+  svg { display:block; width:100%; height:auto; user-select:none; }
+  .panel { background:var(--panel); border-left:1px solid #273328; padding:12px; overflow:auto; }
+  h1 { font-size:18px; margin:0 0 8px; }
+  h2 { font-size:13px; margin:16px 0 6px; color:#f4d28b; text-transform:uppercase; letter-spacing:.05em; }
+  button, select, input { background:#17231b; color:#f3f3f3; border:1px solid #3b5140; border-radius:6px; padding:6px 8px; }
+  button { cursor:pointer; }
+  button:hover { border-color:#f1b921; }
+  button.primary { background:#5c4613; border-color:#c99618; }
+  button.warn { background:#3b1515; border-color:#c44; }
+  .grid { display:grid; grid-template-columns: repeat(4, 1fr); gap:6px; }
+  .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:6px; }
+  .row { display:flex; gap:6px; align-items:center; margin:6px 0; flex-wrap:wrap; }
+  label { display:flex; align-items:center; gap:6px; }
+  input[type="number"] { width:72px; }
+  input[type="checkbox"] { width:auto; }
+  #list { max-height:220px; overflow:auto; border:1px solid #2d3c30; border-radius:8px; padding:4px; background:#0d130f; }
+  .item { padding:4px 6px; border-radius:4px; cursor:pointer; display:flex; justify-content:space-between; gap:8px; }
+  .item:hover { background:#1b281f; }
+  .item.sel { background:#40320f; color:#fff; }
+  code, pre { background:#080c09; border:1px solid #2d3c30; border-radius:6px; padding:8px; overflow:auto; }
+  pre { white-space:pre-wrap; max-height:220px; }
+  .small { color:#a8b5aa; font-size:12px; }
+  .anchor { fill:rgba(0,0,0,.18); stroke-width:2.2; vector-effect:non-scaling-stroke; cursor:pointer; }
+  .anchor.hand { stroke:var(--cyan); }
+  .anchor.pass { stroke:var(--gold); fill:rgba(241,185,33,.09); }
+  .anchor.trick { stroke:var(--blue); fill:rgba(49,168,255,.08); }
+  .anchor.rack { stroke:var(--mag); fill:rgba(255,76,236,.07); stroke-dasharray:6 4; }
+  .anchor.sel { stroke:#fff !important; stroke-width:4; filter:drop-shadow(0 0 4px #fff); }
+  .centerDot { pointer-events:none; }
+  .labelText { fill:#e9f9ff; font-size:12px; paint-order:stroke; stroke:#001; stroke-width:3px; stroke-linejoin:round; pointer-events:none; }
+  .dim { opacity:.25; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<div id="stageWrap">
+  <div id="stage">
+    <svg id="svg" viewBox="0 0 1536 1024" preserveAspectRatio="xMidYMid meet">
+      <image id="baseImg" href="t/base.png" x="0" y="0" width="1536" height="1024" />
+      <image id="dragonImg" href="t/dragon.png" x="0" y="0" width="1536" height="1024" opacity="1" />
+      <g id="anchors"></g>
+    </svg>
+  </div>
+</div>
+<aside class="panel">
+  <h1>Tichu Anchor Editor</h1>
+  <div class="small">Design space: <b>1536 × 1024</b>. All edits write design pixels. Use a local server, not file://.</div>
+
+  <h2>Layers</h2>
+  <div class="grid2">
+    <label><input id="showHand" type="checkbox" checked> hand h/a</label>
+    <label><input id="showPass" type="checkbox" checked> pass p/a</label>
+    <label><input id="showTrick" type="checkbox" checked> trick k/a</label>
+    <label><input id="showRack" type="checkbox" checked> racks</label>
+    <label><input id="showDragon" type="checkbox" checked> dragon</label>
+    <label><input id="showLabels" type="checkbox" checked> labels</label>
+  </div>
+  <div class="row">
+    <select id="filter"></select>
+    <button id="selZone">Select zone</button>
+    <button id="clearSel">Clear</button>
+  </div>
+
+  <h2>Nudge</h2>
+  <div class="row">Step <input id="step" type="number" value="1" min="0.05" step="0.25"> px/deg</div>
+  <div class="grid">
+    <button data-move="0,-1">↑</button><button data-move="-1,0">←</button><button data-move="1,0">→</button><button data-move="0,1">↓</button>
+  </div>
+  <div class="row">
+    <button data-rot="-1">shape -</button><button data-rot="1">shape +</button>
+    <button data-cardrot="-1">card -</button><button data-cardrot="1">card +</button>
+  </div>
+  <div class="row">
+    <button data-scale="0.99,1">w -</button><button data-scale="1.01,1">w +</button>
+    <button data-scale="1,0.99">h -</button><button data-scale="1,1.01">h +</button>
+  </div>
+  <div class="row">
+    <button id="snapAxis">Rebuild rect from bbox</button>
+    <button id="undo">Undo</button>
+  </div>
+
+  <h2>Selected</h2>
+  <pre id="details">none</pre>
+
+  <h2>Export</h2>
+  <div class="grid2">
+    <button class="primary" id="patch">Patch</button>
+    <button id="dlH">h/a</button>
+    <button id="dlP">p/a</button>
+    <button id="dlK">k/a</button>
+    <button id="dlRack">rack</button>
+    <button id="dlMath">math</button>
+  </div>
+  <p class="small">Apply patch: <code>node x/apply.mjs anchor_patch.json .</code></p>
+
+  <h2>Why E/W break</h2>
+  <div class="small">Side rails are perspective objects, not simple rotated rows. Use <b>polygon_px</b> for actual side hit/card geometry. <b>bbox_px</b> is an envelope only for angled targets.</div>
+
+  <h2>Responsive rule</h2>
+  <pre>scale = min(viewW/1536, viewH/1024)
+offsetX = (viewW - 1536*scale)/2
+offsetY = (viewH - 1024*scale)/2
+screenX = offsetX + designX*scale
+screenY = offsetY + designY*scale</pre>
+</aside>
+<script>
+const DESIGN_W = 1536, DESIGN_H = 1024;
+const files = {
+  hand: 'h/a.json', pass: 'p/a.json', trick: 'k/a.json', rack: 'h/rack.json', math: 'h/math.json'
+};
+const state = { data:{}, items:[], selected:new Set(), undo:[], drag:null, labels:true };
+const g = document.getElementById('anchors');
+const $ = id => document.getElementById(id);
+const deepCopy = o => JSON.parse(JSON.stringify(o));
+const round = n => Math.round(n*100)/100;
+
+async function loadJson(path){ const r=await fetch(path); if(!r.ok) throw new Error(path+' '+r.status); return r.json(); }
+function rectPoly(x,y,w,h){ return [{x,y},{x:x+w,y},{x:x+w,y:y+h},{x,y:y+h}]; }
+function bbox(poly){ const xs=poly.map(p=>p.x), ys=poly.map(p=>p.y); const x=Math.min(...xs), y=Math.min(...ys); return {x:round(x), y:round(y), w:round(Math.max(...xs)-x), h:round(Math.max(...ys)-y)}; }
+function center(poly){ const b=bbox(poly); return {x:round(b.x+b.w/2), y:round(b.y+b.h/2)}; }
+function pts(poly){ return poly.map(p=>`${round(p.x)},${round(p.y)}`).join(' '); }
+function toPoly(a){
+  if (a.polygon_px) return deepCopy(a.polygon_px);
+  if (a.bbox_px) return rectPoly(a.bbox_px.x,a.bbox_px.y,a.bbox_px.w,a.bbox_px.h);
+  if (a.card_channel_px) return rectPoly(a.card_channel_px.x,a.card_channel_px.y,a.card_channel_px.w,a.card_channel_px.h);
+  const c=a.center_px||{x:0,y:0}, w=a.w_px||50, h=a.h_px||70; return rectPoly(c.x-w/2,c.y-h/2,w,h);
+}
+function makeItems(){
+  state.items=[];
+  const addAnchors=(layer, data, arrName='anchors')=>{
+    (data?.[arrName]||[]).forEach((a,idx)=> state.items.push({layer, idx, id:a.id||`${layer}_${idx}`, zone:a.zone||a.seat||layer, ref:a, poly:toPoly(a)}));
+  };
+  addAnchors('hand', state.data.hand);
+  addAnchors('pass', state.data.pass);
+  addAnchors('trick', state.data.trick);
+  (state.data.rack?.racks||[]).forEach((a,idx)=> state.items.push({layer:'rack', idx, id:a.id||`rack_${idx}`, zone:a.zone||a.seat||'rack', ref:a, poly:toPoly(a)}));
+}
+function syncRef(item){
+  const p=item.poly.map(q=>({x:round(q.x), y:round(q.y)}));
+  const b=bbox(p), c=center(p);
+  const a=item.ref;
+  if(item.layer==='rack') {
+    a.card_channel_px = b;
+    return;
+  }
+  a.polygon_px = p;
+  a.bbox_px = b;
+  a.center_px = c;
+  if ('w_px' in a) a.w_px = round(a.w_px ?? b.w);
+  if ('h_px' in a) a.h_px = round(a.h_px ?? b.h);
+}
+function updateAllRefs(){ state.items.forEach(syncRef); if(state.data.math) state.data.math.anchors = deepCopy(state.data.hand.anchors); }
+function layerVisible(layer){
+  return layer==='hand' ? $('showHand').checked : layer==='pass' ? $('showPass').checked : layer==='trick' ? $('showTrick').checked : $('showRack').checked;
+}
+function render(){
+  $('dragonImg').style.display = $('showDragon').checked ? '' : 'none';
+  state.labels = $('showLabels').checked;
+  g.innerHTML='';
+  for(const item of state.items){
+    if(!layerVisible(item.layer)) continue;
+    const poly=document.createElementNS('http://www.w3.org/2000/svg','polygon');
+    poly.setAttribute('points', pts(item.poly));
+    poly.classList.add('anchor', item.layer);
+    if(state.selected.has(item.id)) poly.classList.add('sel');
+    poly.dataset.id=item.id;
+    poly.addEventListener('pointerdown', onPointerDown);
+    g.appendChild(poly);
+    const c=center(item.poly);
+    const dot=document.createElementNS('http://www.w3.org/2000/svg','circle');
+    dot.setAttribute('cx', c.x); dot.setAttribute('cy', c.y); dot.setAttribute('r', state.selected.has(item.id)?4:2.5);
+    dot.setAttribute('fill', item.layer==='pass'?'#f1b921':item.layer==='hand'?'#00d8ff':item.layer==='trick'?'#31a8ff':'#ff4cec');
+    dot.classList.add('centerDot'); g.appendChild(dot);
+    if(state.labels){
+      const t=document.createElementNS('http://www.w3.org/2000/svg','text');
+      t.setAttribute('x', c.x+4); t.setAttribute('y', c.y-4); t.classList.add('labelText');
+      t.textContent=item.id; g.appendChild(t);
+    }
+  }
+  renderList(); renderDetails();
+}
+function renderList(){
+  const zones=[...new Set(state.items.map(i=>i.zone))].sort();
+  const filter=$('filter');
+  const cur=filter.value;
+  filter.innerHTML='<option value="all">all</option>'+zones.map(z=>`<option value="${z}">${z}</option>`).join('');
+  filter.value = [...filter.options].some(o=>o.value===cur) ? cur : 'all';
+  let list=$('list'); if(!list){ list=document.createElement('div'); list.id='list'; $('filter').parentElement.after(list); }
+  const f=filter.value;
+  const visible=state.items.filter(i=>(f==='all'||i.zone===f) && layerVisible(i.layer));
+  list.innerHTML=visible.map(i=>`<div class="item ${state.selected.has(i.id)?'sel':''}" data-id="${i.id}"><span>${i.id}</span><span>${i.layer}</span></div>`).join('');
+  list.querySelectorAll('.item').forEach(el=>el.onclick=(e)=>{ if(!e.shiftKey) state.selected.clear(); state.selected.add(el.dataset.id); render(); });
+}
+function renderDetails(){
+  const sel=[...state.selected].map(id=>state.items.find(i=>i.id===id)).filter(Boolean);
+  if(!sel.length){ $('details').textContent='none'; return; }
+  const lines=sel.map(i=>{
+    const b=bbox(i.poly), c=center(i.poly), a=i.ref;
+    return `${i.id}\n layer: ${i.layer} zone: ${i.zone}\n center: ${c.x}, ${c.y}\n bbox: x ${b.x} y ${b.y} w ${b.w} h ${b.h}\n rot: ${a.rotation_deg ?? ''} visual: ${a.visual_rotation_deg ?? ''} card: ${a.card_rotation_deg ?? ''} arrow: ${a.arrow_direction ?? ''}`;
+  });
+  $('details').textContent=lines.join('\n\n');
+}
+function svgPoint(evt){
+  const svg=$('svg'); const pt=svg.createSVGPoint(); pt.x=evt.clientX; pt.y=evt.clientY;
+  return pt.matrixTransform(svg.getScreenCTM().inverse());
+}
+function snapshot(){ state.undo.push(deepCopy({data:state.data, selected:[...state.selected]})); if(state.undo.length>50) state.undo.shift(); }
+function selectedItems(){ return [...state.selected].map(id=>state.items.find(i=>i.id===id)).filter(Boolean); }
+function move(dx,dy){ snapshot(); selectedItems().forEach(i=>{ i.poly.forEach(p=>{p.x+=dx;p.y+=dy}); syncRef(i); }); render(); }
+function rotatePoly(poly,deg,c=center(poly)){ const r=deg*Math.PI/180, cos=Math.cos(r), sin=Math.sin(r); return poly.map(p=>{const x=p.x-c.x,y=p.y-c.y; return {x:c.x+x*cos-y*sin,y:c.y+x*sin+y*cos};}); }
+function rotateShape(deg){ snapshot(); selectedItems().forEach(i=>{ const a=i.ref; i.poly=rotatePoly(i.poly,deg); if('visual_rotation_deg' in a) a.visual_rotation_deg=round((a.visual_rotation_deg||0)+deg); else if('rotation_deg' in a) a.rotation_deg=round((a.rotation_deg||0)+deg); ['shape_rotation_deg','target_rotation_deg','render_rotation_deg'].forEach(k=>{ if(k in a) a[k]=round((a[k]||0)+deg); }); syncRef(i); }); render(); }
+function rotateCard(deg){ snapshot(); selectedItems().forEach(i=>{ const a=i.ref; if('card_rotation_deg' in a) a.card_rotation_deg=round((a.card_rotation_deg||0)+deg); else a.rotation_deg=round((a.rotation_deg||0)+deg); }); render(); }
+function scaleShape(sx,sy){ snapshot(); selectedItems().forEach(i=>{ const c=center(i.poly); i.poly=i.poly.map(p=>({x:c.x+(p.x-c.x)*sx, y:c.y+(p.y-c.y)*sy})); if('w_px' in i.ref) i.ref.w_px=round((i.ref.w_px||bbox(i.poly).w)*sx); if('h_px' in i.ref) i.ref.h_px=round((i.ref.h_px||bbox(i.poly).h)*sy); syncRef(i); }); render(); }
+function rebuildRect(){ snapshot(); selectedItems().forEach(i=>{ const b=bbox(i.poly); i.poly=rectPoly(b.x,b.y,b.w,b.h); syncRef(i); }); render(); }
+function onPointerDown(evt){
+  evt.preventDefault(); const id=evt.currentTarget.dataset.id;
+  if(!evt.shiftKey && !state.selected.has(id)) state.selected.clear();
+  if(evt.shiftKey && state.selected.has(id)) state.selected.delete(id); else state.selected.add(id);
+  snapshot(); const start=svgPoint(evt); const originals=new Map(selectedItems().map(i=>[i.id, deepCopy(i.poly)]));
+  state.drag={start, originals}; render();
+  window.addEventListener('pointermove', onPointerMove); window.addEventListener('pointerup', onPointerUp, {once:true});
+}
+function onPointerMove(evt){
+  if(!state.drag) return; const p=svgPoint(evt); const dx=p.x-state.drag.start.x, dy=p.y-state.drag.start.y;
+  selectedItems().forEach(i=>{ const orig=state.drag.originals.get(i.id); if(orig){ i.poly=orig.map(q=>({x:q.x+dx,y:q.y+dy})); syncRef(i); }}); render();
+}
+function onPointerUp(){ state.drag=null; window.removeEventListener('pointermove', onPointerMove); updateAllRefs(); render(); }
+function download(name,obj){ const blob=new Blob([JSON.stringify(obj,null,2)+'\n'],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); }
+function patchObj(){ updateAllRefs(); return { generated_by:'ed.html', design_px:{w:DESIGN_W,h:DESIGN_H}, files:{ 'h/a.json':state.data.hand, 'h/math.json':state.data.math || {name:'math',anchors:state.data.hand.anchors}, 'p/a.json':state.data.pass, 'k/a.json':state.data.trick, 'h/rack.json':state.data.rack } }; }
+async function init(){
+  state.data.hand=await loadJson(files.hand); state.data.pass=await loadJson(files.pass); state.data.trick=await loadJson(files.trick); state.data.rack=await loadJson(files.rack); state.data.math=await loadJson(files.math).catch(()=>null);
+  makeItems(); render();
+}
+['showHand','showPass','showTrick','showRack','showDragon','showLabels'].forEach(id=>$(id).onchange=render);
+$('filter').onchange=renderList; $('selZone').onclick=()=>{ const z=$('filter').value; if(z==='all') return; state.selected.clear(); state.items.filter(i=>i.zone===z).forEach(i=>state.selected.add(i.id)); render(); };
+$('clearSel').onclick=()=>{state.selected.clear(); render();};
+document.querySelectorAll('[data-move]').forEach(b=>b.onclick=()=>{const [x,y]=b.dataset.move.split(',').map(Number), s=Number($('step').value); move(x*s,y*s);});
+document.querySelectorAll('[data-rot]').forEach(b=>b.onclick=()=>rotateShape(Number(b.dataset.rot)*Number($('step').value)));
+document.querySelectorAll('[data-cardrot]').forEach(b=>b.onclick=()=>rotateCard(Number(b.dataset.cardrot)*Number($('step').value)));
+document.querySelectorAll('[data-scale]').forEach(b=>b.onclick=()=>{const [x,y]=b.dataset.scale.split(',').map(Number); scaleShape(x,y);});
+$('snapAxis').onclick=rebuildRect;
+$('undo').onclick=()=>{ const u=state.undo.pop(); if(!u) return; state.data=u.data; makeItems(); state.selected=new Set(u.selected); render(); };
+$('patch').onclick=()=>download('anchor_patch.json', patchObj());
+$('dlH').onclick=()=>{updateAllRefs(); download('h_a.json',state.data.hand);};
+$('dlP').onclick=()=>{updateAllRefs(); download('p_a.json',state.data.pass);};
+$('dlK').onclick=()=>{updateAllRefs(); download('k_a.json',state.data.trick);};
+$('dlRack').onclick=()=>{updateAllRefs(); download('h_rack.json',state.data.rack);};
+$('dlMath').onclick=()=>{updateAllRefs(); download('h_math.json',state.data.math || {name:'math',anchors:state.data.hand.anchors});};
+window.addEventListener('keydown', e=>{
+  if(['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)) return;
+  let s=Number($('step').value); if(e.shiftKey) s*=5; if(e.ctrlKey||e.metaKey) s*=0.25;
+  if(e.key==='ArrowLeft'){move(-s,0); e.preventDefault();}
+  if(e.key==='ArrowRight'){move(s,0); e.preventDefault();}
+  if(e.key==='ArrowUp'){move(0,-s); e.preventDefault();}
+  if(e.key==='ArrowDown'){move(0,s); e.preventDefault();}
+  if(e.key==='['){rotateShape(-s); e.preventDefault();}
+  if(e.key===']'){rotateShape(s); e.preventDefault();}
+  if(e.key===','){rotateCard(-s); e.preventDefault();}
+  if(e.key==='.'){rotateCard(s); e.preventDefault();}
+  if(e.key==='Delete'||e.key==='Escape'){state.selected.clear(); render();}
+});
+init().catch(err=>{ alert('Load failed: '+err.message+'\nRun through a local server, e.g. python -m http.server 8787'); console.error(err); });
+</script>
+</body>
+</html>

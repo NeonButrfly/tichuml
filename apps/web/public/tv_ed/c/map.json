@@ -1,0 +1,74 @@
+{
+  "standard": {
+    "swords": {
+      "A": "c/std/sw_A.png",
+      "K": "c/std/sw_K.png",
+      "Q": "c/std/sw_Q.png",
+      "J": "c/std/sw_J.png",
+      "10": "c/std/sw_10.png",
+      "9": "c/std/sw_9.png",
+      "8": "c/std/sw_8.png",
+      "7": "c/std/sw_7.png",
+      "6": "c/std/sw_6.png",
+      "5": "c/std/sw_5.png",
+      "4": "c/std/sw_4.png",
+      "3": "c/std/sw_3.png",
+      "2": "c/std/sw_2.png"
+    },
+    "pagodas": {
+      "A": "c/std/pg_A.png",
+      "K": "c/std/pg_K.png",
+      "Q": "c/std/pg_Q.png",
+      "J": "c/std/pg_J.png",
+      "10": "c/std/pg_10.png",
+      "9": "c/std/pg_9.png",
+      "8": "c/std/pg_8.png",
+      "7": "c/std/pg_7.png",
+      "6": "c/std/pg_6.png",
+      "5": "c/std/pg_5.png",
+      "4": "c/std/pg_4.png",
+      "3": "c/std/pg_3.png",
+      "2": "c/std/pg_2.png"
+    },
+    "jades": {
+      "A": "c/std/jd_A.png",
+      "K": "c/std/jd_K.png",
+      "Q": "c/std/jd_Q.png",
+      "J": "c/std/jd_J.png",
+      "10": "c/std/jd_10.png",
+      "9": "c/std/jd_9.png",
+      "8": "c/std/jd_8.png",
+      "7": "c/std/jd_7.png",
+      "6": "c/std/jd_6.png",
+      "5": "c/std/jd_5.png",
+      "4": "c/std/jd_4.png",
+      "3": "c/std/jd_3.png",
+      "2": "c/std/jd_2.png"
+    },
+    "stars": {
+      "A": "c/std/st_A.png",
+      "K": "c/std/st_K.png",
+      "Q": "c/std/st_Q.png",
+      "J": "c/std/st_J.png",
+      "10": "c/std/st_10.png",
+      "9": "c/std/st_9.png",
+      "8": "c/std/st_8.png",
+      "7": "c/std/st_7.png",
+      "6": "c/std/st_6.png",
+      "5": "c/std/st_5.png",
+      "4": "c/std/st_4.png",
+      "3": "c/std/st_3.png",
+      "2": "c/std/st_2.png"
+    }
+  },
+  "special": {
+    "mahjong": "c/sp/mahjong.png",
+    "dog": "c/sp/dog.png",
+    "phoenix": "c/sp/phoenix.png",
+    "dragon": "c/sp/dragon.png"
+  },
+  "backs": {
+    "blue": "c/back/blue.png",
+    "green": "c/back/green.png"
+  }
+}

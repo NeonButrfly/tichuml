@@ -1,0 +1,467 @@
+{
+  "name": "tichu_v15",
+  "file_count": 92,
+  "max_path_len": 22,
+  "files": [
+    {
+      "path": "INDEX.md",
+      "bytes": 714,
+      "sha256": "ad295ab78b70f0fc"
+    },
+    {
+      "path": "README.md",
+      "bytes": 714,
+      "sha256": "ad295ab78b70f0fc"
+    },
+    {
+      "path": "c/back/blue.png",
+      "bytes": 188507,
+      "sha256": "7f482fdf01611d85"
+    },
+    {
+      "path": "c/back/green.png",
+      "bytes": 170219,
+      "sha256": "98c68546a357c5b5"
+    },
+    {
+      "path": "c/map.json",
+      "bytes": 1855,
+      "sha256": "a2698ba0578785c3"
+    },
+    {
+      "path": "c/prev/deck.png",
+      "bytes": 1459346,
+      "sha256": "c9b651f913bddaa2"
+    },
+    {
+      "path": "c/prev/sheet.png",
+      "bytes": 2461705,
+      "sha256": "3914878e8e33fd0b"
+    },
+    {
+      "path": "c/sp/dog.png",
+      "bytes": 167195,
+      "sha256": "6f827f7357f781c6"
+    },
+    {
+      "path": "c/sp/dragon.png",
+      "bytes": 176071,
+      "sha256": "1df4fadcf4b0cc84"
+    },
+    {
+      "path": "c/sp/mahjong.png",
+      "bytes": 152889,
+      "sha256": "dc2119b0463cadcf"
+    },
+    {
+      "path": "c/sp/phoenix.png",
+      "bytes": 173432,
+      "sha256": "b9b0ff91fe5b67a5"
+    },
+    {
+      "path": "c/std/jd_10.png",
+      "bytes": 146126,
+      "sha256": "cca99bbf6973df56"
+    },
+    {
+      "path": "c/std/jd_2.png",
+      "bytes": 145431,
+      "sha256": "bba235da34b1de1c"
+    },
+    {
+      "path": "c/std/jd_3.png",
+      "bytes": 146531,
+      "sha256": "cc9bb03a51aeeaad"
+    },
+    {
+      "path": "c/std/jd_4.png",
+      "bytes": 145492,
+      "sha256": "1343994394aef533"
+    },
+    {
+      "path": "c/std/jd_5.png",
+      "bytes": 145335,
+      "sha256": "4505fbaf155b0311"
+    },
+    {
+      "path": "c/std/jd_6.png",
+      "bytes": 145629,
+      "sha256": "5a39f60f3c257c3a"
+    },
+    {
+      "path": "c/std/jd_7.png",
+      "bytes": 145624,
+      "sha256": "cd88c6adb9228372"
+    },
+    {
+      "path": "c/std/jd_8.png",
+      "bytes": 148972,
+      "sha256": "95c24226754330c5"
+    },
+    {
+      "path": "c/std/jd_9.png",
+      "bytes": 147334,
+      "sha256": "4cd296fb8cff5251"
+    },
+    {
+      "path": "c/std/jd_A.png",
+      "bytes": 145339,
+      "sha256": "31bac9ba26f13f18"
+    },
+    {
+      "path": "c/std/jd_J.png",
+      "bytes": 138939,
+      "sha256": "70090587a5b7392a"
+    },
+    {
+      "path": "c/std/jd_K.png",
+      "bytes": 147286,
+      "sha256": "c268d6772a56342c"
+    },
+    {
+      "path": "c/std/jd_Q.png",
+      "bytes": 148528,
+      "sha256": "6cb68f4017922d8d"
+    },
+    {
+      "path": "c/std/pg_10.png",
+      "bytes": 148451,
+      "sha256": "01bc2c6850519131"
+    },
+    {
+      "path": "c/std/pg_2.png",
+      "bytes": 141522,
+      "sha256": "77dd3a5595e1ec62"
+    },
+    {
+      "path": "c/std/pg_3.png",
+      "bytes": 141886,
+      "sha256": "5d696cc30dcf67c0"
+    },
+    {
+      "path": "c/std/pg_4.png",
+      "bytes": 141857,
+      "sha256": "f2e3fd2c9491bd2a"
+    },
+    {
+      "path": "c/std/pg_5.png",
+      "bytes": 141848,
+      "sha256": "64703c57d53ffc6f"
+    },
+    {
+      "path": "c/std/pg_6.png",
+      "bytes": 148088,
+      "sha256": "92b3bedd7a235a08"
+    },
+    {
+      "path": "c/std/pg_7.png",
+      "bytes": 147317,
+      "sha256": "0aaecf617fefdc4b"
+    },
+    {
+      "path": "c/std/pg_8.png",
+      "bytes": 150832,
+      "sha256": "dea705f69b692152"
+    },
+    {
+      "path": "c/std/pg_9.png",
+      "bytes": 149767,
+      "sha256": "81e02cbc35784d1d"
+    },
+    {
+      "path": "c/std/pg_A.png",
+      "bytes": 145445,
+      "sha256": "835d37b8e9fa0a3b"
+    },
+    {
+      "path": "c/std/pg_J.png",
+      "bytes": 147854,
+      "sha256": "9097ae3082d18d28"
+    },
+    {
+      "path": "c/std/pg_K.png",
+      "bytes": 151598,
+      "sha256": "061dc43b734977a5"
+    },
+    {
+      "path": "c/std/pg_Q.png",
+      "bytes": 147516,
+      "sha256": "a1d06c7ee3d3afc5"
+    },
+    {
+      "path": "c/std/st_10.png",
+      "bytes": 139681,
+      "sha256": "b0254c76644946c0"
+    },
+    {
+      "path": "c/std/st_2.png",
+      "bytes": 139073,
+      "sha256": "359ad4d8a3093afb"
+    },
+    {
+      "path": "c/std/st_3.png",
+      "bytes": 139603,
+      "sha256": "f2db2f9bf5ea6304"
+    },
+    {
+      "path": "c/std/st_4.png",
+      "bytes": 139263,
+      "sha256": "4fcef826633a639a"
+    },
+    {
+      "path": "c/std/st_5.png",
+      "bytes": 139346,
+      "sha256": "a9f75d24a7245c08"
+    },
+    {
+      "path": "c/std/st_6.png",
+      "bytes": 139453,
+      "sha256": "8686aff2ea561429"
+    },
+    {
+      "path": "c/std/st_7.png",
+      "bytes": 138895,
+      "sha256": "744b8eb24a5ff3e4"
+    },
+    {
+      "path": "c/std/st_8.png",
+      "bytes": 142259,
+      "sha256": "6c347dfb2366d61b"
+    },
+    {
+      "path": "c/std/st_9.png",
+      "bytes": 140962,
+      "sha256": "4a04c76b7a2501df"
+    },
+    {
+      "path": "c/std/st_A.png",
+      "bytes": 143217,
+      "sha256": "cded964af30ec7df"
+    },
+    {
+      "path": "c/std/st_J.png",
+      "bytes": 143452,
+      "sha256": "6ac1f2e82a337ff3"
+    },
+    {
+      "path": "c/std/st_K.png",
+      "bytes": 143844,
+      "sha256": "d90fe1c04f512ed7"
+    },
+    {
+      "path": "c/std/st_Q.png",
+      "bytes": 150716,
+      "sha256": "00c7120ca63a77bb"
+    },
+    {
+      "path": "c/std/sw_10.png",
+      "bytes": 148818,
+      "sha256": "549c2c13d9e3278e"
+    },
+    {
+      "path": "c/std/sw_2.png",
+      "bytes": 143688,
+      "sha256": "5474b82a3966b31b"
+    },
+    {
+      "path": "c/std/sw_3.png",
+      "bytes": 145178,
+      "sha256": "736c475a48635c42"
+    },
+    {
+      "path": "c/std/sw_4.png",
+      "bytes": 145200,
+      "sha256": "d3f00350f3ff0f11"
+    },
+    {
+      "path": "c/std/sw_5.png",
+      "bytes": 143747,
+      "sha256": "b26d80c5b7c38446"
+    },
+    {
+      "path": "c/std/sw_6.png",
+      "bytes": 147335,
+      "sha256": "8eba1cc7c42054aa"
+    },
+    {
+      "path": "c/std/sw_7.png",
+      "bytes": 149661,
+      "sha256": "919aeb1010a70858"
+    },
+    {
+      "path": "c/std/sw_8.png",
+      "bytes": 152621,
+      "sha256": "2ca90db40bf32472"
+    },
+    {
+      "path": "c/std/sw_9.png",
+      "bytes": 151354,
+      "sha256": "5315f33ebef35501"
+    },
+    {
+      "path": "c/std/sw_A.png",
+      "bytes": 152688,
+      "sha256": "4701ba32bc98680b"
+    },
+    {
+      "path": "c/std/sw_J.png",
+      "bytes": 144062,
+      "sha256": "257a535c39681450"
+    },
+    {
+      "path": "c/std/sw_K.png",
+      "bytes": 151298,
+      "sha256": "29c02ea8d9d0073a"
+    },
+    {
+      "path": "c/std/sw_Q.png",
+      "bytes": 150666,
+      "sha256": "83203741d7ba027e"
+    },
+    {
+      "path": "codex.md",
+      "bytes": 4450,
+      "sha256": "a66bb0926178dec8"
+    },
+    {
+      "path": "config.json",
+      "bytes": 740,
+      "sha256": "b537b162086292be"
+    },
+    {
+      "path": "h/a.json",
+      "bytes": 52692,
+      "sha256": "1ed1082ec3abc798"
+    },
+    {
+      "path": "h/d.png",
+      "bytes": 45223,
+      "sha256": "d1bfc8a03da5ebb0"
+    },
+    {
+      "path": "h/math.json",
+      "bytes": 52541,
+      "sha256": "1f6889f1840e896a"
+    },
+    {
+      "path": "h/prev/all.png",
+      "bytes": 2746774,
+      "sha256": "b09487d5a5718639"
+    },
+    {
+      "path": "h/prev/cards.png",
+      "bytes": 2902112,
+      "sha256": "6caaa5649580bd63"
+    },
+    {
+      "path": "h/prev/debug.png",
+      "bytes": 2790998,
+      "sha256": "0852fba50f1fb2db"
+    },
+    {
+      "path": "h/prev/table.png",
+      "bytes": 2788082,
+      "sha256": "4e4996df4a181285"
+    },
+    {
+      "path": "h/rack.json",
+      "bytes": 1952,
+      "sha256": "6c7e736fa71d1715"
+    },
+    {
+      "path": "h/s.png",
+      "bytes": 20242,
+      "sha256": "618df1db7aa7384b"
+    },
+    {
+      "path": "k/a.json",
+      "bytes": 4378,
+      "sha256": "64815dc03f1de110"
+    },
+    {
+      "path": "k/d.png",
+      "bytes": 9869,
+      "sha256": "119db5316d67059c"
+    },
+    {
+      "path": "k/prev/table.png",
+      "bytes": 2786259,
+      "sha256": "5d735064187c2378"
+    },
+    {
+      "path": "lock.json",
+      "bytes": 2813,
+      "sha256": "bab3ab02fa7e428f"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 9357,
+      "sha256": "8504dd6286115e12"
+    },
+    {
+      "path": "p/a.json",
+      "bytes": 17646,
+      "sha256": "f9f829e759dc4519"
+    },
+    {
+      "path": "p/d.png",
+      "bytes": 19741,
+      "sha256": "646c9ff1d56f33f6"
+    },
+    {
+      "path": "p/o.png",
+      "bytes": 12844,
+      "sha256": "3859f19b72b85c50"
+    },
+    {
+      "path": "p/prev/black.png",
+      "bytes": 13982,
+      "sha256": "3d6f98576899470f"
+    },
+    {
+      "path": "p/prev/debug.png",
+      "bytes": 2768371,
+      "sha256": "56e6ef4572e8a0ab"
+    },
+    {
+      "path": "p/prev/table.png",
+      "bytes": 2756753,
+      "sha256": "81428a355b6fc637"
+    },
+    {
+      "path": "p/r.png",
+      "bytes": 7546,
+      "sha256": "b3af6216e7348e12"
+    },
+    {
+      "path": "p/s.png",
+      "bytes": 12018,
+      "sha256": "0c5c813600ed68c8"
+    },
+    {
+      "path": "r/math_overlay_all.png",
+      "bytes": 2746774,
+      "sha256": "b09487d5a5718639"
+    },
+    {
+      "path": "t/base.png",
+      "bytes": 2726496,
+      "sha256": "2666faefa0591492"
+    },
+    {
+      "path": "t/dragon.png",
+      "bytes": 2813844,
+      "sha256": "33fedbf9af866402"
+    },
+    {
+      "path": "t/plate.png",
+      "bytes": 2790856,
+      "sha256": "e99463eab16b4470"
+    },
+    {
+      "path": "x/check.mjs",
+      "bytes": 5437,
+      "sha256": "46f403104da66fe4"
+    }
+  ]
+}

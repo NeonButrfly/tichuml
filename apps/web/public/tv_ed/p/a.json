@@ -1,0 +1,752 @@
+{
+  "name": "tichu_v15_passing_anchors",
+  "version": "15.0.0",
+  "design_px": {
+    "w": 1536,
+    "h": 1024
+  },
+  "table": {
+    "base": "t/base.png",
+    "dragon": "t/dragon.png",
+    "plate": "t/plate.png"
+  },
+  "overlays": {
+    "production": "p/o.png",
+    "slots": "p/s.png",
+    "arrows": "p/r.png",
+    "debug": "p/d.png"
+  },
+  "direction_map": {
+    "north_pass_left": "left",
+    "north_pass_across": "south",
+    "north_pass_right": "right",
+    "south_pass_left": "left",
+    "south_pass_across": "north",
+    "south_pass_right": "right",
+    "west_pass_north": "north",
+    "west_pass_across": "east",
+    "west_pass_south": "south",
+    "east_pass_north": "north",
+    "east_pass_across": "west",
+    "east_pass_south": "south"
+  },
+  "orientation_map": {
+    "north_pass_left": "landscape",
+    "north_pass_across": "portrait",
+    "north_pass_right": "landscape",
+    "south_pass_left": "landscape",
+    "south_pass_across": "portrait",
+    "south_pass_right": "landscape",
+    "west_pass_north": "portrait",
+    "west_pass_across": "landscape",
+    "west_pass_south": "portrait",
+    "east_pass_north": "portrait",
+    "east_pass_across": "landscape",
+    "east_pass_south": "portrait"
+  },
+  "rotation_map": {
+    "north_pass_left": 0,
+    "north_pass_across": 0,
+    "north_pass_right": 0,
+    "south_pass_left": 0,
+    "south_pass_across": 0,
+    "south_pass_right": 0,
+    "west_pass_north": -90,
+    "west_pass_across": 90,
+    "west_pass_south": 90,
+    "east_pass_north": -90,
+    "east_pass_across": 90,
+    "east_pass_south": 90
+  },
+  "rules": {
+    "seat_edge_keyed": true,
+    "west_same_left_edge": true,
+    "east_same_right_edge": true,
+    "north_same_top_edge": true,
+    "south_same_bottom_edge": true,
+    "east_west_targets_have_angled_geometry": true,
+    "side_shape_rotation_matches_card_rail": {
+      "west": -13,
+      "east": 13
+    },
+    "bbox_px_is_envelope_for_angled_side_targets": true,
+    "polygon_px_is_source_of_truth_for_hit_testing": true,
+    "logical_direction_map_unchanged_from_v6": true,
+    "card_math_locked_from_v14": true,
+    "dynamic_components_are_math_drawn": true
+  },
+  "anchors": [
+    {
+      "id": "north_pass_left",
+      "zone": "passing",
+      "seat": "north",
+      "index": 1,
+      "kind": "passing_lane",
+      "layout_source": "passing_math_layer_v15_angled_side_edges",
+      "center_px": {
+        "x": 622.5,
+        "y": 184.0
+      },
+      "w_px": 125,
+      "h_px": 78,
+      "aspect_ratio": 1.6026,
+      "bbox_px": {
+        "x": 560.0,
+        "y": 145.0,
+        "w": 125.0,
+        "h": 78.0
+      },
+      "polygon_px": [
+        {
+          "x": 560.0,
+          "y": 145.0
+        },
+        {
+          "x": 685.0,
+          "y": 145.0
+        },
+        {
+          "x": 685.0,
+          "y": 223.0
+        },
+        {
+          "x": 560.0,
+          "y": 223.0
+        }
+      ],
+      "z_index": 201,
+      "arrow_direction": "left",
+      "orientation": "landscape",
+      "lane": "left",
+      "visual_rotation_deg": 0,
+      "target_rotation_deg": 0,
+      "shape_rotation_deg": 0,
+      "card_rotation_deg": 0,
+      "face_rotation_deg": 0,
+      "logic_rotation_deg": 0,
+      "render_rotation_deg": 0,
+      "targets_not_rotated": true,
+      "side_target_geometry": "axis_aligned_polygon",
+      "seat_edge_keyed": true,
+      "key_edge": "top",
+      "hit_test": "polygon_px",
+      "bbox_is_envelope_only": false
+    },
+    {
+      "id": "north_pass_across",
+      "zone": "passing",
+      "seat": "north",
+      "index": 2,
+      "kind": "passing_lane",
+      "layout_source": "passing_math_layer_v15_angled_side_edges",
+      "center_px": {
+        "x": 768.0,
+        "y": 207.5
+      },
+      "w_px": 78,
+      "h_px": 125,
+      "aspect_ratio": 0.624,
+      "bbox_px": {
+        "x": 729.0,
+        "y": 145.0,
+        "w": 78.0,
+        "h": 125.0
+      },
+      "polygon_px": [
+        {
+          "x": 729.0,
+          "y": 145.0
+        },
+        {
+          "x": 807.0,
+          "y": 145.0
+        },
+        {
+          "x": 807.0,
+          "y": 270.0
+        },
+        {
+          "x": 729.0,
+          "y": 270.0
+        }
+      ],
+      "z_index": 202,
+      "arrow_direction": "south",
+      "orientation": "portrait",
+      "lane": "across",
+      "visual_rotation_deg": 0,
+      "target_rotation_deg": 0,
+      "shape_rotation_deg": 0,
+      "card_rotation_deg": 0,
+      "face_rotation_deg": 0,
+      "logic_rotation_deg": 0,
+      "render_rotation_deg": 0,
+      "targets_not_rotated": true,
+      "side_target_geometry": "axis_aligned_polygon",
+      "seat_edge_keyed": true,
+      "key_edge": "top",
+      "hit_test": "polygon_px",
+      "bbox_is_envelope_only": false
+    },
+    {
+      "id": "north_pass_right",
+      "zone": "passing",
+      "seat": "north",
+      "index": 3,
+      "kind": "passing_lane",
+      "layout_source": "passing_math_layer_v15_angled_side_edges",
+      "center_px": {
+        "x": 913.5,
+        "y": 184.0
+      },
+      "w_px": 125,
+      "h_px": 78,
+      "aspect_ratio": 1.6026,
+      "bbox_px": {
+        "x": 851.0,
+        "y": 145.0,
+        "w": 125.0,
+        "h": 78.0
+      },
+      "polygon_px": [
+        {
+          "x": 851.0,
+          "y": 145.0
+        },
+        {
+          "x": 976.0,
+          "y": 145.0
+        },
+        {
+          "x": 976.0,
+          "y": 223.0
+        },
+        {
+          "x": 851.0,
+          "y": 223.0
+        }
+      ],
+      "z_index": 203,
+      "arrow_direction": "right",
+      "orientation": "landscape",
+      "lane": "right",
+      "visual_rotation_deg": 0,
+      "target_rotation_deg": 0,
+      "shape_rotation_deg": 0,
+      "card_rotation_deg": 0,
+      "face_rotation_deg": 0,
+      "logic_rotation_deg": 0,
+      "render_rotation_deg": 0,
+      "targets_not_rotated": true,
+      "side_target_geometry": "axis_aligned_polygon",
+      "seat_edge_keyed": true,
+      "key_edge": "top",
+      "hit_test": "polygon_px",
+      "bbox_is_envelope_only": false
+    },
+    {
+      "id": "south_pass_left",
+      "zone": "passing",
+      "seat": "south",
+      "index": 4,
+      "kind": "passing_lane",
+      "layout_source": "passing_math_layer_v15_angled_side_edges",
+      "center_px": {
+        "x": 622.5,
+        "y": 756.0
+      },
+      "w_px": 125,
+      "h_px": 78,
+      "aspect_ratio": 1.6026,
+      "bbox_px": {
+        "x": 560.0,
+        "y": 717.0,
+        "w": 125.0,
+        "h": 78.0
+      },
+      "polygon_px": [
+        {
+          "x": 560.0,
+          "y": 717.0
+        },
+        {
+          "x": 685.0,
+          "y": 717.0
+        },
+        {
+          "x": 685.0,
+          "y": 795.0
+        },
+        {
+          "x": 560.0,
+          "y": 795.0
+        }
+      ],
+      "z_index": 204,
+      "arrow_direction": "left",
+      "orientation": "landscape",
+      "lane": "left",
+      "visual_rotation_deg": 0,
+      "target_rotation_deg": 0,
+      "shape_rotation_deg": 0,
+      "card_rotation_deg": 0,
+      "face_rotation_deg": 0,
+      "logic_rotation_deg": 0,
+      "render_rotation_deg": 0,
+      "targets_not_rotated": true,
+      "side_target_geometry": "axis_aligned_polygon",
+      "seat_edge_keyed": true,
+      "key_edge": "bottom",
+      "hit_test": "polygon_px",
+      "bbox_is_envelope_only": false
+    },
+    {
+      "id": "south_pass_across",
+      "zone": "passing",
+      "seat": "south",
+      "index": 5,
+      "kind": "passing_lane",
+      "layout_source": "passing_math_layer_v15_angled_side_edges",
+      "center_px": {
+        "x": 768.0,
+        "y": 732.5
+      },
+      "w_px": 78,
+      "h_px": 125,
+      "aspect_ratio": 0.624,
+      "bbox_px": {
+        "x": 729.0,
+        "y": 670.0,
+        "w": 78.0,
+        "h": 125.0
+      },
+      "polygon_px": [
+        {
+          "x": 729.0,
+          "y": 670.0
+        },
+        {
+          "x": 807.0,
+          "y": 670.0
+        },
+        {
+          "x": 807.0,
+          "y": 795.0
+        },
+        {
+          "x": 729.0,
+          "y": 795.0
+        }
+      ],
+      "z_index": 205,
+      "arrow_direction": "north",
+      "orientation": "portrait",
+      "lane": "across",
+      "visual_rotation_deg": 0,
+      "target_rotation_deg": 0,
+      "shape_rotation_deg": 0,
+      "card_rotation_deg": 0,
+      "face_rotation_deg": 0,
+      "logic_rotation_deg": 0,
+      "render_rotation_deg": 0,
+      "targets_not_rotated": true,
+      "side_target_geometry": "axis_aligned_polygon",
+      "seat_edge_keyed": true,
+      "key_edge": "bottom",
+      "hit_test": "polygon_px",
+      "bbox_is_envelope_only": false
+    },
+    {
+      "id": "south_pass_right",
+      "zone": "passing",
+      "seat": "south",
+      "index": 6,
+      "kind": "passing_lane",
+      "layout_source": "passing_math_layer_v15_angled_side_edges",
+      "center_px": {
+        "x": 913.5,
+        "y": 756.0
+      },
+      "w_px": 125,
+      "h_px": 78,
+      "aspect_ratio": 1.6026,
+      "bbox_px": {
+        "x": 851.0,
+        "y": 717.0,
+        "w": 125.0,
+        "h": 78.0
+      },
+      "polygon_px": [
+        {
+          "x": 851.0,
+          "y": 717.0
+        },
+        {
+          "x": 976.0,
+          "y": 717.0
+        },
+        {
+          "x": 976.0,
+          "y": 795.0
+        },
+        {
+          "x": 851.0,
+          "y": 795.0
+        }
+      ],
+      "z_index": 206,
+      "arrow_direction": "right",
+      "orientation": "landscape",
+      "lane": "right",
+      "visual_rotation_deg": 0,
+      "target_rotation_deg": 0,
+      "shape_rotation_deg": 0,
+      "card_rotation_deg": 0,
+      "face_rotation_deg": 0,
+      "logic_rotation_deg": 0,
+      "render_rotation_deg": 0,
+      "targets_not_rotated": true,
+      "side_target_geometry": "axis_aligned_polygon",
+      "seat_edge_keyed": true,
+      "key_edge": "bottom",
+      "hit_test": "polygon_px",
+      "bbox_is_envelope_only": false
+    },
+    {
+      "id": "west_pass_north",
+      "zone": "passing",
+      "seat": "west",
+      "index": 7,
+      "kind": "passing_lane",
+      "layout_source": "passing_math_layer_v15_angled_side_edges",
+      "center_px": {
+        "x": 233.08,
+        "y": 291.9
+      },
+      "w_px": 72,
+      "h_px": 116,
+      "aspect_ratio": 0.6207,
+      "bbox_px": {
+        "x": 184.95,
+        "y": 227.29,
+        "w": 96.25,
+        "h": 129.22
+      },
+      "polygon_px": [
+        {
+          "x": 184.95,
+          "y": 243.49
+        },
+        {
+          "x": 255.11,
+          "y": 227.29
+        },
+        {
+          "x": 281.2,
+          "y": 340.32
+        },
+        {
+          "x": 211.05,
+          "y": 356.51
+        }
+      ],
+      "z_index": 207,
+      "arrow_direction": "north",
+      "orientation": "portrait",
+      "lane": "north",
+      "visual_rotation_deg": -13,
+      "target_rotation_deg": -13,
+      "shape_rotation_deg": -13,
+      "card_rotation_deg": -90,
+      "face_rotation_deg": -90,
+      "logic_rotation_deg": -90,
+      "render_rotation_deg": -13,
+      "targets_not_rotated": false,
+      "side_target_geometry": "angled_polygon",
+      "seat_edge_keyed": true,
+      "key_edge": "left",
+      "hit_test": "polygon_px",
+      "bbox_is_envelope_only": true
+    },
+    {
+      "id": "west_pass_across",
+      "zone": "passing",
+      "seat": "west",
+      "index": 8,
+      "kind": "passing_lane",
+      "layout_source": "passing_math_layer_v15_angled_side_edges",
+      "center_px": {
+        "x": 254.51,
+        "y": 440.95
+      },
+      "w_px": 116,
+      "h_px": 72,
+      "aspect_ratio": 1.6111,
+      "bbox_px": {
+        "x": 189.9,
+        "y": 392.83,
+        "w": 129.23,
+        "h": 96.25
+      },
+      "polygon_px": [
+        {
+          "x": 189.9,
+          "y": 418.92
+        },
+        {
+          "x": 302.93,
+          "y": 392.83
+        },
+        {
+          "x": 319.13,
+          "y": 462.98
+        },
+        {
+          "x": 206.1,
+          "y": 489.08
+        }
+      ],
+      "z_index": 208,
+      "arrow_direction": "east",
+      "orientation": "landscape",
+      "lane": "across",
+      "visual_rotation_deg": -13,
+      "target_rotation_deg": -13,
+      "shape_rotation_deg": -13,
+      "card_rotation_deg": 90,
+      "face_rotation_deg": 90,
+      "logic_rotation_deg": 90,
+      "render_rotation_deg": -13,
+      "targets_not_rotated": false,
+      "side_target_geometry": "angled_polygon",
+      "seat_edge_keyed": true,
+      "key_edge": "left",
+      "hit_test": "polygon_px",
+      "bbox_is_envelope_only": true
+    },
+    {
+      "id": "west_pass_south",
+      "zone": "passing",
+      "seat": "west",
+      "index": 9,
+      "kind": "passing_lane",
+      "layout_source": "passing_math_layer_v15_angled_side_edges",
+      "center_px": {
+        "x": 233.08,
+        "y": 599.9
+      },
+      "w_px": 72,
+      "h_px": 116,
+      "aspect_ratio": 0.6207,
+      "bbox_px": {
+        "x": 184.95,
+        "y": 535.29,
+        "w": 96.25,
+        "h": 129.22
+      },
+      "polygon_px": [
+        {
+          "x": 184.95,
+          "y": 551.49
+        },
+        {
+          "x": 255.11,
+          "y": 535.29
+        },
+        {
+          "x": 281.2,
+          "y": 648.32
+        },
+        {
+          "x": 211.05,
+          "y": 664.51
+        }
+      ],
+      "z_index": 209,
+      "arrow_direction": "south",
+      "orientation": "portrait",
+      "lane": "south",
+      "visual_rotation_deg": -13,
+      "target_rotation_deg": -13,
+      "shape_rotation_deg": -13,
+      "card_rotation_deg": 90,
+      "face_rotation_deg": 90,
+      "logic_rotation_deg": 90,
+      "render_rotation_deg": -13,
+      "targets_not_rotated": false,
+      "side_target_geometry": "angled_polygon",
+      "seat_edge_keyed": true,
+      "key_edge": "left",
+      "hit_test": "polygon_px",
+      "bbox_is_envelope_only": true
+    },
+    {
+      "id": "east_pass_north",
+      "zone": "passing",
+      "seat": "east",
+      "index": 10,
+      "kind": "passing_lane",
+      "layout_source": "passing_math_layer_v15_angled_side_edges",
+      "center_px": {
+        "x": 1302.92,
+        "y": 291.9
+      },
+      "w_px": 72,
+      "h_px": 116,
+      "aspect_ratio": 0.6207,
+      "bbox_px": {
+        "x": 1254.8,
+        "y": 227.29,
+        "w": 96.25,
+        "h": 129.22
+      },
+      "polygon_px": [
+        {
+          "x": 1280.89,
+          "y": 227.29
+        },
+        {
+          "x": 1351.05,
+          "y": 243.49
+        },
+        {
+          "x": 1324.95,
+          "y": 356.51
+        },
+        {
+          "x": 1254.8,
+          "y": 340.32
+        }
+      ],
+      "z_index": 210,
+      "arrow_direction": "north",
+      "orientation": "portrait",
+      "lane": "north",
+      "visual_rotation_deg": 13,
+      "target_rotation_deg": 13,
+      "shape_rotation_deg": 13,
+      "card_rotation_deg": -90,
+      "face_rotation_deg": -90,
+      "logic_rotation_deg": -90,
+      "render_rotation_deg": 13,
+      "targets_not_rotated": false,
+      "side_target_geometry": "angled_polygon",
+      "seat_edge_keyed": true,
+      "key_edge": "right",
+      "hit_test": "polygon_px",
+      "bbox_is_envelope_only": true
+    },
+    {
+      "id": "east_pass_across",
+      "zone": "passing",
+      "seat": "east",
+      "index": 11,
+      "kind": "passing_lane",
+      "layout_source": "passing_math_layer_v15_angled_side_edges",
+      "center_px": {
+        "x": 1281.49,
+        "y": 440.95
+      },
+      "w_px": 116,
+      "h_px": 72,
+      "aspect_ratio": 1.6111,
+      "bbox_px": {
+        "x": 1216.87,
+        "y": 392.83,
+        "w": 129.23,
+        "h": 96.25
+      },
+      "polygon_px": [
+        {
+          "x": 1233.07,
+          "y": 392.83
+        },
+        {
+          "x": 1346.1,
+          "y": 418.92
+        },
+        {
+          "x": 1329.9,
+          "y": 489.08
+        },
+        {
+          "x": 1216.87,
+          "y": 462.98
+        }
+      ],
+      "z_index": 211,
+      "arrow_direction": "west",
+      "orientation": "landscape",
+      "lane": "across",
+      "visual_rotation_deg": 13,
+      "target_rotation_deg": 13,
+      "shape_rotation_deg": 13,
+      "card_rotation_deg": 90,
+      "face_rotation_deg": 90,
+      "logic_rotation_deg": 90,
+      "render_rotation_deg": 13,
+      "targets_not_rotated": false,
+      "side_target_geometry": "angled_polygon",
+      "seat_edge_keyed": true,
+      "key_edge": "right",
+      "hit_test": "polygon_px",
+      "bbox_is_envelope_only": true
+    },
+    {
+      "id": "east_pass_south",
+      "zone": "passing",
+      "seat": "east",
+      "index": 12,
+      "kind": "passing_lane",
+      "layout_source": "passing_math_layer_v15_angled_side_edges",
+      "center_px": {
+        "x": 1302.92,
+        "y": 599.9
+      },
+      "w_px": 72,
+      "h_px": 116,
+      "aspect_ratio": 0.6207,
+      "bbox_px": {
+        "x": 1254.8,
+        "y": 535.29,
+        "w": 96.25,
+        "h": 129.22
+      },
+      "polygon_px": [
+        {
+          "x": 1280.89,
+          "y": 535.29
+        },
+        {
+          "x": 1351.05,
+          "y": 551.49
+        },
+        {
+          "x": 1324.95,
+          "y": 664.51
+        },
+        {
+          "x": 1254.8,
+          "y": 648.32
+        }
+      ],
+      "z_index": 212,
+      "arrow_direction": "south",
+      "orientation": "portrait",
+      "lane": "south",
+      "visual_rotation_deg": 13,
+      "target_rotation_deg": 13,
+      "shape_rotation_deg": 13,
+      "card_rotation_deg": 90,
+      "face_rotation_deg": 90,
+      "logic_rotation_deg": 90,
+      "render_rotation_deg": 13,
+      "targets_not_rotated": false,
+      "side_target_geometry": "angled_polygon",
+      "seat_edge_keyed": true,
+      "key_edge": "right",
+      "hit_test": "polygon_px",
+      "bbox_is_envelope_only": true
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "name": "tichu_v15",
+  "version": "15.0.0",
+  "design_px": {
+    "w": 1536,
+    "h": 1024
+  },
+  "paths": {
+    "table_base": "t/base.png",
+    "dragon": "t/dragon.png",
+    "table_plate": "t/plate.png",
+    "hand_anchors": "h/a.json",
+    "hand_math_lock": "h/math.json",
+    "rack_zones": "h/rack.json",
+    "passing_anchors": "p/a.json",
+    "passing_overlay": "p/o.png",
+    "trick_anchors": "k/a.json",
+    "cards": "c/",
+    "validator": "x/check.mjs"
+  },
+  "notes": [
+    "tv15 keeps the tv14 card math that lined up correctly",
+    "east/west passing lanes now use angled polygon geometry following the rail",
+    "preview overlays are math-rendered, not image-generated",
+    "use polygon_px for pass target hit testing"
+  ]
+}
