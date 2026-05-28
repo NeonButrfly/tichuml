@@ -32,6 +32,42 @@
   overflow: hidden;
 }
 
+.alt-table-hidden-hands {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+  -webkit-mask-image: url("/tv7/t/cardmask.png");
+  -webkit-mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%;
+  mask-image: url("/tv7/t/cardmask.png");
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: 100% 100%;
+}
+
+.alt-table-hidden-hands__meta {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.alt-table-hidden-hands__meta span {
+  position: absolute;
+  display: block;
+  opacity: 0;
+}
+
+.alt-table-hidden-hands__canvas {
+  position: absolute !important;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+}
+
 .alt-table-board__plate,
 .alt-table-board__overlay {
   position: absolute;
@@ -40,6 +76,14 @@
   height: 100%;
   display: block;
   pointer-events: none;
+}
+
+.alt-table-board__plate {
+  z-index: 0;
+}
+
+.alt-table-board__overlay {
+  z-index: 4;
 }
 
 .alt-table-status {
@@ -110,6 +154,7 @@
   padding: 0;
   border: none;
   background: transparent;
+  z-index: 2;
 }
 
 .alt-table-card--interactive {
@@ -137,6 +182,7 @@
   border: none;
   background: rgba(211, 170, 74, 0.08);
   cursor: pointer;
+  z-index: 5;
   transition:
     background-color 120ms ease,
     box-shadow 120ms ease;

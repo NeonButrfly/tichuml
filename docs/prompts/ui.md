@@ -14,6 +14,31 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 
 ## Entries
 
+### 2026-05-28 - ALT hidden opponent hands must sit in the authored rails as real 3D cards
+
+- Prompt Signal: The latest ALT-table follow-up rejected the current hidden-hand
+  presentation after direct review. The user clarified that the change is
+  ALT-table only, said the north/east/west cards were still too small and not
+  seated in the rails, and explicitly required those hidden opponent hands to
+  be rendered as real 3D card surfaces with the face toward the owning seat and
+  the back toward the table.
+- Interpreted Requirement: Issue
+  [#85](https://github.com/NeonButrfly/tichuml/issues/85) is the canonical
+  tracker for this follow-up. The `?table=alt` route should keep the committed
+  `tv7` table plate and anchor contract, leave the normal table untouched, and
+  move the hidden north/east/west hands off the flat DOM sprite layer and into
+  a dedicated React Three Fiber scene that seats those cards into the authored
+  rail regions while preserving the existing south-hand, pass-target, and
+  runtime-snapshot behavior.
+- Affected Systems: `apps/web/src/alt-table-3d/AltHiddenHands3D.tsx`,
+  `apps/web/src/alt-table-3d/AltTichuTable3D.tsx`,
+  `apps/web/src/alt-table-3d/alt-table-3d.css`,
+  `tests/integration/alternate-table-view.test.ts`,
+  `tests/integration/alternate-table-route-guards.test.ts`.
+- Linked GitHub Issue: [#85](https://github.com/NeonButrfly/tichuml/issues/85)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.
+
 ### 2026-05-26 - ALT table must restart clean on the tv7 authored card-layer pack
 
 - Prompt Signal: The latest ALT-table prompt replaced the tv6 contract with a

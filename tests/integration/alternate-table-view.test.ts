@@ -265,6 +265,9 @@ describe("AltTable3DRoute", () => {
     expect(view.container.querySelectorAll("[data-zone='east_hand']")).toHaveLength(8);
     expect(view.container.querySelectorAll("[data-zone='south_hand']")).toHaveLength(8);
     expect(view.container.querySelectorAll("[data-zone='west_hand']")).toHaveLength(8);
+    expect(
+      view.container.querySelectorAll("[data-render-mode='r3f-hidden-hand']")
+    ).toHaveLength(24);
 
     const southDeal8Cards = Array.from(
       view.container.querySelectorAll("[data-zone='south_hand'][data-card-id]")
@@ -295,6 +298,42 @@ describe("AltTable3DRoute", () => {
     expect(view.container.querySelectorAll("[data-zone='east_hand']")).toHaveLength(14);
     expect(view.container.querySelectorAll("[data-zone='south_hand']")).toHaveLength(14);
     expect(view.container.querySelectorAll("[data-zone='west_hand']")).toHaveLength(14);
+    expect(
+      view.container.querySelectorAll("[data-render-mode='r3f-hidden-hand']")
+    ).toHaveLength(42);
+    expect(
+      view.container.querySelectorAll("[data-zone='north_hand'][data-render-mode='r3f-hidden-hand']")
+    ).toHaveLength(14);
+    expect(
+      view.container.querySelectorAll("[data-zone='east_hand'][data-render-mode='r3f-hidden-hand']")
+    ).toHaveLength(14);
+    expect(
+      view.container.querySelectorAll("[data-zone='west_hand'][data-render-mode='r3f-hidden-hand']")
+    ).toHaveLength(14);
+    expect(
+      view.container.querySelectorAll("[data-zone='north_hand'] img")
+    ).toHaveLength(0);
+    expect(
+      view.container.querySelectorAll("[data-zone='east_hand'] img")
+    ).toHaveLength(0);
+    expect(
+      view.container.querySelectorAll("[data-zone='west_hand'] img")
+    ).toHaveLength(0);
+    expect(
+      view.container.querySelector(
+        "[data-zone='east_hand'][data-render-mode='r3f-hidden-hand'][data-facing-seat='east']"
+      )
+    ).toBeTruthy();
+    expect(
+      view.container.querySelector(
+        "[data-zone='west_hand'][data-render-mode='r3f-hidden-hand'][data-facing-seat='west']"
+      )
+    ).toBeTruthy();
+    expect(
+      view.container.querySelector(
+        "[data-zone='north_hand'][data-render-mode='r3f-hidden-hand'][data-facing-seat='north']"
+      )
+    ).toBeTruthy();
 
     const allCardImages = Array.from(
       view.container.querySelectorAll("[data-card-id] img")

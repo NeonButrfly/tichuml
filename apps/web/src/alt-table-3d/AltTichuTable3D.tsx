@@ -33,6 +33,7 @@ import {
   type Tv7RuntimeAssets,
   type Tv7Snapshot
 } from "./tv7-runtime";
+import { AltHiddenHands3D, type HiddenHandCard } from "./AltHiddenHands3D";
 
 const READY_TO_DEAL_DELAY_MS = 180;
 const DEAL_TO_GT_DELAY_MS = 1_100;
@@ -256,6 +257,30 @@ export function AltTichuTable3D() {
 
     return cards;
   }, [assets, backSrc, cardAnchors, phase, selectedSouthCardIds, visibleHands]);
+
+  const hiddenHandCards = useMemo<HiddenHandCard[]>(
+    () =>
+      renderedCards.flatMap((card) => {
+        if (card.seat === null || card.seat === "south") {
+          return [];
+        }
+
+        return [
+          {
+            anchor: card.anchor,
+            card: card.card,
+            seat: card.seat,
+            zone: card.zone
+          }
+        ];
+      }),
+    [renderedCards]
+  );
+
+  const surfaceCards = useMemo(
+    () => renderedCards.filter((card) => card.seat === "south"),
+    [renderedCards]
+  );
 
   const deckAnchor = cardAnchors.find((anchor) => anchor.zone === "deck") ?? null;
   const discardAnchor =
@@ -542,7 +567,9 @@ export function AltTichuTable3D() {
             src={assets.tableMeta.src}
           />
 
-          {renderedCards.map((renderedCard) => (
+          <AltHiddenHands3D backSrc={backSrc} cards={hiddenHandCards} />
+
+          {surfaceCards.map((renderedCard) => (
             <CardSprite
               key={`${renderedCard.zone}-${renderedCard.card.id}`}
               anchor={renderedCard.anchor}

@@ -11,6 +11,10 @@ const tableSource = readFileSync(
   resolve("apps/web/src/alt-table-3d/AltTichuTable3D.tsx"),
   "utf8"
 );
+const hiddenHandsSource = readFileSync(
+  resolve("apps/web/src/alt-table-3d/AltHiddenHands3D.tsx"),
+  "utf8"
+);
 const runtimeSource = readFileSync(
   resolve("apps/web/src/alt-table-3d/tv7-runtime.ts"),
   "utf8"
@@ -49,28 +53,21 @@ describe("alternate table route guards", () => {
     expect(tableSource).not.toContain("/tv6");
   });
 
-  it("forbids procedural, generic hand-row, and 3D table renderers on the active alt-table implementation", () => {
-    for (const forbidden of [
-      "@react-three/fiber",
-      "Canvas",
-      "three",
-      "WebGL",
-      "Phaser",
-      "pixi",
-      "rotateX",
-      "rotateY",
-      "perspective",
-      "mesh",
-      "geometry",
-      "rail"
-    ]) {
-      expect(tableSource).not.toContain(forbidden);
-      expect(stylesSource).not.toContain(forbidden);
-    }
-
+  it("uses a dedicated masked R3F hidden-hand layer while preserving authored tv7 card anchors", () => {
+    expect(tableSource).toContain('import { AltHiddenHands3D');
+    expect(tableSource).toContain("<AltHiddenHands3D");
+    expect(hiddenHandsSource).toContain("@react-three/fiber");
+    expect(hiddenHandsSource).toContain("Canvas");
+    expect(hiddenHandsSource).toContain("mesh");
+    expect(hiddenHandsSource).toContain("rotateX");
+    expect(hiddenHandsSource).toContain("rotateY");
+    expect(hiddenHandsSource).toContain("supportsWebGlCanvas");
+    expect(stylesSource).toContain("alt-table-hidden-hands");
+    expect(stylesSource).toContain("cardmask.png");
     expect(tableSource).not.toContain("HAND_LAYOUT");
     expect(tableSource).not.toContain("data-seat-hand");
     expect(tableSource).toContain('data-layout-source": "prototype_layer"');
+    expect(hiddenHandsSource).toContain('data-render-mode="r3f-hidden-hand"');
     expect(runtimeSource).toContain("prototype_layer");
     expect(browserVerifySource).toContain("__tichuV7Snapshot");
     expect(browserVerifySource).toContain("apps/web/public/tv7/x/check.mjs");
