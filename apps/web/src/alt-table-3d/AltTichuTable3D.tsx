@@ -33,7 +33,8 @@ import {
   type Tv7RuntimeAssets,
   type Tv7Snapshot
 } from "./tv7-runtime";
-import { AltHiddenHands3D, type HiddenHandCard } from "./AltHiddenHands3D";
+import { AltTableScene } from "./AltTableScene";
+import type { HiddenHandCard } from "./AltTableCards3D";
 
 const READY_TO_DEAL_DELAY_MS = 180;
 const DEAL_TO_GT_DELAY_MS = 1_100;
@@ -577,7 +578,7 @@ export function AltTichuTable3D() {
             src={assets.tableMeta.src}
           />
 
-          <AltHiddenHands3D backSrc={backSrc} cards={hiddenHandCards} />
+          <AltTableScene backSrc={backSrc} cards={hiddenHandCards} />
 
           {surfaceCards.map((renderedCard) => (
             <CardSprite

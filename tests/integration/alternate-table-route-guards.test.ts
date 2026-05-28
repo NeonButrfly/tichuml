@@ -11,8 +11,12 @@ const tableSource = readFileSync(
   resolve("apps/web/src/alt-table-3d/AltTichuTable3D.tsx"),
   "utf8"
 );
-const hiddenHandsSource = readFileSync(
-  resolve("apps/web/src/alt-table-3d/AltHiddenHands3D.tsx"),
+const sceneSource = readFileSync(
+  resolve("apps/web/src/alt-table-3d/AltTableScene.tsx"),
+  "utf8"
+);
+const cards3dSource = readFileSync(
+  resolve("apps/web/src/alt-table-3d/AltTableCards3D.tsx"),
   "utf8"
 );
 const runtimeSource = readFileSync(
@@ -53,21 +57,22 @@ describe("alternate table route guards", () => {
     expect(tableSource).not.toContain("/tv6");
   });
 
-  it("uses a dedicated masked R3F hidden-hand layer while preserving authored tv7 card anchors", () => {
-    expect(tableSource).toContain('import { AltHiddenHands3D');
-    expect(tableSource).toContain("<AltHiddenHands3D");
-    expect(hiddenHandsSource).toContain("@react-three/fiber");
-    expect(hiddenHandsSource).toContain("Canvas");
-    expect(hiddenHandsSource).toContain("mesh");
-    expect(hiddenHandsSource).toContain("rotateX");
-    expect(hiddenHandsSource).toContain("rotateY");
-    expect(hiddenHandsSource).toContain("supportsWebGlCanvas");
-    expect(stylesSource).toContain("alt-table-hidden-hands");
-    expect(stylesSource).toContain("cardmask.png");
+  it("uses a dedicated R3F world-scene hidden-hand layer while preserving authored tv7 card anchors", () => {
+    expect(tableSource).toContain('import { AltTableScene }');
+    expect(tableSource).toContain("<AltTableScene");
+    expect(sceneSource).toContain("@react-three/fiber");
+    expect(sceneSource).toContain("Canvas");
+    expect(sceneSource).toContain("camera.lookAt(0, 0, 0)");
+    expect(sceneSource).toContain("RackShell");
+    expect(sceneSource).toContain("supportsWebGlCanvas");
+    expect(cards3dSource).toContain("CARD_WIDTH = 0.32");
+    expect(cards3dSource).toContain("CARD_HEIGHT = 0.448");
+    expect(cards3dSource).toContain("resolveHiddenHandPlacement");
+    expect(stylesSource).toContain("alt-table-world-scene");
     expect(tableSource).not.toContain("HAND_LAYOUT");
     expect(tableSource).not.toContain("data-seat-hand");
     expect(tableSource).toContain('data-layout-source": "prototype_layer"');
-    expect(hiddenHandsSource).toContain('data-render-mode="r3f-hidden-hand"');
+    expect(sceneSource).toContain('data-render-mode="r3f-hidden-hand"');
     expect(runtimeSource).toContain("prototype_layer");
     expect(browserVerifySource).toContain("__tichuV7Snapshot");
     expect(browserVerifySource).toContain("apps/web/public/tv7/x/check.mjs");

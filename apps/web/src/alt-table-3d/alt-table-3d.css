@@ -32,35 +32,27 @@
   overflow: hidden;
 }
 
-.alt-table-hidden-hands {
+.alt-table-world-scene {
   position: absolute;
   inset: 0;
   z-index: 1;
   overflow: hidden;
   pointer-events: none;
-  -webkit-mask-image: url("/tv7/t/cardmask.png");
-  -webkit-mask-position: center;
-  -webkit-mask-repeat: no-repeat;
-  -webkit-mask-size: 100% 100%;
-  mask-image: url("/tv7/t/cardmask.png");
-  mask-position: center;
-  mask-repeat: no-repeat;
-  mask-size: 100% 100%;
 }
 
-.alt-table-hidden-hands__meta {
+.alt-table-world-scene__meta {
   position: absolute;
   inset: 0;
   pointer-events: none;
 }
 
-.alt-table-hidden-hands__meta span {
+.alt-table-world-scene__meta span {
   position: absolute;
   display: block;
   opacity: 0;
 }
 
-.alt-table-hidden-hands__canvas {
+.alt-table-world-scene__canvas {
   position: absolute !important;
   inset: 0;
   width: 100% !important;
