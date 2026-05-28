@@ -89,16 +89,17 @@
 .alt-table-status {
   position: fixed;
   z-index: 20;
-  left: 1rem;
-  top: 1rem;
+  top: 1.5rem;
+  right: 1rem;
   display: grid;
-  gap: 0.55rem;
-  min-width: 18rem;
+  gap: 0.7rem;
+  width: min(17rem, calc(100vw - 1.5rem));
   padding: 0.9rem 1rem;
   border: 1px solid rgba(201, 167, 105, 0.42);
   border-radius: 1rem;
   background: rgba(4, 12, 8, 0.86);
   color: #f4e7c7;
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.34);
 }
 
 .alt-table-status__header,
@@ -114,6 +115,8 @@
 
 .alt-table-status__header {
   justify-content: space-between;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 .alt-table-status__header span {
@@ -127,6 +130,18 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-size: 0.76rem;
+}
+
+.alt-table-status__body {
+  margin: 0;
+  color: rgba(244, 231, 199, 0.84);
+  line-height: 1.45;
+  font-size: 0.92rem;
+}
+
+.alt-table-status__selection {
+  flex-direction: column;
+  align-items: flex-start;
 }
 
 .alt-table-status button {
@@ -146,6 +161,41 @@
 .alt-table-status button:disabled {
   opacity: 0.48;
   cursor: default;
+}
+
+.alt-table-footer {
+  position: fixed;
+  z-index: 20;
+  left: 1rem;
+  right: 19rem;
+  bottom: 1rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.alt-table-preview {
+  min-height: 7.5rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid rgba(201, 167, 105, 0.42);
+  border-radius: 1rem;
+  background: rgba(4, 12, 8, 0.86);
+  color: #f4e7c7;
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.34);
+}
+
+.alt-table-preview__title {
+  margin-bottom: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+}
+
+.alt-table-preview p {
+  margin: 0;
+  color: rgba(244, 231, 199, 0.84);
+  line-height: 1.45;
+  font-size: 0.92rem;
 }
 
 .alt-table-card,
@@ -213,8 +263,13 @@
 
 @media (max-width: 900px) {
   .alt-table-status {
-    left: 0.75rem;
+    top: 0.75rem;
     right: 0.75rem;
-    min-width: auto;
+    width: min(15rem, calc(100vw - 1.5rem));
+  }
+
+  .alt-table-footer {
+    right: 1rem;
+    grid-template-columns: 1fr;
   }
 }

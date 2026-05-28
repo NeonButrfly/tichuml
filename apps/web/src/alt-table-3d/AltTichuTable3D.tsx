@@ -488,9 +488,9 @@ export function AltTichuTable3D() {
 
   return (
     <section className="alt-table-3d-route">
-      <div className="alt-table-status">
+      <aside className="alt-table-status">
         <div className="alt-table-status__header">
-          <strong>Alt Table Demo</strong>
+          <strong>Passing Lanes</strong>
           <span data-alt-phase-label="true">{phase}</span>
         </div>
         <div className="alt-table-status__counts">
@@ -500,6 +500,10 @@ export function AltTichuTable3D() {
           <span>West {handCounts.west}</span>
           <span>Deck {deckRemaining}</span>
         </div>
+        <p className="alt-table-status__body">
+          Hidden hands use real 3D card planes in the seat racks. Passing targets stay
+          unrotated and directional over the shared tv7 authored layout.
+        </p>
         <div className="alt-table-status__flow">
           <span>Deal 8: {phase === "ready" ? 0 : FIRST_DEAL_COUNT}</span>
           <span>
@@ -562,7 +566,7 @@ export function AltTichuTable3D() {
             <span>South assigned: {assignedSouthCount}/3</span>
           </div>
         ) : null}
-      </div>
+      </aside>
 
       <div className="alt-table-stage" data-alt-table-root="tv7">
         <div className="alt-table-board" style={boardStyle}>
@@ -688,6 +692,30 @@ export function AltTichuTable3D() {
               })
             : null}
         </div>
+      </div>
+
+      <div className="alt-table-footer">
+        <section className="alt-table-preview">
+          <div className="alt-table-preview__title">Hand Anchor Preview</div>
+          <p>
+            South fan is intentionally calmer than the old prototype spread while the hidden
+            seat cards stay rack-seated and upright.
+          </p>
+        </section>
+        <section className="alt-table-preview">
+          <div className="alt-table-preview__title">Passing Anchor Preview</div>
+          <p>
+            Twelve authored pass targets remain direction-locked and share the same fixed
+            design-space transform as the table art.
+          </p>
+        </section>
+        <section className="alt-table-preview">
+          <div className="alt-table-preview__title">Trick Anchor Preview</div>
+          <p>
+            This ALT cleanup keeps the table readable first while the fuller photorealistic
+            rack-and-table rebuild continues.
+          </p>
+        </section>
       </div>
     </section>
   );
