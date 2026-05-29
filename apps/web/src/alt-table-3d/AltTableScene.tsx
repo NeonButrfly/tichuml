@@ -199,9 +199,9 @@ export function getAltTableSculptConfig() {
 
 export function getAltTableSurfaceMaterialConfig() {
   return {
-    feltTopEmissiveIntensity: 0.88,
-    feltWellEmissiveIntensity: 0.82,
-    dragonOpacity: 0.68,
+    feltTopEmissiveIntensity: 1.12,
+    feltWellEmissiveIntensity: 1.02,
+    dragonOpacity: 0.84,
     goldTrimOpacity: 0.9
   } as const;
 }
@@ -582,11 +582,11 @@ function TableBody(props: {
           ]}
         />
         <meshStandardMaterial
-          color="#7aa169"
+          color="#8ab477"
           map={props.feltTexture}
           metalness={0.03}
-          roughness={0.88}
-          emissive="#4e7645"
+          roughness={0.84}
+          emissive="#6d965e"
           emissiveIntensity={surfaceConfig.feltWellEmissiveIntensity}
         />
       </mesh>
@@ -648,7 +648,7 @@ function TableBody(props: {
       <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, FELT_Y + 0.002, 0]}>
         <planeGeometry args={[props.feltWidth - 0.1, props.feltHeight - 0.1]} />
         <meshBasicMaterial
-          color="#628f58"
+          color="#7ca76b"
           map={props.feltTexture}
           transparent
           opacity={0.98}
@@ -657,12 +657,17 @@ function TableBody(props: {
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FELT_Y + 0.004, 0]}>
         <planeGeometry args={[props.feltWidth - 0.2, props.feltHeight - 0.2]} />
-        <meshBasicMaterial color="#a9d090" transparent opacity={reliefConfig.centerHighlightOpacity} />
+        <meshBasicMaterial color="#c1e0a2" transparent opacity={0.24} />
       </mesh>
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FELT_Y + 0.003, 0]}>
         <planeGeometry args={[props.feltWidth * 0.68, props.feltHeight * 0.7]} />
-        <meshBasicMaterial color="#edf5be" transparent opacity={0.18} />
+        <meshBasicMaterial color="#f2f8c8" transparent opacity={0.24} />
+      </mesh>
+
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FELT_Y + 0.005, 0]}>
+        <planeGeometry args={[props.feltWidth * 0.86, props.feltHeight * 0.82]} />
+        <meshBasicMaterial color="#7ea96d" transparent opacity={0.16} />
       </mesh>
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FELT_Y + 0.006, 0]}>
