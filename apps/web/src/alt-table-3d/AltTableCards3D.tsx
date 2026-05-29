@@ -12,15 +12,15 @@ export type HiddenHandCard = {
   zone: string;
 };
 
-const CARD_WIDTH = 0.36;
-const CARD_HEIGHT = 0.504;
+const CARD_WIDTH = 0.42;
+const CARD_HEIGHT = 0.588;
 const CARD_ASPECT = 2.5 / 3.5;
 const CARD_BACK_INSET = 0.02;
 const CARD_FRONT_INSET = 0.028;
 const CARD_FRAME = 0.012;
 const CARD_THICKNESS = 0.014;
 const RACK_FLOOR_Y = 0.082;
-const RACK_BURY_DEPTH = 0.048;
+const RACK_BURY_DEPTH = 0.056;
 const TABLE_WORLD_W = 11.4;
 const TABLE_WORLD_H = 7.6;
 
@@ -99,27 +99,27 @@ function resolveHiddenHandPlacement(card: HiddenHandCard) {
         position: [
           base[0],
           seatedY,
-          base[2] - size.width * (0.48 - Math.min(seatCurve * 0.007, 0.04))
+          base[2] - size.width * (0.4 - Math.min(seatCurve * 0.006, 0.032))
         ] as const,
-        rotation: [0.18 - Math.min(seatCurve * 0.004, 0.024), seatOffset * 0.02, 0] as const
+        rotation: [0.12 - Math.min(seatCurve * 0.003, 0.018), seatOffset * 0.018, 0] as const
       };
     case "east":
       return {
         position: [
-          base[0] + size.width * (0.43 - Math.min(seatCurve * 0.004, 0.022)),
+          base[0] + size.width * (0.36 - Math.min(seatCurve * 0.004, 0.018)),
           seatedY,
-          base[2] + seatOffset * 0.008
+          base[2] + seatOffset * 0.01
         ] as const,
-        rotation: [0.12 - Math.min(seatCurve * 0.003, 0.02), -1.14 - seatOffset * 0.016, 0] as const
+        rotation: [0.08 - Math.min(seatCurve * 0.003, 0.016), -1.02 - seatOffset * 0.014, 0] as const
       };
     case "west":
       return {
         position: [
-          base[0] - size.width * (0.43 - Math.min(seatCurve * 0.004, 0.022)),
+          base[0] - size.width * (0.36 - Math.min(seatCurve * 0.004, 0.018)),
           seatedY,
-          base[2] + seatOffset * 0.008
+          base[2] + seatOffset * 0.01
         ] as const,
-        rotation: [0.12 - Math.min(seatCurve * 0.003, 0.02), 1.14 - seatOffset * 0.016, 0] as const
+        rotation: [0.08 - Math.min(seatCurve * 0.003, 0.016), 1.02 - seatOffset * 0.014, 0] as const
       };
   }
 }

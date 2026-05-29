@@ -62,14 +62,14 @@ const EAST_PLAQUE_SRC = buildSeatPlaqueSrc("EAST", { vertical: true });
 const WEST_PLAQUE_SRC = buildSeatPlaqueSrc("WEST", { vertical: true });
 const PASS_PLAQUE_SRC = buildSeatPlaqueSrc("PASS");
 const SCORE_PLAQUE_SRC = buildScorePlaqueSrc();
-const RACK_BASE_HEIGHT = 0.15;
-const RACK_SIDE_HEIGHT = 0.32;
-const RACK_SIDE_THICKNESS = 0.13;
+const RACK_BASE_HEIGHT = 0.17;
+const RACK_SIDE_HEIGHT = 0.38;
+const RACK_SIDE_THICKNESS = 0.16;
 const RACK_SLOT_THICKNESS = 0.05;
-const RACK_SLOT_DEPTH = 0.18;
-const RACK_END_BLOCK = 0.18;
-const RACK_PLAQUE_WIDTH = 0.9;
-const RACK_PLAQUE_HEIGHT = 0.34;
+const RACK_SLOT_DEPTH = 0.22;
+const RACK_END_BLOCK = 0.2;
+const RACK_PLAQUE_WIDTH = 1.02;
+const RACK_PLAQUE_HEIGHT = 0.38;
 const RACK_PLAQUE_INSET = 0.05;
 const FRONT_RAIL_HEIGHT = 0.24;
 const FRONT_RAIL_DEPTH = 0.34;
@@ -478,11 +478,11 @@ function RackShell(props: {
 
   if (props.seat === "north") {
     const width = maxX - minX + sampleSize.width * 1.75;
-    const depth = sampleSize.height * 1.04;
+    const depth = sampleSize.height * 1.18;
     const centerX = (minX + maxX) / 2;
-    const centerZ = minZ - sampleSize.width * 0.74;
+    const centerZ = minZ - sampleSize.width * 0.58;
     return (
-      <group position={[centerX, 0.05, centerZ]}>
+      <group position={[centerX, 0.07, centerZ]}>
         <mesh castShadow receiveShadow>
           <boxGeometry args={[width, RACK_BASE_HEIGHT, depth]} />
           {commonMaterial}
@@ -514,16 +514,16 @@ function RackShell(props: {
     );
   }
 
-  const depth = sampleSize.width * 1.04;
-  const height = maxZ - minZ + sampleSize.width * 2.26;
+  const depth = sampleSize.width * 1.18;
+  const height = maxZ - minZ + sampleSize.width * 2.54;
   const centerZ = (minZ + maxZ) / 2;
   const centerX =
     props.seat === "east"
-      ? maxX + sampleSize.width * 0.62
-      : minX - sampleSize.width * 0.62;
+      ? maxX + sampleSize.width * 0.52
+      : minX - sampleSize.width * 0.52;
   const sideDir = props.seat === "east" ? -1 : 1;
   return (
-    <group position={[centerX, 0.05, centerZ]}>
+    <group position={[centerX, 0.07, centerZ]}>
       <mesh castShadow receiveShadow>
         <boxGeometry args={[depth, RACK_BASE_HEIGHT, height]} />
         {commonMaterial}
