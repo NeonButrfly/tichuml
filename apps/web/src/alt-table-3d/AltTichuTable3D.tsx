@@ -58,6 +58,32 @@ type RenderedCard = {
   isInteractive: boolean;
 };
 
+const ALT_PASSING_DIRECTIONS = [
+  "NORTH (top edge): ← ↓ →",
+  "SOUTH (bottom edge): ← ↑ →",
+  "WEST (left edge): ↑ → ↓",
+  "EAST (right edge): ↑ ← ↓"
+] as const;
+
+const ALT_ANCHOR_RULES = [
+  "North lanes keyed to top edge",
+  "South lanes keyed to bottom edge",
+  "West lanes keyed to left edge",
+  "East lanes keyed to right edge",
+  "East/West 3 lanes share same keyed edge for alignment",
+  "Cards sit inside rails (racks)",
+  "Target boxes are not rotated",
+  "Dragon is on lower layer"
+] as const;
+
+const ALT_LAYER_ORDER = [
+  "1. Table Base",
+  "2. Dragon Motif",
+  "3. Hands / Deck Flow / Tricks",
+  "4. Passing Overlay (during passing)",
+  "5. Assigned Pass Cards / UI"
+] as const;
+
 export function AltTichuTable3D() {
   const [assets, setAssets] = useState<Tv7RuntimeAssets | null>(null);
   const [loadError, setLoadError] = useState<Error | null>(null);
@@ -616,7 +642,7 @@ export function AltTichuTable3D() {
           <div className="alt-table-board__chrome" data-alt-board-chrome="true">
             <aside className="alt-table-status">
               <div className="alt-table-status__header">
-                <strong>Passing Lanes</strong>
+                <strong>Passing Lanes (12)</strong>
                 <span data-alt-phase-label="true">{phase}</span>
               </div>
               <div className="alt-table-status__counts">
@@ -630,6 +656,13 @@ export function AltTichuTable3D() {
                 Hidden hands use real 3D card planes in the seat racks. Passing targets stay
                 unrotated and directional over the shared tv7 authored layout.
               </p>
+              <div className="alt-table-status__section">
+                <div className="alt-table-status__legend">[] = Passing Target</div>
+                <div className="alt-table-status__legend">Arrow = Pass Direction</div>
+                <div className="alt-table-status__legend">
+                  Dashed box = actual target area (not rotated)
+                </div>
+              </div>
               <div className="alt-table-status__flow">
                 <span>Deal 8: {phase === "ready" ? 0 : FIRST_DEAL_COUNT}</span>
                 <span>
@@ -648,6 +681,36 @@ export function AltTichuTable3D() {
                     : 0}
                 </span>
                 <span>GT choice: {gtChoice ?? "pending"}</span>
+              </div>
+              <div className="alt-table-status__section">
+                <div className="alt-table-status__section-title">Passing Directions</div>
+                <div className="alt-table-status__rules">
+                  {ALT_PASSING_DIRECTIONS.map((line) => (
+                    <div key={line} className="alt-table-status__rule">
+                      {line}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="alt-table-status__section">
+                <div className="alt-table-status__section-title">Anchor Rules</div>
+                <div className="alt-table-status__rules">
+                  {ALT_ANCHOR_RULES.map((line) => (
+                    <div key={line} className="alt-table-status__rule">
+                      {line}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="alt-table-status__section">
+                <div className="alt-table-status__section-title">Layer Order (Bottom → Top)</div>
+                <div className="alt-table-status__rules">
+                  {ALT_LAYER_ORDER.map((line) => (
+                    <div key={line} className="alt-table-status__rule">
+                      {line}
+                    </div>
+                  ))}
+                </div>
               </div>
               {phase === "grand_tichu" ? (
                 <div className="alt-table-status__actions">
@@ -710,7 +773,7 @@ export function AltTichuTable3D() {
                 </p>
               </section>
               <section className="alt-table-preview">
-                <div className="alt-table-preview__title">Trick Anchor Preview</div>
+                <div className="alt-table-preview__title">Trick Anchor Preview (Virtual)</div>
                 <p>
                   This ALT cleanup keeps the table readable first while the fuller photorealistic
                   rack-and-table rebuild continues.

@@ -92,15 +92,17 @@
   top: 24px;
   right: 24px;
   display: grid;
-  gap: 0.7rem;
-  width: 274px;
-  padding: 0.9rem 1rem;
+  gap: 0.42rem;
+  width: 304px;
+  padding: 0.72rem 0.84rem;
   border: 1px solid rgba(201, 167, 105, 0.42);
   border-radius: 1rem;
   background: rgba(4, 12, 8, 0.86);
   color: #f4e7c7;
   box-shadow: 0 16px 32px rgba(0, 0, 0, 0.34);
   pointer-events: auto;
+  max-height: 776px;
+  overflow: hidden;
 }
 
 .alt-table-status__header,
@@ -136,13 +138,39 @@
 .alt-table-status__body {
   margin: 0;
   color: rgba(244, 231, 199, 0.84);
-  line-height: 1.45;
-  font-size: 0.92rem;
+  line-height: 1.28;
+  font-size: 0.78rem;
 }
 
 .alt-table-status__selection {
   flex-direction: column;
   align-items: flex-start;
+}
+
+.alt-table-status__section {
+  display: grid;
+  gap: 0.24rem;
+  padding-top: 0.42rem;
+  border-top: 1px solid rgba(201, 167, 105, 0.22);
+}
+
+.alt-table-status__section-title {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  font-size: 0.82rem;
+}
+
+.alt-table-status__legend,
+.alt-table-status__rule {
+  color: rgba(244, 231, 199, 0.84);
+  line-height: 1.22;
+  font-size: 0.74rem;
+}
+
+.alt-table-status__rules {
+  display: grid;
+  gap: 0.2rem;
 }
 
 .alt-table-status button {
