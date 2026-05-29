@@ -330,6 +330,18 @@ export function getAltTableRackMaterialConfig() {
   } as const;
 }
 
+export function getAltRackPlaquePresentationConfig() {
+  return {
+    northPlaqueDepth: 0.52,
+    northPlaqueLift: 0.82,
+    northPlaqueScale: 1.12,
+    sidePlaqueYaw: 0.52,
+    sidePlaqueOffset: 0.47,
+    sidePlaqueLift: 1.36,
+    sidePlaqueScale: 1.1
+  } as const;
+}
+
 export function getAltTableInsetConfig() {
   return {
     frameWidth: TABLE_FRAME_WIDTH,
@@ -1175,6 +1187,7 @@ function RackShell(props: {
   woodTexture: Texture;
 }) {
   const rackConfig = getAltTableRackMaterialConfig();
+  const plaqueConfig = getAltRackPlaquePresentationConfig();
   const commonMaterial = (
     <meshStandardMaterial
       color="#96613b"
@@ -1362,11 +1375,11 @@ function RackShell(props: {
           />
         </mesh>
         <SeatPlaque
-          height={RACK_PLAQUE_HEIGHT * 1.08}
-          position={[0, RACK_PLAQUE_HEIGHT * 0.82, depth * 0.52]}
+          height={RACK_PLAQUE_HEIGHT * plaqueConfig.northPlaqueScale}
+          position={[0, RACK_PLAQUE_HEIGHT * plaqueConfig.northPlaqueLift, depth * plaqueConfig.northPlaqueDepth]}
           rotation={[0, 0, 0]}
           texture={props.plaqueTexture}
-          width={RACK_PLAQUE_WIDTH * 1.12}
+          width={RACK_PLAQUE_WIDTH * plaqueConfig.northPlaqueScale}
         />
       </group>
     );
@@ -1514,8 +1527,8 @@ function RackShell(props: {
       <mesh
         castShadow
         receiveShadow
-        position={[sideDir * (depth * 0.31 + RACK_PLAQUE_INSET), RACK_PLAQUE_HEIGHT * 1.34, 0]}
-        rotation={[0, sideDir * 0.18, 0]}
+        position={[sideDir * (depth * plaqueConfig.sidePlaqueOffset + RACK_PLAQUE_INSET), RACK_PLAQUE_HEIGHT * 1.42, 0]}
+        rotation={[0, sideDir * plaqueConfig.sidePlaqueYaw, 0]}
       >
         <boxGeometry args={[depth * 0.18, RACK_PLAQUE_HEIGHT * 1.28, RACK_PLAQUE_WIDTH * 1.16]} />
         <meshStandardMaterial
@@ -1527,7 +1540,7 @@ function RackShell(props: {
       </mesh>
       <mesh
         rotation={[0, sideDir * Math.PI / 2, 0]}
-        position={[sideDir * (depth * 0.34 + RACK_PLAQUE_INSET), RACK_PLAQUE_HEIGHT * 1.86, 0]}
+        position={[sideDir * (depth * (plaqueConfig.sidePlaqueOffset + 0.03) + RACK_PLAQUE_INSET), RACK_PLAQUE_HEIGHT * 1.96, 0]}
       >
         <planeGeometry args={[RACK_PLAQUE_WIDTH * 1.02, depth * 0.11]} />
         <meshBasicMaterial
@@ -1538,11 +1551,11 @@ function RackShell(props: {
         />
       </mesh>
       <SeatPlaque
-        height={RACK_PLAQUE_WIDTH * 1.08}
-        position={[sideDir * (depth * 0.39 + RACK_PLAQUE_INSET), RACK_PLAQUE_HEIGHT * 1.3, 0]}
-        rotation={[0, sideDir * 0.18, 0]}
+        height={RACK_PLAQUE_WIDTH * plaqueConfig.sidePlaqueScale}
+        position={[sideDir * (depth * plaqueConfig.sidePlaqueOffset + RACK_PLAQUE_INSET + 0.04), RACK_PLAQUE_HEIGHT * plaqueConfig.sidePlaqueLift, 0]}
+        rotation={[0, sideDir * plaqueConfig.sidePlaqueYaw, 0]}
         texture={props.plaqueTexture}
-        width={RACK_PLAQUE_HEIGHT * 1.08}
+        width={RACK_PLAQUE_HEIGHT * plaqueConfig.sidePlaqueScale}
       />
     </group>
   );
