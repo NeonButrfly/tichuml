@@ -14,7 +14,11 @@ import {
   getTableWorldSize,
   type HiddenHandCard
 } from "./AltTableCards3D";
-import { TV7_TABLE_PLATE_SRC } from "./tv7-runtime";
+import {
+  TV7_ASSET_ROOT,
+  TV7_TABLE_PLATE_SRC,
+  TV7_TABLE_REFERENCE_SRC
+} from "./tv7-runtime";
 
 const TABLE_BASE_THICKNESS = 0.18;
 const TABLE_FRAME_HEIGHT = 0.16;
@@ -98,6 +102,7 @@ const WORLD_PLATE_ALPHA_SRC = buildWorldPlateAlphaSrc({
   insetX: 148,
   insetY: 124
 });
+const REFERENCE_HARDWARE_MASK_SRC = `${TV7_ASSET_ROOT}/t/cardmask.png`;
 const ALT_HIDDEN_CARD_BACK_SRC = `data:image/svg+xml;utf8,${encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 588">
   <defs>
@@ -235,6 +240,14 @@ export function getAltTableWorldPlateConfig() {
   } as const;
 }
 
+export function getAltTableReferenceHardwareConfig() {
+  return {
+    opacity: 0.66,
+    brightness: 0.98,
+    yOffset: 0.11
+  } as const;
+}
+
 export function getAltTableRackMaterialConfig() {
   return {
     rackTrimOpacity: 0.92,
@@ -325,13 +338,15 @@ function AltTableWorld(props: {
 }) {
   const lightingConfig = getAltTableLightingConfig();
   const hiddenBackSrc = useMemo(() => ALT_HIDDEN_CARD_BACK_SRC || props.backSrc, [props.backSrc]);
-  const [backTexture, dragonTexture, woodTexture, feltTexture, plateTexture, plateAlphaTexture, northPlaqueTexture, southPlaqueTexture, eastPlaqueTexture, westPlaqueTexture, passPlaqueTexture, scorePlaqueTexture] = useLoader(TextureLoader, [
+  const [backTexture, dragonTexture, woodTexture, feltTexture, plateTexture, plateAlphaTexture, referenceTexture, referenceMaskTexture, northPlaqueTexture, southPlaqueTexture, eastPlaqueTexture, westPlaqueTexture, passPlaqueTexture, scorePlaqueTexture] = useLoader(TextureLoader, [
     hiddenBackSrc,
     DRAGON_MOTIF_SRC,
     WOOD_GRAIN_SRC,
     FELT_SURFACE_SRC,
     TV7_TABLE_PLATE_SRC,
     WORLD_PLATE_ALPHA_SRC,
+    TV7_TABLE_REFERENCE_SRC,
+    REFERENCE_HARDWARE_MASK_SRC,
     NORTH_PLAQUE_SRC,
     SOUTH_PLAQUE_SRC,
     EAST_PLAQUE_SRC,
@@ -368,6 +383,13 @@ function AltTableWorld(props: {
   plateAlphaTexture.minFilter = LinearFilter;
   plateAlphaTexture.magFilter = LinearFilter;
   plateAlphaTexture.needsUpdate = true;
+  referenceTexture.colorSpace = SRGBColorSpace;
+  referenceTexture.minFilter = LinearFilter;
+  referenceTexture.magFilter = LinearFilter;
+  referenceTexture.needsUpdate = true;
+  referenceMaskTexture.minFilter = LinearFilter;
+  referenceMaskTexture.magFilter = LinearFilter;
+  referenceMaskTexture.needsUpdate = true;
   northPlaqueTexture.colorSpace = SRGBColorSpace;
   northPlaqueTexture.minFilter = LinearFilter;
   northPlaqueTexture.magFilter = LinearFilter;
@@ -426,6 +448,8 @@ function AltTableWorld(props: {
           passPlaqueTexture={passPlaqueTexture}
           plateAlphaTexture={plateAlphaTexture}
           plateTexture={plateTexture}
+          referenceMaskTexture={referenceMaskTexture}
+          referenceTexture={referenceTexture}
           scorePlaqueTexture={scorePlaqueTexture}
           southPlaqueTexture={southPlaqueTexture}
           woodTexture={woodTexture}
@@ -450,12 +474,15 @@ function TableBody(props: {
   passPlaqueTexture: Texture;
   plateAlphaTexture: Texture;
   plateTexture: Texture;
+  referenceMaskTexture: Texture;
+  referenceTexture: Texture;
   scorePlaqueTexture: Texture;
   southPlaqueTexture: Texture;
   woodTexture: Texture;
 }) {
   const surfaceConfig = getAltTableSurfaceMaterialConfig();
   const reliefConfig = getAltTableReliefConfig();
+  const referenceHardwareConfig = getAltTableReferenceHardwareConfig();
   const worldPlateConfig = getAltTableWorldPlateConfig();
   const rackConfig = getAltTableRackMaterialConfig();
   const innerRailXLength = props.feltWidth + 0.22;
@@ -513,6 +540,18 @@ function TableBody(props: {
           opacity={worldPlateConfig.opacity}
           toneMapped={false}
           color={`rgb(${Math.round(worldPlateConfig.brightness * 255)}, ${Math.round(worldPlateConfig.brightness * 255)}, ${Math.round(worldPlateConfig.brightness * 255)})`}
+        />
+      </mesh>
+
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, referenceHardwareConfig.yOffset, 0]} receiveShadow>
+        <planeGeometry args={[props.outerWidth, props.outerHeight]} />
+        <meshBasicMaterial
+          alphaMap={props.referenceMaskTexture}
+          map={props.referenceTexture}
+          transparent
+          opacity={referenceHardwareConfig.opacity}
+          toneMapped={false}
+          color={`rgb(${Math.round(referenceHardwareConfig.brightness * 255)}, ${Math.round(referenceHardwareConfig.brightness * 255)}, ${Math.round(referenceHardwareConfig.brightness * 255)})`}
         />
       </mesh>
 
