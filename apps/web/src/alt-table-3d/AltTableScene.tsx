@@ -110,6 +110,9 @@ const RACK_END_BLOCK = 0.2;
 const RACK_PLAQUE_WIDTH = 1.02;
 const RACK_PLAQUE_HEIGHT = 0.38;
 const RACK_PLAQUE_INSET = 0.05;
+const RACK_SUPPORT_BLOCK = 0.28;
+const RACK_FRONT_LIP_HEIGHT = 0.14;
+const RACK_FRONT_LIP_DEPTH = 0.16;
 const FRONT_RAIL_HEIGHT = 0.24;
 const FRONT_RAIL_DEPTH = 0.34;
 const FRONT_RAIL_INSET = 0.18;
@@ -539,12 +542,24 @@ function RackShell(props: {
           <boxGeometry args={[width - 0.22, RACK_SLOT_THICKNESS * 0.9, RACK_SIDE_THICKNESS * 0.7]} />
           <meshStandardMaterial color="#44291b" metalness={0.1} roughness={0.8} />
         </mesh>
+        <mesh castShadow receiveShadow position={[0, RACK_FRONT_LIP_HEIGHT * 0.5, depth * 0.34]}>
+          <boxGeometry args={[width - 0.08, RACK_FRONT_LIP_HEIGHT, RACK_FRONT_LIP_DEPTH]} />
+          {commonMaterial}
+        </mesh>
         <mesh castShadow receiveShadow position={[-width / 2 + RACK_END_BLOCK / 2, RACK_SIDE_HEIGHT * 0.34, -depth * 0.04]}>
           <boxGeometry args={[RACK_END_BLOCK, RACK_SIDE_HEIGHT * 0.72, depth * 0.76]} />
           {commonMaterial}
         </mesh>
         <mesh castShadow receiveShadow position={[width / 2 - RACK_END_BLOCK / 2, RACK_SIDE_HEIGHT * 0.34, -depth * 0.04]}>
           <boxGeometry args={[RACK_END_BLOCK, RACK_SIDE_HEIGHT * 0.72, depth * 0.76]} />
+          {commonMaterial}
+        </mesh>
+        <mesh castShadow receiveShadow position={[-width * 0.34, RACK_SIDE_HEIGHT * 0.26, depth * 0.14]}>
+          <boxGeometry args={[RACK_SUPPORT_BLOCK, RACK_SIDE_HEIGHT * 0.52, depth * 0.52]} />
+          {commonMaterial}
+        </mesh>
+        <mesh castShadow receiveShadow position={[width * 0.34, RACK_SIDE_HEIGHT * 0.26, depth * 0.14]}>
+          <boxGeometry args={[RACK_SUPPORT_BLOCK, RACK_SIDE_HEIGHT * 0.52, depth * 0.52]} />
           {commonMaterial}
         </mesh>
         <SeatPlaque
@@ -584,12 +599,24 @@ function RackShell(props: {
         <boxGeometry args={[RACK_SIDE_THICKNESS * 0.72, RACK_SLOT_THICKNESS * 0.9, height - 0.26]} />
         <meshStandardMaterial color="#44291b" metalness={0.1} roughness={0.8} />
       </mesh>
+      <mesh castShadow receiveShadow position={[-sideDir * depth * 0.3, RACK_FRONT_LIP_HEIGHT * 0.5, 0]}>
+        <boxGeometry args={[RACK_FRONT_LIP_DEPTH, RACK_FRONT_LIP_HEIGHT, height - 0.08]} />
+        {commonMaterial}
+      </mesh>
       <mesh castShadow receiveShadow position={[0, RACK_SIDE_HEIGHT * 0.34, -height / 2 + RACK_END_BLOCK / 2]}>
         <boxGeometry args={[depth * 0.76, RACK_SIDE_HEIGHT * 0.72, RACK_END_BLOCK]} />
         {commonMaterial}
       </mesh>
       <mesh castShadow receiveShadow position={[0, RACK_SIDE_HEIGHT * 0.34, height / 2 - RACK_END_BLOCK / 2]}>
         <boxGeometry args={[depth * 0.76, RACK_SIDE_HEIGHT * 0.72, RACK_END_BLOCK]} />
+        {commonMaterial}
+      </mesh>
+      <mesh castShadow receiveShadow position={[sideDir * depth * 0.08, RACK_SIDE_HEIGHT * 0.26, -height * 0.28]}>
+        <boxGeometry args={[RACK_SUPPORT_BLOCK * 0.82, RACK_SIDE_HEIGHT * 0.52, RACK_SUPPORT_BLOCK]} />
+        {commonMaterial}
+      </mesh>
+      <mesh castShadow receiveShadow position={[sideDir * depth * 0.08, RACK_SIDE_HEIGHT * 0.26, height * 0.28]}>
+        <boxGeometry args={[RACK_SUPPORT_BLOCK * 0.82, RACK_SIDE_HEIGHT * 0.52, RACK_SUPPORT_BLOCK]} />
         {commonMaterial}
       </mesh>
       <SeatPlaque
