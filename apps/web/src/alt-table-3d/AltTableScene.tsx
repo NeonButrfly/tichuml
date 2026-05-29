@@ -397,6 +397,16 @@ export function getAltRackSlotDividerConfig() {
   } as const;
 }
 
+export function getAltRackLinerConfig() {
+  return {
+    linerOpacity: 0.36,
+    linerEmissiveOpacity: 0.18,
+    goldEdgeOpacity: 0.26,
+    northInset: 0.06,
+    sideInset: 0.045
+  } as const;
+}
+
 export function getAltTableInsetConfig() {
   return {
     frameWidth: TABLE_FRAME_WIDTH,
@@ -1310,6 +1320,7 @@ function RackShell(props: {
     sampleSize
   });
   const slotDividerConfig = getAltRackSlotDividerConfig();
+  const linerConfig = getAltRackLinerConfig();
   const seatCenters = seatCards.map((card) =>
     designToWorld(card.anchor.center_px.x, card.anchor.center_px.y)
   );
@@ -1352,6 +1363,18 @@ function RackShell(props: {
         <mesh castShadow receiveShadow position={[0, RACK_BASE_HEIGHT * 0.18, depth * 0.02]}>
           <boxGeometry args={[width - 0.22, RACK_SLOT_THICKNESS, RACK_SLOT_DEPTH]} />
           <meshStandardMaterial color="#2b1a12" metalness={0.08} roughness={0.86} />
+        </mesh>
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, RACK_SLOT_THICKNESS + 0.002, depth * linerConfig.northInset]}>
+          <planeGeometry args={[width - 0.34, RACK_SLOT_DEPTH * 0.72]} />
+          <meshBasicMaterial color="#2c4a31" transparent opacity={linerConfig.linerOpacity} toneMapped={false} />
+        </mesh>
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, RACK_SLOT_THICKNESS + 0.003, depth * (linerConfig.northInset + 0.02)]}>
+          <planeGeometry args={[width - 0.42, RACK_SLOT_DEPTH * 0.32]} />
+          <meshBasicMaterial color="#7ea169" transparent opacity={linerConfig.linerEmissiveOpacity} toneMapped={false} />
+        </mesh>
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, RACK_SLOT_THICKNESS + 0.004, depth * 0.16]}>
+          <planeGeometry args={[width - 0.26, RACK_TRIM_WIDTH * 0.72]} />
+          <meshBasicMaterial color="#d8b466" transparent opacity={linerConfig.goldEdgeOpacity} toneMapped={false} />
         </mesh>
         <mesh castShadow receiveShadow position={[0, RACK_BASE_HEIGHT * 0.24, depth * 0.2]}>
           <boxGeometry args={[width - 0.22, RACK_SLOT_THICKNESS * 0.9, RACK_SIDE_THICKNESS * 0.7]} />
@@ -1542,6 +1565,18 @@ function RackShell(props: {
       <mesh castShadow receiveShadow position={[-sideDir * depth * 0.04, RACK_BASE_HEIGHT * 0.18, 0]}>
         <boxGeometry args={[RACK_SLOT_DEPTH, RACK_SLOT_THICKNESS, height - 0.26]} />
         <meshStandardMaterial color="#2b1a12" metalness={0.08} roughness={0.86} />
+      </mesh>
+      <mesh rotation={[0, sideDir * Math.PI / 2, 0]} position={[-sideDir * depth * linerConfig.sideInset, RACK_SLOT_THICKNESS + 0.002, 0]}>
+        <planeGeometry args={[height - 0.34, RACK_SLOT_DEPTH * 0.72]} />
+        <meshBasicMaterial color="#2c4a31" transparent opacity={linerConfig.linerOpacity} toneMapped={false} />
+      </mesh>
+      <mesh rotation={[0, sideDir * Math.PI / 2, 0]} position={[-sideDir * depth * (linerConfig.sideInset + 0.018), RACK_SLOT_THICKNESS + 0.003, 0]}>
+        <planeGeometry args={[height - 0.42, RACK_SLOT_DEPTH * 0.32]} />
+        <meshBasicMaterial color="#7ea169" transparent opacity={linerConfig.linerEmissiveOpacity} toneMapped={false} />
+      </mesh>
+      <mesh rotation={[0, sideDir * Math.PI / 2, 0]} position={[-sideDir * depth * 0.135, RACK_SLOT_THICKNESS + 0.004, 0]}>
+        <planeGeometry args={[height - 0.26, RACK_TRIM_WIDTH * 0.72]} />
+        <meshBasicMaterial color="#d8b466" transparent opacity={linerConfig.goldEdgeOpacity} toneMapped={false} />
       </mesh>
       <mesh castShadow receiveShadow position={[-sideDir * depth * 0.2, RACK_BASE_HEIGHT * 0.24, 0]}>
         <boxGeometry args={[RACK_SIDE_THICKNESS * 0.72, RACK_SLOT_THICKNESS * 0.9, height - 0.26]} />
