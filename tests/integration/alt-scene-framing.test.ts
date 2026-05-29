@@ -6,15 +6,13 @@ import {
 } from "../../apps/web/src/alt-table-3d/AltTableScene";
 
 describe("ALT scene framing", () => {
-  it("keeps the ALT perspective camera close enough to let the table fill the authored board", () => {
+  it("keeps the ALT perspective camera in a higher, wider 3/4 view so more of the authored board and racks read like the reference", () => {
     const camera = getAltTableCameraConfig();
 
-    expect(camera.position[1]).toBeLessThan(6.5);
-    expect(camera.position[1]).toBeGreaterThan(6.2);
-    expect(camera.position[2]).toBeLessThan(5.9);
-    expect(camera.position[2]).toBeGreaterThan(5.6);
-    expect(camera.fov).toBeLessThanOrEqual(40);
-    expect(camera.fov).toBeGreaterThanOrEqual(37);
+    expect(camera.position[1]).toBeGreaterThan(6.9);
+    expect(camera.position[2]).toBeGreaterThan(6.7);
+    expect(camera.fov).toBeGreaterThanOrEqual(39);
+    expect(camera.fov).toBeLessThanOrEqual(43);
   });
 
   it("pulls hidden-hand trays inward from the outer edges so the racks read larger in-frame", () => {

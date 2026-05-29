@@ -240,8 +240,8 @@ export function getAltTableInsetConfig() {
 
 export function getAltTableCameraConfig() {
   return {
-    position: [0, 6.35, 5.8] as const,
-    fov: 38,
+    position: [0, 7.2, 7.05] as const,
+    fov: 41,
     near: 0.1,
     far: 64
   } as const;
