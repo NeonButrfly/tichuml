@@ -1,14 +1,14 @@
 {
-  "timestamp": "2026-05-01T20:00:27.468Z",
+  "timestamp": "2026-05-29T22:53:47.025Z",
   "base_seed": "evaluation",
-  "backend_url": "http://127.0.0.1:4310",
+  "backend_url": "http://127.0.0.1:4311",
   "telemetry_enabled": false,
   "mirror_seats": false,
   "baseline_run": {
     "name": "heuristic_sanity",
     "seed": "evaluation:heuristic-baseline",
     "games_played": 1,
-    "hands_played": 1,
+    "hands_played": 16,
     "default_provider": "server_heuristic",
     "ns_provider": "server_heuristic",
     "ew_provider": "server_heuristic",
@@ -28,9 +28,9 @@
       "tie": 0
     },
     "hand_win_counts": {
-      "team-0": 0,
-      "team-1": 1,
-      "tie": 0
+      "team-0": 4,
+      "team-1": 11,
+      "tie": 1
     },
     "win_rate_by_team": {
       "team-0": 0,
@@ -38,60 +38,57 @@
       "tie": 0
     },
     "hand_win_rate_by_team": {
-      "team-0": 0,
-      "team-1": 1,
-      "tie": 0
+      "team-0": 0.25,
+      "team-1": 0.6875,
+      "tie": 0.0625
     },
-    "average_score_margin": 90,
+    "average_score_margin": 500,
     "total_score_by_team": {
-      "team-0": 5,
-      "team-1": 95
+      "team-0": 550,
+      "team-1": 1050
     },
-    "pass_rate": 0.4588,
+    "pass_rate": 0.4856,
     "bomb_usage_rate": 0,
-    "wish_satisfaction_rate": null,
-    "tichu_call_rate": 2,
-    "tichu_success_rate": 0.5,
-    "grand_tichu_call_rate": 0,
-    "grand_tichu_success_rate": null,
-    "double_victory_rate": 0,
+    "wish_satisfaction_rate": 0.3548,
+    "tichu_call_rate": 0.0625,
+    "tichu_success_rate": 1,
+    "grand_tichu_call_rate": 0.0625,
+    "grand_tichu_success_rate": 0,
+    "double_victory_rate": 0.0625,
     "double_victory_counts": {
       "team-0": 0,
-      "team-1": 0
+      "team-1": 1
     },
-    "fallback_count": 2,
+    "fallback_count": 0,
     "invalid_decision_count": 0,
     "average_latency_by_provider": {
-      "local_heuristic": 354,
-      "server_heuristic": 5.73,
-      "system_local": 0.33
+      "server_heuristic": 2.7,
+      "system_local": 0.06
     },
     "decision_latency_p95_by_provider": {
-      "local_heuristic": null,
       "server_heuristic": null,
       "system_local": null
     },
     "provider_usage": {
-      "local_heuristic": 3,
-      "server_heuristic": 93,
-      "system_local": 3
+      "server_heuristic": 1395,
+      "system_local": 48
     },
     "decisions_by_phase": {
-      "grand_tichu_window": 4,
-      "pass_select": 6,
-      "pass_reveal": 1,
-      "exchange_complete": 1,
-      "trick_play": 86,
-      "round_scoring": 1
+      "grand_tichu_window": 64,
+      "pass_select": 64,
+      "pass_reveal": 16,
+      "exchange_complete": 16,
+      "trick_play": 1267,
+      "round_scoring": 16
     },
     "events_by_phase": {
-      "grand_tichu_window": 6,
-      "pass_select": 8,
-      "pass_reveal": 2,
-      "exchange_complete": 2,
-      "trick_play": 101,
-      "round_scoring": 2,
-      "finished": 2
+      "grand_tichu_window": 96,
+      "pass_select": 96,
+      "pass_reveal": 32,
+      "exchange_complete": 32,
+      "trick_play": 1467,
+      "round_scoring": 30,
+      "finished": 33
     },
     "exchange_phase_recorded": true,
     "pass_select_recorded": true,
@@ -102,7 +99,7 @@
       "name": "primary",
       "seed": "evaluation:primary",
       "games_played": 1,
-      "hands_played": 1,
+      "hands_played": 9,
       "default_provider": "lightgbm_model",
       "ns_provider": "lightgbm_model",
       "ew_provider": "server_heuristic",
@@ -122,8 +119,8 @@
         "tie": 0
       },
       "hand_win_counts": {
-        "team-0": 0,
-        "team-1": 1,
+        "team-0": 2,
+        "team-1": 7,
         "tie": 0
       },
       "win_rate_by_team": {
@@ -132,60 +129,60 @@
         "tie": 0
       },
       "hand_win_rate_by_team": {
-        "team-0": 0,
-        "team-1": 1,
+        "team-0": 0.2222,
+        "team-1": 0.7778,
         "tie": 0
       },
-      "average_score_margin": 300,
+      "average_score_margin": 1210,
       "total_score_by_team": {
-        "team-0": 0,
-        "team-1": 300
+        "team-0": -5,
+        "team-1": 1205
       },
-      "pass_rate": 0.557,
-      "bomb_usage_rate": 0,
-      "wish_satisfaction_rate": 1,
-      "tichu_call_rate": 1,
-      "tichu_success_rate": 1,
+      "pass_rate": 0.5374,
+      "bomb_usage_rate": 0.0032,
+      "wish_satisfaction_rate": 0.5,
+      "tichu_call_rate": 0.5556,
+      "tichu_success_rate": 0.4,
       "grand_tichu_call_rate": 0,
       "grand_tichu_success_rate": null,
-      "double_victory_rate": 1,
+      "double_victory_rate": 0.4444,
       "double_victory_counts": {
         "team-0": 0,
-        "team-1": 1
+        "team-1": 4
       },
-      "fallback_count": 52,
+      "fallback_count": 0,
       "invalid_decision_count": 0,
       "average_latency_by_provider": {
-        "local_heuristic": 951.83,
-        "server_heuristic": 4.86,
-        "system_local": 0
+        "server_heuristic": 8.26,
+        "system_local": 0.04,
+        "lightgbm_model": 14.75
       },
       "decision_latency_p95_by_provider": {
-        "local_heuristic": null,
         "server_heuristic": null,
-        "system_local": null
+        "system_local": null,
+        "lightgbm_model": null
       },
       "provider_usage": {
-        "local_heuristic": 52,
-        "server_heuristic": 36,
-        "system_local": 3
+        "server_heuristic": 416,
+        "system_local": 27,
+        "lightgbm_model": 350
       },
       "decisions_by_phase": {
-        "grand_tichu_window": 4,
-        "pass_select": 4,
-        "pass_reveal": 1,
-        "exchange_complete": 1,
-        "trick_play": 80,
-        "round_scoring": 1
+        "grand_tichu_window": 36,
+        "pass_select": 36,
+        "pass_reveal": 9,
+        "exchange_complete": 9,
+        "trick_play": 694,
+        "round_scoring": 9
       },
       "events_by_phase": {
-        "grand_tichu_window": 6,
-        "pass_select": 6,
-        "pass_reveal": 2,
-        "exchange_complete": 2,
-        "trick_play": 97,
-        "round_scoring": 2,
-        "finished": 2
+        "grand_tichu_window": 54,
+        "pass_select": 54,
+        "pass_reveal": 18,
+        "exchange_complete": 18,
+        "trick_play": 830,
+        "round_scoring": 16,
+        "finished": 19
       },
       "exchange_phase_recorded": true,
       "pass_select_recorded": true,
@@ -196,26 +193,26 @@
     "provider_a": "lightgbm_model",
     "provider_b": "server_heuristic",
     "total_games": 1,
-    "total_hands": 1,
+    "total_hands": 9,
     "provider_a_match_wins": 0,
     "provider_b_match_wins": 1,
     "ties": 0,
     "provider_a_match_win_rate": 0,
     "provider_b_match_win_rate": 1,
-    "provider_a_hand_wins": 0,
-    "provider_b_hand_wins": 1,
+    "provider_a_hand_wins": 2,
+    "provider_b_hand_wins": 7,
     "hand_ties": 0,
-    "provider_a_hand_win_rate": 0,
-    "provider_b_hand_win_rate": 1,
-    "provider_a_average_score": 0,
-    "provider_b_average_score": 300,
-    "average_score_delta_provider_a_minus_b": -300,
-    "provider_a_total_score": 0,
-    "provider_b_total_score": 300,
+    "provider_a_hand_win_rate": 0.2222,
+    "provider_b_hand_win_rate": 0.7778,
+    "provider_a_average_score": -5,
+    "provider_b_average_score": 1205,
+    "average_score_delta_provider_a_minus_b": -1210,
+    "provider_a_total_score": -5,
+    "provider_b_total_score": 1205,
     "provider_a_double_victories": 0,
-    "provider_b_double_victories": 1,
-    "provider_a_average_latency_ms": null,
-    "provider_b_average_latency_ms": 4.86,
+    "provider_b_double_victories": 4,
+    "provider_a_average_latency_ms": 14.75,
+    "provider_b_average_latency_ms": 8.26,
     "provider_a_match_win_rate_ci95": [
       0,
       0.7935
@@ -244,7 +241,7 @@
       {
         "name": "beats_baseline",
         "passed": false,
-        "details": "win_rate=0, average_score_delta=-300"
+        "details": "win_rate=0, average_score_delta=-1210"
       },
       {
         "name": "illegal_actions",
@@ -253,23 +250,23 @@
       },
       {
         "name": "fallbacks",
-        "passed": false,
-        "details": "comparison_fallbacks=52, baseline_fallbacks=2"
+        "passed": true,
+        "details": "comparison_fallbacks=0, baseline_fallbacks=0"
       },
       {
         "name": "latency",
-        "passed": false,
-        "details": "challenger_average_latency_ms=n/a, max=250"
+        "passed": true,
+        "details": "challenger_average_latency_ms=14.75, max=250"
       }
     ]
   },
-  "git_commit": "69e0b6d3545fcd0803f3995e45755c7f6af70a3c",
+  "git_commit": "b993a200535c13860ef584535e3ca4af163bb30b",
   "model_file": "C:\\tichu\\tichuml\\ml\\model_registry\\lightgbm_action_model.txt",
-  "model_version": "2026-04-20T04:00:59.835356+00:00",
+  "model_version": "lightgbm-action-model-20260529224550",
   "latest_summary": {
-    "timestamp": "2026-05-01T20:00:27.468Z",
+    "timestamp": "2026-05-29T22:53:47.025Z",
     "games_played": 1,
-    "hands_played": 1,
+    "hands_played": 9,
     "base_seed": "evaluation",
     "default_provider": "lightgbm_model",
     "ns_provider": "lightgbm_model",
@@ -280,7 +277,7 @@
       "seat-1": "server_heuristic",
       "seat-3": "server_heuristic"
     },
-    "backend_url": "http://127.0.0.1:4310",
+    "backend_url": "http://127.0.0.1:4311",
     "telemetry_enabled": false,
     "mirror_seats": false,
     "win_counts": {
@@ -289,8 +286,8 @@
       "tie": 0
     },
     "hand_win_counts": {
-      "team-0": 0,
-      "team-1": 1,
+      "team-0": 2,
+      "team-1": 7,
       "tie": 0
     },
     "win_rate_by_team": {
@@ -299,62 +296,62 @@
       "tie": 0
     },
     "hand_win_rate_by_team": {
-      "team-0": 0,
-      "team-1": 1,
+      "team-0": 0.2222,
+      "team-1": 0.7778,
       "tie": 0
     },
-    "average_score_margin": 300,
+    "average_score_margin": 1210,
     "total_score_by_team": {
-      "team-0": 0,
-      "team-1": 300
+      "team-0": -5,
+      "team-1": 1205
     },
-    "pass_rate": 0.557,
-    "bomb_usage_rate": 0,
-    "wish_satisfaction_rate": 1,
-    "tichu_call_rate": 1,
-    "tichu_success_rate": 1,
+    "pass_rate": 0.5374,
+    "bomb_usage_rate": 0.0032,
+    "wish_satisfaction_rate": 0.5,
+    "tichu_call_rate": 0.5556,
+    "tichu_success_rate": 0.4,
     "grand_tichu_call_rate": 0,
     "grand_tichu_success_rate": null,
-    "double_victory_rate": 1,
+    "double_victory_rate": 0.4444,
     "double_victory_counts": {
       "team-0": 0,
-      "team-1": 1
+      "team-1": 4
     },
-    "fallback_count": 52,
+    "fallback_count": 0,
     "invalid_decision_count": 0,
     "average_latency_by_provider": {
-      "local_heuristic": 951.83,
-      "server_heuristic": 4.86,
-      "system_local": 0
+      "server_heuristic": 8.26,
+      "system_local": 0.04,
+      "lightgbm_model": 14.75
     },
     "provider_usage": {
-      "local_heuristic": 52,
-      "server_heuristic": 36,
-      "system_local": 3
+      "server_heuristic": 416,
+      "system_local": 27,
+      "lightgbm_model": 350
     },
     "decisions_by_phase": {
-      "grand_tichu_window": 4,
-      "pass_select": 4,
-      "pass_reveal": 1,
-      "exchange_complete": 1,
-      "trick_play": 80,
-      "round_scoring": 1
+      "grand_tichu_window": 36,
+      "pass_select": 36,
+      "pass_reveal": 9,
+      "exchange_complete": 9,
+      "trick_play": 694,
+      "round_scoring": 9
     },
     "events_by_phase": {
-      "grand_tichu_window": 6,
-      "pass_select": 6,
-      "pass_reveal": 2,
-      "exchange_complete": 2,
-      "trick_play": 97,
-      "round_scoring": 2,
-      "finished": 2
+      "grand_tichu_window": 54,
+      "pass_select": 54,
+      "pass_reveal": 18,
+      "exchange_complete": 18,
+      "trick_play": 830,
+      "round_scoring": 16,
+      "finished": 19
     },
     "exchange_phase_recorded": true,
     "pass_select_recorded": true,
     "errors": 0,
-    "git_commit": "69e0b6d3545fcd0803f3995e45755c7f6af70a3c",
+    "git_commit": "b993a200535c13860ef584535e3ca4af163bb30b",
     "model_file": "C:\\tichu\\tichuml\\ml\\model_registry\\lightgbm_action_model.txt",
-    "model_version": "2026-04-20T04:00:59.835356+00:00",
+    "model_version": "lightgbm-action-model-20260529224550",
     "gate_passed": false
   }
 }

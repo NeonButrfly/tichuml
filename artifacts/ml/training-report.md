@@ -1,16 +1,16 @@
 # Training Report
 
-- objective: imitation_binary
-- label_mode: imitation
-- target_column: label
-- row_count: 1358
-- decision_count: 120
-- game_count: 2
+- objective: observed_outcome_regression
+- label_mode: observed_outcome
+- target_column: observed_actor_team_hand_delta
+- row_count: 12429
+- decision_count: 12429
+- game_count: 12
 - split_method: game_id_group_holdout
-- feature_count: 128
+- feature_count: 109
 
 ## Validation Metrics
 
-- auc: 0.8527552266685825
-- accuracy: 0.95
-- top1_chosen_action_recall: 0.6129032258064516
+- rmse: 164.8700026848867
+- mae: 122.93880956071384
+- spearman: -0.08546663082650077

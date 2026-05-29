@@ -29,12 +29,17 @@ The repo is no longer imitation-only.
 - Telemetry stores richer match lifecycle outcomes, decision metadata, and
   full-state replay context when full telemetry is enabled.
 - `ml:export` streams decisions in chunks, expands one row per legal action,
-  keeps the legacy imitation `label`, and adds clearly named `observed_*`
-  outcome columns by default.
+  defaults to the canonical `server_heuristic` provider slice, keeps the legacy
+  imitation `label`, and adds clearly named `observed_*` outcome columns by
+  default.
 - `ml:rollouts` creates offline counterfactual labels and writes resumable JSONL
   results plus quality reports.
 - `ml:train` supports `imitation_binary`, `observed_outcome_regression`,
   `rollout_regression`, and `rollout_ranker`.
+- `ml:train` now defaults to `observed_outcome_regression` with the
+  runtime-safe `runtime_raw` feature profile, so the checked-in
+  `lightgbm_model` can score trick-play requests without building the older
+  shared tactical analyzer path.
 - `ml:evaluate` supports heuristic sanity baselines, mirrored seating, provider
   comparison summaries, and a configurable improvement gate.
 
@@ -49,6 +54,9 @@ Export candidate-action rows with observed outcomes:
 ```powershell
 npm run ml:export -- --database-url "$env:DATABASE_URL" --phase trick_play
 ```
+
+When no provider override is supplied, `ml:export` now defaults to
+`server_heuristic` so the generated dataset stays policy-consistent.
 
 Validate scoped current-run export compatibility without writing a full dataset:
 
@@ -74,16 +82,26 @@ Generate rollout labels:
 npm run ml:rollouts -- --database-url "$env:DATABASE_URL" --phase trick_play --provider local_heuristic --continuation-provider local --rollouts-per-action 4 --max-decisions 100
 ```
 
-Train the legacy imitation model:
+Train the default runtime-safe model:
 
 ```powershell
 npm run ml:train -- --input ml/data/action_rows.parquet --phase trick_play
 ```
 
+That default command now trains `observed_outcome_regression` with the
+`runtime_raw` feature profile and writes metadata that the backend uses to skip
+the expensive shared tactical analyzer for trick-play inference.
+
 Train against observed outcomes:
 
 ```powershell
 npm run ml:train -- --input ml/data/action_rows.parquet --manifest-input artifacts/ml/export-manifest.json --objective observed_outcome_regression --phase trick_play
+```
+
+Train the older richer imitation path explicitly:
+
+```powershell
+npm run ml:train -- --input ml/data/action_rows.parquet --manifest-input artifacts/ml/export-manifest.json --objective imitation_binary --feature-profile full --phase trick_play
 ```
 
 Train against rollout labels:
@@ -152,6 +170,7 @@ machine-parseable and deterministic under the same explicit DB/provider scope.
 - `artifacts/ml/training-report.json`
 - `artifacts/ml/training-report.md`
 - `artifacts/ml/feature-importance.csv`
+- training metadata including `feature_profile`, `phase`, and `feature_names`
 
 `ml:evaluate` writes:
 
@@ -199,6 +218,12 @@ The current evaluation harness writes pass or fail details into
 - large trick-play requests are prefiltered through the bounded fast-path
   candidate generator before full LightGBM feature building, and runtime
   metadata records when the cap was applied
+- runtime-safe `runtime_raw` models advertise their feature profile through
+  model metadata, and backend inference now skips shared tactical feature
+  construction when that profile is active
+- models trained for a different phase now delegate intentionally to
+  `server_heuristic` instead of timing out and being counted as transport
+  fallbacks
 - issue [#82](https://github.com/NeonButrfly/tichuml/issues/82) hardened
   training metadata and inference responses to emit strict JSON, and the Node
   scorer now treats malformed protocol output as a recoverable fallback path

@@ -23,6 +23,41 @@ from json_utils import dumps_json_safe, make_json_safe
 DEFAULT_MANIFEST = Path("artifacts/ml/export-manifest.json")
 DEFAULT_REPORT_JSON = Path("artifacts/ml/training-report.json")
 DEFAULT_FEATURE_IMPORTANCE = Path("artifacts/ml/feature-importance.csv")
+RUNTIME_TACTICAL_FEATURES = {
+    "likely_wins_current_trick_flag",
+    "hand_quality_score",
+    "future_hand_quality_delta",
+    "control_retention_estimate",
+    "structure_preservation_score",
+    "dead_singles_count_before",
+    "dead_singles_count_after",
+    "dead_singles_reduction",
+    "combo_count_before",
+    "combo_count_after",
+    "finishability_score",
+    "endgame_pressure",
+    "partner_advantage_estimate",
+    "opponent_threat_estimate",
+    "resource_cost_score",
+    "shed_value_score",
+    "control_value_score",
+    "bomb_count_in_hand",
+    "dragon_in_hand",
+    "phoenix_in_hand",
+    "dog_in_hand",
+    "mahjong_in_hand",
+    "control_cards_count",
+    "premium_resource_pressure",
+    "singles_count",
+    "pairs_count",
+    "triples_count",
+    "straights_count",
+    "pair_runs_count",
+    "bombs_count",
+    "isolated_high_singles_count",
+    "isolated_low_singles_count",
+}
+RUNTIME_TACTICAL_PREFIXES = ("urgency_mode_",)
 
 
 def load_frame(path: str) -> pd.DataFrame:
@@ -111,6 +146,22 @@ def default_feature_columns(frame: pd.DataFrame, manifest: dict[str, Any]) -> li
             "cards_used_count",
             "opponent_near_out_count",
         }
+    ]
+
+
+def apply_feature_profile(
+    feature_columns: list[str], feature_profile: str
+) -> list[str]:
+    if feature_profile == "full":
+        return feature_columns
+    if feature_profile != "runtime_raw":
+        raise ValueError(f"Unsupported feature profile: {feature_profile}")
+
+    return [
+        column
+        for column in feature_columns
+        if column not in RUNTIME_TACTICAL_FEATURES
+        and not column.startswith(RUNTIME_TACTICAL_PREFIXES)
     ]
 
 
@@ -326,13 +377,18 @@ def main() -> None:
             "rollout_regression",
             "rollout_ranker",
         ],
-        default="imitation_binary",
+        default="observed_outcome_regression",
     )
     parser.add_argument("--target-column", default=None)
     parser.add_argument("--report-output", default=str(DEFAULT_REPORT_JSON))
     parser.add_argument(
         "--feature-importance-output",
         default=str(DEFAULT_FEATURE_IMPORTANCE),
+    )
+    parser.add_argument(
+        "--feature-profile",
+        choices=["runtime_raw", "full"],
+        default="runtime_raw",
     )
     args = parser.parse_args()
 
@@ -354,9 +410,13 @@ def main() -> None:
     if frame.empty:
         raise ValueError(f"Target column '{target_column}' has no non-null rows after filtering.")
 
-    feature_columns = default_feature_columns(frame, manifest)
+    feature_columns = apply_feature_profile(
+        default_feature_columns(frame, manifest), args.feature_profile
+    )
     if not feature_columns:
-        raise ValueError("No runtime-safe feature columns were available for training.")
+        raise ValueError(
+            f"No feature columns were available for training profile '{args.feature_profile}'."
+        )
     feature_frame = normalize_feature_frame(frame[feature_columns])
 
     excluded = excluded_columns(frame, manifest, feature_columns, target_column, args.objective)
@@ -474,6 +534,7 @@ def main() -> None:
         "telemetry_schema_version": manifest.get("telemetry_schema_version"),
         "feature_columns": feature_columns,
         "feature_names": feature_columns,
+        "feature_profile": args.feature_profile,
         "excluded_columns": excluded,
         "row_count": int(len(frame.index)),
         "decision_count": int(frame["decision_id"].nunique()) if "decision_id" in frame.columns else int(len(frame.index)),
@@ -502,6 +563,7 @@ def main() -> None:
         "decision_count": meta["decision_count"],
         "game_count": meta["game_count"],
         "feature_columns": feature_columns,
+        "feature_profile": args.feature_profile,
         "excluded_columns": excluded,
         "train_validation_split_method": split_method,
         "validation_metrics": validation_metrics,
@@ -528,6 +590,7 @@ def main() -> None:
                 "meta": str(meta_path),
                 "row_count": meta["row_count"],
                 "feature_count": len(feature_columns),
+                "feature_profile": args.feature_profile,
                 "validation_metrics": validation_metrics,
             }
         )

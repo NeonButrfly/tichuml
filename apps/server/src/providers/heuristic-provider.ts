@@ -346,7 +346,8 @@ export function routeHeuristicDecision(
           total_latency_ms: Date.now() - startedAt,
           candidate_count: fastDecision.candidateCount,
           scoring_path: scoringPath
-        }
+        },
+        ...(options.metadata ?? {})
       } as JsonObject
     };
   }
@@ -443,7 +444,8 @@ export function routeHeuristicDecision(
         total_latency_ms: Date.now() - startedAt,
         candidate_count: chosen.explanation.candidateScores.length,
         scoring_path: scoringPath
-      }
+      },
+      ...(options.metadata ?? {})
     } as JsonObject
   };
 }

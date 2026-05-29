@@ -1,12 +1,17 @@
 import {
   buildServerFastPathState,
+  type CandidateActionFeatureSnapshot,
   createHeuristicFeatureAnalyzer,
   generateFastTrickPlayCandidates,
-  SERVER_HEURISTIC_FAST_PATH_LIMITS
+  SERVER_HEURISTIC_FAST_PATH_LIMITS,
+  type TacticalFeatureSnapshot
 } from "@tichuml/ai-heuristics";
 import type { GameState, LegalAction } from "@tichuml/engine";
 import type { DecisionRequestPayload, JsonObject } from "@tichuml/shared";
-import type { LightgbmScorer } from "../ml/lightgbm-scorer.js";
+import type {
+  LightgbmFeatureRequirements,
+  LightgbmScorer
+} from "../ml/lightgbm-scorer.js";
 import {
   buildChosenDecision,
   createTelemetryPayload,
@@ -46,6 +51,49 @@ type CandidatePrefilterResult = {
   legalActions: LegalAction[];
   metadata: JsonObject;
 };
+
+type PreparedLightgbmFeatureInputs = {
+  stateFeatures: TacticalFeatureSnapshot | null;
+  candidateFeatures: Array<CandidateActionFeatureSnapshot | null>;
+  metadata: JsonObject;
+};
+
+const TACTICAL_LIGHTGBM_FEATURES = new Set([
+  "likely_wins_current_trick_flag",
+  "hand_quality_score",
+  "future_hand_quality_delta",
+  "control_retention_estimate",
+  "structure_preservation_score",
+  "dead_singles_count_before",
+  "dead_singles_count_after",
+  "dead_singles_reduction",
+  "combo_count_before",
+  "combo_count_after",
+  "finishability_score",
+  "endgame_pressure",
+  "partner_advantage_estimate",
+  "opponent_threat_estimate",
+  "resource_cost_score",
+  "shed_value_score",
+  "control_value_score",
+  "bomb_count_in_hand",
+  "dragon_in_hand",
+  "phoenix_in_hand",
+  "dog_in_hand",
+  "mahjong_in_hand",
+  "control_cards_count",
+  "premium_resource_pressure",
+  "singles_count",
+  "pairs_count",
+  "triples_count",
+  "straights_count",
+  "pair_runs_count",
+  "bombs_count",
+  "isolated_high_singles_count",
+  "isolated_low_singles_count"
+]);
+
+const TACTICAL_LIGHTGBM_FEATURE_PREFIXES = ["urgency_mode_"];
 
 function findMatchingLegalAction(
   actorLegalActions: LegalAction[],
@@ -131,6 +179,106 @@ function prefilterLightgbmLegalActions(
   };
 }
 
+export function lightgbmRequiresSharedTacticalFeatures(
+  featureRequirements: LightgbmFeatureRequirements | null | undefined
+): boolean {
+  if (!featureRequirements) {
+    return true;
+  }
+
+  if (featureRequirements.featureProfile === "runtime_raw") {
+    return false;
+  }
+
+  if (
+    featureRequirements.featureProfile &&
+    featureRequirements.featureProfile !== "full"
+  ) {
+    return featureRequirements.featureProfile !== "runtime_raw";
+  }
+
+  const featureNames = featureRequirements.featureNames;
+  if (!featureNames || featureNames.length === 0) {
+    return true;
+  }
+
+  return featureNames.some(
+    (featureName) =>
+      TACTICAL_LIGHTGBM_FEATURES.has(featureName) ||
+      TACTICAL_LIGHTGBM_FEATURE_PREFIXES.some((prefix) =>
+        featureName.startsWith(prefix)
+      )
+  );
+}
+
+function normalizeLightgbmPhase(phase: string | null | undefined): string | null {
+  if (!phase) {
+    return null;
+  }
+  return phase === "play" ? "trick_play" : phase;
+}
+
+function lightgbmSupportsPhase(config: {
+  phase: string;
+  featureRequirements: LightgbmFeatureRequirements | null | undefined;
+}): boolean {
+  const modelPhase = normalizeLightgbmPhase(config.featureRequirements?.modelPhase);
+  if (!modelPhase) {
+    return true;
+  }
+  return normalizeLightgbmPhase(config.phase) === modelPhase;
+}
+
+export function buildLightgbmFeatureInputs(config: {
+  payload: DecisionRequestPayload;
+  stateRaw: GameState;
+  actorSeat: string;
+  scoringLegalActions: LegalAction[];
+  featureRequirements: LightgbmFeatureRequirements | null | undefined;
+  analyzerFactory?: typeof createHeuristicFeatureAnalyzer;
+}): PreparedLightgbmFeatureInputs {
+  const featureProfile = config.featureRequirements?.featureProfile ?? null;
+  if (!lightgbmRequiresSharedTacticalFeatures(config.featureRequirements)) {
+    return {
+      stateFeatures: null,
+      candidateFeatures: config.scoringLegalActions.map(() => null),
+      metadata: {
+        shared_tactical_features_used: false,
+        model_feature_profile: featureProfile
+      }
+    };
+  }
+
+  const analyzerFactory = config.analyzerFactory ?? createHeuristicFeatureAnalyzer;
+  const analyzerLegalActions = Array.isArray(config.payload.legal_actions)
+    ? ({ [config.payload.actor_seat]: config.scoringLegalActions } as Record<
+        string,
+        LegalAction[]
+      >)
+    : (config.payload.legal_actions as Record<string, LegalAction[]>);
+  const analyzer = analyzerFactory({
+    state: config.stateRaw,
+    legalActions: analyzerLegalActions as never
+  });
+  const stateFeatures = analyzer.getStateFeatures(config.actorSeat as never);
+  const candidateFeatures = config.scoringLegalActions.map((legalAction) =>
+    analyzer.getCandidateFeatures(
+      config.actorSeat as never,
+      toConcreteActionForLegalAction(config.stateRaw, legalAction),
+      legalAction
+    )
+  );
+
+  return {
+    stateFeatures,
+    candidateFeatures,
+    metadata: {
+      shared_tactical_features_used: true,
+      model_feature_profile: featureProfile
+    }
+  };
+}
+
 export async function routeLightgbmDecision(
   payload: DecisionRequestPayload,
   scorer: LightgbmScorer,
@@ -153,6 +301,26 @@ export async function routeLightgbmDecision(
   }
 
   try {
+    const featureRequirements = scorer.getFeatureRequirements?.() ?? null;
+    if (!lightgbmSupportsPhase({ phase: payload.phase, featureRequirements })) {
+      return routeHeuristicDecision(payload, {
+        providerReason:
+          "LightGBM model is scoped to trick_play; delegated to the backend heuristic for this phase.",
+        metadata: {
+          requested_provider: "lightgbm_model",
+          provider_path: "lightgbm_model",
+          fallback_used: false,
+          lightgbm_phase_delegated: true,
+          lightgbm_model_phase:
+            normalizeLightgbmPhase(featureRequirements?.modelPhase) ?? null,
+          lightgbm_feature_profile: featureRequirements?.featureProfile ?? null
+        },
+        ...(options.traceDecisionRequests !== undefined
+          ? { traceDecisionRequests: options.traceDecisionRequests }
+          : {})
+      });
+    }
+
     const prefilter = prefilterLightgbmLegalActions(
       payload,
       stateRaw,
@@ -160,23 +328,14 @@ export async function routeLightgbmDecision(
       actorLegalActions
     );
     const scoringLegalActions = prefilter.legalActions;
-    const analyzerLegalActions = Array.isArray(payload.legal_actions)
-      ? ({ [payload.actor_seat]: scoringLegalActions } as Record<string, LegalAction[]>)
-      : (payload.legal_actions as Record<string, LegalAction[]>);
     const featureBuildStartedAt = Date.now();
-    const analyzer = createHeuristicFeatureAnalyzer({
-      state: stateRaw,
-      legalActions: analyzerLegalActions as never
+    const featureInputs = buildLightgbmFeatureInputs({
+      payload,
+      stateRaw,
+      actorSeat: canonicalActor,
+      scoringLegalActions,
+      featureRequirements
     });
-    const actorSeat = canonicalActor;
-    const stateFeatures = analyzer.getStateFeatures(actorSeat);
-    const candidateFeatures = scoringLegalActions.map((legalAction) =>
-      analyzer.getCandidateFeatures(
-        actorSeat,
-        toConcreteActionForLegalAction(stateRaw, legalAction),
-        legalAction
-      )
-    );
     const featureBuildMs = Date.now() - featureBuildStartedAt;
     const scoringStartedAt = Date.now();
     const scored = await scorer.score({
@@ -184,8 +343,8 @@ export async function routeLightgbmDecision(
       actorSeat: canonicalActor,
       phase: payload.phase,
       legalActions: scoringLegalActions,
-      stateFeatures,
-      candidateFeatures
+      stateFeatures: featureInputs.stateFeatures,
+      candidateFeatures: featureInputs.candidateFeatures
     });
     const scoringLatencyMs = Date.now() - scoringStartedAt;
 
@@ -203,7 +362,7 @@ export async function routeLightgbmDecision(
       score: scored.scores[index] ?? 0,
       concreteAction: toConcreteActionForLegalAction(stateRaw, legalAction),
       actionKey: toLegalActionKey(stateRaw, legalAction),
-      features: candidateFeatures[index] ?? null
+      features: featureInputs.candidateFeatures[index] ?? null
     }));
 
     ranked.sort((left, right) => {
@@ -230,13 +389,14 @@ export async function routeLightgbmDecision(
     const runtimeMetadata = {
       ...scored.runtimeMetadata,
       scoring_latency_ms: scoringLatencyMs,
-      feature_build_ms: featureBuildMs
+      feature_build_ms: featureBuildMs,
+      ...featureInputs.metadata
     } as JsonObject;
     const providerReason = "Resolved by the LightGBM action model on the backend.";
     const explanation = {
       policy: "lightgbm-action-model",
       actor: canonicalActor,
-      stateFeatures,
+      stateFeatures: featureInputs.stateFeatures,
       candidateScores: ranked.map((entry) => ({
         action: entry.concreteAction,
         score: entry.score,
@@ -275,7 +435,7 @@ export async function routeLightgbmDecision(
           model_metadata: modelMetadata,
           runtime_metadata: runtimeMetadata,
           explanation,
-          state_features: stateFeatures,
+          state_features: featureInputs.stateFeatures,
           candidate_features: ranked.map((entry) => ({
             action_key: entry.actionKey,
             action: entry.concreteAction,
@@ -316,6 +476,7 @@ export async function routeLightgbmDecision(
           fallback_used: false,
           canonical_actor_seat: canonicalActor,
           legal_action_count: scoringLegalActions.length,
+          ...featureInputs.metadata,
           ...prefilter.metadata,
           runtime_feature_count:
             typeof runtimeMetadata.runtime_feature_count === "number"
@@ -347,7 +508,7 @@ export async function routeLightgbmDecision(
         })),
         model_metadata: modelMetadata,
         runtime_metadata: runtimeMetadata,
-        state_features: stateFeatures,
+        state_features: featureInputs.stateFeatures,
         candidate_features: ranked.map((entry) => ({
           action_key: entry.actionKey,
           action: entry.concreteAction,
@@ -384,6 +545,7 @@ export async function routeLightgbmDecision(
         requested_provider: "lightgbm_model",
         canonical_actor_seat: canonicalActor,
         legal_action_count: scoringLegalActions.length,
+        ...featureInputs.metadata,
         ...prefilter.metadata,
         runtime_feature_count:
           typeof runtimeMetadata.runtime_feature_count === "number"

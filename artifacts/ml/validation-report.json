@@ -1,0 +1,1006 @@
+{
+  "accepted": true,
+  "validation_status": "accepted",
+  "export_mode": "chosen_decision_rows",
+  "phase": "trick_play",
+  "provider": "server_heuristic",
+  "run_id": null,
+  "game_id_prefix": null,
+  "candidate_row_count_before_filters": 18198,
+  "total_exported_rows": 12429,
+  "dropped_rows_by_reason": {
+    "missing_outcome_reward": 2830
+  },
+  "provider_distribution": {
+    "server_heuristic": 12429
+  },
+  "provider_distribution_all_scoped": {
+    "human_ui": 35,
+    "lightgbm_model": 616,
+    "local_heuristic": 98,
+    "server_heuristic": 16936,
+    "system_local": 513
+  },
+  "requested_provider_distribution_all_scoped": {
+    "human_ui": 35,
+    "lightgbm_model": 649,
+    "local": 98,
+    "server_heuristic": 16903,
+    "system_local": 513
+  },
+  "phase_distribution": {
+    "trick_play": 12429
+  },
+  "chosen_action_type_distribution": {
+    "play_cards": 6488,
+    "pass_turn": 5770,
+    "assign_dragon_trick": 151,
+    "call_tichu": 20
+  },
+  "fallback_count_scoped": 29,
+  "invalid_decision_count_scoped": 0,
+  "bomb_decision_count_scoped": 4,
+  "completed_match_count": 0,
+  "non_completed_match_count": 0,
+  "concurrent_writer_overlap": {
+    "warning": false,
+    "overlapping_decisions": 0,
+    "overlap_first_ts": null,
+    "overlap_last_ts": null
+  },
+  "reward_distribution": {
+    "count": 12429,
+    "missing_count": 0,
+    "min": -420.0,
+    "p01": -215.0,
+    "p05": -45.0,
+    "median": 180.0,
+    "mean": 172.9966208061791,
+    "p95": 460.0,
+    "p99": 565.0,
+    "max": 865.0,
+    "positive_count": 10510,
+    "zero_count": 473,
+    "negative_count": 1446
+  },
+  "reward_distribution_by_chosen_action_type": {
+    "assign_dragon_trick": {
+      "count": 151,
+      "missing_count": 0,
+      "min": -410.0,
+      "p01": -227.5,
+      "p05": -50.0,
+      "median": 175.0,
+      "mean": 156.5562913907285,
+      "p95": 425.0,
+      "p99": 570.0,
+      "max": 645.0,
+      "positive_count": 116,
+      "zero_count": 3,
+      "negative_count": 32
+    },
+    "call_tichu": {
+      "count": 20,
+      "missing_count": 0,
+      "min": -205.0,
+      "p01": -204.05,
+      "p05": -200.25,
+      "median": 87.5,
+      "mean": 120.5,
+      "p95": 515.75,
+      "p99": 527.15,
+      "max": 530.0,
+      "positive_count": 13,
+      "zero_count": 0,
+      "negative_count": 7
+    },
+    "pass_turn": {
+      "count": 5770,
+      "missing_count": 0,
+      "min": -420.0,
+      "p01": -220.0,
+      "p05": -45.0,
+      "median": 165.0,
+      "mean": 161.32668977469672,
+      "p95": 450.0,
+      "p99": 629.650000000006,
+      "max": 865.0,
+      "positive_count": 4775,
+      "zero_count": 226,
+      "negative_count": 769
+    },
+    "play_cards": {
+      "count": 6488,
+      "missing_count": 0,
+      "min": -420.0,
+      "p01": -215.0,
+      "p05": -40.0,
+      "median": 195.0,
+      "mean": 183.9195437731196,
+      "p95": 460.0,
+      "p99": 560.0,
+      "max": 865.0,
+      "positive_count": 5606,
+      "zero_count": 244,
+      "negative_count": 638
+    }
+  },
+  "legal_chosen_action_count": 12429,
+  "feature_count": 146,
+  "label_count": 1,
+  "feature_columns": [
+    "self_hand_size",
+    "partner_hand_size",
+    "left_opponent_hand_size",
+    "right_opponent_hand_size",
+    "cards_remaining_self",
+    "cards_remaining_partner",
+    "cards_remaining_left_opponent",
+    "cards_remaining_right_opponent",
+    "self_near_out_flag",
+    "partner_near_out_flag",
+    "left_opponent_near_out_flag",
+    "right_opponent_near_out_flag",
+    "any_opponent_near_out_flag",
+    "opponent_near_out_count",
+    "wish_active_flag",
+    "wished_rank",
+    "current_top_combo_rank",
+    "current_top_combo_length",
+    "current_trick_size",
+    "pass_select_phase_flag",
+    "exchange_phase_flag",
+    "pickup_phase_flag",
+    "actor_called_tichu",
+    "actor_called_grand_tichu",
+    "partner_called_tichu",
+    "partner_called_grand_tichu",
+    "left_opponent_called_tichu",
+    "left_opponent_called_grand_tichu",
+    "right_opponent_called_tichu",
+    "right_opponent_called_grand_tichu",
+    "all_opponents_called_tichu_count",
+    "all_opponents_called_grand_tichu_count",
+    "action_rank",
+    "action_length",
+    "cards_used_count",
+    "uses_bomb_flag",
+    "uses_dragon_flag",
+    "uses_phoenix_flag",
+    "uses_dog_flag",
+    "uses_mahjong_flag",
+    "satisfies_wish_flag",
+    "overtakes_partner_flag",
+    "likely_wins_current_trick_flag",
+    "pass_action_flag",
+    "hand_quality_score",
+    "future_hand_quality_delta",
+    "control_retention_estimate",
+    "structure_preservation_score",
+    "dead_singles_count_before",
+    "dead_singles_count_after",
+    "dead_singles_reduction",
+    "combo_count_before",
+    "combo_count_after",
+    "finishability_score",
+    "endgame_pressure",
+    "partner_advantage_estimate",
+    "opponent_threat_estimate",
+    "resource_cost_score",
+    "shed_value_score",
+    "control_value_score",
+    "bomb_count_in_hand",
+    "dragon_in_hand",
+    "phoenix_in_hand",
+    "dog_in_hand",
+    "mahjong_in_hand",
+    "control_cards_count",
+    "premium_resource_pressure",
+    "singles_count",
+    "pairs_count",
+    "triples_count",
+    "straights_count",
+    "pair_runs_count",
+    "bombs_count",
+    "isolated_high_singles_count",
+    "isolated_low_singles_count",
+    "phase_grand_tichu_window",
+    "phase_pass_select",
+    "phase_pass_reveal",
+    "phase_exchange_complete",
+    "phase_trick_play",
+    "phase_finished",
+    "actor_is_seat-0",
+    "actor_is_seat-1",
+    "actor_is_seat-2",
+    "actor_is_seat-3",
+    "active_seat_relation_self",
+    "active_seat_relation_partner",
+    "active_seat_relation_left_opponent",
+    "active_seat_relation_right_opponent",
+    "active_seat_relation_none",
+    "current_leader_relation_self",
+    "current_leader_relation_partner",
+    "current_leader_relation_left_opponent",
+    "current_leader_relation_right_opponent",
+    "current_leader_relation_none",
+    "current_top_combo_kind_single",
+    "current_top_combo_kind_pair",
+    "current_top_combo_kind_triple",
+    "current_top_combo_kind_straight",
+    "current_top_combo_kind_pair-sequence",
+    "current_top_combo_kind_full-house",
+    "current_top_combo_kind_bomb-four-kind",
+    "current_top_combo_kind_bomb-straight",
+    "current_top_combo_kind_dog",
+    "current_top_combo_kind_unknown",
+    "action_type_call_grand_tichu",
+    "action_type_decline_grand_tichu",
+    "action_type_call_tichu",
+    "action_type_select_pass",
+    "action_type_pass_turn",
+    "action_type_play_cards",
+    "action_type_assign_dragon_trick",
+    "action_type_advance_phase",
+    "action_combo_single",
+    "action_combo_pair",
+    "action_combo_triple",
+    "action_combo_straight",
+    "action_combo_pair-sequence",
+    "action_combo_full-house",
+    "action_combo_bomb-four-kind",
+    "action_combo_bomb-straight",
+    "action_combo_dog",
+    "action_combo_unknown",
+    "urgency_mode_normal",
+    "urgency_mode_opponent_near_out",
+    "urgency_mode_self_near_out",
+    "urgency_mode_partner_support",
+    "urgency_mode_endgame",
+    "actor_hand_count",
+    "partner_hand_count",
+    "left_opponent_hand_count",
+    "right_opponent_hand_count",
+    "actor_team_score",
+    "opponent_team_score",
+    "score_delta",
+    "wish_active",
+    "candidate_satisfies_wish",
+    "opponents_called_tichu_count",
+    "opponents_called_grand_tichu_count",
+    "candidate_card_count",
+    "candidate_rank_strength",
+    "candidate_uses_bomb",
+    "candidate_uses_dragon",
+    "candidate_uses_phoenix",
+    "candidate_uses_dog",
+    "candidate_uses_mahjong"
+  ],
+  "label_columns": [
+    "outcome_reward"
+  ],
+  "metadata_columns": [
+    "decision_id",
+    "ts",
+    "game_id",
+    "hand_id",
+    "phase",
+    "actor_seat",
+    "actor_team",
+    "opponent_team",
+    "decision_index",
+    "event_index",
+    "candidate_action_index",
+    "candidate_action_type",
+    "candidate_action_key",
+    "candidate_action_canonical_json",
+    "candidate_was_chosen",
+    "label",
+    "provider_used",
+    "requested_provider",
+    "policy_source",
+    "policy_name",
+    "fallback_used",
+    "chosen_action_is_legal",
+    "legal_action_count",
+    "state_hash",
+    "legal_actions_hash",
+    "chosen_action_hash",
+    "schema_version",
+    "engine_version",
+    "sim_version",
+    "chosen_action_type",
+    "has_explanation",
+    "has_candidate_scores",
+    "has_state_features",
+    "split",
+    "exploration_enabled",
+    "exploration_profile",
+    "exploration_selected",
+    "exploration_reason",
+    "original_top_action_type",
+    "original_top_score",
+    "selected_rank_in_candidates",
+    "selected_score",
+    "score_gap_from_top",
+    "exploration_rate",
+    "exploration_top_n",
+    "exploration_max_score_gap",
+    "current_phase",
+    "current_top_combo_type",
+    "current_winner_relation",
+    "active_seat_relation",
+    "candidate_combo_type",
+    "candidate_action_semantics",
+    "observed_outcome_available",
+    "observed_hand_outcome_available",
+    "observed_match_outcome_available",
+    "observed_actor_team_hand_score",
+    "observed_opponent_team_hand_score",
+    "observed_actor_team_hand_delta",
+    "observed_actor_team_won_hand",
+    "observed_actor_finish_rank",
+    "observed_partner_finish_rank",
+    "observed_finish_order",
+    "observed_double_victory_team",
+    "observed_double_victory_for_actor_team",
+    "observed_tichu_bonus_actor_team",
+    "observed_tichu_bonus_opponent_team",
+    "observed_tichu_success_actor",
+    "observed_grand_tichu_success_actor",
+    "observed_actor_team_final_score",
+    "observed_opponent_team_final_score",
+    "observed_actor_team_final_delta",
+    "observed_actor_team_won_match",
+    "observed_final_winner_team",
+    "observed_final_team_0_score",
+    "observed_final_team_1_score",
+    "missing_outcome_reason"
+  ],
+  "null_nan_feature_counts": {
+    "self_hand_size": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "partner_hand_size": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "left_opponent_hand_size": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "right_opponent_hand_size": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "cards_remaining_self": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "cards_remaining_partner": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "cards_remaining_left_opponent": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "cards_remaining_right_opponent": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "self_near_out_flag": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "partner_near_out_flag": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "left_opponent_near_out_flag": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "right_opponent_near_out_flag": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "any_opponent_near_out_flag": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "opponent_near_out_count": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "wish_active_flag": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "wished_rank": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "current_top_combo_rank": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "current_top_combo_length": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "current_trick_size": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "pass_select_phase_flag": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "exchange_phase_flag": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "pickup_phase_flag": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "actor_called_tichu": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "actor_called_grand_tichu": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "partner_called_tichu": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "partner_called_grand_tichu": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "left_opponent_called_tichu": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "left_opponent_called_grand_tichu": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "right_opponent_called_tichu": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "right_opponent_called_grand_tichu": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "all_opponents_called_tichu_count": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "all_opponents_called_grand_tichu_count": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "action_rank": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "action_length": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "cards_used_count": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "uses_bomb_flag": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "uses_dragon_flag": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "uses_phoenix_flag": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "uses_dog_flag": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "uses_mahjong_flag": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "satisfies_wish_flag": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "overtakes_partner_flag": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "likely_wins_current_trick_flag": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "pass_action_flag": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "hand_quality_score": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "future_hand_quality_delta": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "control_retention_estimate": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "structure_preservation_score": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "dead_singles_count_before": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "dead_singles_count_after": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "dead_singles_reduction": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "combo_count_before": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "combo_count_after": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "finishability_score": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "endgame_pressure": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "partner_advantage_estimate": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "opponent_threat_estimate": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "resource_cost_score": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "shed_value_score": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "control_value_score": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "bomb_count_in_hand": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "dragon_in_hand": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "phoenix_in_hand": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "dog_in_hand": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "mahjong_in_hand": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "control_cards_count": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "premium_resource_pressure": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "singles_count": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "pairs_count": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "triples_count": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "straights_count": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "pair_runs_count": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "bombs_count": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "isolated_high_singles_count": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "isolated_low_singles_count": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "phase_grand_tichu_window": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "phase_pass_select": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "phase_pass_reveal": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "phase_exchange_complete": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "phase_trick_play": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "phase_finished": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "actor_is_seat-0": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "actor_is_seat-1": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "actor_is_seat-2": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "actor_is_seat-3": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "active_seat_relation_self": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "active_seat_relation_partner": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "active_seat_relation_left_opponent": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "active_seat_relation_right_opponent": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "active_seat_relation_none": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "current_leader_relation_self": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "current_leader_relation_partner": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "current_leader_relation_left_opponent": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "current_leader_relation_right_opponent": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "current_leader_relation_none": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "current_top_combo_kind_single": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "current_top_combo_kind_pair": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "current_top_combo_kind_triple": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "current_top_combo_kind_straight": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "current_top_combo_kind_pair-sequence": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "current_top_combo_kind_full-house": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "current_top_combo_kind_bomb-four-kind": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "current_top_combo_kind_bomb-straight": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "current_top_combo_kind_dog": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "current_top_combo_kind_unknown": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "action_type_call_grand_tichu": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "action_type_decline_grand_tichu": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "action_type_call_tichu": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "action_type_select_pass": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "action_type_pass_turn": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "action_type_play_cards": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "action_type_assign_dragon_trick": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "action_type_advance_phase": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "action_combo_single": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "action_combo_pair": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "action_combo_triple": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "action_combo_straight": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "action_combo_pair-sequence": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "action_combo_full-house": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "action_combo_bomb-four-kind": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "action_combo_bomb-straight": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "action_combo_dog": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "action_combo_unknown": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "urgency_mode_normal": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "urgency_mode_opponent_near_out": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "urgency_mode_self_near_out": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "urgency_mode_partner_support": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "urgency_mode_endgame": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "actor_hand_count": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "partner_hand_count": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "left_opponent_hand_count": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "right_opponent_hand_count": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "actor_team_score": {
+      "null_count": 12429,
+      "nan_count": 0
+    },
+    "opponent_team_score": {
+      "null_count": 12429,
+      "nan_count": 0
+    },
+    "score_delta": {
+      "null_count": 12429,
+      "nan_count": 0
+    },
+    "wish_active": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "candidate_satisfies_wish": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "opponents_called_tichu_count": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "opponents_called_grand_tichu_count": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "candidate_card_count": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "candidate_rank_strength": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "candidate_uses_bomb": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "candidate_uses_dragon": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "candidate_uses_phoenix": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "candidate_uses_dog": {
+      "null_count": 0,
+      "nan_count": 0
+    },
+    "candidate_uses_mahjong": {
+      "null_count": 0,
+      "nan_count": 0
+    }
+  },
+  "game_id_grouped_split_confirmation": {
+    "accepted": true,
+    "split_row_counts": {
+      "train": 12429
+    },
+    "split_game_counts": {
+      "train": 12,
+      "validation": 0,
+      "test": 0
+    }
+  },
+  "leakage_denylist_pass": true,
+  "leakage_errors": [],
+  "exploration_rows_excluded_by_default": true,
+  "exploration_rows_count": 0,
+  "non_exploration_rows_count": 12429,
+  "rows_excluded_due_to_exploration": 0,
+  "explored_decision_rate": 0.0,
+  "reward_distribution_by_exploration": {
+    "exploration": {
+      "count": 0,
+      "missing_count": 0,
+      "min": null,
+      "p01": null,
+      "p05": null,
+      "median": null,
+      "mean": null,
+      "p95": null,
+      "p99": null,
+      "max": null,
+      "positive_count": 0,
+      "zero_count": 0,
+      "negative_count": 0
+    },
+    "non_exploration": {
+      "count": 12429,
+      "missing_count": 0,
+      "min": -420.0,
+      "p01": -215.0,
+      "p05": -45.0,
+      "median": 180.0,
+      "mean": 172.9966208061791,
+      "p95": 460.0,
+      "p99": 565.0,
+      "max": 865.0,
+      "positive_count": 10510,
+      "zero_count": 473,
+      "negative_count": 1446
+    }
+  },
+  "source_row_counts": {
+    "decisions": 18198,
+    "events": 18450,
+    "matches": 27
+  },
+  "ml_safe": {
+    "accepted": true,
+    "leakage_denylist_pass": true,
+    "uses_predecision_state_only": true
+  }
+}

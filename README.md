@@ -373,7 +373,9 @@ npm run ml:export -- --phase play
 npm run ml:export -- --phase play
 ```
 
-That export reads raw decision telemetry from Postgres; make sure the backend/database bootstrap is running first.
+That export reads raw decision telemetry from Postgres, defaults to the
+`server_heuristic` provider slice, and requires the backend/database bootstrap
+to be running first.
 
 Train the LightGBM action model:
 
@@ -385,7 +387,14 @@ npm run ml:train -- --phase play
 npm run ml:train -- --phase play
 ```
 
-Both commands prefer the repo `.venv` automatically when it exists, so they use the same Python environment created by the bootstrap scripts.
+`ml:train` now defaults to the observed-outcome regression objective and writes
+the runtime-safe `runtime_raw` feature profile to
+`ml/model_registry/lightgbm_action_model.*`. Use
+`--feature-profile full --objective imitation_binary` when you explicitly want
+the older richer imitation experiment path.
+
+Both commands prefer the repo `.venv` automatically when it exists, so they use
+the same Python environment created by the bootstrap scripts.
 
 Export supports optional filters such as:
 

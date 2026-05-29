@@ -14,7 +14,7 @@ export type LightgbmScoreRequest = {
   actorSeat: string;
   phase: string;
   legalActions: LegalAction[];
-  stateFeatures: TacticalFeatureSnapshot;
+  stateFeatures: TacticalFeatureSnapshot | null;
   candidateFeatures: Array<CandidateActionFeatureSnapshot | null>;
 };
 
@@ -24,9 +24,16 @@ export type LightgbmScoreResult = {
   runtimeMetadata: JsonObject;
 };
 
+export type LightgbmFeatureRequirements = {
+  featureNames: string[] | null;
+  featureProfile: string | null;
+  modelPhase: string | null;
+};
+
 export interface LightgbmScorer {
   score(request: LightgbmScoreRequest): Promise<LightgbmScoreResult>;
   close(): Promise<void>;
+  getFeatureRequirements?(): LightgbmFeatureRequirements | null;
 }
 
 type PendingRequest = {
@@ -101,8 +108,11 @@ export class PythonLightgbmScorer implements LightgbmScorer {
   private child: ChildProcessWithoutNullStreams | null = null;
   private pending = new Map<string, PendingRequest>();
   private requestSequence = 0;
+  private readonly featureRequirements: LightgbmFeatureRequirements | null;
 
-  constructor(private readonly config: ServerConfig) {}
+  constructor(private readonly config: ServerConfig) {
+    this.featureRequirements = loadFeatureRequirements(config.lightgbmModelMetaPath);
+  }
 
   private rejectAllPending(error: Error): void {
     for (const pending of this.pending.values()) {
@@ -287,8 +297,47 @@ export class PythonLightgbmScorer implements LightgbmScorer {
       child.kill();
     });
   }
+
+  getFeatureRequirements(): LightgbmFeatureRequirements | null {
+    return this.featureRequirements;
+  }
 }
 
 export function createLightgbmScorer(config: ServerConfig): LightgbmScorer {
   return new PythonLightgbmScorer(config);
+}
+
+function loadFeatureRequirements(
+  metaPath: string
+): LightgbmFeatureRequirements | null {
+  if (!fs.existsSync(metaPath)) {
+    return null;
+  }
+
+  try {
+    const raw = fs.readFileSync(metaPath, "utf8");
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const featureNames = Array.isArray(parsed.feature_names)
+      ? parsed.feature_names.filter(
+          (value): value is string =>
+            typeof value === "string" && value.trim().length > 0
+        )
+      : null;
+    const featureProfile =
+      typeof parsed.feature_profile === "string" &&
+      parsed.feature_profile.trim().length > 0
+        ? parsed.feature_profile
+        : null;
+
+    return {
+      featureNames,
+      featureProfile,
+      modelPhase:
+        typeof parsed.phase === "string" && parsed.phase.trim().length > 0
+          ? parsed.phase
+          : null
+    };
+  } catch {
+    return null;
+  }
 }
