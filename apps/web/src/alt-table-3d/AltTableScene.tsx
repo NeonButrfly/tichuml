@@ -113,6 +113,9 @@ const RACK_PLAQUE_INSET = 0.05;
 const RACK_SUPPORT_BLOCK = 0.28;
 const RACK_FRONT_LIP_HEIGHT = 0.14;
 const RACK_FRONT_LIP_DEPTH = 0.16;
+const RACK_CHEEK_WIDTH = 0.32;
+const RACK_CHEEK_HEIGHT = 0.52;
+const RACK_CHEEK_DEPTH = 0.24;
 const FRONT_RAIL_HEIGHT = 0.24;
 const FRONT_RAIL_DEPTH = 0.34;
 const FRONT_RAIL_INSET = 0.18;
@@ -562,6 +565,28 @@ function RackShell(props: {
           <boxGeometry args={[RACK_SUPPORT_BLOCK, RACK_SIDE_HEIGHT * 0.52, depth * 0.52]} />
           {commonMaterial}
         </mesh>
+        <mesh
+          castShadow
+          receiveShadow
+          position={[-width / 2 + RACK_CHEEK_WIDTH * 0.72, RACK_CHEEK_HEIGHT * 0.42, depth * 0.18]}
+          rotation={[0, 0, 0.3]}
+        >
+          <boxGeometry args={[RACK_CHEEK_WIDTH, RACK_CHEEK_HEIGHT, RACK_CHEEK_DEPTH]} />
+          {commonMaterial}
+        </mesh>
+        <mesh
+          castShadow
+          receiveShadow
+          position={[width / 2 - RACK_CHEEK_WIDTH * 0.72, RACK_CHEEK_HEIGHT * 0.42, depth * 0.18]}
+          rotation={[0, 0, -0.3]}
+        >
+          <boxGeometry args={[RACK_CHEEK_WIDTH, RACK_CHEEK_HEIGHT, RACK_CHEEK_DEPTH]} />
+          {commonMaterial}
+        </mesh>
+        <mesh castShadow receiveShadow position={[0, RACK_BASE_HEIGHT * 0.62, depth * 0.18]}>
+          <boxGeometry args={[width * 0.42, RACK_BASE_HEIGHT * 0.62, depth * 0.3]} />
+          {commonMaterial}
+        </mesh>
         <SeatPlaque
           height={RACK_PLAQUE_HEIGHT}
           position={[0, RACK_PLAQUE_HEIGHT * 0.62, depth * 0.46]}
@@ -617,6 +642,28 @@ function RackShell(props: {
       </mesh>
       <mesh castShadow receiveShadow position={[sideDir * depth * 0.08, RACK_SIDE_HEIGHT * 0.26, height * 0.28]}>
         <boxGeometry args={[RACK_SUPPORT_BLOCK * 0.82, RACK_SIDE_HEIGHT * 0.52, RACK_SUPPORT_BLOCK]} />
+        {commonMaterial}
+      </mesh>
+      <mesh
+        castShadow
+        receiveShadow
+        position={[sideDir * depth * 0.22, RACK_CHEEK_HEIGHT * 0.42, -height * 0.34]}
+        rotation={[0.3, 0, 0]}
+      >
+        <boxGeometry args={[RACK_CHEEK_DEPTH, RACK_CHEEK_HEIGHT, RACK_CHEEK_WIDTH]} />
+        {commonMaterial}
+      </mesh>
+      <mesh
+        castShadow
+        receiveShadow
+        position={[sideDir * depth * 0.22, RACK_CHEEK_HEIGHT * 0.42, height * 0.34]}
+        rotation={[-0.3, 0, 0]}
+      >
+        <boxGeometry args={[RACK_CHEEK_DEPTH, RACK_CHEEK_HEIGHT, RACK_CHEEK_WIDTH]} />
+        {commonMaterial}
+      </mesh>
+      <mesh castShadow receiveShadow position={[-sideDir * depth * 0.08, RACK_BASE_HEIGHT * 0.62, 0]}>
+        <boxGeometry args={[depth * 0.3, RACK_BASE_HEIGHT * 0.62, height * 0.42]} />
         {commonMaterial}
       </mesh>
       <SeatPlaque
