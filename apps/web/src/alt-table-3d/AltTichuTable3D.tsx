@@ -908,7 +908,7 @@ function buildCardStyleFromProps(props: {
   } satisfies CSSProperties;
 }
 
-function resolveCardSpriteVisualTuning(
+export function resolveCardSpriteVisualTuning(
   anchor: Tv7CardAnchor,
   zone: string,
   slotIndex = 0,
@@ -927,14 +927,14 @@ function resolveCardSpriteVisualTuning(
   const centerIndex = (Math.max(handCount, 1) - 1) / 2;
   const offsetFromCenter = slotIndex - centerIndex;
   const distance = Math.abs(offsetFromCenter);
-  const width = anchor.w_px * 0.84;
-  const height = anchor.h_px * 0.84;
+  const width = anchor.w_px * 0.78;
+  const height = anchor.h_px * 0.78;
 
   return {
     width,
     height,
-    translateX: offsetFromCenter * -18,
-    translateY: 56 - distance * 3.2,
+    translateX: offsetFromCenter * -16,
+    translateY: 74 - distance * 2.6,
     transformOrigin: "center 82%"
   } as const;
 }

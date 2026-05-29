@@ -124,12 +124,21 @@ const RACK_FOOT_HEIGHT = 0.16;
 const RACK_FOOT_DEPTH = 0.26;
 const RACK_PEDESTAL_WIDTH = 0.88;
 const RACK_PEDESTAL_DEPTH = 0.34;
-const FRONT_RAIL_HEIGHT = 0.24;
-const FRONT_RAIL_DEPTH = 0.34;
+const FRONT_RAIL_HEIGHT = 0.3;
+const FRONT_RAIL_DEPTH = 0.44;
 const FRONT_RAIL_INSET = 0.18;
 const FRONT_BLOCK_WIDTH = 1.26;
-const FRONT_BLOCK_HEIGHT = 0.44;
-const FRONT_BLOCK_DEPTH = 0.42;
+const FRONT_BLOCK_HEIGHT = 0.56;
+const FRONT_BLOCK_DEPTH = 0.5;
+
+export function getFrontRailAssemblyConfig() {
+  return {
+    railHeight: FRONT_RAIL_HEIGHT,
+    railDepth: FRONT_RAIL_DEPTH,
+    centerBlockHeight: FRONT_BLOCK_HEIGHT,
+    sideBlockHeight: 0.46
+  } as const;
+}
 
 export function getAltTableCameraConfig() {
   return {
@@ -384,14 +393,15 @@ function FrontRailAssembly(props: {
   southPlaqueTexture: Texture;
   woodTexture: Texture;
 }) {
+  const config = getFrontRailAssemblyConfig();
   const railZ = (props.outerHeight - TABLE_BORDER_WIDTH) / 2 - 0.14;
-  const railY = FRONT_RAIL_HEIGHT / 2;
+  const railY = config.railHeight / 2;
   const plaqueZ = railZ + FRONT_BLOCK_DEPTH * 0.12;
 
   return (
     <group>
       <mesh castShadow position={[0, railY, railZ]} receiveShadow>
-        <boxGeometry args={[props.outerWidth, FRONT_RAIL_HEIGHT, FRONT_RAIL_DEPTH]} />
+        <boxGeometry args={[props.outerWidth, config.railHeight, config.railDepth]} />
         <meshStandardMaterial
           color="#734224"
           map={props.woodTexture}
@@ -400,8 +410,8 @@ function FrontRailAssembly(props: {
         />
       </mesh>
 
-      <mesh castShadow position={[0, FRONT_BLOCK_HEIGHT * 0.54, plaqueZ]} receiveShadow>
-        <boxGeometry args={[FRONT_BLOCK_WIDTH, FRONT_BLOCK_HEIGHT, FRONT_BLOCK_DEPTH]} />
+      <mesh castShadow position={[0, config.centerBlockHeight * 0.54, plaqueZ]} receiveShadow>
+        <boxGeometry args={[FRONT_BLOCK_WIDTH, config.centerBlockHeight, FRONT_BLOCK_DEPTH]} />
         <meshStandardMaterial
           color="#6b4125"
           map={props.woodTexture}
@@ -410,8 +420,8 @@ function FrontRailAssembly(props: {
         />
       </mesh>
 
-      <mesh castShadow position={[-props.outerWidth / 2 + 1.24, FRONT_BLOCK_HEIGHT * 0.5, railZ + 0.08]} receiveShadow>
-        <boxGeometry args={[0.98, 0.38, 0.34]} />
+      <mesh castShadow position={[-props.outerWidth / 2 + 1.24, config.sideBlockHeight * 0.5, railZ + 0.08]} receiveShadow>
+        <boxGeometry args={[0.98, config.sideBlockHeight, 0.38]} />
         <meshStandardMaterial
           color="#6b4125"
           map={props.woodTexture}
@@ -420,8 +430,8 @@ function FrontRailAssembly(props: {
         />
       </mesh>
 
-      <mesh castShadow position={[props.outerWidth / 2 - 0.88, FRONT_BLOCK_HEIGHT * 0.5, railZ + 0.08]} receiveShadow>
-        <boxGeometry args={[0.66, 0.38, 0.34]} />
+      <mesh castShadow position={[props.outerWidth / 2 - 0.88, config.sideBlockHeight * 0.5, railZ + 0.08]} receiveShadow>
+        <boxGeometry args={[0.72, config.sideBlockHeight, 0.38]} />
         <meshStandardMaterial
           color="#6b4125"
           map={props.woodTexture}
@@ -432,21 +442,21 @@ function FrontRailAssembly(props: {
 
       <SeatPlaque
         height={RACK_PLAQUE_HEIGHT}
-        position={[0, FRONT_BLOCK_HEIGHT * 0.66, plaqueZ + 0.22]}
+        position={[0, config.centerBlockHeight * 0.66, plaqueZ + 0.22]}
         rotation={[0, 0, 0]}
         texture={props.southPlaqueTexture}
         width={RACK_PLAQUE_WIDTH}
       />
       <SeatPlaque
         height={0.26}
-        position={[props.outerWidth / 2 - 0.88, FRONT_BLOCK_HEIGHT * 0.62, railZ + 0.22]}
+        position={[props.outerWidth / 2 - 0.88, config.sideBlockHeight * 0.66, railZ + 0.24]}
         rotation={[0, 0, 0]}
         texture={props.passPlaqueTexture}
         width={0.52}
       />
       <SeatPlaque
         height={0.3}
-        position={[-props.outerWidth / 2 + 1.24, FRONT_BLOCK_HEIGHT * 0.62, railZ + 0.22]}
+        position={[-props.outerWidth / 2 + 1.24, config.sideBlockHeight * 0.66, railZ + 0.24]}
         rotation={[0, 0, 0]}
         texture={props.scorePlaqueTexture}
         width={0.82}
