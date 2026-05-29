@@ -430,8 +430,8 @@ function RackShell(props: {
       </mesh>
       <SeatPlaque
         height={RACK_PLAQUE_WIDTH}
-        position={[sideDir * (depth * 0.52 + RACK_PLAQUE_INSET), RACK_PLAQUE_HEIGHT * 1.08, 0]}
-        rotation={[0, props.seat === "east" ? -Math.PI / 2 : Math.PI / 2, 0]}
+        position={[sideDir * (depth * 0.36 + RACK_PLAQUE_INSET), RACK_PLAQUE_HEIGHT * 1.08, 0]}
+        rotation={[0, sideDir * 0.34, 0]}
         texture={props.plaqueTexture}
         width={RACK_PLAQUE_HEIGHT}
       />
