@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   designToWorld,
   getHiddenHandPresenceConfig,
+  getHiddenHandSeatLayoutConfig,
   getHiddenCardWorldSize,
   resolveHiddenHandPlacement,
   type HiddenHandCard
@@ -60,11 +61,14 @@ function buildHiddenCard(
 describe("ALT hidden-hand geometry", () => {
   it("keeps hidden cards at a readable physical size with only shallow rack burial", () => {
     const config = getHiddenHandPresenceConfig();
+    const seatLayout = getHiddenHandSeatLayoutConfig();
 
     expect(config.cardWidth).toBeGreaterThan(0.44);
     expect(config.cardHeight).toBeGreaterThan(0.62);
     expect(config.rackBuryDepth).toBeLessThan(0.035);
     expect(config.rackFloorY).toBeGreaterThan(0.09);
+    expect(seatLayout.sideRowSpacing).toBeLessThan(0.024);
+    expect(seatLayout.sideInboardOffset).toBeGreaterThan(0.28);
   });
 
   it("keeps north cards upright but exposes more back surface toward the camera", () => {
@@ -86,9 +90,9 @@ describe("ALT hidden-hand geometry", () => {
 
     expect(eastPlacement.position[0]).toBeLessThan(eastBase[0]);
     expect(westPlacement.position[0]).toBeGreaterThan(westBase[0]);
-    expect(eastPlacement.rotation[1]).toBeLessThan(-0.6);
+    expect(eastPlacement.rotation[1]).toBeLessThan(-0.64);
     expect(eastPlacement.rotation[1]).toBeGreaterThan(-0.74);
-    expect(westPlacement.rotation[1]).toBeGreaterThan(0.6);
+    expect(westPlacement.rotation[1]).toBeGreaterThan(0.64);
     expect(westPlacement.rotation[1]).toBeLessThan(0.74);
   });
 });

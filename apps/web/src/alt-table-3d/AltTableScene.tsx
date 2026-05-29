@@ -191,6 +191,8 @@ const RACK_TRIM_WIDTH = 0.028;
 const RACK_SUPPORT_BLOCK = 0.28;
 const RACK_FRONT_LIP_HEIGHT = 0.1;
 const RACK_FRONT_LIP_DEPTH = 0.12;
+const RACK_SLOT_DIVIDER_THICKNESS = 0.02;
+const RACK_SLOT_DIVIDER_HEIGHT = 0.18;
 const RACK_CHEEK_WIDTH = 0.32;
 const RACK_CHEEK_HEIGHT = 0.46;
 const RACK_CHEEK_DEPTH = 0.24;
@@ -341,6 +343,15 @@ export function getAltRackPlaquePresentationConfig() {
     sidePlaqueScale: 1.1,
     sidePlaqueBridgeLength: 0.16,
     sidePlaqueBackerThickness: 0.22
+  } as const;
+}
+
+export function getAltRackSlotDividerConfig() {
+  return {
+    dividerThickness: RACK_SLOT_DIVIDER_THICKNESS,
+    dividerHeight: RACK_SLOT_DIVIDER_HEIGHT,
+    northInset: 0.1,
+    sideInset: 0.07
   } as const;
 }
 
@@ -1218,6 +1229,20 @@ function RackShell(props: {
     maxZ,
     sampleSize
   });
+  const slotDividerConfig = getAltRackSlotDividerConfig();
+  const seatCenters = seatCards.map((card) =>
+    designToWorld(card.anchor.center_px.x, card.anchor.center_px.y)
+  );
+  const northSlotDividers = buildRackSlotDividerOffsets({
+    seat: "north",
+    centers: seatCenters,
+    basePosition
+  });
+  const sideSlotDividers = buildRackSlotDividerOffsets({
+    seat: props.seat === "north" ? "east" : props.seat,
+    centers: seatCenters,
+    basePosition
+  });
 
   if (props.seat === "north") {
     const width = maxX - minX + sampleSize.width * 1.75;
@@ -1252,6 +1277,28 @@ function RackShell(props: {
           <boxGeometry args={[width - 0.22, RACK_SLOT_THICKNESS * 0.9, RACK_SIDE_THICKNESS * 0.7]} />
           <meshStandardMaterial color="#44291b" metalness={0.1} roughness={0.8} />
         </mesh>
+        {northSlotDividers.map((offset, index) => (
+          <mesh
+            key={`north-slot-divider-${index}`}
+            castShadow
+            receiveShadow
+            position={[offset, RACK_SLOT_DIVIDER_HEIGHT * 0.5, depth * slotDividerConfig.northInset]}
+          >
+            <boxGeometry
+              args={[
+                RACK_SLOT_DIVIDER_THICKNESS,
+                RACK_SLOT_DIVIDER_HEIGHT,
+                RACK_SLOT_DEPTH * 0.88
+              ]}
+            />
+            <meshStandardMaterial
+              color="#4f2f1d"
+              map={props.woodTexture}
+              metalness={rackConfig.rackWoodMetalness * 0.82}
+              roughness={rackConfig.rackWoodRoughness * 1.02}
+            />
+          </mesh>
+        ))}
         <mesh castShadow receiveShadow position={[0, RACK_TRAY_BRIDGE_HEIGHT * 0.5, depth * 0.36]}>
           <boxGeometry args={[width * 0.58, RACK_TRAY_BRIDGE_HEIGHT, depth * 0.26]} />
           {commonMaterial}
@@ -1420,6 +1467,28 @@ function RackShell(props: {
         <boxGeometry args={[RACK_SIDE_THICKNESS * 0.72, RACK_SLOT_THICKNESS * 0.9, height - 0.26]} />
         <meshStandardMaterial color="#44291b" metalness={0.1} roughness={0.8} />
       </mesh>
+      {sideSlotDividers.map((offset, index) => (
+        <mesh
+          key={`${props.seat}-slot-divider-${index}`}
+          castShadow
+          receiveShadow
+          position={[-sideDir * depth * slotDividerConfig.sideInset, RACK_SLOT_DIVIDER_HEIGHT * 0.5, offset]}
+        >
+          <boxGeometry
+            args={[
+              RACK_SLOT_DEPTH * 0.9,
+              RACK_SLOT_DIVIDER_HEIGHT,
+              RACK_SLOT_DIVIDER_THICKNESS
+            ]}
+          />
+          <meshStandardMaterial
+            color="#4f2f1d"
+            map={props.woodTexture}
+            metalness={rackConfig.rackWoodMetalness * 0.82}
+            roughness={rackConfig.rackWoodRoughness * 1.02}
+          />
+        </mesh>
+      ))}
       <mesh castShadow receiveShadow position={[-sideDir * depth * 0.3, RACK_TRAY_BRIDGE_HEIGHT * 0.5, 0]}>
         <boxGeometry args={[depth * 0.26, RACK_TRAY_BRIDGE_HEIGHT, height * 0.56]} />
         {commonMaterial}
@@ -1603,6 +1672,25 @@ function RackShell(props: {
       />
     </group>
   );
+}
+
+function buildRackSlotDividerOffsets(args: {
+  seat: "north" | "east" | "west";
+  centers: readonly (readonly [number, number, number])[];
+  basePosition: readonly [number, number, number];
+}) {
+  if (args.centers.length < 2) {
+    return [];
+  }
+
+  return args.centers.slice(0, -1).map((center, index) => {
+    const nextCenter = args.centers[index + 1]!;
+    const midpoint =
+      args.seat === "north"
+        ? (center[0] + nextCenter[0]) / 2 - args.basePosition[0]
+        : (center[2] + nextCenter[2]) / 2 - args.basePosition[2];
+    return midpoint;
+  });
 }
 
 export function getRackShellBasePosition(args: {
