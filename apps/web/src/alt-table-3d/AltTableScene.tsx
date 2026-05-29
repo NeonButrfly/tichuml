@@ -128,14 +128,18 @@ const ALT_HIDDEN_CARD_BACK_SRC = `data:image/svg+xml;utf8,${encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 588">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#24482f"/>
-      <stop offset="52%" stop-color="#153622"/>
-      <stop offset="100%" stop-color="#0d2216"/>
+      <stop offset="0%" stop-color="#295136"/>
+      <stop offset="52%" stop-color="#194128"/>
+      <stop offset="100%" stop-color="#102818"/>
     </linearGradient>
     <radialGradient id="glow" cx="50%" cy="45%" r="60%">
-      <stop offset="0%" stop-color="#4f7e4b" stop-opacity="0.4"/>
+      <stop offset="0%" stop-color="#6c9b65" stop-opacity="0.52"/>
       <stop offset="100%" stop-color="#0a170f" stop-opacity="0"/>
     </radialGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f0d791"/>
+      <stop offset="100%" stop-color="#bf9943"/>
+    </linearGradient>
     <filter id="noise">
       <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="9"/>
       <feColorMatrix type="saturate" values="0"/>
@@ -144,21 +148,26 @@ const ALT_HIDDEN_CARD_BACK_SRC = `data:image/svg+xml;utf8,${encodeURIComponent(`
       </feComponentTransfer>
     </filter>
   </defs>
-  <rect width="420" height="588" rx="26" fill="#d8c38a"/>
-  <rect x="12" y="12" width="396" height="564" rx="22" fill="#c7a45b"/>
+  <rect width="420" height="588" rx="26" fill="#ecd599"/>
+  <rect x="12" y="12" width="396" height="564" rx="22" fill="url(#rim)"/>
   <rect x="24" y="24" width="372" height="540" rx="18" fill="url(#bg)"/>
-  <rect x="38" y="38" width="344" height="512" rx="14" fill="none" stroke="#e5cf8e" stroke-width="3.5" opacity="0.96"/>
+  <rect x="38" y="38" width="344" height="512" rx="14" fill="none" stroke="#f0d791" stroke-width="4.2" opacity="0.98"/>
+  <rect x="51" y="51" width="318" height="486" rx="13" fill="none" stroke="#456443" stroke-width="2.4" opacity="0.72"/>
   <rect x="54" y="54" width="312" height="480" rx="12" fill="url(#glow)"/>
-  <g fill="none" stroke="#e1c578" stroke-linecap="round" stroke-linejoin="round" opacity="0.94">
-    <path d="M210 128c68 0 122 54 122 122 0 49-28 91-73 111 14 30 13 66-3 97-22 43-67 71-116 71-67 0-122-52-128-117 43 20 94 14 130-16 39-31 57-82 45-128-13-47-54-85-104-94 28-31 69-46 127-46z" stroke-width="10"/>
-    <path d="M210 184c36 31 57 65 63 102 7 45-8 88-42 124-26-14-46-36-59-65-17-38-19-83-6-161 11 6 28 6 44 0z" stroke-width="9"/>
-    <path d="M152 270c21-5 40-18 58-41 18 23 37 36 58 41-21 9-40 25-58 50-18-25-37-41-58-50z" stroke-width="8"/>
-    <path d="M119 163c21 11 41 15 60 12M301 163c-21 11-41 15-60 12M120 429c23-12 44-18 63-15M300 429c-23-12-44-18-63-15" stroke-width="6.5"/>
-    <path d="M92 102h46M282 102h46M92 486h46M282 486h46" stroke-width="5.5" opacity="0.84"/>
+  <g fill="none" stroke="#ecd28a" stroke-linecap="round" stroke-linejoin="round" opacity="0.96">
+    <path d="M210 118c74 0 133 59 133 133 0 54-31 100-81 122 16 34 15 75-4 110-25 49-76 80-132 80-76 0-138-59-145-132 49 23 106 16 147-18 44-36 65-93 51-146-14-53-61-97-117-107 31-35 78-52 148-52z" stroke-width="11.5"/>
+    <path d="M210 178c40 35 63 72 70 114 7 50-10 98-46 138-29-16-51-41-65-74-18-42-20-92-7-178 12 7 29 7 48 0z" stroke-width="10"/>
+    <path d="M147 272c24-6 45-20 63-45 20 25 41 39 63 45-24 10-45 28-63 55-18-27-39-45-63-55z" stroke-width="8.8"/>
+    <path d="M118 157c24 12 46 16 68 13M302 157c-24 12-46 16-68 13M116 437c26-13 50-19 72-16M304 437c-26-13-50-19-72-16" stroke-width="7.2"/>
+    <path d="M89 100h53M278 100h53M89 488h53M278 488h53" stroke-width="6.3" opacity="0.88"/>
   </g>
-  <g fill="#eed899" opacity="0.86">
-    <circle cx="82" cy="82" r="7"/><circle cx="338" cy="82" r="7"/>
-    <circle cx="82" cy="506" r="7"/><circle cx="338" cy="506" r="7"/>
+  <g fill="none" stroke="#56754d" opacity="0.34">
+    <rect x="78" y="78" width="264" height="432" rx="12" stroke-width="1.8" stroke-dasharray="10 10"/>
+    <rect x="96" y="96" width="228" height="396" rx="10" stroke-width="1.4" stroke-dasharray="6 8"/>
+  </g>
+  <g fill="#f1dd9d" opacity="0.9">
+    <circle cx="82" cy="82" r="7.5"/><circle cx="338" cy="82" r="7.5"/>
+    <circle cx="82" cy="506" r="7.5"/><circle cx="338" cy="506" r="7.5"/>
   </g>
   <rect width="420" height="588" rx="26" fill="none" filter="url(#noise)"/>
 </svg>

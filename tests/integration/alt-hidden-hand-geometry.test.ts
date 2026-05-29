@@ -72,7 +72,7 @@ describe("ALT hidden-hand geometry", () => {
     const base = designToWorld(card.anchor.center_px.x, card.anchor.center_px.y);
     const placement = resolveHiddenHandPlacement(card);
 
-    expect(placement.rotation[0]).toBeGreaterThan(0.14);
+    expect(placement.rotation[0]).toBeGreaterThan(0.15);
     expect(placement.position[2]).toBeGreaterThan(base[2]);
   });
 
@@ -86,9 +86,9 @@ describe("ALT hidden-hand geometry", () => {
 
     expect(eastPlacement.position[0]).toBeLessThan(eastBase[0]);
     expect(westPlacement.position[0]).toBeGreaterThan(westBase[0]);
-    expect(eastPlacement.rotation[1]).toBeLessThan(-0.68);
-    expect(eastPlacement.rotation[1]).toBeGreaterThan(-0.82);
-    expect(westPlacement.rotation[1]).toBeGreaterThan(0.68);
-    expect(westPlacement.rotation[1]).toBeLessThan(0.82);
+    expect(eastPlacement.rotation[1]).toBeLessThan(-0.6);
+    expect(eastPlacement.rotation[1]).toBeGreaterThan(-0.74);
+    expect(westPlacement.rotation[1]).toBeGreaterThan(0.6);
+    expect(westPlacement.rotation[1]).toBeLessThan(0.74);
   });
 });

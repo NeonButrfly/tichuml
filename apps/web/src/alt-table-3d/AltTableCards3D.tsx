@@ -30,8 +30,8 @@ export function getHiddenHandPresenceConfig() {
     cardHeight: CARD_HEIGHT,
     rackFloorY: RACK_FLOOR_Y,
     rackBuryDepth: RACK_BURY_DEPTH,
-    northTilt: 0.18,
-    sideYaw: 0.74
+    northTilt: 0.17,
+    sideYaw: 0.66
   } as const;
 }
 
@@ -69,16 +69,17 @@ function HiddenHandCardMesh(props: {
     >
       <mesh castShadow receiveShadow renderOrder={1}>
         <boxGeometry args={[size.width, size.height, CARD_THICKNESS]} />
-        <meshStandardMaterial color="#31402b" metalness={0.02} roughness={0.94} />
+        <meshStandardMaterial color="#394934" metalness={0.03} roughness={0.9} />
       </mesh>
       <mesh castShadow position={[0, 0, backZ]} receiveShadow renderOrder={3}>
         <planeGeometry args={[size.width - CARD_BACK_INSET, size.height - CARD_BACK_INSET]} />
         <meshStandardMaterial
           map={props.texture}
-          emissive="#152518"
-          emissiveIntensity={0.62}
-          metalness={0.08}
-          roughness={0.32}
+          color="#eef0d8"
+          emissive="#24402b"
+          emissiveIntensity={0.92}
+          metalness={0.1}
+          roughness={0.24}
         />
       </mesh>
       <mesh castShadow position={[0, 0, frontZ]} receiveShadow renderOrder={2} rotation={[0, Math.PI, 0]}>
@@ -91,7 +92,7 @@ function HiddenHandCardMesh(props: {
       </mesh>
       <mesh castShadow position={[0, 0, backZ - 0.0003]} receiveShadow renderOrder={2}>
         <planeGeometry args={[size.width + CARD_FRAME, size.height + CARD_FRAME]} />
-        <meshStandardMaterial color="#b69a56" metalness={0.04} roughness={0.78} />
+        <meshStandardMaterial color="#cfb169" metalness={0.06} roughness={0.68} />
       </mesh>
     </group>
   );
@@ -103,9 +104,9 @@ export function resolveHiddenHandPlacement(card: HiddenHandCard) {
   const seatOffset = card.slotIndex - (card.handCount - 1) / 2;
   const seatCurve = Math.abs(seatOffset);
   const seatedY = RACK_FLOOR_Y + size.height / 2 - RACK_BURY_DEPTH + seatCurve * 0.0012;
-  const northTilt = 0.18;
-  const sideTilt = 0.12;
-  const sideYaw = 0.74;
+  const northTilt = 0.17;
+  const sideTilt = 0.11;
+  const sideYaw = 0.66;
 
   switch (card.seat) {
     case "north":
