@@ -10,5 +10,8 @@ describe("ALT rack slot dividers", () => {
     expect(config.dividerHeight).toBeGreaterThan(0.14);
     expect(config.northInset).toBeGreaterThan(0.06);
     expect(config.sideInset).toBeGreaterThan(0.04);
+    expect(config.frontExposeHeight).toBeGreaterThan(0.09);
+    expect(config.northFrontInset).toBeGreaterThan(0.28);
+    expect(config.sideFrontInset).toBeGreaterThan(0.22);
   });
 });

@@ -394,7 +394,10 @@ export function getAltRackSlotDividerConfig() {
     dividerThickness: RACK_SLOT_DIVIDER_THICKNESS,
     dividerHeight: RACK_SLOT_DIVIDER_HEIGHT,
     northInset: 0.1,
-    sideInset: 0.07
+    sideInset: 0.07,
+    frontExposeHeight: 0.118,
+    northFrontInset: 0.31,
+    sideFrontInset: 0.245
   } as const;
 }
 
@@ -1411,6 +1414,28 @@ function RackShell(props: {
             />
           </mesh>
         ))}
+        {northSlotDividers.map((offset, index) => (
+          <mesh
+            key={`north-slot-divider-face-${index}`}
+            castShadow
+            receiveShadow
+            position={[offset, slotDividerConfig.frontExposeHeight * 0.5, depth * slotDividerConfig.northFrontInset]}
+          >
+            <boxGeometry
+              args={[
+                RACK_SLOT_DIVIDER_THICKNESS * 1.08,
+                slotDividerConfig.frontExposeHeight,
+                RACK_FRONT_LIP_DEPTH * 0.92
+              ]}
+            />
+            <meshStandardMaterial
+              color="#6b4328"
+              map={props.woodTexture}
+              metalness={rackConfig.rackWoodMetalness * 0.88}
+              roughness={rackConfig.rackWoodRoughness * 0.96}
+            />
+          </mesh>
+        ))}
         <mesh castShadow receiveShadow position={[0, RACK_TRAY_BRIDGE_HEIGHT * 0.5, depth * 0.36]}>
           <boxGeometry args={[width * 0.58, RACK_TRAY_BRIDGE_HEIGHT, depth * 0.26]} />
           {commonMaterial}
@@ -1626,6 +1651,28 @@ function RackShell(props: {
             map={props.woodTexture}
             metalness={rackConfig.rackWoodMetalness * 0.82}
             roughness={rackConfig.rackWoodRoughness * 1.02}
+          />
+        </mesh>
+      ))}
+      {sideSlotDividers.map((offset, index) => (
+        <mesh
+          key={`${props.seat}-slot-divider-face-${index}`}
+          castShadow
+          receiveShadow
+          position={[-sideDir * depth * slotDividerConfig.sideFrontInset, slotDividerConfig.frontExposeHeight * 0.5, offset]}
+        >
+          <boxGeometry
+            args={[
+              RACK_FRONT_LIP_DEPTH * 0.92,
+              slotDividerConfig.frontExposeHeight,
+              RACK_SLOT_DIVIDER_THICKNESS * 1.08
+            ]}
+          />
+          <meshStandardMaterial
+            color="#6b4328"
+            map={props.woodTexture}
+            metalness={rackConfig.rackWoodMetalness * 0.88}
+            roughness={rackConfig.rackWoodRoughness * 0.96}
           />
         </mesh>
       ))}
