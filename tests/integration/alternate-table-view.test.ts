@@ -310,6 +310,12 @@ describe("AltTable3DRoute", () => {
     expect(southCards).toHaveLength(14);
     expect(southCards[0]?.style.left).toBe(`${southAnchors[0]?.center_px.x}px`);
     expect(southCards[0]?.style.top).toBe(`${southAnchors[0]?.center_px.y}px`);
+    expect(Number.parseFloat(southCards[0]?.style.width ?? "0")).toBeLessThan(
+      southAnchors[0]?.w_px ?? 0
+    );
+    expect(Number.parseFloat(southCards[0]?.style.height ?? "0")).toBeLessThan(
+      southAnchors[0]?.h_px ?? 0
+    );
     expect(southCards[0]?.style.transform).toContain(
       `rotate(${southAnchors[0]?.rotation_deg}deg)`
     );

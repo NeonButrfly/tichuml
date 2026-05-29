@@ -57,8 +57,11 @@ const WOOD_GRAIN_SRC = `data:image/svg+xml;utf8,${encodeURIComponent(`
 </svg>
 `)}`;
 const NORTH_PLAQUE_SRC = buildSeatPlaqueSrc("NORTH");
+const SOUTH_PLAQUE_SRC = buildSeatPlaqueSrc("SOUTH");
 const EAST_PLAQUE_SRC = buildSeatPlaqueSrc("EAST", { vertical: true });
 const WEST_PLAQUE_SRC = buildSeatPlaqueSrc("WEST", { vertical: true });
+const PASS_PLAQUE_SRC = buildSeatPlaqueSrc("PASS");
+const SCORE_PLAQUE_SRC = buildScorePlaqueSrc();
 const RACK_BASE_HEIGHT = 0.15;
 const RACK_SIDE_HEIGHT = 0.32;
 const RACK_SIDE_THICKNESS = 0.13;
@@ -68,6 +71,12 @@ const RACK_END_BLOCK = 0.18;
 const RACK_PLAQUE_WIDTH = 0.9;
 const RACK_PLAQUE_HEIGHT = 0.34;
 const RACK_PLAQUE_INSET = 0.05;
+const FRONT_RAIL_HEIGHT = 0.24;
+const FRONT_RAIL_DEPTH = 0.34;
+const FRONT_RAIL_INSET = 0.18;
+const FRONT_BLOCK_WIDTH = 1.26;
+const FRONT_BLOCK_HEIGHT = 0.44;
+const FRONT_BLOCK_DEPTH = 0.42;
 
 export function AltTableScene(props: {
   cards: HiddenHandCard[];
@@ -134,13 +143,16 @@ function AltTableWorld(props: {
   cards: HiddenHandCard[];
   backSrc: string;
 }) {
-  const [backTexture, dragonTexture, woodTexture, northPlaqueTexture, eastPlaqueTexture, westPlaqueTexture] = useLoader(TextureLoader, [
+  const [backTexture, dragonTexture, woodTexture, northPlaqueTexture, southPlaqueTexture, eastPlaqueTexture, westPlaqueTexture, passPlaqueTexture, scorePlaqueTexture] = useLoader(TextureLoader, [
     props.backSrc,
     DRAGON_MOTIF_SRC,
     WOOD_GRAIN_SRC,
     NORTH_PLAQUE_SRC,
+    SOUTH_PLAQUE_SRC,
     EAST_PLAQUE_SRC,
-    WEST_PLAQUE_SRC
+    WEST_PLAQUE_SRC,
+    PASS_PLAQUE_SRC,
+    SCORE_PLAQUE_SRC
   ]);
   backTexture.colorSpace = SRGBColorSpace;
   backTexture.minFilter = LinearFilter;
@@ -169,6 +181,18 @@ function AltTableWorld(props: {
   westPlaqueTexture.minFilter = LinearFilter;
   westPlaqueTexture.magFilter = LinearFilter;
   westPlaqueTexture.needsUpdate = true;
+  southPlaqueTexture.colorSpace = SRGBColorSpace;
+  southPlaqueTexture.minFilter = LinearFilter;
+  southPlaqueTexture.magFilter = LinearFilter;
+  southPlaqueTexture.needsUpdate = true;
+  passPlaqueTexture.colorSpace = SRGBColorSpace;
+  passPlaqueTexture.minFilter = LinearFilter;
+  passPlaqueTexture.magFilter = LinearFilter;
+  passPlaqueTexture.needsUpdate = true;
+  scorePlaqueTexture.colorSpace = SRGBColorSpace;
+  scorePlaqueTexture.minFilter = LinearFilter;
+  scorePlaqueTexture.magFilter = LinearFilter;
+  scorePlaqueTexture.needsUpdate = true;
   const tableSize = getTableWorldSize();
   const feltWidth = tableSize.width - FELT_INSET_X;
   const feltHeight = tableSize.height - FELT_INSET_Z;
@@ -195,6 +219,9 @@ function AltTableWorld(props: {
           feltWidth={feltWidth}
           outerHeight={outerHeight}
           outerWidth={outerWidth}
+          passPlaqueTexture={passPlaqueTexture}
+          scorePlaqueTexture={scorePlaqueTexture}
+          southPlaqueTexture={southPlaqueTexture}
           woodTexture={woodTexture}
         />
         <RackShell cards={props.cards} seat="north" plaqueTexture={northPlaqueTexture} woodTexture={woodTexture} />
@@ -213,6 +240,9 @@ function TableBody(props: {
   feltWidth: number;
   outerHeight: number;
   outerWidth: number;
+  passPlaqueTexture: Texture;
+  scorePlaqueTexture: Texture;
+  southPlaqueTexture: Texture;
   woodTexture: Texture;
 }) {
   return (
@@ -273,9 +303,95 @@ function TableBody(props: {
       <GoldCorner position={[props.feltWidth / 2 - 0.34, FELT_Y + 0.008, props.feltHeight / 2 - 0.34]} flipX={true} flipZ={true} />
 
       <FrameRail axis="x" length={props.outerWidth} position={[0, 0, -(props.outerHeight - TABLE_BORDER_WIDTH) / 2]} woodTexture={props.woodTexture} />
-      <FrameRail axis="x" length={props.outerWidth} position={[0, 0, (props.outerHeight - TABLE_BORDER_WIDTH) / 2]} woodTexture={props.woodTexture} />
+      <FrontRailAssembly
+        outerHeight={props.outerHeight}
+        outerWidth={props.outerWidth}
+        passPlaqueTexture={props.passPlaqueTexture}
+        scorePlaqueTexture={props.scorePlaqueTexture}
+        southPlaqueTexture={props.southPlaqueTexture}
+        woodTexture={props.woodTexture}
+      />
       <FrameRail axis="z" length={props.outerHeight - TABLE_BORDER_WIDTH * 2} position={[-(props.outerWidth - TABLE_BORDER_WIDTH) / 2, 0, 0]} woodTexture={props.woodTexture} />
       <FrameRail axis="z" length={props.outerHeight - TABLE_BORDER_WIDTH * 2} position={[(props.outerWidth - TABLE_BORDER_WIDTH) / 2, 0, 0]} woodTexture={props.woodTexture} />
+    </group>
+  );
+}
+
+function FrontRailAssembly(props: {
+  outerHeight: number;
+  outerWidth: number;
+  passPlaqueTexture: Texture;
+  scorePlaqueTexture: Texture;
+  southPlaqueTexture: Texture;
+  woodTexture: Texture;
+}) {
+  const railZ = (props.outerHeight - TABLE_BORDER_WIDTH) / 2 - 0.14;
+  const railY = FRONT_RAIL_HEIGHT / 2;
+  const plaqueZ = railZ + FRONT_BLOCK_DEPTH * 0.12;
+
+  return (
+    <group>
+      <mesh castShadow position={[0, railY, railZ]} receiveShadow>
+        <boxGeometry args={[props.outerWidth, FRONT_RAIL_HEIGHT, FRONT_RAIL_DEPTH]} />
+        <meshStandardMaterial
+          color="#734224"
+          map={props.woodTexture}
+          metalness={0.12}
+          roughness={0.72}
+        />
+      </mesh>
+
+      <mesh castShadow position={[0, FRONT_BLOCK_HEIGHT * 0.54, plaqueZ]} receiveShadow>
+        <boxGeometry args={[FRONT_BLOCK_WIDTH, FRONT_BLOCK_HEIGHT, FRONT_BLOCK_DEPTH]} />
+        <meshStandardMaterial
+          color="#6b4125"
+          map={props.woodTexture}
+          metalness={0.12}
+          roughness={0.7}
+        />
+      </mesh>
+
+      <mesh castShadow position={[-props.outerWidth / 2 + 1.24, FRONT_BLOCK_HEIGHT * 0.5, railZ + 0.08]} receiveShadow>
+        <boxGeometry args={[0.98, 0.38, 0.34]} />
+        <meshStandardMaterial
+          color="#6b4125"
+          map={props.woodTexture}
+          metalness={0.12}
+          roughness={0.7}
+        />
+      </mesh>
+
+      <mesh castShadow position={[props.outerWidth / 2 - 0.88, FRONT_BLOCK_HEIGHT * 0.5, railZ + 0.08]} receiveShadow>
+        <boxGeometry args={[0.66, 0.38, 0.34]} />
+        <meshStandardMaterial
+          color="#6b4125"
+          map={props.woodTexture}
+          metalness={0.12}
+          roughness={0.7}
+        />
+      </mesh>
+
+      <SeatPlaque
+        height={RACK_PLAQUE_HEIGHT}
+        position={[0, FRONT_BLOCK_HEIGHT * 0.66, plaqueZ + 0.22]}
+        rotation={[0, 0, 0]}
+        texture={props.southPlaqueTexture}
+        width={RACK_PLAQUE_WIDTH}
+      />
+      <SeatPlaque
+        height={0.26}
+        position={[props.outerWidth / 2 - 0.88, FRONT_BLOCK_HEIGHT * 0.62, railZ + 0.22]}
+        rotation={[0, 0, 0]}
+        texture={props.passPlaqueTexture}
+        width={0.52}
+      />
+      <SeatPlaque
+        height={0.3}
+        position={[-props.outerWidth / 2 + 1.24, FRONT_BLOCK_HEIGHT * 0.62, railZ + 0.22]}
+        rotation={[0, 0, 0]}
+        texture={props.scorePlaqueTexture}
+        width={0.82}
+      />
     </group>
   );
 }
@@ -480,6 +596,21 @@ function buildSeatPlaqueSrc(
   <g transform="${textTransform}">
     <text x="0" y="0" text-anchor="middle" dominant-baseline="middle" font-family="Georgia, serif" font-size="${isVertical ? 64 : 78}" fill="#f0ddb1" letter-spacing="6">${label}</text>
   </g>
+</svg>
+`)}`;
+}
+
+function buildScorePlaqueSrc() {
+  const width = 380;
+  const height = 220;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}">
+  <rect x="8" y="8" width="${width - 16}" height="${height - 16}" rx="28" fill="#0f241a" stroke="#9f7c34" stroke-width="10"/>
+  <rect x="22" y="22" width="${width - 44}" height="${height - 44}" rx="20" fill="#153224" stroke="#c6a65d" stroke-opacity="0.55" stroke-width="3"/>
+  <text x="98" y="72" text-anchor="middle" font-family="Georgia, serif" font-size="42" fill="#f0ddb1" letter-spacing="4">WE</text>
+  <text x="282" y="72" text-anchor="middle" font-family="Georgia, serif" font-size="42" fill="#f0ddb1" letter-spacing="4">THEY</text>
+  <text x="98" y="156" text-anchor="middle" font-family="Georgia, serif" font-size="66" fill="#f0ddb1">0</text>
+  <text x="282" y="156" text-anchor="middle" font-family="Georgia, serif" font-size="66" fill="#f0ddb1">0</text>
 </svg>
 `)}`;
 }

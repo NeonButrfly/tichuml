@@ -819,18 +819,59 @@ function CardSprite(props: {
 
 function buildCardStyleFromProps(props: {
   anchor: Tv7CardAnchor;
+  handCount?: number;
   isSelected: boolean;
+  slotIndex?: number;
+  zone: string;
 }) {
   const layout = resolveVisibleCardLayoutForSprite(props.anchor);
-  const translateY = props.isSelected ? -18 : 0;
+  const visual = resolveCardSpriteVisualTuning(
+    props.anchor,
+    props.zone,
+    props.slotIndex,
+    props.handCount
+  );
+  const translateX = visual.translateX;
+  const translateY = visual.translateY + (props.isSelected ? -18 : 0);
   return {
     left: `${layout.centerX}px`,
     top: `${layout.centerY}px`,
-    width: `${layout.width}px`,
-    height: `${layout.height}px`,
-    transform: `translate(-50%, calc(-50% + ${translateY}px)) rotate(${layout.rotationDeg}deg)`,
-    transformOrigin: "center center"
+    width: `${visual.width}px`,
+    height: `${visual.height}px`,
+    transform: `translate(calc(-50% + ${translateX}px), calc(-50% + ${translateY}px)) rotate(${layout.rotationDeg}deg)`,
+    transformOrigin: visual.transformOrigin
   } satisfies CSSProperties;
+}
+
+function resolveCardSpriteVisualTuning(
+  anchor: Tv7CardAnchor,
+  zone: string,
+  slotIndex = 0,
+  handCount = 1
+) {
+  if (zone !== "south_hand") {
+    return {
+      width: anchor.w_px,
+      height: anchor.h_px,
+      translateX: 0,
+      translateY: 0,
+      transformOrigin: "center center"
+    } as const;
+  }
+
+  const centerIndex = (Math.max(handCount, 1) - 1) / 2;
+  const offsetFromCenter = slotIndex - centerIndex;
+  const distance = Math.abs(offsetFromCenter);
+  const width = anchor.w_px * 0.84;
+  const height = anchor.h_px * 0.84;
+
+  return {
+    width,
+    height,
+    translateX: offsetFromCenter * -18,
+    translateY: 56 - distance * 3.2,
+    transformOrigin: "center 82%"
+  } as const;
 }
 
 function PassCardSprite(props: {
