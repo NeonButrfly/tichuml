@@ -34,9 +34,9 @@ const FELT_SURFACE_SRC = `data:image/svg+xml;utf8,${encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
   <defs>
     <radialGradient id="felt" cx="50%" cy="46%" r="74%">
-      <stop offset="0%" stop-color="#456e40"/>
-      <stop offset="55%" stop-color="#31552f"/>
-      <stop offset="100%" stop-color="#1b311e"/>
+      <stop offset="0%" stop-color="#7ea06b"/>
+      <stop offset="55%" stop-color="#5d8153"/>
+      <stop offset="100%" stop-color="#38543c"/>
     </radialGradient>
     <filter id="noise">
       <feTurbulence type="fractalNoise" baseFrequency="0.92" numOctaves="2" seed="17"/>
@@ -47,14 +47,14 @@ const FELT_SURFACE_SRC = `data:image/svg+xml;utf8,${encodeURIComponent(`
     </filter>
   </defs>
   <rect width="1024" height="1024" fill="url(#felt)"/>
-  <g opacity="0.16" stroke="#9cc090" stroke-width="2.8">
+  <g opacity="0.18" stroke="#b8d4a7" stroke-width="2.8">
     <path d="M0 74c163 18 326 13 489-14 164-28 330-30 535 8" fill="none"/>
     <path d="M0 246c147-11 301-20 462-3 178 19 370 19 562-8" fill="none"/>
     <path d="M0 425c187 22 372 18 560-9 157-23 304-23 464-4" fill="none"/>
     <path d="M0 607c177-20 349-26 522-10 173 16 340 18 502 0" fill="none"/>
     <path d="M0 794c172 21 340 23 512 5 171-19 342-20 512-3" fill="none"/>
   </g>
-  <g opacity="0.07">
+  <g opacity="0.09">
     <path d="M122 0v1024M264 0v1024M401 0v1024M555 0v1024M698 0v1024M854 0v1024" stroke="#d8f0c8" stroke-width="2"/>
   </g>
   <rect width="1024" height="1024" fill="#fff" filter="url(#noise)"/>
@@ -73,13 +73,13 @@ const WOOD_GRAIN_SRC = `data:image/svg+xml;utf8,${encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#8a5230"/>
-      <stop offset="55%" stop-color="#5a321f"/>
-      <stop offset="100%" stop-color="#3f2418"/>
+      <stop offset="0%" stop-color="#a66a3d"/>
+      <stop offset="55%" stop-color="#724224"/>
+      <stop offset="100%" stop-color="#4f2e1c"/>
     </linearGradient>
   </defs>
   <rect width="512" height="512" fill="url(#bg)"/>
-  <g opacity="0.22">
+  <g opacity="0.3">
     <path d="M18 42c45 9 93 7 142 2 69-7 138-23 207-13 43 6 84 20 127 23" stroke="#d39a61" stroke-width="8" fill="none"/>
     <path d="M0 118c49 13 100 8 150-1 66-12 130-33 198-29 55 3 109 20 164 25" stroke="#3c2015" stroke-width="10" fill="none"/>
     <path d="M8 186c77 11 152-12 228-21 87-10 175 7 261 17" stroke="#b77849" stroke-width="8" fill="none"/>
@@ -87,7 +87,7 @@ const WOOD_GRAIN_SRC = `data:image/svg+xml;utf8,${encodeURIComponent(`
     <path d="M13 336c48 5 95 2 143-4 95-11 190-28 286-11 24 4 47 10 70 16" stroke="#d4975d" stroke-width="8" fill="none"/>
     <path d="M0 420c65 8 129-2 193-13 108-19 215-31 319-5" stroke="#4a281b" stroke-width="10" fill="none"/>
   </g>
-  <g opacity="0.08">
+  <g opacity="0.1">
     <rect x="0" y="0" width="512" height="512" fill="#fff7df"/>
     <path d="M84 0v512M168 0v512M252 0v512M336 0v512M420 0v512" stroke="#1f120d" stroke-width="3"/>
   </g>
@@ -194,10 +194,20 @@ export function getAltTableSculptConfig() {
 
 export function getAltTableSurfaceMaterialConfig() {
   return {
-    feltTopEmissiveIntensity: 0.58,
-    feltWellEmissiveIntensity: 0.58,
-    dragonOpacity: 0.42,
-    goldTrimOpacity: 0.84
+    feltTopEmissiveIntensity: 0.88,
+    feltWellEmissiveIntensity: 0.82,
+    dragonOpacity: 0.68,
+    goldTrimOpacity: 0.9
+  } as const;
+}
+
+export function getAltTableLightingConfig() {
+  return {
+    ambientIntensity: 1.82,
+    hemisphereIntensity: 1.14,
+    keyLightIntensity: 2.34,
+    fillLightIntensity: 1.16,
+    pointLightIntensity: 16.2
   } as const;
 }
 
@@ -298,6 +308,7 @@ function AltTableWorld(props: {
   cards: HiddenHandCard[];
   backSrc: string;
 }) {
+  const lightingConfig = getAltTableLightingConfig();
   const hiddenBackSrc = useMemo(() => ALT_HIDDEN_CARD_BACK_SRC || props.backSrc, [props.backSrc]);
   const [backTexture, dragonTexture, woodTexture, feltTexture, northPlaqueTexture, southPlaqueTexture, eastPlaqueTexture, westPlaqueTexture, passPlaqueTexture, scorePlaqueTexture] = useLoader(TextureLoader, [
     hiddenBackSrc,
@@ -365,20 +376,20 @@ function AltTableWorld(props: {
 
   return (
     <>
-      <ambientLight intensity={1.58} />
+      <ambientLight intensity={lightingConfig.ambientIntensity} />
       <hemisphereLight
-        args={["#f7eed2", "#132016", 1.05]}
+        args={["#f7eed2", "#17301e", lightingConfig.hemisphereIntensity]}
       />
       <directionalLight
         castShadow
-        intensity={2.08}
+        intensity={lightingConfig.keyLightIntensity}
         position={[3.2, 8.8, 5.1]}
         shadow-bias={-0.0002}
         shadow-mapSize-height={2048}
         shadow-mapSize-width={2048}
       />
-      <directionalLight intensity={1.02} position={[-3.8, 6.2, -4.9]} />
-      <pointLight intensity={13.5} position={[0, 4.1, 1.8]} distance={16} decay={2} />
+      <directionalLight intensity={lightingConfig.fillLightIntensity} position={[-3.8, 6.2, -4.9]} />
+      <pointLight intensity={lightingConfig.pointLightIntensity} position={[0, 4.2, 1.7]} distance={16} decay={2} />
 
       <group>
         <TableBody
@@ -457,47 +468,47 @@ function TableBody(props: {
       <mesh position={[0, TABLE_BASE_THICKNESS / 2 - TABLE_UPPER_DECK_HEIGHT / 2 + 0.01, 0]} receiveShadow>
         <boxGeometry args={[topDeckWidth, TABLE_UPPER_DECK_HEIGHT, topDeckHeight]} />
         <meshStandardMaterial
-          color="#875332"
+          color="#9a6137"
           map={props.woodTexture}
           metalness={0.12}
-          roughness={0.68}
+          roughness={0.62}
         />
       </mesh>
 
       <mesh castShadow position={[0, shoulderY, -(shoulderInnerHeight + shoulderDepth) / 2]} receiveShadow>
         <boxGeometry args={[shoulderOuterWidth, reliefConfig.topShoulderHeight, shoulderDepth]} />
         <meshStandardMaterial
-          color="#97603b"
+          color="#ad7448"
           map={props.woodTexture}
           metalness={0.14}
-          roughness={0.62}
+          roughness={0.56}
         />
       </mesh>
       <mesh castShadow position={[0, shoulderY, (shoulderInnerHeight + shoulderDepth) / 2]} receiveShadow>
         <boxGeometry args={[shoulderOuterWidth, reliefConfig.topShoulderHeight, shoulderDepth]} />
         <meshStandardMaterial
-          color="#97603b"
+          color="#ad7448"
           map={props.woodTexture}
           metalness={0.14}
-          roughness={0.62}
+          roughness={0.56}
         />
       </mesh>
       <mesh castShadow position={[-(shoulderInnerWidth + shoulderWidth) / 2, shoulderY, 0]} receiveShadow>
         <boxGeometry args={[shoulderWidth, reliefConfig.topShoulderHeight, shoulderInnerHeight]} />
         <meshStandardMaterial
-          color="#97603b"
+          color="#ad7448"
           map={props.woodTexture}
           metalness={0.14}
-          roughness={0.62}
+          roughness={0.56}
         />
       </mesh>
       <mesh castShadow position={[(shoulderInnerWidth + shoulderWidth) / 2, shoulderY, 0]} receiveShadow>
         <boxGeometry args={[shoulderWidth, reliefConfig.topShoulderHeight, shoulderInnerHeight]} />
         <meshStandardMaterial
-          color="#97603b"
+          color="#ad7448"
           map={props.woodTexture}
           metalness={0.14}
-          roughness={0.62}
+          roughness={0.56}
         />
       </mesh>
 
@@ -530,11 +541,11 @@ function TableBody(props: {
           ]}
         />
         <meshStandardMaterial
-          color="#5a7c4c"
+          color="#7aa169"
           map={props.feltTexture}
           metalness={0.03}
-          roughness={0.92}
-          emissive="#32592d"
+          roughness={0.88}
+          emissive="#4e7645"
           emissiveIntensity={surfaceConfig.feltWellEmissiveIntensity}
         />
       </mesh>
@@ -542,37 +553,37 @@ function TableBody(props: {
       <mesh position={[0, innerRailY, -(props.feltHeight + TABLE_INNER_RAIL_WIDTH) / 2]} receiveShadow>
         <boxGeometry args={[innerRailXLength, TABLE_INNER_RAIL_HEIGHT, TABLE_INNER_RAIL_WIDTH]} />
         <meshStandardMaterial
-          color="#7f5130"
+          color="#9d683d"
           map={props.woodTexture}
           metalness={0.1}
-          roughness={0.62}
+          roughness={0.54}
         />
       </mesh>
       <mesh position={[0, innerRailY, (props.feltHeight + TABLE_INNER_RAIL_WIDTH) / 2]} receiveShadow>
         <boxGeometry args={[innerRailXLength, TABLE_INNER_RAIL_HEIGHT, TABLE_INNER_RAIL_WIDTH]} />
         <meshStandardMaterial
-          color="#7f5130"
+          color="#9d683d"
           map={props.woodTexture}
           metalness={0.1}
-          roughness={0.62}
+          roughness={0.54}
         />
       </mesh>
       <mesh position={[-(props.feltWidth + TABLE_INNER_RAIL_WIDTH) / 2, innerRailY, 0]} receiveShadow>
         <boxGeometry args={[TABLE_INNER_RAIL_WIDTH, TABLE_INNER_RAIL_HEIGHT, innerRailZLength]} />
         <meshStandardMaterial
-          color="#7f5130"
+          color="#9d683d"
           map={props.woodTexture}
           metalness={0.1}
-          roughness={0.62}
+          roughness={0.54}
         />
       </mesh>
       <mesh position={[(props.feltWidth + TABLE_INNER_RAIL_WIDTH) / 2, innerRailY, 0]} receiveShadow>
         <boxGeometry args={[TABLE_INNER_RAIL_WIDTH, TABLE_INNER_RAIL_HEIGHT, innerRailZLength]} />
         <meshStandardMaterial
-          color="#7f5130"
+          color="#9d683d"
           map={props.woodTexture}
           metalness={0.1}
-          roughness={0.62}
+          roughness={0.54}
         />
       </mesh>
 
@@ -596,10 +607,10 @@ function TableBody(props: {
       <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, FELT_Y + 0.002, 0]}>
         <planeGeometry args={[props.feltWidth - 0.1, props.feltHeight - 0.1]} />
         <meshBasicMaterial
-          color="#4f7c47"
+          color="#628f58"
           map={props.feltTexture}
           transparent
-          opacity={0.96}
+          opacity={0.98}
         />
       </mesh>
 
@@ -610,7 +621,7 @@ function TableBody(props: {
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FELT_Y + 0.003, 0]}>
         <planeGeometry args={[props.feltWidth * 0.68, props.feltHeight * 0.7]} />
-        <meshBasicMaterial color="#d5e7aa" transparent opacity={0.09} />
+        <meshBasicMaterial color="#edf5be" transparent opacity={0.18} />
       </mesh>
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FELT_Y + 0.006, 0]}>
