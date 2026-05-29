@@ -6,21 +6,21 @@ import {
 } from "../../apps/web/src/alt-table-3d/AltTableScene";
 
 describe("ALT reference center config", () => {
-  it("keeps a scene-owned reference felt layer active so the live ALT scene can inherit the committed green felt and dragon read", () => {
+  it("keeps a subtle scene-owned reference dragon lift active without washing the felt center back into a flat green patch", () => {
     const config = getAltTableReferenceCenterConfig();
 
-    expect(config.opacity).toBeGreaterThan(0.1);
+    expect(config.opacity).toBeGreaterThan(0.15);
     expect(config.opacity).toBeLessThan(0.3);
-    expect(config.brightness).toBeGreaterThan(0.85);
+    expect(config.brightness).toBeGreaterThan(1);
     expect(config.yOffset).toBeGreaterThan(0.09);
   });
 
-  it("limits the center reference mask to the dragon/felt field so authored cards and plaques do not bleed back into the live scene", () => {
+  it("limits the center reference mask to the dragon zone so authored cards and plaques do not bleed back into the live scene", () => {
     const config = getAltTableReferenceCenterMaskConfig();
 
-    expect(config.dragonField.x).toBeGreaterThan(250);
-    expect(config.dragonField.y).toBeGreaterThan(100);
-    expect(config.dragonField.width).toBeLessThan(1000);
-    expect(config.dragonField.height).toBeLessThan(560);
+    expect(config.dragonField.cx).toBeGreaterThan(650);
+    expect(config.dragonField.cy).toBeGreaterThan(300);
+    expect(config.dragonField.rx).toBeLessThan(320);
+    expect(config.dragonField.ry).toBeLessThan(260);
   });
 });

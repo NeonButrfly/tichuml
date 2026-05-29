@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Canvas, useLoader } from "@react-three/fiber";
 import {
+  ClampToEdgeWrapping,
   LinearFilter,
   RepeatWrapping,
   SRGBColorSpace,
@@ -71,10 +72,13 @@ const FELT_SURFACE_SRC = `data:image/svg+xml;utf8,${encodeURIComponent(`
 `)}`;
 const DRAGON_MOTIF_SRC = `data:image/svg+xml;utf8,${encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <g fill="none" stroke="#b89442" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M534 116c164 18 286 150 286 309 0 124-73 229-187 278-36 16-50 57-32 94 17 35 58 57 98 51-56 51-137 80-228 80-209 0-378-135-378-302 0-98 59-182 151-225 31-15 46-51 37-84-12-44 5-93 43-121 28-21 68-31 103-21-24 18-39 49-37 82 2 44 36 76 80 74 60-3 107-64 93-123-6-27-21-51-42-70z" stroke-width="36" opacity="0.36"/>
-    <path d="M453 304c43-61 122-74 183-31 51 36 71 99 48 151-22 51-80 84-135 77 23 39 18 89-14 124-42 47-114 53-164 13-48-38-60-109-28-162 20-33 53-55 89-62-20-34-14-77 21-110z" stroke-width="26" opacity="0.3"/>
-    <path d="M612 328l110-58M338 634l-118 62M671 566c-14 37-54 62-95 60M318 459c22-22 52-33 83-31" stroke-width="20" opacity="0.24"/>
+  <rect width="1024" height="1024" fill="#000000"/>
+  <g fill="none" stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M560 242c114 16 200 101 200 206 0 80-48 150-124 184-44 20-62 67-39 106 15 27 43 47 75 54-44 27-98 42-157 42-166 0-302-117-320-268 47 38 111 60 179 60 141 0 255-92 255-205 0-43-17-83-47-116-14-16-19-34-14-54 3-11 6-24 7-39 6 11 19 22 39 30 22 10 43 13 63 10-17 -5 -29 -14 -36 -27 -13 -27 -10 -54 8 -83 36 40 58 82 65 126 7 39 -1 73 -25 103-9 11 -14 20 -14 27 0 9 8 18 25 26z" stroke-width="40" opacity="0.92"/>
+    <path d="M417 374c-77 45-109 132-75 201 24 48 72 82 128 93-35 28-78 43-126 43-106 0-192-76-192-170 0-96 83-176 191-186 28-3 53-9 74-18z" stroke-width="26" opacity="0.56"/>
+    <path d="M567 338c46 18 77 49 92 91 16 45 8 88-25 131-24 31-55 51-93 61 16-29 22-61 16-96-6-40-26-77-59-110 28-17 51-43 69-77z" stroke-width="22" opacity="0.44"/>
+    <path d="M624 286l66-22M344 612l-82 39M626 624c-33 28-70 43-113 45M449 305c28-11 56-27 84-48" stroke-width="14" opacity="0.42"/>
+    <circle cx="675" cy="377" r="10" fill="#ffffff" opacity="0.72" stroke="none"/>
   </g>
 </svg>
 `)}`;
@@ -106,7 +110,7 @@ const WORLD_PLATE_ALPHA_SRC = buildWorldPlateAlphaSrc({
   insetX: 148,
   insetY: 124
 });
-const REFERENCE_CENTER_ALPHA_SRC = buildReferenceCenterAlphaSrc();
+const REFERENCE_DRAGON_ALPHA_SRC = buildReferenceDragonAlphaSrc();
 const REFERENCE_HARDWARE_ALPHA_SRC = buildReferenceHardwareAlphaSrc();
 const ALT_HIDDEN_CARD_BACK_SRC = `data:image/svg+xml;utf8,${encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 588">
@@ -212,7 +216,7 @@ export function getAltTableSurfaceMaterialConfig() {
   return {
     feltTopEmissiveIntensity: 0.72,
     feltWellEmissiveIntensity: 0.78,
-    dragonOpacity: 0.96,
+    dragonOpacity: 1,
     feltHighlightOpacity: 0.05,
     feltInnerHighlightOpacity: 0.035,
     feltFieldHighlightOpacity: 0.028,
@@ -259,15 +263,26 @@ export function getAltTableReferenceHardwareConfig() {
 
 export function getAltTableReferenceCenterConfig() {
   return {
-    opacity: 0.18,
-    brightness: 0.92,
+    opacity: 0.2,
+    brightness: 1.04,
     yOffset: 0.099
   } as const;
 }
 
 export function getAltTableReferenceCenterMaskConfig() {
   return {
-    dragonField: { x: 334, y: 132, width: 868, height: 510, radius: 96 }
+    dragonField: { cx: 772, cy: 392, rx: 268, ry: 218 }
+  } as const;
+}
+
+export function getAltTableReferenceDragonCropConfig() {
+  return {
+    sourceX: 430,
+    sourceY: 194,
+    sourceWidth: 650,
+    sourceHeight: 470,
+    planeWidthFactor: 0.42,
+    planeHeightFactor: 0.5
   } as const;
 }
 
@@ -373,7 +388,7 @@ function AltTableWorld(props: {
 }) {
   const lightingConfig = getAltTableLightingConfig();
   const hiddenBackSrc = useMemo(() => ALT_HIDDEN_CARD_BACK_SRC || props.backSrc, [props.backSrc]);
-  const [backTexture, dragonTexture, woodTexture, feltTexture, plateTexture, plateAlphaTexture, referenceTexture, referenceCenterTexture, referenceMaskTexture, northPlaqueTexture, southPlaqueTexture, eastPlaqueTexture, westPlaqueTexture, passPlaqueTexture, scorePlaqueTexture] = useLoader(TextureLoader, [
+  const [backTexture, dragonTexture, woodTexture, feltTexture, plateTexture, plateAlphaTexture, referenceTexture, referenceDragonAlphaTexture, referenceMaskTexture, northPlaqueTexture, southPlaqueTexture, eastPlaqueTexture, westPlaqueTexture, passPlaqueTexture, scorePlaqueTexture] = useLoader(TextureLoader, [
     hiddenBackSrc,
     DRAGON_MOTIF_SRC,
     WOOD_GRAIN_SRC,
@@ -381,7 +396,7 @@ function AltTableWorld(props: {
     TV7_TABLE_PLATE_SRC,
     WORLD_PLATE_ALPHA_SRC,
     TV7_TABLE_REFERENCE_SRC,
-    REFERENCE_CENTER_ALPHA_SRC,
+    REFERENCE_DRAGON_ALPHA_SRC,
     REFERENCE_HARDWARE_ALPHA_SRC,
     NORTH_PLAQUE_SRC,
     SOUTH_PLAQUE_SRC,
@@ -423,9 +438,9 @@ function AltTableWorld(props: {
   referenceTexture.minFilter = LinearFilter;
   referenceTexture.magFilter = LinearFilter;
   referenceTexture.needsUpdate = true;
-  referenceCenterTexture.minFilter = LinearFilter;
-  referenceCenterTexture.magFilter = LinearFilter;
-  referenceCenterTexture.needsUpdate = true;
+  referenceDragonAlphaTexture.minFilter = LinearFilter;
+  referenceDragonAlphaTexture.magFilter = LinearFilter;
+  referenceDragonAlphaTexture.needsUpdate = true;
   referenceMaskTexture.minFilter = LinearFilter;
   referenceMaskTexture.magFilter = LinearFilter;
   referenceMaskTexture.needsUpdate = true;
@@ -487,7 +502,7 @@ function AltTableWorld(props: {
           passPlaqueTexture={passPlaqueTexture}
           plateAlphaTexture={plateAlphaTexture}
           plateTexture={plateTexture}
-          referenceCenterTexture={referenceCenterTexture}
+          referenceDragonAlphaTexture={referenceDragonAlphaTexture}
           referenceMaskTexture={referenceMaskTexture}
           referenceTexture={referenceTexture}
           scorePlaqueTexture={scorePlaqueTexture}
@@ -514,7 +529,7 @@ function TableBody(props: {
   passPlaqueTexture: Texture;
   plateAlphaTexture: Texture;
   plateTexture: Texture;
-  referenceCenterTexture: Texture;
+  referenceDragonAlphaTexture: Texture;
   referenceMaskTexture: Texture;
   referenceTexture: Texture;
   scorePlaqueTexture: Texture;
@@ -522,11 +537,30 @@ function TableBody(props: {
   woodTexture: Texture;
 }) {
   const referenceCenterConfig = getAltTableReferenceCenterConfig();
+  const referenceDragonCropConfig = getAltTableReferenceDragonCropConfig();
   const surfaceConfig = getAltTableSurfaceMaterialConfig();
   const reliefConfig = getAltTableReliefConfig();
   const referenceHardwareConfig = getAltTableReferenceHardwareConfig();
   const worldPlateConfig = getAltTableWorldPlateConfig();
   const rackConfig = getAltTableRackMaterialConfig();
+  const referenceDragonTexture = useMemo(() => {
+    const texture = props.referenceTexture.clone();
+    texture.wrapS = ClampToEdgeWrapping;
+    texture.wrapT = ClampToEdgeWrapping;
+    texture.repeat.set(
+      referenceDragonCropConfig.sourceWidth / 1536,
+      referenceDragonCropConfig.sourceHeight / 1024
+    );
+    texture.offset.set(
+      referenceDragonCropConfig.sourceX / 1536,
+      1 -
+        (referenceDragonCropConfig.sourceY +
+          referenceDragonCropConfig.sourceHeight) /
+          1024
+    );
+    texture.needsUpdate = true;
+    return texture;
+  }, [props.referenceTexture, referenceDragonCropConfig]);
   const innerRailXLength = props.feltWidth + 0.22;
   const innerRailZLength = props.feltHeight + 0.22;
   const innerRailY = FELT_Y + TABLE_INNER_RAIL_HEIGHT / 2 - 0.004;
@@ -618,10 +652,15 @@ function TableBody(props: {
       </mesh>
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, referenceCenterConfig.yOffset, 0]} receiveShadow>
-        <planeGeometry args={[props.outerWidth, props.outerHeight]} />
+        <planeGeometry
+          args={[
+            props.feltWidth * referenceDragonCropConfig.planeWidthFactor,
+            props.feltHeight * referenceDragonCropConfig.planeHeightFactor
+          ]}
+        />
         <meshBasicMaterial
-          alphaMap={props.referenceCenterTexture}
-          map={props.referenceTexture}
+          alphaMap={props.referenceDragonAlphaTexture}
+          map={referenceDragonTexture}
           transparent
           opacity={referenceCenterConfig.opacity}
           toneMapped={false}
@@ -795,13 +834,30 @@ function TableBody(props: {
         <meshBasicMaterial color="#4f6838" transparent opacity={surfaceConfig.feltFieldHighlightOpacity} />
       </mesh>
 
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FELT_Y + 0.0055, 0]}>
+        <circleGeometry args={[Math.min(props.feltWidth, props.feltHeight) * 0.24, 96]} />
+        <meshBasicMaterial color="#876726" transparent opacity={0.09} toneMapped={false} />
+      </mesh>
+
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FELT_Y + 0.0058, 0]}>
+        <ringGeometry
+          args={[
+            Math.min(props.feltWidth, props.feltHeight) * 0.205,
+            Math.min(props.feltWidth, props.feltHeight) * 0.238,
+            96
+          ]}
+        />
+        <meshBasicMaterial color="#c29b46" transparent opacity={0.24} toneMapped={false} />
+      </mesh>
+
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FELT_Y + 0.006, 0]}>
-        <planeGeometry args={[props.feltWidth * 0.58, props.feltHeight * 0.64]} />
+        <planeGeometry args={[props.feltWidth * 0.82, props.feltHeight * 0.88]} />
         <meshBasicMaterial
-          map={props.dragonTexture}
-          color="#d3af56"
+          alphaMap={props.dragonTexture}
+          color="#d8b464"
           transparent
           opacity={surfaceConfig.dragonOpacity}
+          toneMapped={false}
         />
       </mesh>
 
@@ -1419,20 +1475,27 @@ function buildWorldPlateAlphaSrc(args: {
 `)}`;
 }
 
-function buildReferenceCenterAlphaSrc() {
+function buildReferenceDragonAlphaSrc() {
   const config = getAltTableReferenceCenterMaskConfig();
   const dragonField = config.dragonField;
 
   return `data:image/svg+xml;utf8,${encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1536 1024">
+  <defs>
+    <radialGradient id="dragonMask" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="58%" stop-color="#f0f0f0"/>
+      <stop offset="82%" stop-color="#7a7a7a"/>
+      <stop offset="100%" stop-color="#000000"/>
+    </radialGradient>
+  </defs>
   <rect width="1536" height="1024" fill="#000000"/>
-  <rect
-    x="${dragonField.x}"
-    y="${dragonField.y}"
-    width="${dragonField.width}"
-    height="${dragonField.height}"
-    rx="${dragonField.radius}"
-    fill="#ffffff"
+  <ellipse
+    cx="${dragonField.cx}"
+    cy="${dragonField.cy}"
+    rx="${dragonField.rx}"
+    ry="${dragonField.ry}"
+    fill="url(#dragonMask)"
   />
 </svg>
 `)}`;
