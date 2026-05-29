@@ -162,8 +162,8 @@ export function getAltTableSculptConfig() {
 
 export function getAltTableCameraConfig() {
   return {
-    position: [0, 6.1, 5.45] as const,
-    fov: 36,
+    position: [0, 6.35, 5.8] as const,
+    fov: 38,
     near: 0.1,
     far: 64
   } as const;
@@ -956,16 +956,16 @@ export function getRackShellBasePosition(args: {
   if (args.seat === "north") {
     return [
       (args.minX + args.maxX) / 2,
-      0.085,
-      args.minZ - args.sampleSize.width * 0.28
+      0.1,
+      args.minZ - args.sampleSize.width * 0.14
     ] as const;
   }
 
   return [
     args.seat === "east"
-      ? args.maxX + args.sampleSize.width * 0.28
-      : args.minX - args.sampleSize.width * 0.28,
-    0.085,
+      ? args.maxX + args.sampleSize.width * 0.16
+      : args.minX - args.sampleSize.width * 0.16,
+    0.1,
     (args.minZ + args.maxZ) / 2
   ] as const;
 }

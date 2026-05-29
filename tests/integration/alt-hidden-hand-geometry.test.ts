@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   designToWorld,
+  getHiddenHandPresenceConfig,
   getHiddenCardWorldSize,
   resolveHiddenHandPlacement,
   type HiddenHandCard
@@ -57,16 +58,25 @@ function buildHiddenCard(
 }
 
 describe("ALT hidden-hand geometry", () => {
+  it("keeps hidden cards at a readable physical size with only shallow rack burial", () => {
+    const config = getHiddenHandPresenceConfig();
+
+    expect(config.cardWidth).toBeGreaterThan(0.44);
+    expect(config.cardHeight).toBeGreaterThan(0.62);
+    expect(config.rackBuryDepth).toBeLessThan(0.035);
+    expect(config.rackFloorY).toBeGreaterThan(0.09);
+  });
+
   it("keeps north cards upright but exposes more back surface toward the camera", () => {
     const card = buildHiddenCard("north", 6);
     const base = designToWorld(card.anchor.center_px.x, card.anchor.center_px.y);
     const placement = resolveHiddenHandPlacement(card);
 
-    expect(placement.rotation[0]).toBeGreaterThan(0.05);
+    expect(placement.rotation[0]).toBeGreaterThan(0.14);
     expect(placement.position[2]).toBeGreaterThan(base[2]);
   });
 
-  it("keeps east and west cards less buried and pulls them inward into the trays", () => {
+  it("keeps east and west cards less buried, more camera-open, and pulled inward into the trays", () => {
     const eastCard = buildHiddenCard("east", 6);
     const westCard = buildHiddenCard("west", 6);
     const eastBase = designToWorld(eastCard.anchor.center_px.x, eastCard.anchor.center_px.y);
@@ -76,7 +86,9 @@ describe("ALT hidden-hand geometry", () => {
 
     expect(eastPlacement.position[0]).toBeLessThan(eastBase[0]);
     expect(westPlacement.position[0]).toBeGreaterThan(westBase[0]);
-    expect(eastPlacement.rotation[1]).toBeLessThan(-0.92);
-    expect(westPlacement.rotation[1]).toBeGreaterThan(0.92);
+    expect(eastPlacement.rotation[1]).toBeLessThan(-0.68);
+    expect(eastPlacement.rotation[1]).toBeGreaterThan(-0.82);
+    expect(westPlacement.rotation[1]).toBeGreaterThan(0.68);
+    expect(westPlacement.rotation[1]).toBeLessThan(0.82);
   });
 });

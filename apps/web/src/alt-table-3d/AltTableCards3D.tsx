@@ -12,17 +12,28 @@ export type HiddenHandCard = {
   zone: string;
 };
 
-const CARD_WIDTH = 0.42;
-const CARD_HEIGHT = 0.588;
+const CARD_WIDTH = 0.46;
+const CARD_HEIGHT = 0.644;
 const CARD_ASPECT = 2.5 / 3.5;
 const CARD_BACK_INSET = 0.02;
 const CARD_FRONT_INSET = 0.028;
 const CARD_FRAME = 0.012;
 const CARD_THICKNESS = 0.014;
-const RACK_FLOOR_Y = 0.082;
-const RACK_BURY_DEPTH = 0.044;
+const RACK_FLOOR_Y = 0.096;
+const RACK_BURY_DEPTH = 0.03;
 const TABLE_WORLD_W = 11.4;
 const TABLE_WORLD_H = 7.6;
+
+export function getHiddenHandPresenceConfig() {
+  return {
+    cardWidth: CARD_WIDTH,
+    cardHeight: CARD_HEIGHT,
+    rackFloorY: RACK_FLOOR_Y,
+    rackBuryDepth: RACK_BURY_DEPTH,
+    northTilt: 0.18,
+    sideYaw: 0.74
+  } as const;
+}
 
 export function AltTableCards3D(props: {
   cards: HiddenHandCard[];
@@ -65,9 +76,9 @@ function HiddenHandCardMesh(props: {
         <meshStandardMaterial
           map={props.texture}
           emissive="#152518"
-          emissiveIntensity={0.46}
+          emissiveIntensity={0.62}
           metalness={0.08}
-          roughness={0.38}
+          roughness={0.32}
         />
       </mesh>
       <mesh castShadow position={[0, 0, frontZ]} receiveShadow renderOrder={2} rotation={[0, Math.PI, 0]}>
@@ -92,6 +103,9 @@ export function resolveHiddenHandPlacement(card: HiddenHandCard) {
   const seatOffset = card.slotIndex - (card.handCount - 1) / 2;
   const seatCurve = Math.abs(seatOffset);
   const seatedY = RACK_FLOOR_Y + size.height / 2 - RACK_BURY_DEPTH + seatCurve * 0.0012;
+  const northTilt = 0.18;
+  const sideTilt = 0.12;
+  const sideYaw = 0.74;
 
   switch (card.seat) {
     case "north":
@@ -99,27 +113,27 @@ export function resolveHiddenHandPlacement(card: HiddenHandCard) {
         position: [
           base[0],
           seatedY,
-          base[2] + size.width * (0.14 - Math.min(seatCurve * 0.002, 0.008))
+          base[2] + size.width * (0.3 - Math.min(seatCurve * 0.008, 0.04))
         ] as const,
-        rotation: [0.084 - Math.min(seatCurve * 0.003, 0.022), seatOffset * 0.018, 0] as const
+        rotation: [northTilt - Math.min(seatCurve * 0.006, 0.04), seatOffset * 0.024, 0] as const
       };
     case "east":
       return {
         position: [
-          base[0] - size.width * (0.12 - Math.min(seatCurve * 0.0015, 0.007)),
+          base[0] - size.width * (0.28 - Math.min(seatCurve * 0.006, 0.03)),
           seatedY,
-          base[2] + seatOffset * 0.018
+          base[2] + seatOffset * 0.026
         ] as const,
-        rotation: [0.056 - Math.min(seatCurve * 0.002, 0.016), -0.98 - seatOffset * 0.012, 0] as const
+        rotation: [sideTilt - Math.min(seatCurve * 0.004, 0.03), -sideYaw - seatOffset * 0.01, 0] as const
       };
     case "west":
       return {
         position: [
-          base[0] + size.width * (0.12 - Math.min(seatCurve * 0.0015, 0.007)),
+          base[0] + size.width * (0.28 - Math.min(seatCurve * 0.006, 0.03)),
           seatedY,
-          base[2] + seatOffset * 0.018
+          base[2] + seatOffset * 0.026
         ] as const,
-        rotation: [0.056 - Math.min(seatCurve * 0.002, 0.016), 0.98 - seatOffset * 0.012, 0] as const
+        rotation: [sideTilt - Math.min(seatCurve * 0.004, 0.03), sideYaw - seatOffset * 0.01, 0] as const
       };
   }
 }
