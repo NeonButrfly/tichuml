@@ -119,6 +119,11 @@ const RACK_CHEEK_DEPTH = 0.24;
 const RACK_CAP_HEIGHT = 0.1;
 const RACK_CAP_DEPTH = 0.18;
 const RACK_SHOULDER_BLOCK = 0.34;
+const RACK_FOOT_WIDTH = 0.42;
+const RACK_FOOT_HEIGHT = 0.16;
+const RACK_FOOT_DEPTH = 0.26;
+const RACK_PEDESTAL_WIDTH = 0.88;
+const RACK_PEDESTAL_DEPTH = 0.34;
 const FRONT_RAIL_HEIGHT = 0.24;
 const FRONT_RAIL_DEPTH = 0.34;
 const FRONT_RAIL_INSET = 0.18;
@@ -536,6 +541,18 @@ function RackShell(props: {
           <boxGeometry args={[width, RACK_BASE_HEIGHT, depth]} />
           {commonMaterial}
         </mesh>
+        <mesh castShadow receiveShadow position={[-width * 0.34, -RACK_FOOT_HEIGHT * 0.24, depth * 0.18]}>
+          <boxGeometry args={[RACK_FOOT_WIDTH, RACK_FOOT_HEIGHT, RACK_FOOT_DEPTH]} />
+          {commonMaterial}
+        </mesh>
+        <mesh castShadow receiveShadow position={[0, -RACK_FOOT_HEIGHT * 0.22, depth * 0.22]}>
+          <boxGeometry args={[RACK_PEDESTAL_WIDTH, RACK_FOOT_HEIGHT, RACK_PEDESTAL_DEPTH]} />
+          {commonMaterial}
+        </mesh>
+        <mesh castShadow receiveShadow position={[width * 0.34, -RACK_FOOT_HEIGHT * 0.24, depth * 0.18]}>
+          <boxGeometry args={[RACK_FOOT_WIDTH, RACK_FOOT_HEIGHT, RACK_FOOT_DEPTH]} />
+          {commonMaterial}
+        </mesh>
         <mesh castShadow receiveShadow position={[0, RACK_SIDE_HEIGHT * 0.5, -depth * 0.22]}>
           <boxGeometry args={[width - 0.1, RACK_SIDE_HEIGHT, RACK_SIDE_THICKNESS]} />
           {commonMaterial}
@@ -635,6 +652,18 @@ function RackShell(props: {
     <group position={[centerX, 0.085, centerZ]}>
       <mesh castShadow receiveShadow>
         <boxGeometry args={[depth, RACK_BASE_HEIGHT, height]} />
+        {commonMaterial}
+      </mesh>
+      <mesh castShadow receiveShadow position={[-sideDir * depth * 0.14, -RACK_FOOT_HEIGHT * 0.24, -height * 0.32]}>
+        <boxGeometry args={[RACK_FOOT_DEPTH, RACK_FOOT_HEIGHT, RACK_FOOT_WIDTH]} />
+        {commonMaterial}
+      </mesh>
+      <mesh castShadow receiveShadow position={[-sideDir * depth * 0.12, -RACK_FOOT_HEIGHT * 0.22, 0]}>
+        <boxGeometry args={[RACK_PEDESTAL_DEPTH, RACK_FOOT_HEIGHT, RACK_PEDESTAL_WIDTH]} />
+        {commonMaterial}
+      </mesh>
+      <mesh castShadow receiveShadow position={[-sideDir * depth * 0.14, -RACK_FOOT_HEIGHT * 0.24, height * 0.32]}>
+        <boxGeometry args={[RACK_FOOT_DEPTH, RACK_FOOT_HEIGHT, RACK_FOOT_WIDTH]} />
         {commonMaterial}
       </mesh>
       <mesh castShadow receiveShadow position={[sideDir * depth * 0.22, RACK_SIDE_HEIGHT * 0.5, 0]}>
