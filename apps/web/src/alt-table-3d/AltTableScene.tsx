@@ -407,6 +407,14 @@ export function getAltRackLinerConfig() {
   } as const;
 }
 
+export function getAltRackInteriorFinishConfig() {
+  return {
+    backPanelOpacity: 0.24,
+    backPanelGlowOpacity: 0.14,
+    sideWallEdgeOpacity: 0.22
+  } as const;
+}
+
 export function getAltTableInsetConfig() {
   return {
     frameWidth: TABLE_FRAME_WIDTH,
@@ -1321,6 +1329,7 @@ function RackShell(props: {
   });
   const slotDividerConfig = getAltRackSlotDividerConfig();
   const linerConfig = getAltRackLinerConfig();
+  const interiorFinishConfig = getAltRackInteriorFinishConfig();
   const seatCenters = seatCards.map((card) =>
     designToWorld(card.anchor.center_px.x, card.anchor.center_px.y)
   );
@@ -1426,6 +1435,22 @@ function RackShell(props: {
         <mesh castShadow receiveShadow position={[0, RACK_REAR_SPINE_HEIGHT * 0.5, -depth * 0.4]}>
           <boxGeometry args={[width * 0.74, RACK_REAR_SPINE_HEIGHT, depth * 0.22]} />
           {commonMaterial}
+        </mesh>
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, RACK_SLOT_DIVIDER_HEIGHT * 0.84, -depth * 0.18]}>
+          <planeGeometry args={[width - 0.34, RACK_SIDE_HEIGHT * 0.36]} />
+          <meshBasicMaterial color="#2f4f34" transparent opacity={interiorFinishConfig.backPanelOpacity} toneMapped={false} />
+        </mesh>
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, RACK_SLOT_DIVIDER_HEIGHT * 0.86, -depth * 0.12]}>
+          <planeGeometry args={[width - 0.46, RACK_SIDE_HEIGHT * 0.12]} />
+          <meshBasicMaterial color="#8eaf73" transparent opacity={interiorFinishConfig.backPanelGlowOpacity} toneMapped={false} />
+        </mesh>
+        <mesh rotation={[-Math.PI / 2, 0, Math.PI / 2]} position={[-width / 2 + 0.18, RACK_SLOT_DIVIDER_HEIGHT * 0.86, -depth * 0.17]}>
+          <planeGeometry args={[RACK_SIDE_HEIGHT * 0.28, RACK_TRIM_WIDTH * 0.68]} />
+          <meshBasicMaterial color="#d7b05f" transparent opacity={interiorFinishConfig.sideWallEdgeOpacity} toneMapped={false} />
+        </mesh>
+        <mesh rotation={[-Math.PI / 2, 0, Math.PI / 2]} position={[width / 2 - 0.18, RACK_SLOT_DIVIDER_HEIGHT * 0.86, -depth * 0.17]}>
+          <planeGeometry args={[RACK_SIDE_HEIGHT * 0.28, RACK_TRIM_WIDTH * 0.68]} />
+          <meshBasicMaterial color="#d7b05f" transparent opacity={interiorFinishConfig.sideWallEdgeOpacity} toneMapped={false} />
         </mesh>
         <mesh castShadow receiveShadow position={[-width / 2 + RACK_END_BLOCK / 2, RACK_SIDE_HEIGHT * 0.34, -depth * 0.04]}>
           <boxGeometry args={[RACK_END_BLOCK, RACK_SIDE_HEIGHT * 0.72, depth * 0.76]} />
@@ -1628,6 +1653,22 @@ function RackShell(props: {
       <mesh castShadow receiveShadow position={[sideDir * depth * 0.34, RACK_REAR_SPINE_HEIGHT * 0.5, 0]}>
         <boxGeometry args={[depth * 0.22, RACK_REAR_SPINE_HEIGHT, height * 0.74]} />
         {commonMaterial}
+      </mesh>
+      <mesh rotation={[0, sideDir * Math.PI / 2, 0]} position={[sideDir * depth * 0.14, RACK_SLOT_DIVIDER_HEIGHT * 0.84, 0]}>
+        <planeGeometry args={[height - 0.34, RACK_SIDE_HEIGHT * 0.36]} />
+        <meshBasicMaterial color="#2f4f34" transparent opacity={interiorFinishConfig.backPanelOpacity} toneMapped={false} />
+      </mesh>
+      <mesh rotation={[0, sideDir * Math.PI / 2, 0]} position={[sideDir * depth * 0.11, RACK_SLOT_DIVIDER_HEIGHT * 0.86, 0]}>
+        <planeGeometry args={[height - 0.46, RACK_SIDE_HEIGHT * 0.12]} />
+        <meshBasicMaterial color="#8eaf73" transparent opacity={interiorFinishConfig.backPanelGlowOpacity} toneMapped={false} />
+      </mesh>
+      <mesh rotation={[0, sideDir * Math.PI / 2, Math.PI / 2]} position={[sideDir * depth * 0.13, RACK_SLOT_DIVIDER_HEIGHT * 0.86, -height * 0.32]}>
+        <planeGeometry args={[RACK_SIDE_HEIGHT * 0.28, RACK_TRIM_WIDTH * 0.68]} />
+        <meshBasicMaterial color="#d7b05f" transparent opacity={interiorFinishConfig.sideWallEdgeOpacity} toneMapped={false} />
+      </mesh>
+      <mesh rotation={[0, sideDir * Math.PI / 2, Math.PI / 2]} position={[sideDir * depth * 0.13, RACK_SLOT_DIVIDER_HEIGHT * 0.86, height * 0.32]}>
+        <planeGeometry args={[RACK_SIDE_HEIGHT * 0.28, RACK_TRIM_WIDTH * 0.68]} />
+        <meshBasicMaterial color="#d7b05f" transparent opacity={interiorFinishConfig.sideWallEdgeOpacity} toneMapped={false} />
       </mesh>
       <mesh castShadow receiveShadow position={[0, RACK_SIDE_HEIGHT * 0.34, -height / 2 + RACK_END_BLOCK / 2]}>
         <boxGeometry args={[depth * 0.76, RACK_SIDE_HEIGHT * 0.72, RACK_END_BLOCK]} />
