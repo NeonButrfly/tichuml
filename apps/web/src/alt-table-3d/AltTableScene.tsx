@@ -20,6 +20,12 @@ const TABLE_FRAME_HEIGHT = 0.16;
 const TABLE_FRAME_WIDTH = 0.64;
 const TABLE_BORDER_WIDTH = 0.58;
 const TABLE_RAISED_RIM = 0.08;
+const TABLE_PLINTH_HEIGHT = 0.1;
+const TABLE_UPPER_DECK_HEIGHT = 0.085;
+const TABLE_UPPER_DECK_INSET = 0.26;
+const TABLE_INNER_RAIL_HEIGHT = 0.065;
+const TABLE_INNER_RAIL_WIDTH = 0.18;
+const TABLE_INNER_GOLD_WIDTH = 0.028;
 const FELT_INSET_X = 0.88;
 const FELT_INSET_Z = 0.72;
 const FELT_Y = TABLE_BASE_THICKNESS / 2 + 0.004;
@@ -119,6 +125,9 @@ const RACK_CHEEK_DEPTH = 0.24;
 const RACK_CAP_HEIGHT = 0.08;
 const RACK_CAP_DEPTH = 0.18;
 const RACK_SHOULDER_BLOCK = 0.34;
+const RACK_TRAY_BRIDGE_HEIGHT = 0.12;
+const RACK_REAR_SPINE_HEIGHT = 0.18;
+const RACK_WING_BLOCK = 0.24;
 const RACK_FOOT_WIDTH = 0.42;
 const RACK_FOOT_HEIGHT = 0.16;
 const RACK_FOOT_DEPTH = 0.26;
@@ -137,6 +146,17 @@ export function getFrontRailAssemblyConfig() {
     railDepth: FRONT_RAIL_DEPTH,
     centerBlockHeight: FRONT_BLOCK_HEIGHT,
     sideBlockHeight: 0.46
+  } as const;
+}
+
+export function getAltTableSculptConfig() {
+  return {
+    plinthHeight: TABLE_PLINTH_HEIGHT,
+    upperDeckHeight: TABLE_UPPER_DECK_HEIGHT,
+    innerRailHeight: TABLE_INNER_RAIL_HEIGHT,
+    innerRailWidth: TABLE_INNER_RAIL_WIDTH,
+    rackTrayBridgeHeight: RACK_TRAY_BRIDGE_HEIGHT,
+    rackRearSpineHeight: RACK_REAR_SPINE_HEIGHT
   } as const;
 }
 
@@ -269,16 +289,20 @@ function AltTableWorld(props: {
 
   return (
     <>
-      <ambientLight intensity={1.2} />
+      <ambientLight intensity={1.58} />
+      <hemisphereLight
+        args={["#f7eed2", "#132016", 1.05]}
+      />
       <directionalLight
         castShadow
-        intensity={1.7}
-        position={[2.8, 8.5, 5.4]}
+        intensity={2.08}
+        position={[3.2, 8.8, 5.1]}
         shadow-bias={-0.0002}
         shadow-mapSize-height={2048}
         shadow-mapSize-width={2048}
       />
-      <directionalLight intensity={0.62} position={[-3.8, 6.2, -4.9]} />
+      <directionalLight intensity={1.02} position={[-3.8, 6.2, -4.9]} />
+      <pointLight intensity={13.5} position={[0, 4.1, 1.8]} distance={16} decay={2} />
 
       <group>
         <TableBody
@@ -313,15 +337,41 @@ function TableBody(props: {
   southPlaqueTexture: Texture;
   woodTexture: Texture;
 }) {
+  const innerRailXLength = props.feltWidth + 0.22;
+  const innerRailZLength = props.feltHeight + 0.22;
+  const innerRailY = FELT_Y + TABLE_INNER_RAIL_HEIGHT / 2 - 0.004;
+  const topDeckWidth = props.outerWidth - TABLE_UPPER_DECK_INSET;
+  const topDeckHeight = props.outerHeight - TABLE_UPPER_DECK_INSET;
+
   return (
     <group>
+      <mesh position={[0, -TABLE_BASE_THICKNESS - TABLE_PLINTH_HEIGHT / 2 + 0.02, 0]} receiveShadow>
+        <boxGeometry args={[props.outerWidth - 0.42, TABLE_PLINTH_HEIGHT, props.outerHeight - 0.42]} />
+        <meshStandardMaterial
+          color="#5d3622"
+          map={props.woodTexture}
+          metalness={0.08}
+          roughness={0.82}
+        />
+      </mesh>
+
       <mesh position={[0, -TABLE_BASE_THICKNESS / 2, 0]} receiveShadow>
         <boxGeometry args={[props.outerWidth, TABLE_BASE_THICKNESS, props.outerHeight]} />
         <meshStandardMaterial
-          color="#5b341f"
+          color="#71442a"
           map={props.woodTexture}
           metalness={0.1}
-          roughness={0.82}
+          roughness={0.76}
+        />
+      </mesh>
+
+      <mesh position={[0, TABLE_BASE_THICKNESS / 2 - TABLE_UPPER_DECK_HEIGHT / 2 + 0.01, 0]} receiveShadow>
+        <boxGeometry args={[topDeckWidth, TABLE_UPPER_DECK_HEIGHT, topDeckHeight]} />
+        <meshStandardMaterial
+          color="#875332"
+          map={props.woodTexture}
+          metalness={0.12}
+          roughness={0.68}
         />
       </mesh>
 
@@ -337,22 +387,76 @@ function TableBody(props: {
           ]}
         />
         <meshStandardMaterial
-          color="#35532f"
+          color="#5a7c4c"
           metalness={0.03}
-          roughness={0.96}
-          emissive="#142a13"
-          emissiveIntensity={0.34}
+          roughness={0.88}
+          emissive="#32592d"
+          emissiveIntensity={0.68}
         />
+      </mesh>
+
+      <mesh position={[0, innerRailY, -(props.feltHeight + TABLE_INNER_RAIL_WIDTH) / 2]} receiveShadow>
+        <boxGeometry args={[innerRailXLength, TABLE_INNER_RAIL_HEIGHT, TABLE_INNER_RAIL_WIDTH]} />
+        <meshStandardMaterial
+          color="#7f5130"
+          map={props.woodTexture}
+          metalness={0.1}
+          roughness={0.68}
+        />
+      </mesh>
+      <mesh position={[0, innerRailY, (props.feltHeight + TABLE_INNER_RAIL_WIDTH) / 2]} receiveShadow>
+        <boxGeometry args={[innerRailXLength, TABLE_INNER_RAIL_HEIGHT, TABLE_INNER_RAIL_WIDTH]} />
+        <meshStandardMaterial
+          color="#7f5130"
+          map={props.woodTexture}
+          metalness={0.1}
+          roughness={0.68}
+        />
+      </mesh>
+      <mesh position={[-(props.feltWidth + TABLE_INNER_RAIL_WIDTH) / 2, innerRailY, 0]} receiveShadow>
+        <boxGeometry args={[TABLE_INNER_RAIL_WIDTH, TABLE_INNER_RAIL_HEIGHT, innerRailZLength]} />
+        <meshStandardMaterial
+          color="#7f5130"
+          map={props.woodTexture}
+          metalness={0.1}
+          roughness={0.68}
+        />
+      </mesh>
+      <mesh position={[(props.feltWidth + TABLE_INNER_RAIL_WIDTH) / 2, innerRailY, 0]} receiveShadow>
+        <boxGeometry args={[TABLE_INNER_RAIL_WIDTH, TABLE_INNER_RAIL_HEIGHT, innerRailZLength]} />
+        <meshStandardMaterial
+          color="#7f5130"
+          map={props.woodTexture}
+          metalness={0.1}
+          roughness={0.68}
+        />
+      </mesh>
+
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FELT_Y + 0.01, -props.feltHeight / 2 - 0.005]}>
+        <planeGeometry args={[props.feltWidth + 0.26, TABLE_INNER_GOLD_WIDTH]} />
+        <meshBasicMaterial color="#b59244" transparent opacity={0.72} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FELT_Y + 0.01, props.feltHeight / 2 + 0.005]}>
+        <planeGeometry args={[props.feltWidth + 0.26, TABLE_INNER_GOLD_WIDTH]} />
+        <meshBasicMaterial color="#b59244" transparent opacity={0.72} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, Math.PI / 2]} position={[-props.feltWidth / 2 - 0.005, FELT_Y + 0.01, 0]}>
+        <planeGeometry args={[props.feltHeight + 0.26, TABLE_INNER_GOLD_WIDTH]} />
+        <meshBasicMaterial color="#b59244" transparent opacity={0.72} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, Math.PI / 2]} position={[props.feltWidth / 2 + 0.005, FELT_Y + 0.01, 0]}>
+        <planeGeometry args={[props.feltHeight + 0.26, TABLE_INNER_GOLD_WIDTH]} />
+        <meshBasicMaterial color="#b59244" transparent opacity={0.72} />
       </mesh>
 
       <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, FELT_Y + 0.002, 0]}>
         <planeGeometry args={[props.feltWidth - 0.1, props.feltHeight - 0.1]} />
         <meshStandardMaterial
-          color="#284625"
+          color="#4a733f"
           metalness={0.02}
-          roughness={0.98}
-          emissive="#102210"
-          emissiveIntensity={0.22}
+          roughness={0.9}
+          emissive="#264e23"
+          emissiveIntensity={0.52}
         />
       </mesh>
 
@@ -410,6 +514,16 @@ function FrontRailAssembly(props: {
         />
       </mesh>
 
+      <mesh castShadow position={[0, railY + config.railHeight * 0.48, railZ - 0.04]} receiveShadow>
+        <boxGeometry args={[props.outerWidth - 0.28, config.railHeight * 0.34, config.railDepth * 0.5]} />
+        <meshStandardMaterial
+          color="#865233"
+          map={props.woodTexture}
+          metalness={0.12}
+          roughness={0.68}
+        />
+      </mesh>
+
       <mesh castShadow position={[0, config.centerBlockHeight * 0.54, plaqueZ]} receiveShadow>
         <boxGeometry args={[FRONT_BLOCK_WIDTH, config.centerBlockHeight, FRONT_BLOCK_DEPTH]} />
         <meshStandardMaterial
@@ -417,6 +531,16 @@ function FrontRailAssembly(props: {
           map={props.woodTexture}
           metalness={0.12}
           roughness={0.7}
+        />
+      </mesh>
+
+      <mesh castShadow position={[0, config.centerBlockHeight * 0.24, railZ + 0.04]} receiveShadow>
+        <boxGeometry args={[FRONT_BLOCK_WIDTH * 0.82, config.centerBlockHeight * 0.26, FRONT_BLOCK_DEPTH * 0.52]} />
+        <meshStandardMaterial
+          color="#533120"
+          map={props.woodTexture}
+          metalness={0.08}
+          roughness={0.78}
         />
       </mesh>
 
@@ -430,6 +554,16 @@ function FrontRailAssembly(props: {
         />
       </mesh>
 
+      <mesh castShadow position={[-props.outerWidth / 2 + 1.24, config.sideBlockHeight * 0.22, railZ + 0.03]} receiveShadow>
+        <boxGeometry args={[0.8, config.sideBlockHeight * 0.24, 0.24]} />
+        <meshStandardMaterial
+          color="#533120"
+          map={props.woodTexture}
+          metalness={0.08}
+          roughness={0.78}
+        />
+      </mesh>
+
       <mesh castShadow position={[props.outerWidth / 2 - 0.88, config.sideBlockHeight * 0.5, railZ + 0.08]} receiveShadow>
         <boxGeometry args={[0.72, config.sideBlockHeight, 0.38]} />
         <meshStandardMaterial
@@ -437,6 +571,16 @@ function FrontRailAssembly(props: {
           map={props.woodTexture}
           metalness={0.12}
           roughness={0.7}
+        />
+      </mesh>
+
+      <mesh castShadow position={[props.outerWidth / 2 - 0.88, config.sideBlockHeight * 0.22, railZ + 0.03]} receiveShadow>
+        <boxGeometry args={[0.56, config.sideBlockHeight * 0.24, 0.24]} />
+        <meshStandardMaterial
+          color="#533120"
+          map={props.woodTexture}
+          metalness={0.08}
+          roughness={0.78}
         />
       </mesh>
 
@@ -586,8 +730,16 @@ function RackShell(props: {
           <boxGeometry args={[width - 0.22, RACK_SLOT_THICKNESS * 0.9, RACK_SIDE_THICKNESS * 0.7]} />
           <meshStandardMaterial color="#44291b" metalness={0.1} roughness={0.8} />
         </mesh>
+        <mesh castShadow receiveShadow position={[0, RACK_TRAY_BRIDGE_HEIGHT * 0.5, depth * 0.36]}>
+          <boxGeometry args={[width * 0.58, RACK_TRAY_BRIDGE_HEIGHT, depth * 0.26]} />
+          {commonMaterial}
+        </mesh>
         <mesh castShadow receiveShadow position={[0, RACK_FRONT_LIP_HEIGHT * 0.5, depth * 0.28]}>
           <boxGeometry args={[width - 0.08, RACK_FRONT_LIP_HEIGHT, RACK_FRONT_LIP_DEPTH]} />
+          {commonMaterial}
+        </mesh>
+        <mesh castShadow receiveShadow position={[0, RACK_REAR_SPINE_HEIGHT * 0.5, -depth * 0.4]}>
+          <boxGeometry args={[width * 0.74, RACK_REAR_SPINE_HEIGHT, depth * 0.22]} />
           {commonMaterial}
         </mesh>
         <mesh castShadow receiveShadow position={[-width / 2 + RACK_END_BLOCK / 2, RACK_SIDE_HEIGHT * 0.34, -depth * 0.04]}>
@@ -604,6 +756,14 @@ function RackShell(props: {
         </mesh>
         <mesh castShadow receiveShadow position={[width * 0.34, RACK_SIDE_HEIGHT * 0.26, depth * 0.14]}>
           <boxGeometry args={[RACK_SUPPORT_BLOCK, RACK_SIDE_HEIGHT * 0.52, depth * 0.52]} />
+          {commonMaterial}
+        </mesh>
+        <mesh castShadow receiveShadow position={[-width * 0.38, RACK_SIDE_HEIGHT * 0.18, depth * 0.3]}>
+          <boxGeometry args={[RACK_WING_BLOCK, RACK_SIDE_HEIGHT * 0.34, depth * 0.24]} />
+          {commonMaterial}
+        </mesh>
+        <mesh castShadow receiveShadow position={[width * 0.38, RACK_SIDE_HEIGHT * 0.18, depth * 0.3]}>
+          <boxGeometry args={[RACK_WING_BLOCK, RACK_SIDE_HEIGHT * 0.34, depth * 0.24]} />
           {commonMaterial}
         </mesh>
         <mesh
@@ -694,8 +854,16 @@ function RackShell(props: {
         <boxGeometry args={[RACK_SIDE_THICKNESS * 0.72, RACK_SLOT_THICKNESS * 0.9, height - 0.26]} />
         <meshStandardMaterial color="#44291b" metalness={0.1} roughness={0.8} />
       </mesh>
+      <mesh castShadow receiveShadow position={[-sideDir * depth * 0.3, RACK_TRAY_BRIDGE_HEIGHT * 0.5, 0]}>
+        <boxGeometry args={[depth * 0.26, RACK_TRAY_BRIDGE_HEIGHT, height * 0.56]} />
+        {commonMaterial}
+      </mesh>
       <mesh castShadow receiveShadow position={[-sideDir * depth * 0.24, RACK_FRONT_LIP_HEIGHT * 0.5, 0]}>
         <boxGeometry args={[RACK_FRONT_LIP_DEPTH, RACK_FRONT_LIP_HEIGHT, height - 0.08]} />
+        {commonMaterial}
+      </mesh>
+      <mesh castShadow receiveShadow position={[sideDir * depth * 0.34, RACK_REAR_SPINE_HEIGHT * 0.5, 0]}>
+        <boxGeometry args={[depth * 0.22, RACK_REAR_SPINE_HEIGHT, height * 0.74]} />
         {commonMaterial}
       </mesh>
       <mesh castShadow receiveShadow position={[0, RACK_SIDE_HEIGHT * 0.34, -height / 2 + RACK_END_BLOCK / 2]}>
@@ -712,6 +880,14 @@ function RackShell(props: {
       </mesh>
       <mesh castShadow receiveShadow position={[sideDir * depth * 0.08, RACK_SIDE_HEIGHT * 0.26, height * 0.28]}>
         <boxGeometry args={[RACK_SUPPORT_BLOCK * 0.82, RACK_SIDE_HEIGHT * 0.52, RACK_SUPPORT_BLOCK]} />
+        {commonMaterial}
+      </mesh>
+      <mesh castShadow receiveShadow position={[-sideDir * depth * 0.22, RACK_SIDE_HEIGHT * 0.18, -height * 0.34]}>
+        <boxGeometry args={[depth * 0.22, RACK_SIDE_HEIGHT * 0.34, RACK_WING_BLOCK]} />
+        {commonMaterial}
+      </mesh>
+      <mesh castShadow receiveShadow position={[-sideDir * depth * 0.22, RACK_SIDE_HEIGHT * 0.18, height * 0.34]}>
+        <boxGeometry args={[depth * 0.22, RACK_SIDE_HEIGHT * 0.34, RACK_WING_BLOCK]} />
         {commonMaterial}
       </mesh>
       <mesh
