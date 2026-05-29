@@ -489,86 +489,6 @@ export function AltTichuTable3D() {
 
   return (
     <section className="alt-table-3d-route">
-      <aside className="alt-table-status">
-        <div className="alt-table-status__header">
-          <strong>Passing Lanes</strong>
-          <span data-alt-phase-label="true">{phase}</span>
-        </div>
-        <div className="alt-table-status__counts">
-          <span>North {handCounts.north}</span>
-          <span>East {handCounts.east}</span>
-          <span>South {handCounts.south}</span>
-          <span>West {handCounts.west}</span>
-          <span>Deck {deckRemaining}</span>
-        </div>
-        <p className="alt-table-status__body">
-          Hidden hands use real 3D card planes in the seat racks. Passing targets stay
-          unrotated and directional over the shared tv7 authored layout.
-        </p>
-        <div className="alt-table-status__flow">
-          <span>Deal 8: {phase === "ready" ? 0 : FIRST_DEAL_COUNT}</span>
-          <span>
-            GT shown:{" "}
-            {phase === "grand_tichu" ||
-            phase === "deal6" ||
-            phase === "passing" ||
-            phase === "passed"
-              ? "yes"
-              : "no"}
-          </span>
-          <span>
-            Deal 6:{" "}
-            {phase === "deal6" || phase === "passing" || phase === "passed"
-              ? SECOND_DEAL_COUNT
-              : 0}
-          </span>
-          <span>GT choice: {gtChoice ?? "pending"}</span>
-        </div>
-        {phase === "grand_tichu" ? (
-          <div className="alt-table-status__actions">
-            <button
-              type="button"
-              data-alt-action="call-gt"
-              onClick={() => beginGrandTichu("call")}
-            >
-              Call GT
-            </button>
-            <button
-              type="button"
-              data-alt-action="skip-gt"
-              onClick={() => beginGrandTichu("skip")}
-            >
-              Skip GT
-            </button>
-          </div>
-        ) : null}
-        {phase === "passing" ? (
-          <div className="alt-table-status__actions">
-            <button
-              type="button"
-              data-alt-action="auto-demo-pass"
-              onClick={handleAutoDemoPass}
-            >
-              Auto demo pass
-            </button>
-            <button
-              type="button"
-              data-alt-action="confirm-pass"
-              disabled={!confirmPassEnabled}
-              onClick={handleConfirmPass}
-            >
-              Confirm pass
-            </button>
-          </div>
-        ) : null}
-        {phase === "passing" ? (
-          <div className="alt-table-status__selection">
-            <span>South selected: {selectedSouthCardIds.length}/3</span>
-            <span>South assigned: {assignedSouthCount}/3</span>
-          </div>
-        ) : null}
-      </aside>
-
       <div className="alt-table-stage" data-alt-table-root="tv7">
         <div className="alt-table-board" style={boardStyle}>
           <img
@@ -692,31 +612,113 @@ export function AltTichuTable3D() {
                 );
               })
             : null}
-        </div>
-      </div>
 
-      <div className="alt-table-footer">
-        <section className="alt-table-preview">
-          <div className="alt-table-preview__title">Hand Anchor Preview</div>
-          <p>
-            South fan is intentionally calmer than the old prototype spread while the hidden
-            seat cards stay rack-seated and upright.
-          </p>
-        </section>
-        <section className="alt-table-preview">
-          <div className="alt-table-preview__title">Passing Anchor Preview</div>
-          <p>
-            Twelve authored pass targets remain direction-locked and share the same fixed
-            design-space transform as the table art.
-          </p>
-        </section>
-        <section className="alt-table-preview">
-          <div className="alt-table-preview__title">Trick Anchor Preview</div>
-          <p>
-            This ALT cleanup keeps the table readable first while the fuller photorealistic
-            rack-and-table rebuild continues.
-          </p>
-        </section>
+          <div className="alt-table-board__chrome" data-alt-board-chrome="true">
+            <aside className="alt-table-status">
+              <div className="alt-table-status__header">
+                <strong>Passing Lanes</strong>
+                <span data-alt-phase-label="true">{phase}</span>
+              </div>
+              <div className="alt-table-status__counts">
+                <span>North {handCounts.north}</span>
+                <span>East {handCounts.east}</span>
+                <span>South {handCounts.south}</span>
+                <span>West {handCounts.west}</span>
+                <span>Deck {deckRemaining}</span>
+              </div>
+              <p className="alt-table-status__body">
+                Hidden hands use real 3D card planes in the seat racks. Passing targets stay
+                unrotated and directional over the shared tv7 authored layout.
+              </p>
+              <div className="alt-table-status__flow">
+                <span>Deal 8: {phase === "ready" ? 0 : FIRST_DEAL_COUNT}</span>
+                <span>
+                  GT shown:{" "}
+                  {phase === "grand_tichu" ||
+                  phase === "deal6" ||
+                  phase === "passing" ||
+                  phase === "passed"
+                    ? "yes"
+                    : "no"}
+                </span>
+                <span>
+                  Deal 6:{" "}
+                  {phase === "deal6" || phase === "passing" || phase === "passed"
+                    ? SECOND_DEAL_COUNT
+                    : 0}
+                </span>
+                <span>GT choice: {gtChoice ?? "pending"}</span>
+              </div>
+              {phase === "grand_tichu" ? (
+                <div className="alt-table-status__actions">
+                  <button
+                    type="button"
+                    data-alt-action="call-gt"
+                    onClick={() => beginGrandTichu("call")}
+                  >
+                    Call GT
+                  </button>
+                  <button
+                    type="button"
+                    data-alt-action="skip-gt"
+                    onClick={() => beginGrandTichu("skip")}
+                  >
+                    Skip GT
+                  </button>
+                </div>
+              ) : null}
+              {phase === "passing" ? (
+                <div className="alt-table-status__actions">
+                  <button
+                    type="button"
+                    data-alt-action="auto-demo-pass"
+                    onClick={handleAutoDemoPass}
+                  >
+                    Auto demo pass
+                  </button>
+                  <button
+                    type="button"
+                    data-alt-action="confirm-pass"
+                    disabled={!confirmPassEnabled}
+                    onClick={handleConfirmPass}
+                  >
+                    Confirm pass
+                  </button>
+                </div>
+              ) : null}
+              {phase === "passing" ? (
+                <div className="alt-table-status__selection">
+                  <span>South selected: {selectedSouthCardIds.length}/3</span>
+                  <span>South assigned: {assignedSouthCount}/3</span>
+                </div>
+              ) : null}
+            </aside>
+
+            <div className="alt-table-footer">
+              <section className="alt-table-preview">
+                <div className="alt-table-preview__title">Hand Anchor Preview</div>
+                <p>
+                  South fan is intentionally calmer than the old prototype spread while the hidden
+                  seat cards stay rack-seated and upright.
+                </p>
+              </section>
+              <section className="alt-table-preview">
+                <div className="alt-table-preview__title">Passing Anchor Preview</div>
+                <p>
+                  Twelve authored pass targets remain direction-locked and share the same fixed
+                  design-space transform as the table art.
+                </p>
+              </section>
+              <section className="alt-table-preview">
+                <div className="alt-table-preview__title">Trick Anchor Preview</div>
+                <p>
+                  This ALT cleanup keeps the table readable first while the fuller photorealistic
+                  rack-and-table rebuild continues.
+                </p>
+              </section>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
   );
