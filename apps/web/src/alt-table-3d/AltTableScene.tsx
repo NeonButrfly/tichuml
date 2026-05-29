@@ -131,11 +131,21 @@ const FRONT_BLOCK_WIDTH = 1.26;
 const FRONT_BLOCK_HEIGHT = 0.44;
 const FRONT_BLOCK_DEPTH = 0.42;
 
+export function getAltTableCameraConfig() {
+  return {
+    position: [0, 6.1, 5.45] as const,
+    fov: 36,
+    near: 0.1,
+    far: 64
+  } as const;
+}
+
 export function AltTableScene(props: {
   cards: HiddenHandCard[];
   backSrc: string;
 }) {
   const canRender3d = useMemo(() => supportsWebGlCanvas(), []);
+  const camera = useMemo(() => getAltTableCameraConfig(), []);
 
   return (
     <div
@@ -174,12 +184,7 @@ export function AltTableScene(props: {
           frameloop="demand"
           gl={{ alpha: true, antialias: true }}
           shadows
-          camera={{
-            position: [0, 6.55, 5.95],
-            fov: 37,
-            near: 0.1,
-            far: 64
-          }}
+          camera={camera}
           onCreated={({ camera, gl }) => {
             camera.lookAt(0, 0, 0);
             gl.setClearAlpha(0);
@@ -529,14 +534,20 @@ function RackShell(props: {
   const maxX = Math.max(...xs);
   const minZ = Math.min(...zs);
   const maxZ = Math.max(...zs);
+  const basePosition = getRackShellBasePosition({
+    seat: props.seat,
+    minX,
+    maxX,
+    minZ,
+    maxZ,
+    sampleSize
+  });
 
   if (props.seat === "north") {
     const width = maxX - minX + sampleSize.width * 1.75;
     const depth = sampleSize.height * 1.18;
-    const centerX = (minX + maxX) / 2;
-    const centerZ = minZ - sampleSize.width * 0.46;
     return (
-      <group position={[centerX, 0.085, centerZ]}>
+      <group position={basePosition}>
         <mesh castShadow receiveShadow>
           <boxGeometry args={[width, RACK_BASE_HEIGHT, depth]} />
           {commonMaterial}
@@ -642,14 +653,9 @@ function RackShell(props: {
 
   const depth = sampleSize.width * 1.18;
   const height = maxZ - minZ + sampleSize.width * 2.54;
-  const centerZ = (minZ + maxZ) / 2;
-  const centerX =
-    props.seat === "east"
-      ? maxX + sampleSize.width * 0.42
-      : minX - sampleSize.width * 0.42;
   const sideDir = props.seat === "east" ? -1 : 1;
   return (
-    <group position={[centerX, 0.085, centerZ]}>
+    <group position={basePosition}>
       <mesh castShadow receiveShadow>
         <boxGeometry args={[depth, RACK_BASE_HEIGHT, height]} />
         {commonMaterial}
@@ -751,6 +757,31 @@ function RackShell(props: {
       />
     </group>
   );
+}
+
+export function getRackShellBasePosition(args: {
+  seat: "north" | "east" | "west";
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+  sampleSize: { width: number; height: number };
+}) {
+  if (args.seat === "north") {
+    return [
+      (args.minX + args.maxX) / 2,
+      0.085,
+      args.minZ - args.sampleSize.width * 0.28
+    ] as const;
+  }
+
+  return [
+    args.seat === "east"
+      ? args.maxX + args.sampleSize.width * 0.28
+      : args.minX - args.sampleSize.width * 0.28,
+    0.085,
+    (args.minZ + args.maxZ) / 2
+  ] as const;
 }
 
 function SeatPlaque(props: {

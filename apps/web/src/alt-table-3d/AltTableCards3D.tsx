@@ -99,14 +99,14 @@ export function resolveHiddenHandPlacement(card: HiddenHandCard) {
         position: [
           base[0],
           seatedY,
-          base[2] - size.width * (0.18 - Math.min(seatCurve * 0.003, 0.012))
+          base[2] + size.width * (0.14 - Math.min(seatCurve * 0.002, 0.008))
         ] as const,
         rotation: [0.084 - Math.min(seatCurve * 0.003, 0.022), seatOffset * 0.018, 0] as const
       };
     case "east":
       return {
         position: [
-          base[0] + size.width * (0.16 - Math.min(seatCurve * 0.002, 0.01)),
+          base[0] - size.width * (0.12 - Math.min(seatCurve * 0.0015, 0.007)),
           seatedY,
           base[2] + seatOffset * 0.018
         ] as const,
@@ -115,7 +115,7 @@ export function resolveHiddenHandPlacement(card: HiddenHandCard) {
     case "west":
       return {
         position: [
-          base[0] - size.width * (0.16 - Math.min(seatCurve * 0.002, 0.01)),
+          base[0] + size.width * (0.12 - Math.min(seatCurve * 0.0015, 0.007)),
           seatedY,
           base[2] + seatOffset * 0.018
         ] as const,
