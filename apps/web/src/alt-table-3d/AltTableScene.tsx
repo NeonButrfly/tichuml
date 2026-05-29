@@ -15,7 +15,6 @@ import {
   type HiddenHandCard
 } from "./AltTableCards3D";
 import {
-  TV7_ASSET_ROOT,
   TV7_TABLE_PLATE_SRC,
   TV7_TABLE_REFERENCE_SRC
 } from "./tv7-runtime";
@@ -102,7 +101,7 @@ const WORLD_PLATE_ALPHA_SRC = buildWorldPlateAlphaSrc({
   insetX: 148,
   insetY: 124
 });
-const REFERENCE_HARDWARE_MASK_SRC = `${TV7_ASSET_ROOT}/t/cardmask.png`;
+const REFERENCE_HARDWARE_ALPHA_SRC = buildReferenceHardwareAlphaSrc();
 const ALT_HIDDEN_CARD_BACK_SRC = `data:image/svg+xml;utf8,${encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 588">
   <defs>
@@ -248,6 +247,18 @@ export function getAltTableReferenceHardwareConfig() {
   } as const;
 }
 
+export function getAltTableReferenceHardwareMaskConfig() {
+  return {
+    topRack: { x: 332, y: 18, width: 876, height: 178, radius: 42 },
+    leftRack: { x: 28, y: 146, width: 212, height: 612, radius: 36 },
+    rightRack: { x: 1096, y: 146, width: 212, height: 612, radius: 36 },
+    frontRail: { x: 18, y: 930, width: 1200, height: 94, radius: 28 },
+    scorePlaque: { x: 12, y: 826, width: 252, height: 122, radius: 26 },
+    passPlaque: { x: 1112, y: 818, width: 210, height: 132, radius: 26 },
+    specialCardPlaque: { x: 990, y: 494, width: 216, height: 126, radius: 24 }
+  } as const;
+}
+
 export function getAltTableRackMaterialConfig() {
   return {
     rackTrimOpacity: 0.92,
@@ -346,7 +357,7 @@ function AltTableWorld(props: {
     TV7_TABLE_PLATE_SRC,
     WORLD_PLATE_ALPHA_SRC,
     TV7_TABLE_REFERENCE_SRC,
-    REFERENCE_HARDWARE_MASK_SRC,
+    REFERENCE_HARDWARE_ALPHA_SRC,
     NORTH_PLAQUE_SRC,
     SOUTH_PLAQUE_SRC,
     EAST_PLAQUE_SRC,
@@ -1328,6 +1339,40 @@ function buildWorldPlateAlphaSrc(args: {
     rx="48"
     fill="#000000"
   />
+</svg>
+`)}`;
+}
+
+function buildReferenceHardwareAlphaSrc() {
+  const config = getAltTableReferenceHardwareMaskConfig();
+  const rackRects = [
+    config.topRack,
+    config.leftRack,
+    config.rightRack,
+    config.frontRail,
+    config.scorePlaque,
+    config.passPlaque,
+    config.specialCardPlaque
+  ];
+
+  const rackMarkup = rackRects
+    .map(
+      (rect) => `
+  <rect
+    x="${rect.x}"
+    y="${rect.y}"
+    width="${rect.width}"
+    height="${rect.height}"
+    rx="${rect.radius}"
+    fill="#ffffff"
+  />`
+    )
+    .join("");
+
+  return `data:image/svg+xml;utf8,${encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1536 1024">
+  <rect width="1536" height="1024" fill="#000000"/>
+  ${rackMarkup}
 </svg>
 `)}`;
 }
