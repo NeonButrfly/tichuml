@@ -84,6 +84,14 @@ const ALT_LAYER_ORDER = [
   "5. Assigned Pass Cards / UI"
 ] as const;
 
+export function getAltTablePlateBlendConfig() {
+  return {
+    opacity: 0.2,
+    brightness: 0.86,
+    saturate: 0.84
+  } as const;
+}
+
 export function AltTichuTable3D() {
   const [assets, setAssets] = useState<Tv7RuntimeAssets | null>(null);
   const [loadError, setLoadError] = useState<Error | null>(null);
@@ -244,6 +252,14 @@ export function AltTichuTable3D() {
       transformOrigin: "top left"
     }),
     [transform]
+  );
+  const plateBlendConfig = useMemo(() => getAltTablePlateBlendConfig(), []);
+  const plateStyle = useMemo<CSSProperties>(
+    () => ({
+      opacity: plateBlendConfig.opacity,
+      filter: `brightness(${plateBlendConfig.brightness}) saturate(${plateBlendConfig.saturate})`
+    }),
+    [plateBlendConfig]
   );
 
   const passAnchors = useMemo(() => assets?.passAnchors ?? [], [assets]);
@@ -522,6 +538,7 @@ export function AltTichuTable3D() {
             className="alt-table-board__plate"
             data-table-layer="plate"
             src={assets.tableMeta.src}
+            style={plateStyle}
           />
 
           <AltTableScene backSrc={backSrc} cards={hiddenHandCards} />
