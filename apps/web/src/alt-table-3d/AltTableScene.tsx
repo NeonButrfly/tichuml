@@ -38,38 +38,43 @@ const FELT_SURFACE_SRC = `data:image/svg+xml;utf8,${encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
   <defs>
     <radialGradient id="felt" cx="50%" cy="46%" r="74%">
-      <stop offset="0%" stop-color="#7ea06b"/>
-      <stop offset="55%" stop-color="#5d8153"/>
-      <stop offset="100%" stop-color="#38543c"/>
+      <stop offset="0%" stop-color="#6f8b52"/>
+      <stop offset="52%" stop-color="#476339"/>
+      <stop offset="100%" stop-color="#233220"/>
+    </radialGradient>
+    <radialGradient id="vignette" cx="50%" cy="50%" r="72%">
+      <stop offset="62%" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#08110a" stop-opacity="0.4"/>
     </radialGradient>
     <filter id="noise">
-      <feTurbulence type="fractalNoise" baseFrequency="0.92" numOctaves="2" seed="17"/>
+      <feTurbulence type="fractalNoise" baseFrequency="0.78" numOctaves="3" seed="17"/>
       <feColorMatrix type="saturate" values="0"/>
       <feComponentTransfer>
-        <feFuncA type="table" tableValues="0 0.085"/>
+        <feFuncA type="table" tableValues="0 0.06"/>
       </feComponentTransfer>
     </filter>
   </defs>
   <rect width="1024" height="1024" fill="url(#felt)"/>
-  <g opacity="0.18" stroke="#b8d4a7" stroke-width="2.8">
+  <g opacity="0.1" stroke="#93ac78" stroke-width="2.8">
     <path d="M0 74c163 18 326 13 489-14 164-28 330-30 535 8" fill="none"/>
     <path d="M0 246c147-11 301-20 462-3 178 19 370 19 562-8" fill="none"/>
     <path d="M0 425c187 22 372 18 560-9 157-23 304-23 464-4" fill="none"/>
     <path d="M0 607c177-20 349-26 522-10 173 16 340 18 502 0" fill="none"/>
     <path d="M0 794c172 21 340 23 512 5 171-19 342-20 512-3" fill="none"/>
   </g>
-  <g opacity="0.09">
+  <g opacity="0.04">
     <path d="M122 0v1024M264 0v1024M401 0v1024M555 0v1024M698 0v1024M854 0v1024" stroke="#d8f0c8" stroke-width="2"/>
   </g>
   <rect width="1024" height="1024" fill="#fff" filter="url(#noise)"/>
+  <rect width="1024" height="1024" fill="url(#vignette)"/>
 </svg>
 `)}`;
 const DRAGON_MOTIF_SRC = `data:image/svg+xml;utf8,${encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <g fill="none" stroke="#a4843e" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M534 116c164 18 286 150 286 309 0 124-73 229-187 278-36 16-50 57-32 94 17 35 58 57 98 51-56 51-137 80-228 80-209 0-378-135-378-302 0-98 59-182 151-225 31-15 46-51 37-84-12-44 5-93 43-121 28-21 68-31 103-21-24 18-39 49-37 82 2 44 36 76 80 74 60-3 107-64 93-123-6-27-21-51-42-70z" stroke-width="32" opacity="0.24"/>
-    <path d="M453 304c43-61 122-74 183-31 51 36 71 99 48 151-22 51-80 84-135 77 23 39 18 89-14 124-42 47-114 53-164 13-48-38-60-109-28-162 20-33 53-55 89-62-20-34-14-77 21-110z" stroke-width="22" opacity="0.22"/>
-    <path d="M612 328l110-58M338 634l-118 62M671 566c-14 37-54 62-95 60M318 459c22-22 52-33 83-31" stroke-width="18" opacity="0.18"/>
+  <g fill="none" stroke="#b89442" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M534 116c164 18 286 150 286 309 0 124-73 229-187 278-36 16-50 57-32 94 17 35 58 57 98 51-56 51-137 80-228 80-209 0-378-135-378-302 0-98 59-182 151-225 31-15 46-51 37-84-12-44 5-93 43-121 28-21 68-31 103-21-24 18-39 49-37 82 2 44 36 76 80 74 60-3 107-64 93-123-6-27-21-51-42-70z" stroke-width="36" opacity="0.36"/>
+    <path d="M453 304c43-61 122-74 183-31 51 36 71 99 48 151-22 51-80 84-135 77 23 39 18 89-14 124-42 47-114 53-164 13-48-38-60-109-28-162 20-33 53-55 89-62-20-34-14-77 21-110z" stroke-width="26" opacity="0.3"/>
+    <path d="M612 328l110-58M338 634l-118 62M671 566c-14 37-54 62-95 60M318 459c22-22 52-33 83-31" stroke-width="20" opacity="0.24"/>
   </g>
 </svg>
 `)}`;
@@ -205,12 +210,12 @@ export function getAltTableSculptConfig() {
 
 export function getAltTableSurfaceMaterialConfig() {
   return {
-    feltTopEmissiveIntensity: 1.12,
-    feltWellEmissiveIntensity: 1.02,
+    feltTopEmissiveIntensity: 0.72,
+    feltWellEmissiveIntensity: 0.78,
     dragonOpacity: 0.96,
-    feltHighlightOpacity: 0.12,
-    feltInnerHighlightOpacity: 0.08,
-    feltFieldHighlightOpacity: 0.06,
+    feltHighlightOpacity: 0.05,
+    feltInnerHighlightOpacity: 0.035,
+    feltFieldHighlightOpacity: 0.028,
     goldTrimOpacity: 0.9
   } as const;
 }
@@ -254,9 +259,9 @@ export function getAltTableReferenceHardwareConfig() {
 
 export function getAltTableReferenceCenterConfig() {
   return {
-    opacity: 0.82,
-    brightness: 1.02,
-    yOffset: 0.101
+    opacity: 0.18,
+    brightness: 0.92,
+    yOffset: 0.099
   } as const;
 }
 
@@ -702,11 +707,11 @@ function TableBody(props: {
           ]}
         />
         <meshStandardMaterial
-          color="#8ab477"
+          color="#5d7642"
           map={props.feltTexture}
           metalness={0.03}
-          roughness={0.84}
-          emissive="#6d965e"
+          roughness={0.9}
+          emissive="#425936"
           emissiveIntensity={surfaceConfig.feltWellEmissiveIntensity}
         />
       </mesh>
@@ -768,7 +773,7 @@ function TableBody(props: {
       <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, FELT_Y + 0.002, 0]}>
         <planeGeometry args={[props.feltWidth - 0.1, props.feltHeight - 0.1]} />
         <meshBasicMaterial
-          color="#7ca76b"
+          color="#617a45"
           map={props.feltTexture}
           transparent
           opacity={0.98}
@@ -777,17 +782,17 @@ function TableBody(props: {
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FELT_Y + 0.004, 0]}>
         <planeGeometry args={[props.feltWidth - 0.2, props.feltHeight - 0.2]} />
-        <meshBasicMaterial color="#c1e0a2" transparent opacity={surfaceConfig.feltHighlightOpacity} />
+        <meshBasicMaterial color="#9cb67a" transparent opacity={surfaceConfig.feltHighlightOpacity} />
       </mesh>
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FELT_Y + 0.003, 0]}>
         <planeGeometry args={[props.feltWidth * 0.68, props.feltHeight * 0.7]} />
-        <meshBasicMaterial color="#f2f8c8" transparent opacity={surfaceConfig.feltInnerHighlightOpacity} />
+        <meshBasicMaterial color="#d7dfaa" transparent opacity={surfaceConfig.feltInnerHighlightOpacity} />
       </mesh>
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FELT_Y + 0.005, 0]}>
         <planeGeometry args={[props.feltWidth * 0.86, props.feltHeight * 0.82]} />
-        <meshBasicMaterial color="#7ea96d" transparent opacity={surfaceConfig.feltFieldHighlightOpacity} />
+        <meshBasicMaterial color="#4f6838" transparent opacity={surfaceConfig.feltFieldHighlightOpacity} />
       </mesh>
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FELT_Y + 0.006, 0]}>

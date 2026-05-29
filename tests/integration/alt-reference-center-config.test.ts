@@ -9,8 +9,9 @@ describe("ALT reference center config", () => {
   it("keeps a scene-owned reference felt layer active so the live ALT scene can inherit the committed green felt and dragon read", () => {
     const config = getAltTableReferenceCenterConfig();
 
-    expect(config.opacity).toBeGreaterThan(0.7);
-    expect(config.brightness).toBeGreaterThan(1);
+    expect(config.opacity).toBeGreaterThan(0.1);
+    expect(config.opacity).toBeLessThan(0.3);
+    expect(config.brightness).toBeGreaterThan(0.85);
     expect(config.yOffset).toBeGreaterThan(0.09);
   });
 
