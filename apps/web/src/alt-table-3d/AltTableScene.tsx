@@ -338,7 +338,9 @@ export function getAltRackPlaquePresentationConfig() {
     sidePlaqueYaw: 0.52,
     sidePlaqueOffset: 0.47,
     sidePlaqueLift: 1.36,
-    sidePlaqueScale: 1.1
+    sidePlaqueScale: 1.1,
+    sidePlaqueBridgeLength: 0.16,
+    sidePlaqueBackerThickness: 0.22
   } as const;
 }
 
@@ -1539,6 +1541,20 @@ function RackShell(props: {
         />
       </mesh>
       <mesh
+        castShadow
+        receiveShadow
+        position={[sideDir * (depth * (plaqueConfig.sidePlaqueOffset - 0.08) + RACK_PLAQUE_INSET), RACK_PLAQUE_HEIGHT * 1.34, 0]}
+        rotation={[0, sideDir * (plaqueConfig.sidePlaqueYaw * 0.76), 0]}
+      >
+        <boxGeometry args={[depth * plaqueConfig.sidePlaqueBridgeLength, RACK_PLAQUE_HEIGHT * 0.62, RACK_PLAQUE_WIDTH * 0.52]} />
+        <meshStandardMaterial
+          color="#6e4027"
+          map={props.woodTexture}
+          metalness={rackConfig.rackWoodMetalness}
+          roughness={rackConfig.rackWoodRoughness}
+        />
+      </mesh>
+      <mesh
         rotation={[0, sideDir * Math.PI / 2, 0]}
         position={[sideDir * (depth * (plaqueConfig.sidePlaqueOffset + 0.03) + RACK_PLAQUE_INSET), RACK_PLAQUE_HEIGHT * 1.96, 0]}
       >
@@ -1548,6 +1564,34 @@ function RackShell(props: {
           transparent
           opacity={rackConfig.rackWoodAccentOpacity + 0.08}
           toneMapped={false}
+        />
+      </mesh>
+      <mesh
+        castShadow
+        receiveShadow
+        position={[sideDir * (depth * plaqueConfig.sidePlaqueOffset + RACK_PLAQUE_INSET + 0.03), RACK_PLAQUE_HEIGHT * 1.96, 0]}
+        rotation={[0, sideDir * plaqueConfig.sidePlaqueYaw, 0]}
+      >
+        <boxGeometry args={[depth * plaqueConfig.sidePlaqueBackerThickness, RACK_PLAQUE_HEIGHT * 0.22, RACK_PLAQUE_WIDTH * 1.16]} />
+        <meshStandardMaterial
+          color="#82512f"
+          map={props.woodTexture}
+          metalness={rackConfig.rackWoodMetalness}
+          roughness={rackConfig.rackWoodRoughness * 0.92}
+        />
+      </mesh>
+      <mesh
+        castShadow
+        receiveShadow
+        position={[sideDir * (depth * plaqueConfig.sidePlaqueOffset + RACK_PLAQUE_INSET + 0.03), RACK_PLAQUE_HEIGHT * 0.72, 0]}
+        rotation={[0, sideDir * plaqueConfig.sidePlaqueYaw, 0]}
+      >
+        <boxGeometry args={[depth * plaqueConfig.sidePlaqueBackerThickness, RACK_PLAQUE_HEIGHT * 0.18, RACK_PLAQUE_WIDTH * 1.12]} />
+        <meshStandardMaterial
+          color="#6e4027"
+          map={props.woodTexture}
+          metalness={rackConfig.rackWoodMetalness}
+          roughness={rackConfig.rackWoodRoughness}
         />
       </mesh>
       <SeatPlaque

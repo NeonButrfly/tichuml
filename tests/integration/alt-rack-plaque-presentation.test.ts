@@ -12,5 +12,7 @@ describe("ALT rack plaque presentation", () => {
     expect(config.sidePlaqueYaw).toBeLessThan(0.7);
     expect(config.sidePlaqueOffset).toBeGreaterThan(0.4);
     expect(config.sidePlaqueScale).toBeGreaterThan(1.05);
+    expect(config.sidePlaqueBridgeLength).toBeGreaterThan(0.12);
+    expect(config.sidePlaqueBackerThickness).toBeGreaterThan(0.18);
   });
 });
