@@ -124,21 +124,33 @@ const WORLD_PLATE_ALPHA_SRC = buildWorldPlateAlphaSrc({
 });
 const REFERENCE_DRAGON_ALPHA_SRC = buildReferenceDragonAlphaSrc();
 const REFERENCE_HARDWARE_ALPHA_SRC = buildReferenceHardwareAlphaSrc();
+export function getAltHiddenBackArtConfig() {
+  return {
+    rimInset: 12,
+    outerBorderWidth: 5.2,
+    innerBorderWidth: 2.8,
+    emblemStrokeWidth: 13.5,
+    crossStrokeWidth: 10.8,
+    cornerRadius: 9.5,
+    guideOpacity: 0.4
+  } as const;
+}
+const ALT_HIDDEN_BACK_ART = getAltHiddenBackArtConfig();
 const ALT_HIDDEN_CARD_BACK_SRC = `data:image/svg+xml;utf8,${encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 588">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#295136"/>
-      <stop offset="52%" stop-color="#194128"/>
-      <stop offset="100%" stop-color="#102818"/>
+      <stop offset="0%" stop-color="#34613f"/>
+      <stop offset="52%" stop-color="#1f4a2d"/>
+      <stop offset="100%" stop-color="#112817"/>
     </linearGradient>
     <radialGradient id="glow" cx="50%" cy="45%" r="60%">
-      <stop offset="0%" stop-color="#6c9b65" stop-opacity="0.52"/>
+      <stop offset="0%" stop-color="#90bf7b" stop-opacity="0.68"/>
       <stop offset="100%" stop-color="#0a170f" stop-opacity="0"/>
     </radialGradient>
     <linearGradient id="rim" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#f0d791"/>
-      <stop offset="100%" stop-color="#bf9943"/>
+      <stop offset="0%" stop-color="#f5df9d"/>
+      <stop offset="100%" stop-color="#c09134"/>
     </linearGradient>
     <filter id="noise">
       <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="9"/>
@@ -149,25 +161,31 @@ const ALT_HIDDEN_CARD_BACK_SRC = `data:image/svg+xml;utf8,${encodeURIComponent(`
     </filter>
   </defs>
   <rect width="420" height="588" rx="26" fill="#ecd599"/>
-  <rect x="12" y="12" width="396" height="564" rx="22" fill="url(#rim)"/>
+  <rect x="${ALT_HIDDEN_BACK_ART.rimInset}" y="${ALT_HIDDEN_BACK_ART.rimInset}" width="396" height="564" rx="22" fill="url(#rim)"/>
   <rect x="24" y="24" width="372" height="540" rx="18" fill="url(#bg)"/>
-  <rect x="38" y="38" width="344" height="512" rx="14" fill="none" stroke="#f0d791" stroke-width="4.2" opacity="0.98"/>
-  <rect x="51" y="51" width="318" height="486" rx="13" fill="none" stroke="#456443" stroke-width="2.4" opacity="0.72"/>
+  <rect x="36" y="36" width="348" height="516" rx="15" fill="none" stroke="#f4de9a" stroke-width="${ALT_HIDDEN_BACK_ART.outerBorderWidth}" opacity="0.99"/>
+  <rect x="49" y="49" width="322" height="490" rx="14" fill="none" stroke="#5a7d52" stroke-width="${ALT_HIDDEN_BACK_ART.innerBorderWidth}" opacity="0.84"/>
   <rect x="54" y="54" width="312" height="480" rx="12" fill="url(#glow)"/>
+  <rect x="66" y="66" width="288" height="456" rx="10" fill="none" stroke="#f1dc99" stroke-width="1.8" opacity="0.34" stroke-dasharray="18 14"/>
   <g fill="none" stroke="#ecd28a" stroke-linecap="round" stroke-linejoin="round" opacity="0.96">
-    <path d="M210 118c74 0 133 59 133 133 0 54-31 100-81 122 16 34 15 75-4 110-25 49-76 80-132 80-76 0-138-59-145-132 49 23 106 16 147-18 44-36 65-93 51-146-14-53-61-97-117-107 31-35 78-52 148-52z" stroke-width="11.5"/>
-    <path d="M210 178c40 35 63 72 70 114 7 50-10 98-46 138-29-16-51-41-65-74-18-42-20-92-7-178 12 7 29 7 48 0z" stroke-width="10"/>
-    <path d="M147 272c24-6 45-20 63-45 20 25 41 39 63 45-24 10-45 28-63 55-18-27-39-45-63-55z" stroke-width="8.8"/>
-    <path d="M118 157c24 12 46 16 68 13M302 157c-24 12-46 16-68 13M116 437c26-13 50-19 72-16M304 437c-26-13-50-19-72-16" stroke-width="7.2"/>
-    <path d="M89 100h53M278 100h53M89 488h53M278 488h53" stroke-width="6.3" opacity="0.88"/>
+    <path d="M210 118c74 0 133 59 133 133 0 54-31 100-81 122 16 34 15 75-4 110-25 49-76 80-132 80-76 0-138-59-145-132 49 23 106 16 147-18 44-36 65-93 51-146-14-53-61-97-117-107 31-35 78-52 148-52z" stroke-width="${ALT_HIDDEN_BACK_ART.emblemStrokeWidth}"/>
+    <path d="M210 178c40 35 63 72 70 114 7 50-10 98-46 138-29-16-51-41-65-74-18-42-20-92-7-178 12 7 29 7 48 0z" stroke-width="${ALT_HIDDEN_BACK_ART.crossStrokeWidth}"/>
+    <path d="M147 272c24-6 45-20 63-45 20 25 41 39 63 45-24 10-45 28-63 55-18-27-39-45-63-55z" stroke-width="9.8"/>
+    <path d="M118 157c24 12 46 16 68 13M302 157c-24 12-46 16-68 13M116 437c26-13 50-19 72-16M304 437c-26-13-50-19-72-16" stroke-width="8"/>
+    <path d="M89 100h53M278 100h53M89 488h53M278 488h53" stroke-width="6.8" opacity="0.94"/>
+    <circle cx="210" cy="294" r="108" stroke="#f2dc97" stroke-width="4.8" opacity="0.42"/>
+    <circle cx="210" cy="294" r="82" stroke="#c9a85a" stroke-width="3.4" opacity="0.34"/>
   </g>
-  <g fill="none" stroke="#56754d" opacity="0.34">
+  <g fill="none" stroke="#66885d" opacity="${ALT_HIDDEN_BACK_ART.guideOpacity}">
     <rect x="78" y="78" width="264" height="432" rx="12" stroke-width="1.8" stroke-dasharray="10 10"/>
     <rect x="96" y="96" width="228" height="396" rx="10" stroke-width="1.4" stroke-dasharray="6 8"/>
   </g>
-  <g fill="#f1dd9d" opacity="0.9">
-    <circle cx="82" cy="82" r="7.5"/><circle cx="338" cy="82" r="7.5"/>
-    <circle cx="82" cy="506" r="7.5"/><circle cx="338" cy="506" r="7.5"/>
+  <g fill="#f3df9e" opacity="0.94">
+    <circle cx="82" cy="82" r="${ALT_HIDDEN_BACK_ART.cornerRadius}"/><circle cx="338" cy="82" r="${ALT_HIDDEN_BACK_ART.cornerRadius}"/>
+    <circle cx="82" cy="506" r="${ALT_HIDDEN_BACK_ART.cornerRadius}"/><circle cx="338" cy="506" r="${ALT_HIDDEN_BACK_ART.cornerRadius}"/>
+  </g>
+  <g fill="none" stroke="#f4df9d" opacity="0.74">
+    <path d="M109 81c16 9 35 14 56 14M311 81c-16 9-35 14-56 14M109 507c16-9 35-14 56-14M311 507c-16-9-35-14-56-14" stroke-width="4.2" stroke-linecap="round"/>
   </g>
   <rect width="420" height="588" rx="26" fill="none" filter="url(#noise)"/>
 </svg>

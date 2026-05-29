@@ -24,6 +24,19 @@ const RACK_BURY_DEPTH = 0.03;
 const TABLE_WORLD_W = 11.4;
 const TABLE_WORLD_H = 7.6;
 
+export function getAltHiddenCardMaterialConfig() {
+  return {
+    bodyColor: "#43523b",
+    backTint: "#fff6d7",
+    backEmissive: "#315335",
+    backEmissiveIntensity: 1.08,
+    backMetalness: 0.08,
+    backRoughness: 0.18,
+    frontColor: "#263823",
+    frameColor: "#d6b86f"
+  } as const;
+}
+
 export function getHiddenHandSeatLayoutConfig() {
   return {
     northTilt: 0.19,
@@ -72,6 +85,7 @@ function HiddenHandCardMesh(props: {
 }) {
   const placement = resolveHiddenHandPlacement(props.card);
   const size = getHiddenCardWorldSize(props.card.anchor);
+  const material = getAltHiddenCardMaterialConfig();
   const backZ = CARD_THICKNESS / 2 + 0.0006;
   const frontZ = -CARD_THICKNESS / 2 - 0.0006;
 
@@ -83,30 +97,30 @@ function HiddenHandCardMesh(props: {
     >
       <mesh castShadow receiveShadow renderOrder={1}>
         <boxGeometry args={[size.width, size.height, CARD_THICKNESS]} />
-        <meshStandardMaterial color="#394934" metalness={0.03} roughness={0.9} />
+        <meshStandardMaterial color={material.bodyColor} metalness={0.03} roughness={0.88} />
       </mesh>
       <mesh castShadow position={[0, 0, backZ]} receiveShadow renderOrder={3}>
         <planeGeometry args={[size.width - CARD_BACK_INSET, size.height - CARD_BACK_INSET]} />
         <meshStandardMaterial
           map={props.texture}
-          color="#eef0d8"
-          emissive="#24402b"
-          emissiveIntensity={0.92}
-          metalness={0.1}
-          roughness={0.24}
+          color={material.backTint}
+          emissive={material.backEmissive}
+          emissiveIntensity={material.backEmissiveIntensity}
+          metalness={material.backMetalness}
+          roughness={material.backRoughness}
         />
       </mesh>
       <mesh castShadow position={[0, 0, frontZ]} receiveShadow renderOrder={2} rotation={[0, Math.PI, 0]}>
         <planeGeometry args={[size.width - CARD_FRONT_INSET, size.height - CARD_FRONT_INSET]} />
         <meshStandardMaterial
-          color="#223120"
+          color={material.frontColor}
           metalness={0.02}
           roughness={0.9}
         />
       </mesh>
       <mesh castShadow position={[0, 0, backZ - 0.0003]} receiveShadow renderOrder={2}>
         <planeGeometry args={[size.width + CARD_FRAME, size.height + CARD_FRAME]} />
-        <meshStandardMaterial color="#cfb169" metalness={0.06} roughness={0.68} />
+        <meshStandardMaterial color={material.frameColor} metalness={0.06} roughness={0.62} />
       </mesh>
     </group>
   );
