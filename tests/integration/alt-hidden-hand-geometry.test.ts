@@ -67,7 +67,7 @@ describe("ALT hidden-hand geometry", () => {
     expect(config.cardHeight).toBeGreaterThan(0.62);
     expect(config.rackBuryDepth).toBeLessThan(0.035);
     expect(config.rackFloorY).toBeGreaterThan(0.09);
-    expect(seatLayout.northTilt).toBeGreaterThan(0.22);
+    expect(seatLayout.northTilt).toBeGreaterThan(0.26);
     expect(seatLayout.northYawSpread).toBeLessThanOrEqual(0.01);
     expect(seatLayout.sideYaw).toBeGreaterThan(0.42);
     expect(seatLayout.sideYaw).toBeLessThanOrEqual(0.5);
@@ -82,8 +82,8 @@ describe("ALT hidden-hand geometry", () => {
     const base = designToWorld(card.anchor.center_px.x, card.anchor.center_px.y);
     const placement = resolveHiddenHandPlacement(card);
 
-    expect(placement.rotation[0]).toBeGreaterThan(0.15);
-    expect(placement.position[2]).toBeGreaterThan(base[2]);
+    expect(placement.rotation[0]).toBeGreaterThan(0.2);
+    expect(placement.position[2]).toBeGreaterThan(base[2] + 0.18);
   });
 
   it("compresses hidden-hand span into rack-local spacing instead of replaying the full 2D authored fan", () => {
@@ -94,7 +94,7 @@ describe("ALT hidden-hand geometry", () => {
     const westFirst = resolveHiddenHandPlacement(buildHiddenCard("west", 0));
     const westLast = resolveHiddenHandPlacement(buildHiddenCard("west", 13));
 
-    expect(Math.abs(northLast.position[0] - northFirst.position[0])).toBeLessThan(2.45);
+    expect(Math.abs(northLast.position[0] - northFirst.position[0])).toBeLessThan(2.35);
     expect(Math.abs(eastLast.position[2] - eastFirst.position[2])).toBeLessThan(1.7);
     expect(Math.abs(westLast.position[2] - westFirst.position[2])).toBeLessThan(1.7);
   });
