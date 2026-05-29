@@ -41,15 +41,15 @@ export function getAltHiddenCardMaterialConfig() {
 
 export function getHiddenHandSeatLayoutConfig() {
   return {
-    northTilt: 0.19,
-    northYawSpread: 0.011,
-    northForwardOffset: 0.27,
-    northCardStepX: 0.205,
-    sideTilt: 0.11,
-    sideYaw: 0.54,
-    sideYawSpread: 0.003,
-    sideCardStepZ: 0.145,
-    sideInboardOffset: 0.3
+    northTilt: 0.24,
+    northYawSpread: 0.009,
+    northForwardOffset: 0.24,
+    northCardStepX: 0.182,
+    sideTilt: 0.14,
+    sideYaw: 0.46,
+    sideYawSpread: 0.002,
+    sideCardStepZ: 0.125,
+    sideInboardOffset: 0.282
   } as const;
 }
 
