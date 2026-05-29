@@ -70,11 +70,11 @@ describe("ALT hidden-hand geometry", () => {
     expect(seatLayout.northTilt).toBeGreaterThan(0.26);
     expect(seatLayout.northYawSpread).toBeLessThanOrEqual(0.01);
     expect(seatLayout.sideYaw).toBeGreaterThan(0.42);
-    expect(seatLayout.sideYaw).toBeLessThanOrEqual(0.5);
+    expect(seatLayout.sideYaw).toBeLessThanOrEqual(0.46);
     expect(seatLayout.sideYawSpread).toBeLessThanOrEqual(0.003);
     expect(seatLayout.sideCardStepZ).toBeGreaterThan(0.11);
-    expect(seatLayout.sideCardStepZ).toBeLessThan(0.14);
-    expect(seatLayout.sideInboardOffset).toBeGreaterThan(0.27);
+    expect(seatLayout.sideCardStepZ).toBeLessThan(0.12);
+    expect(seatLayout.sideInboardOffset).toBeGreaterThan(0.29);
   });
 
   it("keeps north cards upright but exposes more back surface toward the camera", () => {
@@ -95,8 +95,8 @@ describe("ALT hidden-hand geometry", () => {
     const westLast = resolveHiddenHandPlacement(buildHiddenCard("west", 13));
 
     expect(Math.abs(northLast.position[0] - northFirst.position[0])).toBeLessThan(2.35);
-    expect(Math.abs(eastLast.position[2] - eastFirst.position[2])).toBeLessThan(1.7);
-    expect(Math.abs(westLast.position[2] - westFirst.position[2])).toBeLessThan(1.7);
+    expect(Math.abs(eastLast.position[2] - eastFirst.position[2])).toBeLessThan(1.55);
+    expect(Math.abs(westLast.position[2] - westFirst.position[2])).toBeLessThan(1.55);
   });
 
   it("keeps east and west cards less buried, more camera-open, and pulled inward into the trays", () => {
@@ -107,13 +107,13 @@ describe("ALT hidden-hand geometry", () => {
     const eastPlacement = resolveHiddenHandPlacement(eastCard);
     const westPlacement = resolveHiddenHandPlacement(westCard);
 
-    expect(eastPlacement.position[0]).toBeLessThan(eastBase[0]);
-    expect(westPlacement.position[0]).toBeGreaterThan(westBase[0]);
+    expect(eastPlacement.position[0]).toBeLessThan(eastBase[0] - 0.18);
+    expect(westPlacement.position[0]).toBeGreaterThan(westBase[0] + 0.18);
     expect(Math.abs(eastPlacement.position[2])).toBeLessThan(Math.abs(eastBase[2]));
     expect(Math.abs(westPlacement.position[2])).toBeLessThan(Math.abs(westBase[2]));
     expect(eastPlacement.rotation[1]).toBeLessThan(-0.42);
-    expect(eastPlacement.rotation[1]).toBeGreaterThan(-0.52);
+    expect(eastPlacement.rotation[1]).toBeGreaterThan(-0.48);
     expect(westPlacement.rotation[1]).toBeGreaterThan(0.42);
-    expect(westPlacement.rotation[1]).toBeLessThan(0.52);
+    expect(westPlacement.rotation[1]).toBeLessThan(0.48);
   });
 });

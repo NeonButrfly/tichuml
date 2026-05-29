@@ -24,8 +24,8 @@ const RACK_BURY_DEPTH = 0.03;
 const TABLE_WORLD_W = 11.4;
 const TABLE_WORLD_H = 7.6;
 const NORTH_RACK_CENTER_PX = { x: 768, y: 132 } as const;
-const EAST_RACK_CENTER_PX = { x: 1405, y: 476 } as const;
-const WEST_RACK_CENTER_PX = { x: 131, y: 476 } as const;
+const EAST_RACK_CENTER_PX = { x: 1368, y: 468 } as const;
+const WEST_RACK_CENTER_PX = { x: 168, y: 468 } as const;
 
 export function getAltHiddenCardMaterialConfig() {
   return {
@@ -46,11 +46,11 @@ export function getHiddenHandSeatLayoutConfig() {
     northYawSpread: 0.009,
     northForwardOffset: 0.28,
     northCardStepX: 0.176,
-    sideTilt: 0.14,
-    sideYaw: 0.46,
+    sideTilt: 0.15,
+    sideYaw: 0.44,
     sideYawSpread: 0.002,
-    sideCardStepZ: 0.125,
-    sideInboardOffset: 0.282
+    sideCardStepZ: 0.114,
+    sideInboardOffset: 0.296
   } as const;
 }
 
