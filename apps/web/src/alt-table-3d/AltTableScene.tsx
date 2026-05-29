@@ -17,8 +17,8 @@ import {
 
 const TABLE_BASE_THICKNESS = 0.18;
 const TABLE_FRAME_HEIGHT = 0.16;
-const TABLE_FRAME_WIDTH = 0.64;
-const TABLE_BORDER_WIDTH = 0.58;
+const TABLE_FRAME_WIDTH = 0.82;
+const TABLE_BORDER_WIDTH = 0.72;
 const TABLE_RAISED_RIM = 0.08;
 const TABLE_PLINTH_HEIGHT = 0.1;
 const TABLE_UPPER_DECK_HEIGHT = 0.085;
@@ -27,8 +27,8 @@ const TABLE_INNER_RAIL_HEIGHT = 0.065;
 const TABLE_INNER_RAIL_WIDTH = 0.18;
 const TABLE_INNER_GOLD_WIDTH = 0.028;
 const TABLE_FRAME_TRIM_WIDTH = 0.042;
-const FELT_INSET_X = 0.88;
-const FELT_INSET_Z = 0.72;
+const FELT_INSET_X = 1.34;
+const FELT_INSET_Z = 1.1;
 const FELT_Y = TABLE_BASE_THICKNESS / 2 + 0.004;
 const FELT_SURFACE_SRC = `data:image/svg+xml;utf8,${encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
@@ -207,6 +207,15 @@ export function getAltTableRackMaterialConfig() {
     frameTrimOpacity: 0.88,
     rackWoodRoughness: 0.58,
     rackWoodMetalness: 0.16
+  } as const;
+}
+
+export function getAltTableInsetConfig() {
+  return {
+    frameWidth: TABLE_FRAME_WIDTH,
+    borderWidth: TABLE_BORDER_WIDTH,
+    feltInsetX: FELT_INSET_X,
+    feltInsetZ: FELT_INSET_Z
   } as const;
 }
 
