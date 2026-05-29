@@ -29,7 +29,8 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
   a dedicated React Three Fiber scene for the hidden north/east/west rack
   cards, and keep the visible south hand on the authored `tv7` fan anchors
   rather than custom spread overrides so the live ALT route stays closer to the
-  approved mockup.
+  approved mockup while the visible ALT board itself transitions from the flat
+  DOM plate toward a true world-space wood-and-felt scene.
 - Affected Systems: `apps/web/src/alt-table-3d/AltTableCards3D.tsx`,
   `apps/web/src/alt-table-3d/AltTableScene.tsx`,
   `apps/web/src/alt-table-3d/AltTichuTable3D.tsx`,

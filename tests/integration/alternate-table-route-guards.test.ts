@@ -65,6 +65,10 @@ describe("alternate table route guards", () => {
     expect(sceneSource).toContain("Canvas");
     expect(sceneSource).toContain("camera.lookAt(0, 0, 0)");
     expect(sceneSource).toContain("RackShell");
+    expect(sceneSource).toContain("TableBody");
+    expect(sceneSource).toContain("FrameRail");
+    expect(sceneSource).toContain("WOOD_GRAIN_SRC");
+    expect(sceneSource).toContain("DRAGON_MOTIF_SRC");
     expect(sceneSource).toContain("supportsWebGlCanvas");
     expect(cards3dSource).toContain("WORLD_UNITS_PER_PX");
     expect(cards3dSource).toContain("getHiddenCardWorldSize");

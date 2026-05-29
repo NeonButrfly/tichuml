@@ -72,7 +72,7 @@
 
 .alt-table-board__plate {
   z-index: 0;
-  opacity: 1;
+  opacity: 0.001;
 }
 
 .alt-table-board__overlay {
