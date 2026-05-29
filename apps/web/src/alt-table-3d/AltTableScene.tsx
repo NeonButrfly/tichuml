@@ -1334,12 +1334,30 @@ function RackShell(props: {
           <boxGeometry args={[RACK_SHOULDER_BLOCK, RACK_SIDE_HEIGHT * 0.74, depth * 0.42]} />
           {commonMaterial}
         </mesh>
+        <mesh castShadow receiveShadow position={[0, RACK_PLAQUE_HEIGHT * 0.9, depth * 0.42]}>
+          <boxGeometry args={[RACK_PLAQUE_WIDTH * 1.18, RACK_PLAQUE_HEIGHT * 1.22, depth * 0.18]} />
+          <meshStandardMaterial
+            color="#774729"
+            map={props.woodTexture}
+            metalness={rackConfig.rackWoodMetalness}
+            roughness={rackConfig.rackWoodRoughness * 0.94}
+          />
+        </mesh>
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, RACK_PLAQUE_HEIGHT * 1.5, depth * 0.47]}>
+          <planeGeometry args={[RACK_PLAQUE_WIDTH * 1.02, depth * 0.12]} />
+          <meshBasicMaterial
+            color="#f0cd85"
+            transparent
+            opacity={rackConfig.rackWoodAccentOpacity + 0.08}
+            toneMapped={false}
+          />
+        </mesh>
         <SeatPlaque
-          height={RACK_PLAQUE_HEIGHT}
-          position={[0, RACK_PLAQUE_HEIGHT * 0.62, depth * 0.46]}
+          height={RACK_PLAQUE_HEIGHT * 1.08}
+          position={[0, RACK_PLAQUE_HEIGHT * 0.82, depth * 0.52]}
           rotation={[0, 0, 0]}
           texture={props.plaqueTexture}
-          width={RACK_PLAQUE_WIDTH}
+          width={RACK_PLAQUE_WIDTH * 1.12}
         />
       </group>
     );
@@ -1484,12 +1502,38 @@ function RackShell(props: {
         <boxGeometry args={[depth * 0.42, RACK_SIDE_HEIGHT * 0.74, RACK_SHOULDER_BLOCK]} />
         {commonMaterial}
       </mesh>
+      <mesh
+        castShadow
+        receiveShadow
+        position={[sideDir * (depth * 0.31 + RACK_PLAQUE_INSET), RACK_PLAQUE_HEIGHT * 1.34, 0]}
+        rotation={[0, sideDir * 0.18, 0]}
+      >
+        <boxGeometry args={[depth * 0.18, RACK_PLAQUE_HEIGHT * 1.28, RACK_PLAQUE_WIDTH * 1.16]} />
+        <meshStandardMaterial
+          color="#774729"
+          map={props.woodTexture}
+          metalness={rackConfig.rackWoodMetalness}
+          roughness={rackConfig.rackWoodRoughness * 0.94}
+        />
+      </mesh>
+      <mesh
+        rotation={[0, sideDir * Math.PI / 2, 0]}
+        position={[sideDir * (depth * 0.34 + RACK_PLAQUE_INSET), RACK_PLAQUE_HEIGHT * 1.86, 0]}
+      >
+        <planeGeometry args={[RACK_PLAQUE_WIDTH * 1.02, depth * 0.11]} />
+        <meshBasicMaterial
+          color="#f0cd85"
+          transparent
+          opacity={rackConfig.rackWoodAccentOpacity + 0.08}
+          toneMapped={false}
+        />
+      </mesh>
       <SeatPlaque
-        height={RACK_PLAQUE_WIDTH}
-        position={[sideDir * (depth * 0.36 + RACK_PLAQUE_INSET), RACK_PLAQUE_HEIGHT * 1.08, 0]}
-        rotation={[0, sideDir * 0.34, 0]}
+        height={RACK_PLAQUE_WIDTH * 1.08}
+        position={[sideDir * (depth * 0.39 + RACK_PLAQUE_INSET), RACK_PLAQUE_HEIGHT * 1.3, 0]}
+        rotation={[0, sideDir * 0.18, 0]}
         texture={props.plaqueTexture}
-        width={RACK_PLAQUE_HEIGHT}
+        width={RACK_PLAQUE_HEIGHT * 1.08}
       />
     </group>
   );
@@ -1529,9 +1573,13 @@ function SeatPlaque(props: {
 }) {
   return (
     <group position={props.position} rotation={props.rotation}>
-      <mesh position={[0, 0, -0.015]}>
-        <boxGeometry args={[props.width + 0.08, props.height + 0.08, 0.03]} />
+      <mesh position={[0, 0, -0.028]}>
+        <boxGeometry args={[props.width + 0.14, props.height + 0.14, 0.056]} />
         <meshStandardMaterial color="#9b7a33" metalness={0.34} roughness={0.46} />
+      </mesh>
+      <mesh position={[0, 0, -0.012]}>
+        <boxGeometry args={[props.width + 0.08, props.height + 0.08, 0.024]} />
+        <meshStandardMaterial color="#0f241a" metalness={0.18} roughness={0.58} />
       </mesh>
       <mesh>
         <planeGeometry args={[props.width, props.height]} />
