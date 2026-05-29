@@ -26,6 +26,7 @@ const TABLE_UPPER_DECK_INSET = 0.26;
 const TABLE_INNER_RAIL_HEIGHT = 0.065;
 const TABLE_INNER_RAIL_WIDTH = 0.18;
 const TABLE_INNER_GOLD_WIDTH = 0.028;
+const TABLE_FRAME_TRIM_WIDTH = 0.042;
 const FELT_INSET_X = 0.88;
 const FELT_INSET_Z = 0.72;
 const FELT_Y = TABLE_BASE_THICKNESS / 2 + 0.004;
@@ -146,6 +147,7 @@ const RACK_END_BLOCK = 0.2;
 const RACK_PLAQUE_WIDTH = 1.02;
 const RACK_PLAQUE_HEIGHT = 0.38;
 const RACK_PLAQUE_INSET = 0.05;
+const RACK_TRIM_WIDTH = 0.028;
 const RACK_SUPPORT_BLOCK = 0.28;
 const RACK_FRONT_LIP_HEIGHT = 0.1;
 const RACK_FRONT_LIP_DEPTH = 0.12;
@@ -196,6 +198,15 @@ export function getAltTableSurfaceMaterialConfig() {
     feltWellEmissiveIntensity: 0.58,
     dragonOpacity: 0.42,
     goldTrimOpacity: 0.84
+  } as const;
+}
+
+export function getAltTableRackMaterialConfig() {
+  return {
+    rackTrimOpacity: 0.92,
+    frameTrimOpacity: 0.88,
+    rackWoodRoughness: 0.58,
+    rackWoodMetalness: 0.16
   } as const;
 }
 
@@ -387,6 +398,7 @@ function TableBody(props: {
   woodTexture: Texture;
 }) {
   const surfaceConfig = getAltTableSurfaceMaterialConfig();
+  const rackConfig = getAltTableRackMaterialConfig();
   const innerRailXLength = props.feltWidth + 0.22;
   const innerRailZLength = props.feltHeight + 0.22;
   const innerRailY = FELT_Y + TABLE_INNER_RAIL_HEIGHT / 2 - 0.004;
@@ -533,6 +545,23 @@ function TableBody(props: {
       <GoldCorner position={[props.feltWidth / 2 - 0.34, FELT_Y + 0.008, -props.feltHeight / 2 + 0.34]} flipX={true} flipZ={false} />
       <GoldCorner position={[-props.feltWidth / 2 + 0.34, FELT_Y + 0.008, props.feltHeight / 2 - 0.34]} flipX={false} flipZ={true} />
       <GoldCorner position={[props.feltWidth / 2 - 0.34, FELT_Y + 0.008, props.feltHeight / 2 - 0.34]} flipX={true} flipZ={true} />
+
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, TABLE_FRAME_HEIGHT + 0.002, -(props.outerHeight - TABLE_BORDER_WIDTH) / 2]}>
+        <planeGeometry args={[props.outerWidth - 0.18, TABLE_FRAME_TRIM_WIDTH]} />
+        <meshBasicMaterial color="#c9a04a" transparent opacity={rackConfig.frameTrimOpacity} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, TABLE_FRAME_HEIGHT + 0.002, (props.outerHeight - TABLE_BORDER_WIDTH) / 2]}>
+        <planeGeometry args={[props.outerWidth - 0.18, TABLE_FRAME_TRIM_WIDTH]} />
+        <meshBasicMaterial color="#c9a04a" transparent opacity={rackConfig.frameTrimOpacity} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, Math.PI / 2]} position={[-(props.outerWidth - TABLE_BORDER_WIDTH) / 2, TABLE_FRAME_HEIGHT + 0.002, 0]}>
+        <planeGeometry args={[props.outerHeight - 0.18, TABLE_FRAME_TRIM_WIDTH]} />
+        <meshBasicMaterial color="#c9a04a" transparent opacity={rackConfig.frameTrimOpacity} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, Math.PI / 2]} position={[(props.outerWidth - TABLE_BORDER_WIDTH) / 2, TABLE_FRAME_HEIGHT + 0.002, 0]}>
+        <planeGeometry args={[props.outerHeight - 0.18, TABLE_FRAME_TRIM_WIDTH]} />
+        <meshBasicMaterial color="#c9a04a" transparent opacity={rackConfig.frameTrimOpacity} />
+      </mesh>
 
       <FrameRail axis="x" length={props.outerWidth} position={[0, 0, -(props.outerHeight - TABLE_BORDER_WIDTH) / 2]} woodTexture={props.woodTexture} />
       <FrontRailAssembly
@@ -728,12 +757,13 @@ function RackShell(props: {
   plaqueTexture: Texture;
   woodTexture: Texture;
 }) {
+  const rackConfig = getAltTableRackMaterialConfig();
   const commonMaterial = (
     <meshStandardMaterial
-      color="#6b4125"
+      color="#805132"
       map={props.woodTexture}
-      metalness={0.12}
-      roughness={0.7}
+      metalness={rackConfig.rackWoodMetalness}
+      roughness={rackConfig.rackWoodRoughness}
     />
   );
   const seatCards = props.cards.filter((card) => card.seat === props.seat);
@@ -798,6 +828,10 @@ function RackShell(props: {
           <boxGeometry args={[width - 0.08, RACK_FRONT_LIP_HEIGHT, RACK_FRONT_LIP_DEPTH]} />
           {commonMaterial}
         </mesh>
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, RACK_FRONT_LIP_HEIGHT + 0.002, depth * 0.31]}>
+          <planeGeometry args={[width - 0.16, RACK_TRIM_WIDTH]} />
+          <meshBasicMaterial color="#d2ab55" transparent opacity={rackConfig.rackTrimOpacity} />
+        </mesh>
         <mesh castShadow receiveShadow position={[0, RACK_REAR_SPINE_HEIGHT * 0.5, -depth * 0.4]}>
           <boxGeometry args={[width * 0.74, RACK_REAR_SPINE_HEIGHT, depth * 0.22]} />
           {commonMaterial}
@@ -851,6 +885,10 @@ function RackShell(props: {
         <mesh castShadow receiveShadow position={[0, RACK_SIDE_HEIGHT + RACK_CAP_HEIGHT * 0.2, -depth * 0.26]}>
           <boxGeometry args={[width - 0.22, RACK_CAP_HEIGHT, RACK_CAP_DEPTH]} />
           {commonMaterial}
+        </mesh>
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, RACK_SIDE_HEIGHT + RACK_CAP_HEIGHT + 0.002, -depth * 0.24]}>
+          <planeGeometry args={[width - 0.3, RACK_TRIM_WIDTH]} />
+          <meshBasicMaterial color="#cda451" transparent opacity={rackConfig.rackTrimOpacity} />
         </mesh>
         <mesh
           castShadow
@@ -922,6 +960,10 @@ function RackShell(props: {
         <boxGeometry args={[RACK_FRONT_LIP_DEPTH, RACK_FRONT_LIP_HEIGHT, height - 0.08]} />
         {commonMaterial}
       </mesh>
+      <mesh rotation={[0, sideDir * Math.PI / 2, 0]} position={[-sideDir * depth * 0.27, RACK_FRONT_LIP_HEIGHT + 0.002, 0]}>
+        <planeGeometry args={[height - 0.16, RACK_TRIM_WIDTH]} />
+        <meshBasicMaterial color="#d2ab55" transparent opacity={rackConfig.rackTrimOpacity} />
+      </mesh>
       <mesh castShadow receiveShadow position={[sideDir * depth * 0.34, RACK_REAR_SPINE_HEIGHT * 0.5, 0]}>
         <boxGeometry args={[depth * 0.22, RACK_REAR_SPINE_HEIGHT, height * 0.74]} />
         {commonMaterial}
@@ -975,6 +1017,10 @@ function RackShell(props: {
       <mesh castShadow receiveShadow position={[sideDir * depth * 0.24, RACK_SIDE_HEIGHT + RACK_CAP_HEIGHT * 0.2, 0]}>
         <boxGeometry args={[RACK_CAP_DEPTH, RACK_CAP_HEIGHT, height - 0.18]} />
         {commonMaterial}
+      </mesh>
+      <mesh rotation={[0, sideDir * Math.PI / 2, 0]} position={[sideDir * depth * 0.26, RACK_SIDE_HEIGHT + RACK_CAP_HEIGHT + 0.002, 0]}>
+        <planeGeometry args={[height - 0.26, RACK_TRIM_WIDTH]} />
+        <meshBasicMaterial color="#cda451" transparent opacity={rackConfig.rackTrimOpacity} />
       </mesh>
       <mesh
         castShadow
