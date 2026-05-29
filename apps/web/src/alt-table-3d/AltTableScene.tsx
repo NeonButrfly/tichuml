@@ -94,6 +94,10 @@ const WOOD_GRAIN_SRC = `data:image/svg+xml;utf8,${encodeURIComponent(`
   </g>
 </svg>
 `)}`;
+const WORLD_PLATE_ALPHA_SRC = buildWorldPlateAlphaSrc({
+  insetX: 148,
+  insetY: 124
+});
 const ALT_HIDDEN_CARD_BACK_SRC = `data:image/svg+xml;utf8,${encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 588">
   <defs>
@@ -223,9 +227,11 @@ export function getAltTableReliefConfig() {
 
 export function getAltTableWorldPlateConfig() {
   return {
-    opacity: 0.42,
-    brightness: 0.9,
-    yOffset: 0.104
+    opacity: 0.58,
+    brightness: 0.94,
+    yOffset: 0.104,
+    centerInsetX: 1.04,
+    centerInsetZ: 0.82
   } as const;
 }
 
@@ -319,12 +325,13 @@ function AltTableWorld(props: {
 }) {
   const lightingConfig = getAltTableLightingConfig();
   const hiddenBackSrc = useMemo(() => ALT_HIDDEN_CARD_BACK_SRC || props.backSrc, [props.backSrc]);
-  const [backTexture, dragonTexture, woodTexture, feltTexture, plateTexture, northPlaqueTexture, southPlaqueTexture, eastPlaqueTexture, westPlaqueTexture, passPlaqueTexture, scorePlaqueTexture] = useLoader(TextureLoader, [
+  const [backTexture, dragonTexture, woodTexture, feltTexture, plateTexture, plateAlphaTexture, northPlaqueTexture, southPlaqueTexture, eastPlaqueTexture, westPlaqueTexture, passPlaqueTexture, scorePlaqueTexture] = useLoader(TextureLoader, [
     hiddenBackSrc,
     DRAGON_MOTIF_SRC,
     WOOD_GRAIN_SRC,
     FELT_SURFACE_SRC,
     TV7_TABLE_PLATE_SRC,
+    WORLD_PLATE_ALPHA_SRC,
     NORTH_PLAQUE_SRC,
     SOUTH_PLAQUE_SRC,
     EAST_PLAQUE_SRC,
@@ -358,6 +365,9 @@ function AltTableWorld(props: {
   plateTexture.minFilter = LinearFilter;
   plateTexture.magFilter = LinearFilter;
   plateTexture.needsUpdate = true;
+  plateAlphaTexture.minFilter = LinearFilter;
+  plateAlphaTexture.magFilter = LinearFilter;
+  plateAlphaTexture.needsUpdate = true;
   northPlaqueTexture.colorSpace = SRGBColorSpace;
   northPlaqueTexture.minFilter = LinearFilter;
   northPlaqueTexture.magFilter = LinearFilter;
@@ -414,6 +424,7 @@ function AltTableWorld(props: {
           outerHeight={outerHeight}
           outerWidth={outerWidth}
           passPlaqueTexture={passPlaqueTexture}
+          plateAlphaTexture={plateAlphaTexture}
           plateTexture={plateTexture}
           scorePlaqueTexture={scorePlaqueTexture}
           southPlaqueTexture={southPlaqueTexture}
@@ -437,6 +448,7 @@ function TableBody(props: {
   outerHeight: number;
   outerWidth: number;
   passPlaqueTexture: Texture;
+  plateAlphaTexture: Texture;
   plateTexture: Texture;
   scorePlaqueTexture: Texture;
   southPlaqueTexture: Texture;
@@ -495,6 +507,7 @@ function TableBody(props: {
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, worldPlateConfig.yOffset, 0]} receiveShadow>
         <planeGeometry args={[props.outerWidth, props.outerHeight]} />
         <meshBasicMaterial
+          alphaMap={props.plateAlphaTexture}
           map={props.plateTexture}
           transparent
           opacity={worldPlateConfig.opacity}
@@ -1252,6 +1265,25 @@ function buildScorePlaqueSrc() {
   <text x="282" y="72" text-anchor="middle" font-family="Georgia, serif" font-size="42" fill="#f0ddb1" letter-spacing="4">THEY</text>
   <text x="98" y="156" text-anchor="middle" font-family="Georgia, serif" font-size="66" fill="#f0ddb1">0</text>
   <text x="282" y="156" text-anchor="middle" font-family="Georgia, serif" font-size="66" fill="#f0ddb1">0</text>
+</svg>
+`)}`;
+}
+
+function buildWorldPlateAlphaSrc(args: {
+  insetX: number;
+  insetY: number;
+}) {
+  return `data:image/svg+xml;utf8,${encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1536 1024">
+  <rect width="1536" height="1024" fill="#ffffff"/>
+  <rect
+    x="${args.insetX}"
+    y="${args.insetY}"
+    width="${1536 - args.insetX * 2}"
+    height="${1024 - args.insetY * 2}"
+    rx="48"
+    fill="#000000"
+  />
 </svg>
 `)}`;
 }
