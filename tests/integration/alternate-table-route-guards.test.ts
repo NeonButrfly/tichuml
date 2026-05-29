@@ -69,6 +69,7 @@ describe("alternate table route guards", () => {
     expect(sceneSource).toContain("FrameRail");
     expect(sceneSource).toContain("WOOD_GRAIN_SRC");
     expect(sceneSource).toContain("DRAGON_MOTIF_SRC");
+    expect(sceneSource).toContain("ALT_HIDDEN_CARD_BACK_SRC");
     expect(sceneSource).toContain("supportsWebGlCanvas");
     expect(cards3dSource).toContain("CARD_WIDTH =");
     expect(cards3dSource).toContain("CARD_HEIGHT =");

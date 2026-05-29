@@ -58,29 +58,29 @@ function HiddenHandCardMesh(props: {
     >
       <mesh castShadow receiveShadow renderOrder={1}>
         <boxGeometry args={[size.width, size.height, CARD_THICKNESS]} />
-        <meshStandardMaterial color="#bda77c" metalness={0.03} roughness={0.92} />
+        <meshStandardMaterial color="#31402b" metalness={0.02} roughness={0.94} />
       </mesh>
       <mesh castShadow position={[0, 0, backZ]} receiveShadow renderOrder={3}>
         <planeGeometry args={[size.width - CARD_BACK_INSET, size.height - CARD_BACK_INSET]} />
         <meshStandardMaterial
           map={props.texture}
           emissive="#152518"
-          emissiveIntensity={0.28}
+          emissiveIntensity={0.46}
           metalness={0.08}
-          roughness={0.46}
+          roughness={0.38}
         />
       </mesh>
       <mesh castShadow position={[0, 0, frontZ]} receiveShadow renderOrder={2} rotation={[0, Math.PI, 0]}>
         <planeGeometry args={[size.width - CARD_FRONT_INSET, size.height - CARD_FRONT_INSET]} />
         <meshStandardMaterial
-          color="#d7c7a8"
+          color="#223120"
           metalness={0.02}
-          roughness={0.94}
+          roughness={0.9}
         />
       </mesh>
       <mesh castShadow position={[0, 0, backZ - 0.0003]} receiveShadow renderOrder={2}>
         <planeGeometry args={[size.width + CARD_FRAME, size.height + CARD_FRAME]} />
-        <meshStandardMaterial color="#efe0b8" metalness={0.04} roughness={0.82} />
+        <meshStandardMaterial color="#b69a56" metalness={0.04} roughness={0.78} />
       </mesh>
     </group>
   );
@@ -101,7 +101,7 @@ function resolveHiddenHandPlacement(card: HiddenHandCard) {
           seatedY,
           base[2] - size.width * (0.4 - Math.min(seatCurve * 0.006, 0.032))
         ] as const,
-        rotation: [0.12 - Math.min(seatCurve * 0.003, 0.018), seatOffset * 0.018, 0] as const
+        rotation: [0.08 - Math.min(seatCurve * 0.003, 0.016), seatOffset * 0.016, 0] as const
       };
     case "east":
       return {
@@ -110,7 +110,7 @@ function resolveHiddenHandPlacement(card: HiddenHandCard) {
           seatedY,
           base[2] + seatOffset * 0.01
         ] as const,
-        rotation: [0.08 - Math.min(seatCurve * 0.003, 0.016), -1.02 - seatOffset * 0.014, 0] as const
+        rotation: [0.05 - Math.min(seatCurve * 0.003, 0.014), -0.92 - seatOffset * 0.012, 0] as const
       };
     case "west":
       return {
@@ -119,7 +119,7 @@ function resolveHiddenHandPlacement(card: HiddenHandCard) {
           seatedY,
           base[2] + seatOffset * 0.01
         ] as const,
-        rotation: [0.08 - Math.min(seatCurve * 0.003, 0.016), 1.02 - seatOffset * 0.014, 0] as const
+        rotation: [0.05 - Math.min(seatCurve * 0.003, 0.014), 0.92 - seatOffset * 0.012, 0] as const
       };
   }
 }

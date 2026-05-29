@@ -56,6 +56,45 @@ const WOOD_GRAIN_SRC = `data:image/svg+xml;utf8,${encodeURIComponent(`
   </g>
 </svg>
 `)}`;
+const ALT_HIDDEN_CARD_BACK_SRC = `data:image/svg+xml;utf8,${encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 588">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#24482f"/>
+      <stop offset="52%" stop-color="#153622"/>
+      <stop offset="100%" stop-color="#0d2216"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="45%" r="60%">
+      <stop offset="0%" stop-color="#4f7e4b" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#0a170f" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="noise">
+      <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="9"/>
+      <feColorMatrix type="saturate" values="0"/>
+      <feComponentTransfer>
+        <feFuncA type="table" tableValues="0 0.05"/>
+      </feComponentTransfer>
+    </filter>
+  </defs>
+  <rect width="420" height="588" rx="26" fill="#d8c38a"/>
+  <rect x="12" y="12" width="396" height="564" rx="22" fill="#c7a45b"/>
+  <rect x="24" y="24" width="372" height="540" rx="18" fill="url(#bg)"/>
+  <rect x="38" y="38" width="344" height="512" rx="14" fill="none" stroke="#e5cf8e" stroke-width="3.5" opacity="0.96"/>
+  <rect x="54" y="54" width="312" height="480" rx="12" fill="url(#glow)"/>
+  <g fill="none" stroke="#e1c578" stroke-linecap="round" stroke-linejoin="round" opacity="0.94">
+    <path d="M210 128c68 0 122 54 122 122 0 49-28 91-73 111 14 30 13 66-3 97-22 43-67 71-116 71-67 0-122-52-128-117 43 20 94 14 130-16 39-31 57-82 45-128-13-47-54-85-104-94 28-31 69-46 127-46z" stroke-width="10"/>
+    <path d="M210 184c36 31 57 65 63 102 7 45-8 88-42 124-26-14-46-36-59-65-17-38-19-83-6-161 11 6 28 6 44 0z" stroke-width="9"/>
+    <path d="M152 270c21-5 40-18 58-41 18 23 37 36 58 41-21 9-40 25-58 50-18-25-37-41-58-50z" stroke-width="8"/>
+    <path d="M119 163c21 11 41 15 60 12M301 163c-21 11-41 15-60 12M120 429c23-12 44-18 63-15M300 429c-23-12-44-18-63-15" stroke-width="6.5"/>
+    <path d="M92 102h46M282 102h46M92 486h46M282 486h46" stroke-width="5.5" opacity="0.84"/>
+  </g>
+  <g fill="#eed899" opacity="0.86">
+    <circle cx="82" cy="82" r="7"/><circle cx="338" cy="82" r="7"/>
+    <circle cx="82" cy="506" r="7"/><circle cx="338" cy="506" r="7"/>
+  </g>
+  <rect width="420" height="588" rx="26" fill="none" filter="url(#noise)"/>
+</svg>
+`)}`;
 const NORTH_PLAQUE_SRC = buildSeatPlaqueSrc("NORTH");
 const SOUTH_PLAQUE_SRC = buildSeatPlaqueSrc("SOUTH");
 const EAST_PLAQUE_SRC = buildSeatPlaqueSrc("EAST", { vertical: true });
@@ -143,8 +182,9 @@ function AltTableWorld(props: {
   cards: HiddenHandCard[];
   backSrc: string;
 }) {
+  const hiddenBackSrc = useMemo(() => ALT_HIDDEN_CARD_BACK_SRC || props.backSrc, [props.backSrc]);
   const [backTexture, dragonTexture, woodTexture, northPlaqueTexture, southPlaqueTexture, eastPlaqueTexture, westPlaqueTexture, passPlaqueTexture, scorePlaqueTexture] = useLoader(TextureLoader, [
-    props.backSrc,
+    hiddenBackSrc,
     DRAGON_MOTIF_SRC,
     WOOD_GRAIN_SRC,
     NORTH_PLAQUE_SRC,
@@ -491,9 +531,13 @@ function RackShell(props: {
           <boxGeometry args={[width - 0.1, RACK_SIDE_HEIGHT, RACK_SIDE_THICKNESS]} />
           {commonMaterial}
         </mesh>
-        <mesh castShadow receiveShadow position={[0, RACK_BASE_HEIGHT * 0.2, depth * 0.05]}>
+      <mesh castShadow receiveShadow position={[0, RACK_BASE_HEIGHT * 0.2, depth * 0.05]}>
           <boxGeometry args={[width - 0.22, RACK_SLOT_THICKNESS, RACK_SLOT_DEPTH]} />
           <meshStandardMaterial color="#2b1a12" metalness={0.08} roughness={0.86} />
+        </mesh>
+        <mesh castShadow receiveShadow position={[0, RACK_BASE_HEIGHT * 0.28, depth * 0.26]}>
+          <boxGeometry args={[width - 0.22, RACK_SLOT_THICKNESS * 0.9, RACK_SIDE_THICKNESS * 0.7]} />
+          <meshStandardMaterial color="#44291b" metalness={0.1} roughness={0.8} />
         </mesh>
         <mesh castShadow receiveShadow position={[-width / 2 + RACK_END_BLOCK / 2, RACK_SIDE_HEIGHT * 0.34, -depth * 0.04]}>
           <boxGeometry args={[RACK_END_BLOCK, RACK_SIDE_HEIGHT * 0.72, depth * 0.76]} />
@@ -535,6 +579,10 @@ function RackShell(props: {
       <mesh castShadow receiveShadow position={[-sideDir * depth * 0.02, RACK_BASE_HEIGHT * 0.2, 0]}>
         <boxGeometry args={[RACK_SLOT_DEPTH, RACK_SLOT_THICKNESS, height - 0.26]} />
         <meshStandardMaterial color="#2b1a12" metalness={0.08} roughness={0.86} />
+      </mesh>
+      <mesh castShadow receiveShadow position={[-sideDir * depth * 0.24, RACK_BASE_HEIGHT * 0.28, 0]}>
+        <boxGeometry args={[RACK_SIDE_THICKNESS * 0.72, RACK_SLOT_THICKNESS * 0.9, height - 0.26]} />
+        <meshStandardMaterial color="#44291b" metalness={0.1} roughness={0.8} />
       </mesh>
       <mesh castShadow receiveShadow position={[0, RACK_SIDE_HEIGHT * 0.34, -height / 2 + RACK_END_BLOCK / 2]}>
         <boxGeometry args={[depth * 0.76, RACK_SIDE_HEIGHT * 0.72, RACK_END_BLOCK]} />
