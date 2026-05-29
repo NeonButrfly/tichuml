@@ -944,15 +944,15 @@ export function resolveCardSpriteVisualTuning(
   const centerIndex = (Math.max(handCount, 1) - 1) / 2;
   const offsetFromCenter = slotIndex - centerIndex;
   const distance = Math.abs(offsetFromCenter);
-  const width = anchor.w_px * 0.78;
-  const height = anchor.h_px * 0.78;
+  const width = anchor.w_px * 0.7;
+  const height = anchor.h_px * 0.7;
 
   return {
     width,
     height,
-    translateX: offsetFromCenter * -16,
-    translateY: 74 - distance * 2.6,
-    transformOrigin: "center 82%"
+    translateX: offsetFromCenter * -11,
+    translateY: 86 - distance * 2,
+    transformOrigin: "center 86%"
   } as const;
 }
 

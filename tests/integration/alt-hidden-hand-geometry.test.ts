@@ -67,6 +67,9 @@ describe("ALT hidden-hand geometry", () => {
     expect(config.cardHeight).toBeGreaterThan(0.62);
     expect(config.rackBuryDepth).toBeLessThan(0.035);
     expect(config.rackFloorY).toBeGreaterThan(0.09);
+    expect(seatLayout.northYawSpread).toBeLessThanOrEqual(0.012);
+    expect(seatLayout.sideYaw).toBeLessThanOrEqual(0.58);
+    expect(seatLayout.sideYawSpread).toBeLessThanOrEqual(0.004);
     expect(seatLayout.sideRowSpacing).toBeLessThan(0.024);
     expect(seatLayout.sideInboardOffset).toBeGreaterThan(0.28);
   });
@@ -90,9 +93,9 @@ describe("ALT hidden-hand geometry", () => {
 
     expect(eastPlacement.position[0]).toBeLessThan(eastBase[0]);
     expect(westPlacement.position[0]).toBeGreaterThan(westBase[0]);
-    expect(eastPlacement.rotation[1]).toBeLessThan(-0.64);
-    expect(eastPlacement.rotation[1]).toBeGreaterThan(-0.74);
-    expect(westPlacement.rotation[1]).toBeGreaterThan(0.64);
-    expect(westPlacement.rotation[1]).toBeLessThan(0.74);
+    expect(eastPlacement.rotation[1]).toBeLessThan(-0.46);
+    expect(eastPlacement.rotation[1]).toBeGreaterThan(-0.62);
+    expect(westPlacement.rotation[1]).toBeGreaterThan(0.46);
+    expect(westPlacement.rotation[1]).toBeLessThan(0.62);
   });
 });

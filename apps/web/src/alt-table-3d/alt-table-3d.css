@@ -201,7 +201,7 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.9rem;
-  pointer-events: auto;
+  pointer-events: none;
 }
 
 .alt-table-preview {

@@ -27,4 +27,12 @@ describe("ALT board chrome layout", () => {
     expect(stylesSource).not.toContain(".alt-table-status {\n  position: fixed;");
     expect(stylesSource).not.toContain(".alt-table-footer {\n  position: fixed;");
   });
+
+  it("keeps the informational footer from intercepting south-hand clicks", () => {
+    const footerRule = stylesSource.match(/\.alt-table-footer\s*\{[^}]+\}/);
+
+    expect(footerRule?.[0]).toBeTruthy();
+    expect(footerRule?.[0]).toContain("pointer-events: none;");
+    expect(footerRule?.[0]).not.toContain("pointer-events: auto;");
+  });
 });
