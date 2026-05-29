@@ -101,6 +101,7 @@ const WORLD_PLATE_ALPHA_SRC = buildWorldPlateAlphaSrc({
   insetX: 148,
   insetY: 124
 });
+const REFERENCE_CENTER_ALPHA_SRC = buildReferenceCenterAlphaSrc();
 const REFERENCE_HARDWARE_ALPHA_SRC = buildReferenceHardwareAlphaSrc();
 const ALT_HIDDEN_CARD_BACK_SRC = `data:image/svg+xml;utf8,${encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 588">
@@ -194,6 +195,7 @@ export function getAltTableSculptConfig() {
   return {
     plinthHeight: TABLE_PLINTH_HEIGHT,
     upperDeckHeight: TABLE_UPPER_DECK_HEIGHT,
+    upperDeckReveal: 0.22,
     innerRailHeight: TABLE_INNER_RAIL_HEIGHT,
     innerRailWidth: TABLE_INNER_RAIL_WIDTH,
     rackTrayBridgeHeight: RACK_TRAY_BRIDGE_HEIGHT,
@@ -205,7 +207,10 @@ export function getAltTableSurfaceMaterialConfig() {
   return {
     feltTopEmissiveIntensity: 1.12,
     feltWellEmissiveIntensity: 1.02,
-    dragonOpacity: 0.84,
+    dragonOpacity: 0.96,
+    feltHighlightOpacity: 0.12,
+    feltInnerHighlightOpacity: 0.08,
+    feltFieldHighlightOpacity: 0.06,
     goldTrimOpacity: 0.9
   } as const;
 }
@@ -244,6 +249,20 @@ export function getAltTableReferenceHardwareConfig() {
     opacity: 0.66,
     brightness: 0.98,
     yOffset: 0.11
+  } as const;
+}
+
+export function getAltTableReferenceCenterConfig() {
+  return {
+    opacity: 0.82,
+    brightness: 1.02,
+    yOffset: 0.101
+  } as const;
+}
+
+export function getAltTableReferenceCenterMaskConfig() {
+  return {
+    dragonField: { x: 334, y: 132, width: 868, height: 510, radius: 96 }
   } as const;
 }
 
@@ -349,7 +368,7 @@ function AltTableWorld(props: {
 }) {
   const lightingConfig = getAltTableLightingConfig();
   const hiddenBackSrc = useMemo(() => ALT_HIDDEN_CARD_BACK_SRC || props.backSrc, [props.backSrc]);
-  const [backTexture, dragonTexture, woodTexture, feltTexture, plateTexture, plateAlphaTexture, referenceTexture, referenceMaskTexture, northPlaqueTexture, southPlaqueTexture, eastPlaqueTexture, westPlaqueTexture, passPlaqueTexture, scorePlaqueTexture] = useLoader(TextureLoader, [
+  const [backTexture, dragonTexture, woodTexture, feltTexture, plateTexture, plateAlphaTexture, referenceTexture, referenceCenterTexture, referenceMaskTexture, northPlaqueTexture, southPlaqueTexture, eastPlaqueTexture, westPlaqueTexture, passPlaqueTexture, scorePlaqueTexture] = useLoader(TextureLoader, [
     hiddenBackSrc,
     DRAGON_MOTIF_SRC,
     WOOD_GRAIN_SRC,
@@ -357,6 +376,7 @@ function AltTableWorld(props: {
     TV7_TABLE_PLATE_SRC,
     WORLD_PLATE_ALPHA_SRC,
     TV7_TABLE_REFERENCE_SRC,
+    REFERENCE_CENTER_ALPHA_SRC,
     REFERENCE_HARDWARE_ALPHA_SRC,
     NORTH_PLAQUE_SRC,
     SOUTH_PLAQUE_SRC,
@@ -398,6 +418,9 @@ function AltTableWorld(props: {
   referenceTexture.minFilter = LinearFilter;
   referenceTexture.magFilter = LinearFilter;
   referenceTexture.needsUpdate = true;
+  referenceCenterTexture.minFilter = LinearFilter;
+  referenceCenterTexture.magFilter = LinearFilter;
+  referenceCenterTexture.needsUpdate = true;
   referenceMaskTexture.minFilter = LinearFilter;
   referenceMaskTexture.magFilter = LinearFilter;
   referenceMaskTexture.needsUpdate = true;
@@ -459,6 +482,7 @@ function AltTableWorld(props: {
           passPlaqueTexture={passPlaqueTexture}
           plateAlphaTexture={plateAlphaTexture}
           plateTexture={plateTexture}
+          referenceCenterTexture={referenceCenterTexture}
           referenceMaskTexture={referenceMaskTexture}
           referenceTexture={referenceTexture}
           scorePlaqueTexture={scorePlaqueTexture}
@@ -485,12 +509,14 @@ function TableBody(props: {
   passPlaqueTexture: Texture;
   plateAlphaTexture: Texture;
   plateTexture: Texture;
+  referenceCenterTexture: Texture;
   referenceMaskTexture: Texture;
   referenceTexture: Texture;
   scorePlaqueTexture: Texture;
   southPlaqueTexture: Texture;
   woodTexture: Texture;
 }) {
+  const referenceCenterConfig = getAltTableReferenceCenterConfig();
   const surfaceConfig = getAltTableSurfaceMaterialConfig();
   const reliefConfig = getAltTableReliefConfig();
   const referenceHardwareConfig = getAltTableReferenceHardwareConfig();
@@ -501,6 +527,11 @@ function TableBody(props: {
   const innerRailY = FELT_Y + TABLE_INNER_RAIL_HEIGHT / 2 - 0.004;
   const topDeckWidth = props.outerWidth - TABLE_UPPER_DECK_INSET;
   const topDeckHeight = props.outerHeight - TABLE_UPPER_DECK_INSET;
+  const topDeckInnerWidth = props.feltWidth + getAltTableSculptConfig().upperDeckReveal;
+  const topDeckInnerHeight = props.feltHeight + getAltTableSculptConfig().upperDeckReveal;
+  const topDeckFrameWidth = (topDeckWidth - topDeckInnerWidth) / 2;
+  const topDeckFrameHeight = (topDeckHeight - topDeckInnerHeight) / 2;
+  const topDeckY = TABLE_BASE_THICKNESS / 2 - TABLE_UPPER_DECK_HEIGHT / 2 + 0.01;
   const shoulderOuterWidth = props.feltWidth + reliefConfig.topShoulderInset + TABLE_INNER_RAIL_WIDTH * 1.08;
   const shoulderOuterHeight = props.feltHeight + reliefConfig.topShoulderInset + TABLE_INNER_RAIL_WIDTH * 1.08;
   const shoulderInnerWidth = props.feltWidth + TABLE_INNER_RAIL_WIDTH * 0.62;
@@ -532,8 +563,35 @@ function TableBody(props: {
         />
       </mesh>
 
-      <mesh position={[0, TABLE_BASE_THICKNESS / 2 - TABLE_UPPER_DECK_HEIGHT / 2 + 0.01, 0]} receiveShadow>
-        <boxGeometry args={[topDeckWidth, TABLE_UPPER_DECK_HEIGHT, topDeckHeight]} />
+      <mesh position={[0, topDeckY, -(topDeckInnerHeight + topDeckFrameHeight) / 2]} receiveShadow>
+        <boxGeometry args={[topDeckWidth, TABLE_UPPER_DECK_HEIGHT, topDeckFrameHeight]} />
+        <meshStandardMaterial
+          color="#9a6137"
+          map={props.woodTexture}
+          metalness={0.12}
+          roughness={0.62}
+        />
+      </mesh>
+      <mesh position={[0, topDeckY, (topDeckInnerHeight + topDeckFrameHeight) / 2]} receiveShadow>
+        <boxGeometry args={[topDeckWidth, TABLE_UPPER_DECK_HEIGHT, topDeckFrameHeight]} />
+        <meshStandardMaterial
+          color="#9a6137"
+          map={props.woodTexture}
+          metalness={0.12}
+          roughness={0.62}
+        />
+      </mesh>
+      <mesh position={[-(topDeckInnerWidth + topDeckFrameWidth) / 2, topDeckY, 0]} receiveShadow>
+        <boxGeometry args={[topDeckFrameWidth, TABLE_UPPER_DECK_HEIGHT, topDeckInnerHeight]} />
+        <meshStandardMaterial
+          color="#9a6137"
+          map={props.woodTexture}
+          metalness={0.12}
+          roughness={0.62}
+        />
+      </mesh>
+      <mesh position={[(topDeckInnerWidth + topDeckFrameWidth) / 2, topDeckY, 0]} receiveShadow>
+        <boxGeometry args={[topDeckFrameWidth, TABLE_UPPER_DECK_HEIGHT, topDeckInnerHeight]} />
         <meshStandardMaterial
           color="#9a6137"
           map={props.woodTexture}
@@ -551,6 +609,18 @@ function TableBody(props: {
           opacity={worldPlateConfig.opacity}
           toneMapped={false}
           color={`rgb(${Math.round(worldPlateConfig.brightness * 255)}, ${Math.round(worldPlateConfig.brightness * 255)}, ${Math.round(worldPlateConfig.brightness * 255)})`}
+        />
+      </mesh>
+
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, referenceCenterConfig.yOffset, 0]} receiveShadow>
+        <planeGeometry args={[props.outerWidth, props.outerHeight]} />
+        <meshBasicMaterial
+          alphaMap={props.referenceCenterTexture}
+          map={props.referenceTexture}
+          transparent
+          opacity={referenceCenterConfig.opacity}
+          toneMapped={false}
+          color={`rgb(${Math.round(referenceCenterConfig.brightness * 255)}, ${Math.round(referenceCenterConfig.brightness * 255)}, ${Math.round(referenceCenterConfig.brightness * 255)})`}
         />
       </mesh>
 
@@ -707,23 +777,24 @@ function TableBody(props: {
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FELT_Y + 0.004, 0]}>
         <planeGeometry args={[props.feltWidth - 0.2, props.feltHeight - 0.2]} />
-        <meshBasicMaterial color="#c1e0a2" transparent opacity={0.24} />
+        <meshBasicMaterial color="#c1e0a2" transparent opacity={surfaceConfig.feltHighlightOpacity} />
       </mesh>
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FELT_Y + 0.003, 0]}>
         <planeGeometry args={[props.feltWidth * 0.68, props.feltHeight * 0.7]} />
-        <meshBasicMaterial color="#f2f8c8" transparent opacity={0.24} />
+        <meshBasicMaterial color="#f2f8c8" transparent opacity={surfaceConfig.feltInnerHighlightOpacity} />
       </mesh>
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FELT_Y + 0.005, 0]}>
         <planeGeometry args={[props.feltWidth * 0.86, props.feltHeight * 0.82]} />
-        <meshBasicMaterial color="#7ea96d" transparent opacity={0.16} />
+        <meshBasicMaterial color="#7ea96d" transparent opacity={surfaceConfig.feltFieldHighlightOpacity} />
       </mesh>
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FELT_Y + 0.006, 0]}>
-        <planeGeometry args={[props.feltWidth * 0.46, props.feltHeight * 0.52]} />
+        <planeGeometry args={[props.feltWidth * 0.58, props.feltHeight * 0.64]} />
         <meshBasicMaterial
           map={props.dragonTexture}
+          color="#d3af56"
           transparent
           opacity={surfaceConfig.dragonOpacity}
         />
@@ -1338,6 +1409,25 @@ function buildWorldPlateAlphaSrc(args: {
     height="${1024 - args.insetY * 2}"
     rx="48"
     fill="#000000"
+  />
+</svg>
+`)}`;
+}
+
+function buildReferenceCenterAlphaSrc() {
+  const config = getAltTableReferenceCenterMaskConfig();
+  const dragonField = config.dragonField;
+
+  return `data:image/svg+xml;utf8,${encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1536 1024">
+  <rect width="1536" height="1024" fill="#000000"/>
+  <rect
+    x="${dragonField.x}"
+    y="${dragonField.y}"
+    width="${dragonField.width}"
+    height="${dragonField.height}"
+    rx="${dragonField.radius}"
+    fill="#ffffff"
   />
 </svg>
 `)}`;

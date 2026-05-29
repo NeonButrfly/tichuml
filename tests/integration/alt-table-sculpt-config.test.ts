@@ -8,6 +8,7 @@ describe("ALT table sculpt config", () => {
 
     expect(config.plinthHeight).toBeGreaterThan(0.08);
     expect(config.upperDeckHeight).toBeGreaterThan(0.07);
+    expect(config.upperDeckReveal).toBeGreaterThan(0.2);
     expect(config.innerRailHeight).toBeGreaterThan(0.05);
     expect(config.innerRailWidth).toBeGreaterThan(0.15);
   });

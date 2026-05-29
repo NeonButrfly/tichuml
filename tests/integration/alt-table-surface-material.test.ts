@@ -13,7 +13,8 @@ describe("ALT table surface material", () => {
   it("keeps the dragon and gold trim visible on the ALT surface", () => {
     const config = getAltTableSurfaceMaterialConfig();
 
-    expect(config.dragonOpacity).toBeGreaterThan(0.28);
+    expect(config.dragonOpacity).toBeGreaterThan(0.9);
+    expect(config.feltHighlightOpacity).toBeLessThan(0.2);
     expect(config.goldTrimOpacity).toBeGreaterThan(0.8);
   });
 });
