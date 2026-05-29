@@ -201,6 +201,15 @@ export function getAltTableSurfaceMaterialConfig() {
   } as const;
 }
 
+export function getAltTableReliefConfig() {
+  return {
+    topShoulderInset: 0.42,
+    topShoulderHeight: 0.11,
+    feltWellDrop: 0.094,
+    centerHighlightOpacity: 0.16
+  } as const;
+}
+
 export function getAltTableRackMaterialConfig() {
   return {
     rackTrimOpacity: 0.92,
@@ -407,12 +416,21 @@ function TableBody(props: {
   woodTexture: Texture;
 }) {
   const surfaceConfig = getAltTableSurfaceMaterialConfig();
+  const reliefConfig = getAltTableReliefConfig();
   const rackConfig = getAltTableRackMaterialConfig();
   const innerRailXLength = props.feltWidth + 0.22;
   const innerRailZLength = props.feltHeight + 0.22;
   const innerRailY = FELT_Y + TABLE_INNER_RAIL_HEIGHT / 2 - 0.004;
   const topDeckWidth = props.outerWidth - TABLE_UPPER_DECK_INSET;
   const topDeckHeight = props.outerHeight - TABLE_UPPER_DECK_INSET;
+  const shoulderOuterWidth = props.feltWidth + reliefConfig.topShoulderInset + TABLE_INNER_RAIL_WIDTH * 1.08;
+  const shoulderOuterHeight = props.feltHeight + reliefConfig.topShoulderInset + TABLE_INNER_RAIL_WIDTH * 1.08;
+  const shoulderInnerWidth = props.feltWidth + TABLE_INNER_RAIL_WIDTH * 0.62;
+  const shoulderInnerHeight = props.feltHeight + TABLE_INNER_RAIL_WIDTH * 0.62;
+  const shoulderWidth = (shoulderOuterWidth - shoulderInnerWidth) / 2;
+  const shoulderDepth = (shoulderOuterHeight - shoulderInnerHeight) / 2;
+  const shoulderY = FELT_Y - reliefConfig.feltWellDrop * 0.18;
+  const shoulderTopY = shoulderY + reliefConfig.topShoulderHeight / 2;
 
   return (
     <group>
@@ -444,6 +462,60 @@ function TableBody(props: {
           metalness={0.12}
           roughness={0.68}
         />
+      </mesh>
+
+      <mesh castShadow position={[0, shoulderY, -(shoulderInnerHeight + shoulderDepth) / 2]} receiveShadow>
+        <boxGeometry args={[shoulderOuterWidth, reliefConfig.topShoulderHeight, shoulderDepth]} />
+        <meshStandardMaterial
+          color="#97603b"
+          map={props.woodTexture}
+          metalness={0.14}
+          roughness={0.62}
+        />
+      </mesh>
+      <mesh castShadow position={[0, shoulderY, (shoulderInnerHeight + shoulderDepth) / 2]} receiveShadow>
+        <boxGeometry args={[shoulderOuterWidth, reliefConfig.topShoulderHeight, shoulderDepth]} />
+        <meshStandardMaterial
+          color="#97603b"
+          map={props.woodTexture}
+          metalness={0.14}
+          roughness={0.62}
+        />
+      </mesh>
+      <mesh castShadow position={[-(shoulderInnerWidth + shoulderWidth) / 2, shoulderY, 0]} receiveShadow>
+        <boxGeometry args={[shoulderWidth, reliefConfig.topShoulderHeight, shoulderInnerHeight]} />
+        <meshStandardMaterial
+          color="#97603b"
+          map={props.woodTexture}
+          metalness={0.14}
+          roughness={0.62}
+        />
+      </mesh>
+      <mesh castShadow position={[(shoulderInnerWidth + shoulderWidth) / 2, shoulderY, 0]} receiveShadow>
+        <boxGeometry args={[shoulderWidth, reliefConfig.topShoulderHeight, shoulderInnerHeight]} />
+        <meshStandardMaterial
+          color="#97603b"
+          map={props.woodTexture}
+          metalness={0.14}
+          roughness={0.62}
+        />
+      </mesh>
+
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, shoulderTopY + 0.002, -(shoulderInnerHeight + shoulderDepth * 0.52) / 2]}>
+        <planeGeometry args={[shoulderOuterWidth - 0.08, TABLE_FRAME_TRIM_WIDTH * 0.88]} />
+        <meshBasicMaterial color="#d0a24a" transparent opacity={0.76} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, shoulderTopY + 0.002, (shoulderInnerHeight + shoulderDepth * 0.52) / 2]}>
+        <planeGeometry args={[shoulderOuterWidth - 0.08, TABLE_FRAME_TRIM_WIDTH * 0.88]} />
+        <meshBasicMaterial color="#d0a24a" transparent opacity={0.76} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, Math.PI / 2]} position={[-(shoulderInnerWidth + shoulderWidth * 0.52) / 2, shoulderTopY + 0.002, 0]}>
+        <planeGeometry args={[shoulderOuterHeight - 0.08, TABLE_FRAME_TRIM_WIDTH * 0.88]} />
+        <meshBasicMaterial color="#d0a24a" transparent opacity={0.76} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, Math.PI / 2]} position={[(shoulderInnerWidth + shoulderWidth * 0.52) / 2, shoulderTopY + 0.002, 0]}>
+        <planeGeometry args={[shoulderOuterHeight - 0.08, TABLE_FRAME_TRIM_WIDTH * 0.88]} />
+        <meshBasicMaterial color="#d0a24a" transparent opacity={0.76} />
       </mesh>
 
       <mesh
@@ -533,12 +605,12 @@ function TableBody(props: {
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FELT_Y + 0.004, 0]}>
         <planeGeometry args={[props.feltWidth - 0.2, props.feltHeight - 0.2]} />
-        <meshBasicMaterial color="#9fc586" transparent opacity={0.09} />
+        <meshBasicMaterial color="#a9d090" transparent opacity={reliefConfig.centerHighlightOpacity} />
       </mesh>
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FELT_Y + 0.003, 0]}>
         <planeGeometry args={[props.feltWidth * 0.68, props.feltHeight * 0.7]} />
-        <meshBasicMaterial color="#c5df9e" transparent opacity={0.045} />
+        <meshBasicMaterial color="#d5e7aa" transparent opacity={0.09} />
       </mesh>
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FELT_Y + 0.006, 0]}>
