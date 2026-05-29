@@ -56,6 +56,18 @@ const WOOD_GRAIN_SRC = `data:image/svg+xml;utf8,${encodeURIComponent(`
   </g>
 </svg>
 `)}`;
+const NORTH_PLAQUE_SRC = buildSeatPlaqueSrc("NORTH");
+const EAST_PLAQUE_SRC = buildSeatPlaqueSrc("EAST", { vertical: true });
+const WEST_PLAQUE_SRC = buildSeatPlaqueSrc("WEST", { vertical: true });
+const RACK_BASE_HEIGHT = 0.15;
+const RACK_SIDE_HEIGHT = 0.32;
+const RACK_SIDE_THICKNESS = 0.13;
+const RACK_SLOT_THICKNESS = 0.05;
+const RACK_SLOT_DEPTH = 0.18;
+const RACK_END_BLOCK = 0.18;
+const RACK_PLAQUE_WIDTH = 0.9;
+const RACK_PLAQUE_HEIGHT = 0.34;
+const RACK_PLAQUE_INSET = 0.05;
 
 export function AltTableScene(props: {
   cards: HiddenHandCard[];
@@ -121,10 +133,13 @@ function AltTableWorld(props: {
   cards: HiddenHandCard[];
   backSrc: string;
 }) {
-  const [backTexture, dragonTexture, woodTexture] = useLoader(TextureLoader, [
+  const [backTexture, dragonTexture, woodTexture, northPlaqueTexture, eastPlaqueTexture, westPlaqueTexture] = useLoader(TextureLoader, [
     props.backSrc,
     DRAGON_MOTIF_SRC,
-    WOOD_GRAIN_SRC
+    WOOD_GRAIN_SRC,
+    NORTH_PLAQUE_SRC,
+    EAST_PLAQUE_SRC,
+    WEST_PLAQUE_SRC
   ]);
   backTexture.colorSpace = SRGBColorSpace;
   backTexture.minFilter = LinearFilter;
@@ -141,6 +156,18 @@ function AltTableWorld(props: {
   woodTexture.minFilter = LinearFilter;
   woodTexture.magFilter = LinearFilter;
   woodTexture.needsUpdate = true;
+  northPlaqueTexture.colorSpace = SRGBColorSpace;
+  northPlaqueTexture.minFilter = LinearFilter;
+  northPlaqueTexture.magFilter = LinearFilter;
+  northPlaqueTexture.needsUpdate = true;
+  eastPlaqueTexture.colorSpace = SRGBColorSpace;
+  eastPlaqueTexture.minFilter = LinearFilter;
+  eastPlaqueTexture.magFilter = LinearFilter;
+  eastPlaqueTexture.needsUpdate = true;
+  westPlaqueTexture.colorSpace = SRGBColorSpace;
+  westPlaqueTexture.minFilter = LinearFilter;
+  westPlaqueTexture.magFilter = LinearFilter;
+  westPlaqueTexture.needsUpdate = true;
   const tableSize = getTableWorldSize();
   const feltWidth = tableSize.width - FELT_INSET_X;
   const feltHeight = tableSize.height - FELT_INSET_Z;
@@ -162,9 +189,9 @@ function AltTableWorld(props: {
           outerWidth={outerWidth}
           woodTexture={woodTexture}
         />
-        <RackShell cards={props.cards} seat="north" />
-        <RackShell cards={props.cards} seat="east" />
-        <RackShell cards={props.cards} seat="west" />
+        <RackShell cards={props.cards} seat="north" plaqueTexture={northPlaqueTexture} woodTexture={woodTexture} />
+        <RackShell cards={props.cards} seat="east" plaqueTexture={eastPlaqueTexture} woodTexture={woodTexture} />
+        <RackShell cards={props.cards} seat="west" plaqueTexture={westPlaqueTexture} woodTexture={woodTexture} />
 
         <AltTableCards3D cards={props.cards} texture={backTexture} />
       </group>
@@ -301,9 +328,16 @@ function FrameRail(props: {
 function RackShell(props: {
   cards: HiddenHandCard[];
   seat: "north" | "east" | "west";
+  plaqueTexture: Texture;
+  woodTexture: Texture;
 }) {
   const commonMaterial = (
-    <meshStandardMaterial color="#6b4125" metalness={0.12} roughness={0.7} />
+    <meshStandardMaterial
+      color="#6b4125"
+      map={props.woodTexture}
+      metalness={0.12}
+      roughness={0.7}
+    />
   );
   const seatCards = props.cards.filter((card) => card.seat === props.seat);
   if (seatCards.length === 0) {
@@ -320,48 +354,126 @@ function RackShell(props: {
 
   if (props.seat === "north") {
     const width = maxX - minX + sampleSize.width * 1.75;
-    const depth = sampleSize.height * 0.94;
+    const depth = sampleSize.height * 1.04;
     const centerX = (minX + maxX) / 2;
-    const centerZ = minZ - sampleSize.width * 0.7;
+    const centerZ = minZ - sampleSize.width * 0.74;
     return (
       <group position={[centerX, 0.05, centerZ]}>
         <mesh>
-          <boxGeometry args={[width, 0.14, depth]} />
+          <boxGeometry args={[width, RACK_BASE_HEIGHT, depth]} />
           {commonMaterial}
         </mesh>
-        <mesh position={[0, 0.12, depth * 0.28]}>
-          <boxGeometry args={[width - 0.24, 0.12, 0.14]} />
+        <mesh position={[0, RACK_SIDE_HEIGHT * 0.5, -depth * 0.22]}>
+          <boxGeometry args={[width - 0.1, RACK_SIDE_HEIGHT, RACK_SIDE_THICKNESS]} />
           {commonMaterial}
         </mesh>
+        <mesh position={[0, RACK_BASE_HEIGHT * 0.2, depth * 0.05]}>
+          <boxGeometry args={[width - 0.22, RACK_SLOT_THICKNESS, RACK_SLOT_DEPTH]} />
+          <meshStandardMaterial color="#2b1a12" metalness={0.08} roughness={0.86} />
+        </mesh>
+        <mesh position={[-width / 2 + RACK_END_BLOCK / 2, RACK_SIDE_HEIGHT * 0.34, -depth * 0.04]}>
+          <boxGeometry args={[RACK_END_BLOCK, RACK_SIDE_HEIGHT * 0.72, depth * 0.76]} />
+          {commonMaterial}
+        </mesh>
+        <mesh position={[width / 2 - RACK_END_BLOCK / 2, RACK_SIDE_HEIGHT * 0.34, -depth * 0.04]}>
+          <boxGeometry args={[RACK_END_BLOCK, RACK_SIDE_HEIGHT * 0.72, depth * 0.76]} />
+          {commonMaterial}
+        </mesh>
+        <SeatPlaque
+          height={RACK_PLAQUE_HEIGHT}
+          position={[0, RACK_PLAQUE_HEIGHT * 0.62, depth * 0.46]}
+          rotation={[0, 0, 0]}
+          texture={props.plaqueTexture}
+          width={RACK_PLAQUE_WIDTH}
+        />
       </group>
     );
   }
 
-  const depth = sampleSize.width * 0.94;
-  const height = maxZ - minZ + sampleSize.width * 2.1;
+  const depth = sampleSize.width * 1.04;
+  const height = maxZ - minZ + sampleSize.width * 2.26;
   const centerZ = (minZ + maxZ) / 2;
   const centerX =
     props.seat === "east"
-      ? maxX + sampleSize.width * 0.58
-      : minX - sampleSize.width * 0.58;
+      ? maxX + sampleSize.width * 0.62
+      : minX - sampleSize.width * 0.62;
+  const sideDir = props.seat === "east" ? -1 : 1;
   return (
     <group position={[centerX, 0.05, centerZ]}>
       <mesh>
-        <boxGeometry args={[depth, 0.14, height]} />
+        <boxGeometry args={[depth, RACK_BASE_HEIGHT, height]} />
         {commonMaterial}
       </mesh>
-      <mesh
-        position={[
-          props.seat === "east" ? -depth * 0.26 : depth * 0.26,
-          0.12,
-          0
-        ]}
-      >
-        <boxGeometry args={[0.14, 0.12, height - sampleSize.width * 0.7]} />
+      <mesh position={[sideDir * depth * 0.22, RACK_SIDE_HEIGHT * 0.5, 0]}>
+        <boxGeometry args={[RACK_SIDE_THICKNESS, RACK_SIDE_HEIGHT, height - 0.1]} />
         {commonMaterial}
+      </mesh>
+      <mesh position={[-sideDir * depth * 0.02, RACK_BASE_HEIGHT * 0.2, 0]}>
+        <boxGeometry args={[RACK_SLOT_DEPTH, RACK_SLOT_THICKNESS, height - 0.26]} />
+        <meshStandardMaterial color="#2b1a12" metalness={0.08} roughness={0.86} />
+      </mesh>
+      <mesh position={[0, RACK_SIDE_HEIGHT * 0.34, -height / 2 + RACK_END_BLOCK / 2]}>
+        <boxGeometry args={[depth * 0.76, RACK_SIDE_HEIGHT * 0.72, RACK_END_BLOCK]} />
+        {commonMaterial}
+      </mesh>
+      <mesh position={[0, RACK_SIDE_HEIGHT * 0.34, height / 2 - RACK_END_BLOCK / 2]}>
+        <boxGeometry args={[depth * 0.76, RACK_SIDE_HEIGHT * 0.72, RACK_END_BLOCK]} />
+        {commonMaterial}
+      </mesh>
+      <SeatPlaque
+        height={RACK_PLAQUE_WIDTH}
+        position={[sideDir * (depth * 0.52 + RACK_PLAQUE_INSET), RACK_PLAQUE_HEIGHT * 1.08, 0]}
+        rotation={[0, props.seat === "east" ? -Math.PI / 2 : Math.PI / 2, 0]}
+        texture={props.plaqueTexture}
+        width={RACK_PLAQUE_HEIGHT}
+      />
+    </group>
+  );
+}
+
+function SeatPlaque(props: {
+  height: number;
+  position: [number, number, number];
+  rotation: [number, number, number];
+  texture: Texture;
+  width: number;
+}) {
+  return (
+    <group position={props.position} rotation={props.rotation}>
+      <mesh position={[0, 0, -0.015]}>
+        <boxGeometry args={[props.width + 0.08, props.height + 0.08, 0.03]} />
+        <meshStandardMaterial color="#9b7a33" metalness={0.34} roughness={0.46} />
+      </mesh>
+      <mesh>
+        <planeGeometry args={[props.width, props.height]} />
+        <meshBasicMaterial map={props.texture} transparent />
       </mesh>
     </group>
   );
+}
+
+function buildSeatPlaqueSrc(
+  label: string,
+  options?: {
+    vertical?: boolean;
+  }
+) {
+  const isVertical = options?.vertical ?? false;
+  const width = isVertical ? 220 : 420;
+  const height = isVertical ? 420 : 220;
+  const textTransform = isVertical
+    ? `translate(${width / 2} ${height / 2}) rotate(-90)`
+    : `translate(${width / 2} ${height / 2})`;
+
+  return `data:image/svg+xml;utf8,${encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}">
+  <rect x="8" y="8" width="${width - 16}" height="${height - 16}" rx="28" fill="#0f241a" stroke="#9f7c34" stroke-width="10"/>
+  <rect x="22" y="22" width="${width - 44}" height="${height - 44}" rx="20" fill="#153224" stroke="#c6a65d" stroke-opacity="0.55" stroke-width="3"/>
+  <g transform="${textTransform}">
+    <text x="0" y="0" text-anchor="middle" dominant-baseline="middle" font-family="Georgia, serif" font-size="${isVertical ? 64 : 78}" fill="#f0ddb1" letter-spacing="6">${label}</text>
+  </g>
+</svg>
+`)}`;
 }
 
 function supportsWebGlCanvas() {
