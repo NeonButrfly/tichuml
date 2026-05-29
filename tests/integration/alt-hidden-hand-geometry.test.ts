@@ -109,6 +109,8 @@ describe("ALT hidden-hand geometry", () => {
 
     expect(eastPlacement.position[0]).toBeLessThan(eastBase[0]);
     expect(westPlacement.position[0]).toBeGreaterThan(westBase[0]);
+    expect(Math.abs(eastPlacement.position[2])).toBeLessThan(Math.abs(eastBase[2]));
+    expect(Math.abs(westPlacement.position[2])).toBeLessThan(Math.abs(westBase[2]));
     expect(eastPlacement.rotation[1]).toBeLessThan(-0.42);
     expect(eastPlacement.rotation[1]).toBeGreaterThan(-0.52);
     expect(westPlacement.rotation[1]).toBeGreaterThan(0.42);

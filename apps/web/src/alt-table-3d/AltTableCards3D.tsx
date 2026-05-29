@@ -23,8 +23,9 @@ const RACK_FLOOR_Y = 0.096;
 const RACK_BURY_DEPTH = 0.03;
 const TABLE_WORLD_W = 11.4;
 const TABLE_WORLD_H = 7.6;
-const AUTHORED_NORTH_SLOT_STEP_PX = 38;
-const AUTHORED_SIDE_SLOT_STEP_PX = 34;
+const NORTH_RACK_CENTER_PX = { x: 768, y: 110 } as const;
+const EAST_RACK_CENTER_PX = { x: 1405, y: 476 } as const;
+const WEST_RACK_CENTER_PX = { x: 131, y: 476 } as const;
 
 export function getAltHiddenCardMaterialConfig() {
   return {
@@ -130,12 +131,11 @@ function HiddenHandCardMesh(props: {
 }
 
 export function resolveHiddenHandPlacement(card: HiddenHandCard) {
-  const base = designToWorld(card.anchor.center_px.x, card.anchor.center_px.y);
   const size = getHiddenCardWorldSize(card.anchor);
   const layout = getHiddenHandSeatLayoutConfig();
   const seatOffset = card.slotIndex - (card.handCount - 1) / 2;
   const seatCurve = Math.abs(seatOffset);
-  const rackCenter = resolveHiddenHandRackCenter(card, base, seatOffset);
+  const rackCenter = resolveHiddenHandRackCenter(card);
   const seatedY = RACK_FLOOR_Y + size.height / 2 - RACK_BURY_DEPTH + seatCurve * 0.0012;
 
   switch (card.seat) {
@@ -185,19 +185,15 @@ export function resolveHiddenHandPlacement(card: HiddenHandCard) {
 }
 
 function resolveHiddenHandRackCenter(
-  card: HiddenHandCard,
-  base: readonly [number, number, number],
-  seatOffset: number
+  card: HiddenHandCard
 ) {
-  const northAuthoredStep = (AUTHORED_NORTH_SLOT_STEP_PX / DESIGN_W) * TABLE_WORLD_W;
-  const sideAuthoredStep = (AUTHORED_SIDE_SLOT_STEP_PX / DESIGN_H) * TABLE_WORLD_H;
-
   switch (card.seat) {
     case "north":
-      return [base[0] - seatOffset * northAuthoredStep, base[1], base[2]] as const;
+      return designToWorld(NORTH_RACK_CENTER_PX.x, NORTH_RACK_CENTER_PX.y);
     case "east":
+      return designToWorld(EAST_RACK_CENTER_PX.x, EAST_RACK_CENTER_PX.y);
     case "west":
-      return [base[0], base[1], base[2] - seatOffset * sideAuthoredStep] as const;
+      return designToWorld(WEST_RACK_CENTER_PX.x, WEST_RACK_CENTER_PX.y);
   }
 }
 
