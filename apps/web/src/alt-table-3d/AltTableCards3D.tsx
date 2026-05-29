@@ -99,27 +99,27 @@ function resolveHiddenHandPlacement(card: HiddenHandCard) {
         position: [
           base[0],
           seatedY,
-          base[2] - size.width * (0.4 - Math.min(seatCurve * 0.006, 0.032))
+          base[2] - size.width * (0.33 - Math.min(seatCurve * 0.005, 0.026))
         ] as const,
-        rotation: [0.08 - Math.min(seatCurve * 0.003, 0.016), seatOffset * 0.016, 0] as const
+        rotation: [0.02 - Math.min(seatCurve * 0.002, 0.01), seatOffset * 0.014, 0] as const
       };
     case "east":
       return {
         position: [
-          base[0] + size.width * (0.36 - Math.min(seatCurve * 0.004, 0.018)),
+          base[0] + size.width * (0.29 - Math.min(seatCurve * 0.003, 0.014)),
           seatedY,
-          base[2] + seatOffset * 0.01
+          base[2] + seatOffset * 0.012
         ] as const,
-        rotation: [0.05 - Math.min(seatCurve * 0.003, 0.014), -0.92 - seatOffset * 0.012, 0] as const
+        rotation: [0.01 - Math.min(seatCurve * 0.002, 0.01), -0.78 - seatOffset * 0.01, 0] as const
       };
     case "west":
       return {
         position: [
-          base[0] - size.width * (0.36 - Math.min(seatCurve * 0.004, 0.018)),
+          base[0] - size.width * (0.29 - Math.min(seatCurve * 0.003, 0.014)),
           seatedY,
-          base[2] + seatOffset * 0.01
+          base[2] + seatOffset * 0.012
         ] as const,
-        rotation: [0.05 - Math.min(seatCurve * 0.003, 0.014), 0.92 - seatOffset * 0.012, 0] as const
+        rotation: [0.01 - Math.min(seatCurve * 0.002, 0.01), 0.78 - seatOffset * 0.01, 0] as const
       };
   }
 }

@@ -161,8 +161,8 @@ export function AltTableScene(props: {
           gl={{ alpha: true, antialias: true }}
           shadows
           camera={{
-            position: [0, 7.5, 7.5],
-            fov: 40,
+            position: [0, 6.9, 6.35],
+            fov: 38,
             near: 0.1,
             far: 64
           }}
@@ -520,9 +520,9 @@ function RackShell(props: {
     const width = maxX - minX + sampleSize.width * 1.75;
     const depth = sampleSize.height * 1.18;
     const centerX = (minX + maxX) / 2;
-    const centerZ = minZ - sampleSize.width * 0.58;
+    const centerZ = minZ - sampleSize.width * 0.46;
     return (
-      <group position={[centerX, 0.07, centerZ]}>
+      <group position={[centerX, 0.085, centerZ]}>
         <mesh castShadow receiveShadow>
           <boxGeometry args={[width, RACK_BASE_HEIGHT, depth]} />
           {commonMaterial}
@@ -563,11 +563,11 @@ function RackShell(props: {
   const centerZ = (minZ + maxZ) / 2;
   const centerX =
     props.seat === "east"
-      ? maxX + sampleSize.width * 0.52
-      : minX - sampleSize.width * 0.52;
+      ? maxX + sampleSize.width * 0.42
+      : minX - sampleSize.width * 0.42;
   const sideDir = props.seat === "east" ? -1 : 1;
   return (
-    <group position={[centerX, 0.07, centerZ]}>
+    <group position={[centerX, 0.085, centerZ]}>
       <mesh castShadow receiveShadow>
         <boxGeometry args={[depth, RACK_BASE_HEIGHT, height]} />
         {commonMaterial}
