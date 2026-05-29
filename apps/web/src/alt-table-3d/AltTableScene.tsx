@@ -255,8 +255,8 @@ export function getAltTableSculptConfig() {
 
 export function getAltTableSurfaceMaterialConfig() {
   return {
-    feltTopEmissiveIntensity: 0.72,
-    feltWellEmissiveIntensity: 0.78,
+    feltTopEmissiveIntensity: 0.8,
+    feltWellEmissiveIntensity: 0.86,
     dragonOpacity: 1,
     feltHighlightOpacity: 0.05,
     feltInnerHighlightOpacity: 0.035,
@@ -304,9 +304,23 @@ export function getAltTableReferenceHardwareConfig() {
 
 export function getAltTableReferenceCenterConfig() {
   return {
-    opacity: 0.2,
-    brightness: 1.04,
+    opacity: 0.24,
+    brightness: 1.08,
     yOffset: 0.099
+  } as const;
+}
+
+export function getAltTableCenterMotifConfig() {
+  return {
+    medallionScale: 1.72,
+    outerRingOpacity: 0.62,
+    innerRingOpacity: 0.68,
+    emblemDotOpacity: 0.98,
+    barOpacity: 0.56,
+    ringAccentOpacity: 0.36,
+    planeOpacity: 0.3,
+    centerDiskOpacity: 0.12,
+    centerRingOpacity: 0.3
   } as const;
 }
 
@@ -604,6 +618,7 @@ function TableBody(props: {
 }) {
   const referenceCenterConfig = getAltTableReferenceCenterConfig();
   const referenceDragonCropConfig = getAltTableReferenceDragonCropConfig();
+  const centerMotifConfig = getAltTableCenterMotifConfig();
   const surfaceConfig = getAltTableSurfaceMaterialConfig();
   const reliefConfig = getAltTableReliefConfig();
   const referenceHardwareConfig = getAltTableReferenceHardwareConfig();
@@ -902,7 +917,7 @@ function TableBody(props: {
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FELT_Y + 0.0055, 0]}>
         <circleGeometry args={[Math.min(props.feltWidth, props.feltHeight) * 0.24, 96]} />
-        <meshBasicMaterial color="#876726" transparent opacity={0.09} toneMapped={false} />
+        <meshBasicMaterial color="#876726" transparent opacity={centerMotifConfig.centerDiskOpacity} toneMapped={false} />
       </mesh>
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FELT_Y + 0.0058, 0]}>
@@ -913,7 +928,7 @@ function TableBody(props: {
             96
           ]}
         />
-        <meshBasicMaterial color="#c29b46" transparent opacity={0.24} toneMapped={false} />
+        <meshBasicMaterial color="#c29b46" transparent opacity={centerMotifConfig.centerRingOpacity} toneMapped={false} />
       </mesh>
 
       <DragonMedallionGeometry y={FELT_Y + 0.0061} />
@@ -923,7 +938,7 @@ function TableBody(props: {
         <meshBasicMaterial
           map={props.dragonTexture}
           transparent
-          opacity={surfaceConfig.dragonOpacity * 0.22}
+          opacity={surfaceConfig.dragonOpacity * centerMotifConfig.planeOpacity}
           alphaTest={0.04}
           toneMapped={false}
         />
@@ -1099,39 +1114,40 @@ function FrontRailAssembly(props: {
 function DragonMedallionGeometry(props: {
   y: number;
 }) {
+  const config = getAltTableCenterMotifConfig();
   return (
-    <group position={[0, props.y, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={[1.55, 1.55, 1]}>
+    <group position={[0, props.y, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={[config.medallionScale, config.medallionScale, 1]}>
       <mesh rotation={[0, 0, 0.42]}>
         <torusGeometry args={[0.42, 0.028, 16, 96, 4.78]} />
-        <meshBasicMaterial color="#cfa64d" transparent opacity={0.5} toneMapped={false} />
+        <meshBasicMaterial color="#cfa64d" transparent opacity={config.outerRingOpacity} toneMapped={false} />
       </mesh>
       <mesh position={[0.05, -0.02, 0]} rotation={[0, 0, -2.18]}>
         <torusGeometry args={[0.29, 0.024, 16, 96, 4.44]} />
-        <meshBasicMaterial color="#dabb72" transparent opacity={0.56} toneMapped={false} />
+        <meshBasicMaterial color="#dabb72" transparent opacity={config.innerRingOpacity} toneMapped={false} />
       </mesh>
       <mesh position={[0.2, -0.17, 0]}>
         <circleGeometry args={[0.056, 36]} />
-        <meshBasicMaterial color="#dbbe72" transparent opacity={0.62} toneMapped={false} />
+        <meshBasicMaterial color="#dbbe72" transparent opacity={config.innerRingOpacity} toneMapped={false} />
       </mesh>
       <mesh position={[0.24, -0.15, 0]}>
         <circleGeometry args={[0.011, 24]} />
-        <meshBasicMaterial color="#f7e4a1" transparent opacity={0.92} toneMapped={false} />
+        <meshBasicMaterial color="#f7e4a1" transparent opacity={config.emblemDotOpacity} toneMapped={false} />
       </mesh>
       <mesh position={[0.14, -0.08, 0]} rotation={[0, 0, 0.88]}>
         <boxGeometry args={[0.18, 0.022, 0.002]} />
-        <meshBasicMaterial color="#d2af61" transparent opacity={0.46} toneMapped={false} />
+        <meshBasicMaterial color="#d2af61" transparent opacity={config.barOpacity} toneMapped={false} />
       </mesh>
       <mesh position={[-0.13, 0.17, 0]} rotation={[0, 0, -0.72]}>
         <boxGeometry args={[0.24, 0.024, 0.002]} />
-        <meshBasicMaterial color="#d6b86a" transparent opacity={0.44} toneMapped={false} />
+        <meshBasicMaterial color="#d6b86a" transparent opacity={config.barOpacity} toneMapped={false} />
       </mesh>
       <mesh position={[-0.19, 0.09, 0]} rotation={[0, 0, -1.08]}>
         <boxGeometry args={[0.18, 0.02, 0.002]} />
-        <meshBasicMaterial color="#c79f4b" transparent opacity={0.42} toneMapped={false} />
+        <meshBasicMaterial color="#c79f4b" transparent opacity={config.barOpacity} toneMapped={false} />
       </mesh>
       <mesh position={[-0.02, 0.02, 0]} rotation={[0, 0, 0.2]}>
         <ringGeometry args={[0.075, 0.097, 40, 1, Math.PI * 0.18, Math.PI * 1.22]} />
-        <meshBasicMaterial color="#e1c67c" transparent opacity={0.24} toneMapped={false} />
+        <meshBasicMaterial color="#e1c67c" transparent opacity={config.ringAccentOpacity} toneMapped={false} />
       </mesh>
     </group>
   );
