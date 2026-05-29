@@ -10,9 +10,11 @@ describe("ALT rack plaque presentation", () => {
     expect(config.northPlaqueScale).toBeGreaterThan(1.08);
     expect(config.sidePlaqueYaw).toBeGreaterThan(0.45);
     expect(config.sidePlaqueYaw).toBeLessThan(0.7);
-    expect(config.sidePlaqueOffset).toBeGreaterThan(0.4);
-    expect(config.sidePlaqueScale).toBeGreaterThan(1.05);
-    expect(config.sidePlaqueBridgeLength).toBeGreaterThan(0.12);
-    expect(config.sidePlaqueBackerThickness).toBeGreaterThan(0.18);
+    expect(config.sidePlaqueOffset).toBeGreaterThan(0.54);
+    expect(config.sidePlaqueLift).toBeGreaterThan(1.5);
+    expect(config.sidePlaqueScale).toBeGreaterThan(1.02);
+    expect(config.sidePlaqueScale).toBeLessThan(1.08);
+    expect(config.sidePlaqueBridgeLength).toBeLessThan(0.15);
+    expect(config.sidePlaqueBackerThickness).toBeLessThan(0.21);
   });
 });

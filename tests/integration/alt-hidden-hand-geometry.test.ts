@@ -70,7 +70,8 @@ describe("ALT hidden-hand geometry", () => {
     expect(seatLayout.northYawSpread).toBeLessThanOrEqual(0.012);
     expect(seatLayout.sideYaw).toBeLessThanOrEqual(0.58);
     expect(seatLayout.sideYawSpread).toBeLessThanOrEqual(0.004);
-    expect(seatLayout.sideRowSpacing).toBeLessThan(0.024);
+    expect(seatLayout.sideCardStepZ).toBeGreaterThan(0.13);
+    expect(seatLayout.sideCardStepZ).toBeLessThan(0.16);
     expect(seatLayout.sideInboardOffset).toBeGreaterThan(0.28);
   });
 
@@ -81,6 +82,19 @@ describe("ALT hidden-hand geometry", () => {
 
     expect(placement.rotation[0]).toBeGreaterThan(0.15);
     expect(placement.position[2]).toBeGreaterThan(base[2]);
+  });
+
+  it("compresses hidden-hand span into rack-local spacing instead of replaying the full 2D authored fan", () => {
+    const northFirst = resolveHiddenHandPlacement(buildHiddenCard("north", 0));
+    const northLast = resolveHiddenHandPlacement(buildHiddenCard("north", 13));
+    const eastFirst = resolveHiddenHandPlacement(buildHiddenCard("east", 0));
+    const eastLast = resolveHiddenHandPlacement(buildHiddenCard("east", 13));
+    const westFirst = resolveHiddenHandPlacement(buildHiddenCard("west", 0));
+    const westLast = resolveHiddenHandPlacement(buildHiddenCard("west", 13));
+
+    expect(Math.abs(northLast.position[0] - northFirst.position[0])).toBeLessThan(2.75);
+    expect(Math.abs(eastLast.position[2] - eastFirst.position[2])).toBeLessThan(1.9);
+    expect(Math.abs(westLast.position[2] - westFirst.position[2])).toBeLessThan(1.9);
   });
 
   it("keeps east and west cards less buried, more camera-open, and pulled inward into the trays", () => {

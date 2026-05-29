@@ -23,6 +23,8 @@ const RACK_FLOOR_Y = 0.096;
 const RACK_BURY_DEPTH = 0.03;
 const TABLE_WORLD_W = 11.4;
 const TABLE_WORLD_H = 7.6;
+const AUTHORED_NORTH_SLOT_STEP_PX = 38;
+const AUTHORED_SIDE_SLOT_STEP_PX = 34;
 
 export function getAltHiddenCardMaterialConfig() {
   return {
@@ -42,10 +44,11 @@ export function getHiddenHandSeatLayoutConfig() {
     northTilt: 0.19,
     northYawSpread: 0.011,
     northForwardOffset: 0.27,
+    northCardStepX: 0.205,
     sideTilt: 0.11,
     sideYaw: 0.54,
     sideYawSpread: 0.003,
-    sideRowSpacing: 0.014,
+    sideCardStepZ: 0.145,
     sideInboardOffset: 0.3
   } as const;
 }
@@ -132,15 +135,17 @@ export function resolveHiddenHandPlacement(card: HiddenHandCard) {
   const layout = getHiddenHandSeatLayoutConfig();
   const seatOffset = card.slotIndex - (card.handCount - 1) / 2;
   const seatCurve = Math.abs(seatOffset);
+  const rackCenter = resolveHiddenHandRackCenter(card, base, seatOffset);
   const seatedY = RACK_FLOOR_Y + size.height / 2 - RACK_BURY_DEPTH + seatCurve * 0.0012;
 
   switch (card.seat) {
     case "north":
       return {
         position: [
-          base[0],
+          rackCenter[0] + seatOffset * layout.northCardStepX,
           seatedY,
-          base[2] + size.width * (layout.northForwardOffset - Math.min(seatCurve * 0.006, 0.03))
+          rackCenter[2] +
+            size.width * (layout.northForwardOffset - Math.min(seatCurve * 0.004, 0.02))
         ] as const,
         rotation: [
           layout.northTilt - Math.min(seatCurve * 0.005, 0.034),
@@ -151,9 +156,10 @@ export function resolveHiddenHandPlacement(card: HiddenHandCard) {
     case "east":
       return {
         position: [
-          base[0] - size.width * (layout.sideInboardOffset - Math.min(seatCurve * 0.005, 0.024)),
+          rackCenter[0] -
+            size.width * (layout.sideInboardOffset - Math.min(seatCurve * 0.004, 0.02)),
           seatedY,
-          base[2] + seatOffset * layout.sideRowSpacing
+          rackCenter[2] + seatOffset * layout.sideCardStepZ
         ] as const,
         rotation: [
           layout.sideTilt - Math.min(seatCurve * 0.004, 0.03),
@@ -164,9 +170,10 @@ export function resolveHiddenHandPlacement(card: HiddenHandCard) {
     case "west":
       return {
         position: [
-          base[0] + size.width * (layout.sideInboardOffset - Math.min(seatCurve * 0.005, 0.024)),
+          rackCenter[0] +
+            size.width * (layout.sideInboardOffset - Math.min(seatCurve * 0.004, 0.02)),
           seatedY,
-          base[2] + seatOffset * layout.sideRowSpacing
+          rackCenter[2] + seatOffset * layout.sideCardStepZ
         ] as const,
         rotation: [
           layout.sideTilt - Math.min(seatCurve * 0.004, 0.03),
@@ -174,6 +181,23 @@ export function resolveHiddenHandPlacement(card: HiddenHandCard) {
           0
         ] as const
       };
+  }
+}
+
+function resolveHiddenHandRackCenter(
+  card: HiddenHandCard,
+  base: readonly [number, number, number],
+  seatOffset: number
+) {
+  const northAuthoredStep = (AUTHORED_NORTH_SLOT_STEP_PX / DESIGN_W) * TABLE_WORLD_W;
+  const sideAuthoredStep = (AUTHORED_SIDE_SLOT_STEP_PX / DESIGN_H) * TABLE_WORLD_H;
+
+  switch (card.seat) {
+    case "north":
+      return [base[0] - seatOffset * northAuthoredStep, base[1], base[2]] as const;
+    case "east":
+    case "west":
+      return [base[0], base[1], base[2] - seatOffset * sideAuthoredStep] as const;
   }
 }
 

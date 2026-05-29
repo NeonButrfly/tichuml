@@ -13,6 +13,7 @@ import {
   designToWorld,
   getHiddenCardWorldSize,
   getTableWorldSize,
+  resolveHiddenHandPlacement,
   type HiddenHandCard
 } from "./AltTableCards3D";
 import {
@@ -379,12 +380,12 @@ export function getAltRackPlaquePresentationConfig() {
     northPlaqueDepth: 0.52,
     northPlaqueLift: 0.82,
     northPlaqueScale: 1.12,
-    sidePlaqueYaw: 0.56,
-    sidePlaqueOffset: 0.49,
-    sidePlaqueLift: 1.36,
-    sidePlaqueScale: 1.1,
-    sidePlaqueBridgeLength: 0.16,
-    sidePlaqueBackerThickness: 0.22
+    sidePlaqueYaw: 0.5,
+    sidePlaqueOffset: 0.58,
+    sidePlaqueLift: 1.58,
+    sidePlaqueScale: 1.04,
+    sidePlaqueBridgeLength: 0.14,
+    sidePlaqueBackerThickness: 0.19
   } as const;
 }
 
@@ -1312,8 +1313,9 @@ function RackShell(props: {
     return null;
   }
 
-  const xs = seatCards.map((card) => designToWorld(card.anchor.center_px.x, card.anchor.center_px.y)[0]);
-  const zs = seatCards.map((card) => designToWorld(card.anchor.center_px.x, card.anchor.center_px.y)[2]);
+  const placements = seatCards.map((card) => resolveHiddenHandPlacement(card));
+  const xs = placements.map((placement) => placement.position[0]);
+  const zs = placements.map((placement) => placement.position[2]);
   const sampleSize = getHiddenCardWorldSize(seatCards[Math.floor(seatCards.length / 2)]!.anchor);
   const minX = Math.min(...xs);
   const maxX = Math.max(...xs);
@@ -1330,9 +1332,7 @@ function RackShell(props: {
   const slotDividerConfig = getAltRackSlotDividerConfig();
   const linerConfig = getAltRackLinerConfig();
   const interiorFinishConfig = getAltRackInteriorFinishConfig();
-  const seatCenters = seatCards.map((card) =>
-    designToWorld(card.anchor.center_px.x, card.anchor.center_px.y)
-  );
+  const seatCenters = placements.map((placement) => placement.position);
   const northSlotDividers = buildRackSlotDividerOffsets({
     seat: "north",
     centers: seatCenters,
