@@ -14,6 +14,7 @@ import {
   getTableWorldSize,
   type HiddenHandCard
 } from "./AltTableCards3D";
+import { TV7_TABLE_PLATE_SRC } from "./tv7-runtime";
 
 const TABLE_BASE_THICKNESS = 0.18;
 const TABLE_FRAME_HEIGHT = 0.16;
@@ -220,6 +221,14 @@ export function getAltTableReliefConfig() {
   } as const;
 }
 
+export function getAltTableWorldPlateConfig() {
+  return {
+    opacity: 0.42,
+    brightness: 0.9,
+    yOffset: 0.104
+  } as const;
+}
+
 export function getAltTableRackMaterialConfig() {
   return {
     rackTrimOpacity: 0.92,
@@ -310,11 +319,12 @@ function AltTableWorld(props: {
 }) {
   const lightingConfig = getAltTableLightingConfig();
   const hiddenBackSrc = useMemo(() => ALT_HIDDEN_CARD_BACK_SRC || props.backSrc, [props.backSrc]);
-  const [backTexture, dragonTexture, woodTexture, feltTexture, northPlaqueTexture, southPlaqueTexture, eastPlaqueTexture, westPlaqueTexture, passPlaqueTexture, scorePlaqueTexture] = useLoader(TextureLoader, [
+  const [backTexture, dragonTexture, woodTexture, feltTexture, plateTexture, northPlaqueTexture, southPlaqueTexture, eastPlaqueTexture, westPlaqueTexture, passPlaqueTexture, scorePlaqueTexture] = useLoader(TextureLoader, [
     hiddenBackSrc,
     DRAGON_MOTIF_SRC,
     WOOD_GRAIN_SRC,
     FELT_SURFACE_SRC,
+    TV7_TABLE_PLATE_SRC,
     NORTH_PLAQUE_SRC,
     SOUTH_PLAQUE_SRC,
     EAST_PLAQUE_SRC,
@@ -344,6 +354,10 @@ function AltTableWorld(props: {
   feltTexture.minFilter = LinearFilter;
   feltTexture.magFilter = LinearFilter;
   feltTexture.needsUpdate = true;
+  plateTexture.colorSpace = SRGBColorSpace;
+  plateTexture.minFilter = LinearFilter;
+  plateTexture.magFilter = LinearFilter;
+  plateTexture.needsUpdate = true;
   northPlaqueTexture.colorSpace = SRGBColorSpace;
   northPlaqueTexture.minFilter = LinearFilter;
   northPlaqueTexture.magFilter = LinearFilter;
@@ -400,6 +414,7 @@ function AltTableWorld(props: {
           outerHeight={outerHeight}
           outerWidth={outerWidth}
           passPlaqueTexture={passPlaqueTexture}
+          plateTexture={plateTexture}
           scorePlaqueTexture={scorePlaqueTexture}
           southPlaqueTexture={southPlaqueTexture}
           woodTexture={woodTexture}
@@ -422,12 +437,14 @@ function TableBody(props: {
   outerHeight: number;
   outerWidth: number;
   passPlaqueTexture: Texture;
+  plateTexture: Texture;
   scorePlaqueTexture: Texture;
   southPlaqueTexture: Texture;
   woodTexture: Texture;
 }) {
   const surfaceConfig = getAltTableSurfaceMaterialConfig();
   const reliefConfig = getAltTableReliefConfig();
+  const worldPlateConfig = getAltTableWorldPlateConfig();
   const rackConfig = getAltTableRackMaterialConfig();
   const innerRailXLength = props.feltWidth + 0.22;
   const innerRailZLength = props.feltHeight + 0.22;
@@ -472,6 +489,17 @@ function TableBody(props: {
           map={props.woodTexture}
           metalness={0.12}
           roughness={0.62}
+        />
+      </mesh>
+
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, worldPlateConfig.yOffset, 0]} receiveShadow>
+        <planeGeometry args={[props.outerWidth, props.outerHeight]} />
+        <meshBasicMaterial
+          map={props.plateTexture}
+          transparent
+          opacity={worldPlateConfig.opacity}
+          toneMapped={false}
+          color={`rgb(${Math.round(worldPlateConfig.brightness * 255)}, ${Math.round(worldPlateConfig.brightness * 255)}, ${Math.round(worldPlateConfig.brightness * 255)})`}
         />
       </mesh>
 
