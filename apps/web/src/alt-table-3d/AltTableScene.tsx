@@ -355,12 +355,22 @@ export function getAltTableReferenceHardwareMaskConfig() {
 
 export function getAltTableRackMaterialConfig() {
   return {
-    rackTrimOpacity: 0.94,
-    frameTrimOpacity: 0.9,
-    rackWoodRoughness: 0.54,
-    rackWoodMetalness: 0.18,
-    rackWoodAccentOpacity: 0.18,
-    frameWoodAccentOpacity: 0.16
+    rackTrimOpacity: 0.96,
+    frameTrimOpacity: 0.92,
+    rackWoodRoughness: 0.5,
+    rackWoodMetalness: 0.2,
+    rackWoodAccentOpacity: 0.24,
+    frameWoodAccentOpacity: 0.22
+  } as const;
+}
+
+export function getAltTableHardwareFinishConfig() {
+  return {
+    frameTopGlowOpacity: 0.22,
+    railTopGlowOpacity: 0.24,
+    railLipGlowOpacity: 0.3,
+    centerBlockGlowOpacity: 0.28,
+    sideBlockGlowOpacity: 0.24
   } as const;
 }
 
@@ -990,6 +1000,7 @@ function FrontRailAssembly(props: {
   woodTexture: Texture;
 }) {
   const config = getFrontRailAssemblyConfig();
+  const finishConfig = getAltTableHardwareFinishConfig();
   const railZ = (props.outerHeight - TABLE_BORDER_WIDTH) / 2 - 0.14;
   const railY = config.railHeight / 2;
   const plaqueZ = railZ + FRONT_BLOCK_DEPTH * 0.12;
@@ -1008,7 +1019,11 @@ function FrontRailAssembly(props: {
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, config.railHeight + 0.002, railZ - 0.02]}>
         <planeGeometry args={[props.outerWidth - 0.26, config.railDepth * 0.34]} />
-        <meshBasicMaterial color="#e3c17b" transparent opacity={0.16} toneMapped={false} />
+        <meshBasicMaterial color="#e3c17b" transparent opacity={finishConfig.railTopGlowOpacity} toneMapped={false} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, config.railHeight + 0.004, railZ + config.railDepth * 0.08]}>
+        <planeGeometry args={[props.outerWidth - 0.42, config.railDepth * 0.14]} />
+        <meshBasicMaterial color="#f2d28b" transparent opacity={finishConfig.railLipGlowOpacity} toneMapped={false} />
       </mesh>
 
       <mesh castShadow position={[0, railY + config.railHeight * 0.48, railZ - 0.04]} receiveShadow>
@@ -1033,7 +1048,11 @@ function FrontRailAssembly(props: {
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, config.centerBlockHeight + 0.004, plaqueZ + 0.01]}>
         <planeGeometry args={[FRONT_BLOCK_WIDTH * 0.88, FRONT_BLOCK_DEPTH * 0.42]} />
-        <meshBasicMaterial color="#f0cd85" transparent opacity={0.18} toneMapped={false} />
+        <meshBasicMaterial color="#f0cd85" transparent opacity={finishConfig.centerBlockGlowOpacity} toneMapped={false} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, config.centerBlockHeight * 0.76, plaqueZ - FRONT_BLOCK_DEPTH * 0.06]}>
+        <planeGeometry args={[FRONT_BLOCK_WIDTH * 0.7, FRONT_BLOCK_DEPTH * 0.12]} />
+        <meshBasicMaterial color="#d2a855" transparent opacity={finishConfig.railLipGlowOpacity} toneMapped={false} />
       </mesh>
 
       <mesh castShadow position={[0, config.centerBlockHeight * 0.24, railZ + 0.04]} receiveShadow>
@@ -1055,6 +1074,10 @@ function FrontRailAssembly(props: {
           roughness={0.7}
         />
       </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[-props.outerWidth / 2 + 1.24, config.sideBlockHeight + 0.004, railZ + 0.1]}>
+        <planeGeometry args={[0.72, 0.16]} />
+        <meshBasicMaterial color="#edc87d" transparent opacity={finishConfig.sideBlockGlowOpacity} toneMapped={false} />
+      </mesh>
 
       <mesh castShadow position={[-props.outerWidth / 2 + 1.24, config.sideBlockHeight * 0.22, railZ + 0.03]} receiveShadow>
         <boxGeometry args={[0.8, config.sideBlockHeight * 0.24, 0.24]} />
@@ -1074,6 +1097,10 @@ function FrontRailAssembly(props: {
           metalness={0.12}
           roughness={0.7}
         />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[props.outerWidth / 2 - 0.88, config.sideBlockHeight + 0.004, railZ + 0.1]}>
+        <planeGeometry args={[0.5, 0.16]} />
+        <meshBasicMaterial color="#edc87d" transparent opacity={finishConfig.sideBlockGlowOpacity} toneMapped={false} />
       </mesh>
 
       <mesh castShadow position={[props.outerWidth / 2 - 0.88, config.sideBlockHeight * 0.22, railZ + 0.03]} receiveShadow>
@@ -1189,6 +1216,7 @@ function FrameRail(props: {
   woodTexture: Texture;
 }) {
   const rackConfig = getAltTableRackMaterialConfig();
+  const finishConfig = getAltTableHardwareFinishConfig();
   const size =
     props.axis === "x"
       ? [props.length, TABLE_FRAME_HEIGHT, TABLE_BORDER_WIDTH]
@@ -1220,6 +1248,24 @@ function FrameRail(props: {
           color="#e8c57d"
           transparent
           opacity={rackConfig.frameWoodAccentOpacity}
+          toneMapped={false}
+        />
+      </mesh>
+      <mesh
+        rotation={props.axis === "x" ? [-Math.PI / 2, 0, 0] : [-Math.PI / 2, 0, Math.PI / 2]}
+        position={[0, TABLE_FRAME_HEIGHT + 0.005, 0]}
+      >
+        <planeGeometry
+          args={
+            props.axis === "x"
+              ? [props.length - 0.42, TABLE_BORDER_WIDTH * 0.12]
+              : [props.length - 0.42, TABLE_BORDER_WIDTH * 0.12]
+          }
+        />
+        <meshBasicMaterial
+          color="#f3d28c"
+          transparent
+          opacity={finishConfig.frameTopGlowOpacity}
           toneMapped={false}
         />
       </mesh>
