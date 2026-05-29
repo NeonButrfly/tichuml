@@ -72,13 +72,25 @@ const FELT_SURFACE_SRC = `data:image/svg+xml;utf8,${encodeURIComponent(`
 `)}`;
 const DRAGON_MOTIF_SRC = `data:image/svg+xml;utf8,${encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <rect width="1024" height="1024" fill="#000000"/>
-  <g fill="none" stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M560 242c114 16 200 101 200 206 0 80-48 150-124 184-44 20-62 67-39 106 15 27 43 47 75 54-44 27-98 42-157 42-166 0-302-117-320-268 47 38 111 60 179 60 141 0 255-92 255-205 0-43-17-83-47-116-14-16-19-34-14-54 3-11 6-24 7-39 6 11 19 22 39 30 22 10 43 13 63 10-17 -5 -29 -14 -36 -27 -13 -27 -10 -54 8 -83 36 40 58 82 65 126 7 39 -1 73 -25 103-9 11 -14 20 -14 27 0 9 8 18 25 26z" stroke-width="40" opacity="0.92"/>
-    <path d="M417 374c-77 45-109 132-75 201 24 48 72 82 128 93-35 28-78 43-126 43-106 0-192-76-192-170 0-96 83-176 191-186 28-3 53-9 74-18z" stroke-width="26" opacity="0.56"/>
-    <path d="M567 338c46 18 77 49 92 91 16 45 8 88-25 131-24 31-55 51-93 61 16-29 22-61 16-96-6-40-26-77-59-110 28-17 51-43 69-77z" stroke-width="22" opacity="0.44"/>
-    <path d="M624 286l66-22M344 612l-82 39M626 624c-33 28-70 43-113 45M449 305c28-11 56-27 84-48" stroke-width="14" opacity="0.42"/>
-    <circle cx="675" cy="377" r="10" fill="#ffffff" opacity="0.72" stroke="none"/>
+  <g fill="#b78a34" stroke="none">
+    <path
+      d="M610 238c111 24 186 110 186 214 0 76-41 143-107 187-33 22-51 49-54 81-3 27 8 54 31 81-21 8-43 13-67 16-58 8-117 1-171-20-94-36-158-117-158-214 0-88 53-164 134-207 38-20 60-49 67-87 5-25 1-52-12-80 31 17 65 24 102 21 34-3 63-13 86-32-12 34-11 65 4 94 18 35 51 54 98 58 51 4 94-15 129-58-35-31-71-55-107-74-24-12-38-26-42-41-6-18 0-38 17-59 23 30 47 67 71 111 9 17 16 34 20 50 2 12-1 23-9 33-8 9-11 18-9 27 2 10 9 16 21 19z"
+      opacity="0.42"
+    />
+    <path
+      d="M604 284c76 19 129 79 129 152 0 58-31 108-85 141-45 28-66 60-63 97-35 19-74 28-116 28-69 0-130-27-175-76-43-47-62-103-54-165 8-67 45-118 111-153 39-20 65-50 78-88 15 11 33 17 55 20 26 3 50 0 72-8-6 24-5 46 3 68 15 41 46 63 93 66 35 2 69-12 102-43-27-17-55-29-85-39-37-12-54-34-53-66 25 26 54 46 88 58z"
+      opacity="0.62"
+    />
+    <path
+      d="M598 319c41 11 72 37 89 75 16 37 15 75-3 114-17 37-48 67-93 89-30 15-48 33-54 53-22 3-45 3-68-1-56-10-99-37-129-83-31-48-38-98-21-148 18-52 57-90 118-115 37-16 63-40 77-72 18 11 39 18 61 21 20 3 40 1 59-6-1 28 8 49 27 66 18 15 43 24 75 26-22-7-39-18-50-35-11-16-16-33-15-51z"
+      opacity="0.86"
+    />
+  </g>
+  <g fill="none" stroke="#d9bc73" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M671 332c39 17 64 47 76 89 9 37 6 72-11 106" stroke-width="24" opacity="0.5"/>
+    <path d="M372 585c18 35 47 60 88 77 40 15 81 20 123 14" stroke-width="20" opacity="0.38"/>
+    <path d="M648 285l69 23M314 635l83-26M641 617c-24 25-52 42-84 53" stroke-width="16" opacity="0.46"/>
+    <circle cx="664" cy="357" r="11" fill="#f0d487" opacity="0.9" stroke="none"/>
   </g>
 </svg>
 `)}`;
@@ -850,13 +862,15 @@ function TableBody(props: {
         <meshBasicMaterial color="#c29b46" transparent opacity={0.24} toneMapped={false} />
       </mesh>
 
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FELT_Y + 0.006, 0]}>
+      <DragonMedallionGeometry y={FELT_Y + 0.0061} />
+
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FELT_Y + 0.0059, 0]}>
         <planeGeometry args={[props.feltWidth * 0.82, props.feltHeight * 0.88]} />
         <meshBasicMaterial
-          alphaMap={props.dragonTexture}
-          color="#d8b464"
+          map={props.dragonTexture}
           transparent
-          opacity={surfaceConfig.dragonOpacity}
+          opacity={surfaceConfig.dragonOpacity * 0.22}
+          alphaTest={0.04}
           toneMapped={false}
         />
       </mesh>
@@ -1014,6 +1028,47 @@ function FrontRailAssembly(props: {
         texture={props.scorePlaqueTexture}
         width={0.82}
       />
+    </group>
+  );
+}
+
+function DragonMedallionGeometry(props: {
+  y: number;
+}) {
+  return (
+    <group position={[0, props.y, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={[1.55, 1.55, 1]}>
+      <mesh rotation={[0, 0, 0.42]}>
+        <torusGeometry args={[0.42, 0.028, 16, 96, 4.78]} />
+        <meshBasicMaterial color="#cfa64d" transparent opacity={0.5} toneMapped={false} />
+      </mesh>
+      <mesh position={[0.05, -0.02, 0]} rotation={[0, 0, -2.18]}>
+        <torusGeometry args={[0.29, 0.024, 16, 96, 4.44]} />
+        <meshBasicMaterial color="#dabb72" transparent opacity={0.56} toneMapped={false} />
+      </mesh>
+      <mesh position={[0.2, -0.17, 0]}>
+        <circleGeometry args={[0.056, 36]} />
+        <meshBasicMaterial color="#dbbe72" transparent opacity={0.62} toneMapped={false} />
+      </mesh>
+      <mesh position={[0.24, -0.15, 0]}>
+        <circleGeometry args={[0.011, 24]} />
+        <meshBasicMaterial color="#f7e4a1" transparent opacity={0.92} toneMapped={false} />
+      </mesh>
+      <mesh position={[0.14, -0.08, 0]} rotation={[0, 0, 0.88]}>
+        <boxGeometry args={[0.18, 0.022, 0.002]} />
+        <meshBasicMaterial color="#d2af61" transparent opacity={0.46} toneMapped={false} />
+      </mesh>
+      <mesh position={[-0.13, 0.17, 0]} rotation={[0, 0, -0.72]}>
+        <boxGeometry args={[0.24, 0.024, 0.002]} />
+        <meshBasicMaterial color="#d6b86a" transparent opacity={0.44} toneMapped={false} />
+      </mesh>
+      <mesh position={[-0.19, 0.09, 0]} rotation={[0, 0, -1.08]}>
+        <boxGeometry args={[0.18, 0.02, 0.002]} />
+        <meshBasicMaterial color="#c79f4b" transparent opacity={0.42} toneMapped={false} />
+      </mesh>
+      <mesh position={[-0.02, 0.02, 0]} rotation={[0, 0, 0.2]}>
+        <ringGeometry args={[0.075, 0.097, 40, 1, Math.PI * 0.18, Math.PI * 1.22]} />
+        <meshBasicMaterial color="#e1c67c" transparent opacity={0.24} toneMapped={false} />
+      </mesh>
     </group>
   );
 }
