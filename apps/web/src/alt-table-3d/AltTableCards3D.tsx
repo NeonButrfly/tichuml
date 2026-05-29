@@ -20,7 +20,7 @@ const CARD_FRONT_INSET = 0.028;
 const CARD_FRAME = 0.012;
 const CARD_THICKNESS = 0.014;
 const RACK_FLOOR_Y = 0.082;
-const RACK_BURY_DEPTH = 0.056;
+const RACK_BURY_DEPTH = 0.044;
 const TABLE_WORLD_W = 11.4;
 const TABLE_WORLD_H = 7.6;
 
@@ -86,7 +86,7 @@ function HiddenHandCardMesh(props: {
   );
 }
 
-function resolveHiddenHandPlacement(card: HiddenHandCard) {
+export function resolveHiddenHandPlacement(card: HiddenHandCard) {
   const base = designToWorld(card.anchor.center_px.x, card.anchor.center_px.y);
   const size = getHiddenCardWorldSize(card.anchor);
   const seatOffset = card.slotIndex - (card.handCount - 1) / 2;
@@ -99,27 +99,27 @@ function resolveHiddenHandPlacement(card: HiddenHandCard) {
         position: [
           base[0],
           seatedY,
-          base[2] - size.width * (0.33 - Math.min(seatCurve * 0.005, 0.026))
+          base[2] - size.width * (0.18 - Math.min(seatCurve * 0.003, 0.012))
         ] as const,
-        rotation: [0.02 - Math.min(seatCurve * 0.002, 0.01), seatOffset * 0.014, 0] as const
+        rotation: [0.084 - Math.min(seatCurve * 0.003, 0.022), seatOffset * 0.018, 0] as const
       };
     case "east":
       return {
         position: [
-          base[0] + size.width * (0.29 - Math.min(seatCurve * 0.003, 0.014)),
+          base[0] + size.width * (0.16 - Math.min(seatCurve * 0.002, 0.01)),
           seatedY,
-          base[2] + seatOffset * 0.012
+          base[2] + seatOffset * 0.018
         ] as const,
-        rotation: [0.01 - Math.min(seatCurve * 0.002, 0.01), -0.78 - seatOffset * 0.01, 0] as const
+        rotation: [0.056 - Math.min(seatCurve * 0.002, 0.016), -0.98 - seatOffset * 0.012, 0] as const
       };
     case "west":
       return {
         position: [
-          base[0] - size.width * (0.29 - Math.min(seatCurve * 0.003, 0.014)),
+          base[0] - size.width * (0.16 - Math.min(seatCurve * 0.002, 0.01)),
           seatedY,
-          base[2] + seatOffset * 0.012
+          base[2] + seatOffset * 0.018
         ] as const,
-        rotation: [0.01 - Math.min(seatCurve * 0.002, 0.01), 0.78 - seatOffset * 0.01, 0] as const
+        rotation: [0.056 - Math.min(seatCurve * 0.002, 0.016), 0.98 - seatOffset * 0.012, 0] as const
       };
   }
 }

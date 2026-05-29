@@ -102,21 +102,21 @@ const WEST_PLAQUE_SRC = buildSeatPlaqueSrc("WEST", { vertical: true });
 const PASS_PLAQUE_SRC = buildSeatPlaqueSrc("PASS");
 const SCORE_PLAQUE_SRC = buildScorePlaqueSrc();
 const RACK_BASE_HEIGHT = 0.17;
-const RACK_SIDE_HEIGHT = 0.38;
-const RACK_SIDE_THICKNESS = 0.16;
-const RACK_SLOT_THICKNESS = 0.05;
-const RACK_SLOT_DEPTH = 0.22;
+const RACK_SIDE_HEIGHT = 0.34;
+const RACK_SIDE_THICKNESS = 0.14;
+const RACK_SLOT_THICKNESS = 0.046;
+const RACK_SLOT_DEPTH = 0.24;
 const RACK_END_BLOCK = 0.2;
 const RACK_PLAQUE_WIDTH = 1.02;
 const RACK_PLAQUE_HEIGHT = 0.38;
 const RACK_PLAQUE_INSET = 0.05;
 const RACK_SUPPORT_BLOCK = 0.28;
-const RACK_FRONT_LIP_HEIGHT = 0.14;
-const RACK_FRONT_LIP_DEPTH = 0.16;
+const RACK_FRONT_LIP_HEIGHT = 0.1;
+const RACK_FRONT_LIP_DEPTH = 0.12;
 const RACK_CHEEK_WIDTH = 0.32;
-const RACK_CHEEK_HEIGHT = 0.52;
+const RACK_CHEEK_HEIGHT = 0.46;
 const RACK_CHEEK_DEPTH = 0.24;
-const RACK_CAP_HEIGHT = 0.1;
+const RACK_CAP_HEIGHT = 0.08;
 const RACK_CAP_DEPTH = 0.18;
 const RACK_SHOULDER_BLOCK = 0.34;
 const RACK_FOOT_WIDTH = 0.42;
@@ -175,8 +175,8 @@ export function AltTableScene(props: {
           gl={{ alpha: true, antialias: true }}
           shadows
           camera={{
-            position: [0, 6.9, 6.35],
-            fov: 38,
+            position: [0, 6.55, 5.95],
+            fov: 37,
             near: 0.1,
             far: 64
           }}
@@ -553,19 +553,19 @@ function RackShell(props: {
           <boxGeometry args={[RACK_FOOT_WIDTH, RACK_FOOT_HEIGHT, RACK_FOOT_DEPTH]} />
           {commonMaterial}
         </mesh>
-        <mesh castShadow receiveShadow position={[0, RACK_SIDE_HEIGHT * 0.5, -depth * 0.22]}>
+        <mesh castShadow receiveShadow position={[0, RACK_SIDE_HEIGHT * 0.5, -depth * 0.28]}>
           <boxGeometry args={[width - 0.1, RACK_SIDE_HEIGHT, RACK_SIDE_THICKNESS]} />
           {commonMaterial}
         </mesh>
-      <mesh castShadow receiveShadow position={[0, RACK_BASE_HEIGHT * 0.2, depth * 0.05]}>
+        <mesh castShadow receiveShadow position={[0, RACK_BASE_HEIGHT * 0.18, depth * 0.02]}>
           <boxGeometry args={[width - 0.22, RACK_SLOT_THICKNESS, RACK_SLOT_DEPTH]} />
           <meshStandardMaterial color="#2b1a12" metalness={0.08} roughness={0.86} />
         </mesh>
-        <mesh castShadow receiveShadow position={[0, RACK_BASE_HEIGHT * 0.28, depth * 0.26]}>
+        <mesh castShadow receiveShadow position={[0, RACK_BASE_HEIGHT * 0.24, depth * 0.2]}>
           <boxGeometry args={[width - 0.22, RACK_SLOT_THICKNESS * 0.9, RACK_SIDE_THICKNESS * 0.7]} />
           <meshStandardMaterial color="#44291b" metalness={0.1} roughness={0.8} />
         </mesh>
-        <mesh castShadow receiveShadow position={[0, RACK_FRONT_LIP_HEIGHT * 0.5, depth * 0.34]}>
+        <mesh castShadow receiveShadow position={[0, RACK_FRONT_LIP_HEIGHT * 0.5, depth * 0.28]}>
           <boxGeometry args={[width - 0.08, RACK_FRONT_LIP_HEIGHT, RACK_FRONT_LIP_DEPTH]} />
           {commonMaterial}
         </mesh>
@@ -666,19 +666,19 @@ function RackShell(props: {
         <boxGeometry args={[RACK_FOOT_DEPTH, RACK_FOOT_HEIGHT, RACK_FOOT_WIDTH]} />
         {commonMaterial}
       </mesh>
-      <mesh castShadow receiveShadow position={[sideDir * depth * 0.22, RACK_SIDE_HEIGHT * 0.5, 0]}>
+      <mesh castShadow receiveShadow position={[sideDir * depth * 0.26, RACK_SIDE_HEIGHT * 0.5, 0]}>
         <boxGeometry args={[RACK_SIDE_THICKNESS, RACK_SIDE_HEIGHT, height - 0.1]} />
         {commonMaterial}
       </mesh>
-      <mesh castShadow receiveShadow position={[-sideDir * depth * 0.02, RACK_BASE_HEIGHT * 0.2, 0]}>
+      <mesh castShadow receiveShadow position={[-sideDir * depth * 0.04, RACK_BASE_HEIGHT * 0.18, 0]}>
         <boxGeometry args={[RACK_SLOT_DEPTH, RACK_SLOT_THICKNESS, height - 0.26]} />
         <meshStandardMaterial color="#2b1a12" metalness={0.08} roughness={0.86} />
       </mesh>
-      <mesh castShadow receiveShadow position={[-sideDir * depth * 0.24, RACK_BASE_HEIGHT * 0.28, 0]}>
+      <mesh castShadow receiveShadow position={[-sideDir * depth * 0.2, RACK_BASE_HEIGHT * 0.24, 0]}>
         <boxGeometry args={[RACK_SIDE_THICKNESS * 0.72, RACK_SLOT_THICKNESS * 0.9, height - 0.26]} />
         <meshStandardMaterial color="#44291b" metalness={0.1} roughness={0.8} />
       </mesh>
-      <mesh castShadow receiveShadow position={[-sideDir * depth * 0.3, RACK_FRONT_LIP_HEIGHT * 0.5, 0]}>
+      <mesh castShadow receiveShadow position={[-sideDir * depth * 0.24, RACK_FRONT_LIP_HEIGHT * 0.5, 0]}>
         <boxGeometry args={[RACK_FRONT_LIP_DEPTH, RACK_FRONT_LIP_HEIGHT, height - 0.08]} />
         {commonMaterial}
       </mesh>
