@@ -29,6 +29,36 @@ const TABLE_INNER_GOLD_WIDTH = 0.028;
 const FELT_INSET_X = 0.88;
 const FELT_INSET_Z = 0.72;
 const FELT_Y = TABLE_BASE_THICKNESS / 2 + 0.004;
+const FELT_SURFACE_SRC = `data:image/svg+xml;utf8,${encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <radialGradient id="felt" cx="50%" cy="46%" r="74%">
+      <stop offset="0%" stop-color="#456e40"/>
+      <stop offset="55%" stop-color="#31552f"/>
+      <stop offset="100%" stop-color="#1b311e"/>
+    </radialGradient>
+    <filter id="noise">
+      <feTurbulence type="fractalNoise" baseFrequency="0.92" numOctaves="2" seed="17"/>
+      <feColorMatrix type="saturate" values="0"/>
+      <feComponentTransfer>
+        <feFuncA type="table" tableValues="0 0.085"/>
+      </feComponentTransfer>
+    </filter>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#felt)"/>
+  <g opacity="0.16" stroke="#9cc090" stroke-width="2.8">
+    <path d="M0 74c163 18 326 13 489-14 164-28 330-30 535 8" fill="none"/>
+    <path d="M0 246c147-11 301-20 462-3 178 19 370 19 562-8" fill="none"/>
+    <path d="M0 425c187 22 372 18 560-9 157-23 304-23 464-4" fill="none"/>
+    <path d="M0 607c177-20 349-26 522-10 173 16 340 18 502 0" fill="none"/>
+    <path d="M0 794c172 21 340 23 512 5 171-19 342-20 512-3" fill="none"/>
+  </g>
+  <g opacity="0.07">
+    <path d="M122 0v1024M264 0v1024M401 0v1024M555 0v1024M698 0v1024M854 0v1024" stroke="#d8f0c8" stroke-width="2"/>
+  </g>
+  <rect width="1024" height="1024" fill="#fff" filter="url(#noise)"/>
+</svg>
+`)}`;
 const DRAGON_MOTIF_SRC = `data:image/svg+xml;utf8,${encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
   <g fill="none" stroke="#a4843e" stroke-linecap="round" stroke-linejoin="round">
@@ -160,6 +190,15 @@ export function getAltTableSculptConfig() {
   } as const;
 }
 
+export function getAltTableSurfaceMaterialConfig() {
+  return {
+    feltTopEmissiveIntensity: 0.58,
+    feltWellEmissiveIntensity: 0.58,
+    dragonOpacity: 0.42,
+    goldTrimOpacity: 0.84
+  } as const;
+}
+
 export function getAltTableCameraConfig() {
   return {
     position: [0, 6.35, 5.8] as const,
@@ -231,10 +270,11 @@ function AltTableWorld(props: {
   backSrc: string;
 }) {
   const hiddenBackSrc = useMemo(() => ALT_HIDDEN_CARD_BACK_SRC || props.backSrc, [props.backSrc]);
-  const [backTexture, dragonTexture, woodTexture, northPlaqueTexture, southPlaqueTexture, eastPlaqueTexture, westPlaqueTexture, passPlaqueTexture, scorePlaqueTexture] = useLoader(TextureLoader, [
+  const [backTexture, dragonTexture, woodTexture, feltTexture, northPlaqueTexture, southPlaqueTexture, eastPlaqueTexture, westPlaqueTexture, passPlaqueTexture, scorePlaqueTexture] = useLoader(TextureLoader, [
     hiddenBackSrc,
     DRAGON_MOTIF_SRC,
     WOOD_GRAIN_SRC,
+    FELT_SURFACE_SRC,
     NORTH_PLAQUE_SRC,
     SOUTH_PLAQUE_SRC,
     EAST_PLAQUE_SRC,
@@ -257,6 +297,13 @@ function AltTableWorld(props: {
   woodTexture.minFilter = LinearFilter;
   woodTexture.magFilter = LinearFilter;
   woodTexture.needsUpdate = true;
+  feltTexture.colorSpace = SRGBColorSpace;
+  feltTexture.wrapS = RepeatWrapping;
+  feltTexture.wrapT = RepeatWrapping;
+  feltTexture.repeat.set(1.45, 1.05);
+  feltTexture.minFilter = LinearFilter;
+  feltTexture.magFilter = LinearFilter;
+  feltTexture.needsUpdate = true;
   northPlaqueTexture.colorSpace = SRGBColorSpace;
   northPlaqueTexture.minFilter = LinearFilter;
   northPlaqueTexture.magFilter = LinearFilter;
@@ -307,6 +354,7 @@ function AltTableWorld(props: {
       <group>
         <TableBody
           dragonTexture={dragonTexture}
+          feltTexture={feltTexture}
           feltHeight={feltHeight}
           feltWidth={feltWidth}
           outerHeight={outerHeight}
@@ -328,6 +376,7 @@ function AltTableWorld(props: {
 
 function TableBody(props: {
   dragonTexture: Texture;
+  feltTexture: Texture;
   feltHeight: number;
   feltWidth: number;
   outerHeight: number;
@@ -337,6 +386,7 @@ function TableBody(props: {
   southPlaqueTexture: Texture;
   woodTexture: Texture;
 }) {
+  const surfaceConfig = getAltTableSurfaceMaterialConfig();
   const innerRailXLength = props.feltWidth + 0.22;
   const innerRailZLength = props.feltHeight + 0.22;
   const innerRailY = FELT_Y + TABLE_INNER_RAIL_HEIGHT / 2 - 0.004;
@@ -388,10 +438,11 @@ function TableBody(props: {
         />
         <meshStandardMaterial
           color="#5a7c4c"
+          map={props.feltTexture}
           metalness={0.03}
-          roughness={0.88}
+          roughness={0.92}
           emissive="#32592d"
-          emissiveIntensity={0.68}
+          emissiveIntensity={surfaceConfig.feltWellEmissiveIntensity}
         />
       </mesh>
 
@@ -401,7 +452,7 @@ function TableBody(props: {
           color="#7f5130"
           map={props.woodTexture}
           metalness={0.1}
-          roughness={0.68}
+          roughness={0.62}
         />
       </mesh>
       <mesh position={[0, innerRailY, (props.feltHeight + TABLE_INNER_RAIL_WIDTH) / 2]} receiveShadow>
@@ -410,7 +461,7 @@ function TableBody(props: {
           color="#7f5130"
           map={props.woodTexture}
           metalness={0.1}
-          roughness={0.68}
+          roughness={0.62}
         />
       </mesh>
       <mesh position={[-(props.feltWidth + TABLE_INNER_RAIL_WIDTH) / 2, innerRailY, 0]} receiveShadow>
@@ -419,7 +470,7 @@ function TableBody(props: {
           color="#7f5130"
           map={props.woodTexture}
           metalness={0.1}
-          roughness={0.68}
+          roughness={0.62}
         />
       </mesh>
       <mesh position={[(props.feltWidth + TABLE_INNER_RAIL_WIDTH) / 2, innerRailY, 0]} receiveShadow>
@@ -428,36 +479,45 @@ function TableBody(props: {
           color="#7f5130"
           map={props.woodTexture}
           metalness={0.1}
-          roughness={0.68}
+          roughness={0.62}
         />
       </mesh>
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FELT_Y + 0.01, -props.feltHeight / 2 - 0.005]}>
         <planeGeometry args={[props.feltWidth + 0.26, TABLE_INNER_GOLD_WIDTH]} />
-        <meshBasicMaterial color="#b59244" transparent opacity={0.72} />
+        <meshBasicMaterial color="#c79f49" transparent opacity={surfaceConfig.goldTrimOpacity} />
       </mesh>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FELT_Y + 0.01, props.feltHeight / 2 + 0.005]}>
         <planeGeometry args={[props.feltWidth + 0.26, TABLE_INNER_GOLD_WIDTH]} />
-        <meshBasicMaterial color="#b59244" transparent opacity={0.72} />
+        <meshBasicMaterial color="#c79f49" transparent opacity={surfaceConfig.goldTrimOpacity} />
       </mesh>
       <mesh rotation={[-Math.PI / 2, 0, Math.PI / 2]} position={[-props.feltWidth / 2 - 0.005, FELT_Y + 0.01, 0]}>
         <planeGeometry args={[props.feltHeight + 0.26, TABLE_INNER_GOLD_WIDTH]} />
-        <meshBasicMaterial color="#b59244" transparent opacity={0.72} />
+        <meshBasicMaterial color="#c79f49" transparent opacity={surfaceConfig.goldTrimOpacity} />
       </mesh>
       <mesh rotation={[-Math.PI / 2, 0, Math.PI / 2]} position={[props.feltWidth / 2 + 0.005, FELT_Y + 0.01, 0]}>
         <planeGeometry args={[props.feltHeight + 0.26, TABLE_INNER_GOLD_WIDTH]} />
-        <meshBasicMaterial color="#b59244" transparent opacity={0.72} />
+        <meshBasicMaterial color="#c79f49" transparent opacity={surfaceConfig.goldTrimOpacity} />
       </mesh>
 
       <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, FELT_Y + 0.002, 0]}>
         <planeGeometry args={[props.feltWidth - 0.1, props.feltHeight - 0.1]} />
-        <meshStandardMaterial
-          color="#4a733f"
-          metalness={0.02}
-          roughness={0.9}
-          emissive="#264e23"
-          emissiveIntensity={0.52}
+        <meshBasicMaterial
+          color="#4f7c47"
+          map={props.feltTexture}
+          transparent
+          opacity={0.96}
         />
+      </mesh>
+
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FELT_Y + 0.004, 0]}>
+        <planeGeometry args={[props.feltWidth - 0.2, props.feltHeight - 0.2]} />
+        <meshBasicMaterial color="#9fc586" transparent opacity={0.09} />
+      </mesh>
+
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FELT_Y + 0.003, 0]}>
+        <planeGeometry args={[props.feltWidth * 0.68, props.feltHeight * 0.7]} />
+        <meshBasicMaterial color="#c5df9e" transparent opacity={0.045} />
       </mesh>
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FELT_Y + 0.006, 0]}>
@@ -465,7 +525,7 @@ function TableBody(props: {
         <meshBasicMaterial
           map={props.dragonTexture}
           transparent
-          opacity={0.22}
+          opacity={surfaceConfig.dragonOpacity}
         />
       </mesh>
 
