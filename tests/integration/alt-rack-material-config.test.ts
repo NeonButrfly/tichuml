@@ -16,4 +16,11 @@ describe("ALT rack material config", () => {
     expect(config.rackWoodRoughness).toBeLessThan(0.65);
     expect(config.rackWoodMetalness).toBeGreaterThan(0.14);
   });
+
+  it("keeps dedicated wood accent layers active so the racks and frame do not collapse into near-black silhouettes", () => {
+    const config = getAltTableRackMaterialConfig();
+
+    expect(config.rackWoodAccentOpacity).toBeGreaterThan(0.15);
+    expect(config.frameWoodAccentOpacity).toBeGreaterThan(0.13);
+  });
 });
