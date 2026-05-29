@@ -91,6 +91,9 @@ npm run ml:train -- --input ml/data/action_rows.parquet --phase trick_play
 That default command now trains `observed_outcome_regression` with the
 `runtime_raw` feature profile and writes metadata that the backend uses to skip
 the expensive shared tactical analyzer for trick-play inference.
+If the backend is already running, restart it after training so the
+`lightgbm_model` provider reloads the new model metadata before evaluation or
+live inference.
 
 Train against observed outcomes:
 

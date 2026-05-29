@@ -69,6 +69,10 @@ Quick reference:
 - `npm run ml:train` supports `imitation_binary`,
   `observed_outcome_regression`, `rollout_regression`, and
   `rollout_ranker`.
+- After any host-side `ml:train` run that updates
+  `ml/model_registry/lightgbm_action_model.*`, restart the backend before
+  evaluating or serving `lightgbm_model` so the runtime reloads the new model
+  metadata.
 - `npm run ml:evaluate` compares providers, supports mirrored seating, and
   writes an improvement gate report.
 
