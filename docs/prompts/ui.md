@@ -31,9 +31,11 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
   rather than custom spread overrides. Follow-up tuning may normalize the
   visible south-hand sprite size and fan span, but it must preserve the
   authored anchor centers and rotations while seating the hand lower into the
-  front rail so the live ALT route stays closer to the approved mockup while
-  the visible ALT board itself transitions from the flat DOM plate toward a
-  true world-space wood-and-felt scene.
+  front rail. Hidden opponent cards must remain full-aspect physical 3D card
+  bodies with readable back art from the live camera and visibly deeper slot
+  burial inside the wooden racks so the live ALT route stays closer to the
+  approved mockup while the visible ALT board itself transitions from the flat
+  DOM plate toward a true world-space wood-and-felt scene.
 - Affected Systems: `apps/web/src/alt-table-3d/AltTableCards3D.tsx`,
   `apps/web/src/alt-table-3d/AltTableScene.tsx`,
   `apps/web/src/alt-table-3d/AltTichuTable3D.tsx`,

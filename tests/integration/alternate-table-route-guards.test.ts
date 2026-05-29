@@ -70,9 +70,11 @@ describe("alternate table route guards", () => {
     expect(sceneSource).toContain("WOOD_GRAIN_SRC");
     expect(sceneSource).toContain("DRAGON_MOTIF_SRC");
     expect(sceneSource).toContain("supportsWebGlCanvas");
-    expect(cards3dSource).toContain("CARD_WIDTH = 0.32");
-    expect(cards3dSource).toContain("CARD_HEIGHT = 0.448");
+    expect(cards3dSource).toContain("CARD_WIDTH =");
+    expect(cards3dSource).toContain("CARD_HEIGHT =");
     expect(cards3dSource).toContain("CARD_ASPECT = 2.5 / 3.5");
+    expect(cards3dSource).toContain("CARD_THICKNESS =");
+    expect(cards3dSource).toContain("<boxGeometry args={[size.width, size.height, CARD_THICKNESS]} />");
     expect(cards3dSource).toContain("getHiddenCardWorldSize");
     expect(cards3dSource).toContain("getHiddenCardAspectRatio");
     expect(cards3dSource).toContain("resolveHiddenHandPlacement");
