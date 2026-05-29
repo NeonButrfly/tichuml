@@ -15,6 +15,7 @@ export type HiddenHandCard = {
 const CARD_WIDTH = 0.32;
 const CARD_HEIGHT = 0.448;
 const CARD_ASPECT = 2.5 / 3.5;
+const CARD_BACK_INSET = 0.018;
 const CARD_FRAME = 0.012;
 const RACK_FLOOR_Y = 0.082;
 const TABLE_WORLD_W = 11.4;
@@ -50,12 +51,12 @@ function HiddenHandCardMesh(props: {
       rotation={placement.rotation}
       data-seat={props.card.seat}
     >
-      <mesh position={[0, 0, -CARD_FRAME]} renderOrder={2}>
+      <mesh castShadow position={[0, 0, -CARD_FRAME]} receiveShadow renderOrder={2}>
         <planeGeometry args={[size.width + CARD_FRAME, size.height + CARD_FRAME]} />
-        <meshStandardMaterial color="#ede1bc" metalness={0.08} roughness={0.66} />
+        <meshStandardMaterial color="#efe0b8" metalness={0.08} roughness={0.68} />
       </mesh>
-      <mesh renderOrder={3}>
-        <planeGeometry args={[size.width, size.height]} />
+      <mesh castShadow position={[0, 0, 0.001]} receiveShadow renderOrder={3}>
+        <planeGeometry args={[size.width - CARD_BACK_INSET, size.height - CARD_BACK_INSET]} />
         <meshStandardMaterial
           map={props.texture}
           emissive="#152518"
@@ -72,34 +73,36 @@ function HiddenHandCardMesh(props: {
 function resolveHiddenHandPlacement(card: HiddenHandCard) {
   const base = designToWorld(card.anchor.center_px.x, card.anchor.center_px.y);
   const size = getHiddenCardWorldSize(card.anchor);
+  const seatOffset = card.slotIndex - (card.handCount - 1) / 2;
+  const seatCurve = Math.abs(seatOffset);
 
   switch (card.seat) {
     case "north":
       return {
         position: [
           base[0],
-          RACK_FLOOR_Y + size.height / 2,
-          base[2] - size.width * 0.42
+          RACK_FLOOR_Y + size.height / 2 + seatCurve * 0.0012,
+          base[2] - size.width * (0.42 - Math.min(seatCurve * 0.004, 0.024))
         ] as const,
-        rotation: [0.2, Math.PI, 0] as const
+        rotation: [0.2 - Math.min(seatCurve * 0.003, 0.02), Math.PI + seatOffset * 0.018, 0] as const
       };
     case "east":
       return {
         position: [
-          base[0] + size.width * 0.44,
-          RACK_FLOOR_Y + size.height / 2,
-          base[2]
+          base[0] + size.width * (0.44 - Math.min(seatCurve * 0.003, 0.018)),
+          RACK_FLOOR_Y + size.height / 2 + seatCurve * 0.001,
+          base[2] + seatOffset * 0.004
         ] as const,
-        rotation: [0.12, -1.36, 0] as const
+        rotation: [0.12 - Math.min(seatCurve * 0.002, 0.016), -1.36 - seatOffset * 0.016, 0] as const
       };
     case "west":
       return {
         position: [
-          base[0] - size.width * 0.44,
-          RACK_FLOOR_Y + size.height / 2,
-          base[2]
+          base[0] - size.width * (0.44 - Math.min(seatCurve * 0.003, 0.018)),
+          RACK_FLOOR_Y + size.height / 2 + seatCurve * 0.001,
+          base[2] + seatOffset * 0.004
         ] as const,
-        rotation: [0.12, 1.36, 0] as const
+        rotation: [0.12 - Math.min(seatCurve * 0.002, 0.016), 1.36 - seatOffset * 0.016, 0] as const
       };
   }
 }

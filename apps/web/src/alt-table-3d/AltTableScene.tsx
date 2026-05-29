@@ -111,6 +111,7 @@ export function AltTableScene(props: {
           dpr={[1, 2]}
           frameloop="demand"
           gl={{ alpha: true, antialias: true }}
+          shadows
           camera={{
             position: [0, 7.5, 7.5],
             fov: 40,
@@ -177,7 +178,14 @@ function AltTableWorld(props: {
   return (
     <>
       <ambientLight intensity={1.2} />
-      <directionalLight intensity={1.7} position={[2.8, 8.5, 5.4]} />
+      <directionalLight
+        castShadow
+        intensity={1.7}
+        position={[2.8, 8.5, 5.4]}
+        shadow-bias={-0.0002}
+        shadow-mapSize-height={2048}
+        shadow-mapSize-width={2048}
+      />
       <directionalLight intensity={0.62} position={[-3.8, 6.2, -4.9]} />
 
       <group>
@@ -239,7 +247,7 @@ function TableBody(props: {
         />
       </mesh>
 
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FELT_Y + 0.002, 0]}>
+      <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, FELT_Y + 0.002, 0]}>
         <planeGeometry args={[props.feltWidth - 0.1, props.feltHeight - 0.1]} />
         <meshStandardMaterial
           color="#284625"
@@ -359,23 +367,23 @@ function RackShell(props: {
     const centerZ = minZ - sampleSize.width * 0.74;
     return (
       <group position={[centerX, 0.05, centerZ]}>
-        <mesh>
+        <mesh castShadow receiveShadow>
           <boxGeometry args={[width, RACK_BASE_HEIGHT, depth]} />
           {commonMaterial}
         </mesh>
-        <mesh position={[0, RACK_SIDE_HEIGHT * 0.5, -depth * 0.22]}>
+        <mesh castShadow receiveShadow position={[0, RACK_SIDE_HEIGHT * 0.5, -depth * 0.22]}>
           <boxGeometry args={[width - 0.1, RACK_SIDE_HEIGHT, RACK_SIDE_THICKNESS]} />
           {commonMaterial}
         </mesh>
-        <mesh position={[0, RACK_BASE_HEIGHT * 0.2, depth * 0.05]}>
+        <mesh castShadow receiveShadow position={[0, RACK_BASE_HEIGHT * 0.2, depth * 0.05]}>
           <boxGeometry args={[width - 0.22, RACK_SLOT_THICKNESS, RACK_SLOT_DEPTH]} />
           <meshStandardMaterial color="#2b1a12" metalness={0.08} roughness={0.86} />
         </mesh>
-        <mesh position={[-width / 2 + RACK_END_BLOCK / 2, RACK_SIDE_HEIGHT * 0.34, -depth * 0.04]}>
+        <mesh castShadow receiveShadow position={[-width / 2 + RACK_END_BLOCK / 2, RACK_SIDE_HEIGHT * 0.34, -depth * 0.04]}>
           <boxGeometry args={[RACK_END_BLOCK, RACK_SIDE_HEIGHT * 0.72, depth * 0.76]} />
           {commonMaterial}
         </mesh>
-        <mesh position={[width / 2 - RACK_END_BLOCK / 2, RACK_SIDE_HEIGHT * 0.34, -depth * 0.04]}>
+        <mesh castShadow receiveShadow position={[width / 2 - RACK_END_BLOCK / 2, RACK_SIDE_HEIGHT * 0.34, -depth * 0.04]}>
           <boxGeometry args={[RACK_END_BLOCK, RACK_SIDE_HEIGHT * 0.72, depth * 0.76]} />
           {commonMaterial}
         </mesh>
@@ -400,23 +408,23 @@ function RackShell(props: {
   const sideDir = props.seat === "east" ? -1 : 1;
   return (
     <group position={[centerX, 0.05, centerZ]}>
-      <mesh>
+      <mesh castShadow receiveShadow>
         <boxGeometry args={[depth, RACK_BASE_HEIGHT, height]} />
         {commonMaterial}
       </mesh>
-      <mesh position={[sideDir * depth * 0.22, RACK_SIDE_HEIGHT * 0.5, 0]}>
+      <mesh castShadow receiveShadow position={[sideDir * depth * 0.22, RACK_SIDE_HEIGHT * 0.5, 0]}>
         <boxGeometry args={[RACK_SIDE_THICKNESS, RACK_SIDE_HEIGHT, height - 0.1]} />
         {commonMaterial}
       </mesh>
-      <mesh position={[-sideDir * depth * 0.02, RACK_BASE_HEIGHT * 0.2, 0]}>
+      <mesh castShadow receiveShadow position={[-sideDir * depth * 0.02, RACK_BASE_HEIGHT * 0.2, 0]}>
         <boxGeometry args={[RACK_SLOT_DEPTH, RACK_SLOT_THICKNESS, height - 0.26]} />
         <meshStandardMaterial color="#2b1a12" metalness={0.08} roughness={0.86} />
       </mesh>
-      <mesh position={[0, RACK_SIDE_HEIGHT * 0.34, -height / 2 + RACK_END_BLOCK / 2]}>
+      <mesh castShadow receiveShadow position={[0, RACK_SIDE_HEIGHT * 0.34, -height / 2 + RACK_END_BLOCK / 2]}>
         <boxGeometry args={[depth * 0.76, RACK_SIDE_HEIGHT * 0.72, RACK_END_BLOCK]} />
         {commonMaterial}
       </mesh>
-      <mesh position={[0, RACK_SIDE_HEIGHT * 0.34, height / 2 - RACK_END_BLOCK / 2]}>
+      <mesh castShadow receiveShadow position={[0, RACK_SIDE_HEIGHT * 0.34, height / 2 - RACK_END_BLOCK / 2]}>
         <boxGeometry args={[depth * 0.76, RACK_SIDE_HEIGHT * 0.72, RACK_END_BLOCK]} />
         {commonMaterial}
       </mesh>
