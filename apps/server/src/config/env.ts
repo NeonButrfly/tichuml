@@ -305,11 +305,11 @@ export function loadServerConfig(
     ),
     telemetryPersistenceBatchSize: parsePositiveInteger(
       mergedEnv.TELEMETRY_PERSISTENCE_BATCH_SIZE,
-      100
+      1
     ),
     telemetryPersistenceConcurrency: parsePositiveInteger(
       mergedEnv.TELEMETRY_PERSISTENCE_CONCURRENCY,
-      2
+      1
     ),
     simDefaultProvider: parseDecisionMode(mergedEnv.SIM_PROVIDER),
     simDefaultBackendUrl: normalizeBackendBaseUrl(simBackendUrl),

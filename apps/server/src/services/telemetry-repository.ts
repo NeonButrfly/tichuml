@@ -15,6 +15,7 @@ import {
 import type { DatabaseClient } from "../db/postgres.js";
 import {
   applyOutcomeAttributionForDecisionEvent,
+  applyOutcomeAttributionForDecisionEventOnce,
   deriveDecisionOutcomeContext,
   type OutcomeAttributionUpdateStats
 } from "./telemetry-outcome-finalizer.js";
@@ -773,7 +774,9 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
     this.bumpDuration("event_insert_total_ms", "event_insert_timed_count", performance.now() - startedAt, batchState);
 
     const finalizerStartedAt = performance.now();
-    const attribution = await applyOutcomeAttributionForDecisionEvent(sqlClient, normalized);
+    const attribution = batchState
+      ? await applyOutcomeAttributionForDecisionEventOnce(sqlClient, normalized)
+      : await applyOutcomeAttributionForDecisionEvent(sqlClient, normalized);
     this.recordOutcomeAttribution(attribution, performance.now() - finalizerStartedAt, batchState);
     return row?.id ?? 0;
   }

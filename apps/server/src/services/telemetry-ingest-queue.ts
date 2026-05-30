@@ -103,8 +103,8 @@ export class TelemetryIngestQueue {
   ) {
     this.config = {
       maxDepth: nonNegativeInteger(config.maxDepth ?? 5000, 5000),
-      batchSize: positiveInteger(config.batchSize ?? 100, 100),
-      concurrency: positiveInteger(config.concurrency ?? 2, 2)
+      batchSize: positiveInteger(config.batchSize ?? 1, 1),
+      concurrency: positiveInteger(config.concurrency ?? 1, 1)
     };
   }
 

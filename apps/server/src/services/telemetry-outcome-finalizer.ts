@@ -450,7 +450,7 @@ function eventHasOutcomeMetadata(payload: TelemetryEventPayload): boolean {
   );
 }
 
-async function applyOutcomeAttributionForDecisionEventOnce(
+export async function applyOutcomeAttributionForDecisionEventOnce(
   sql: DatabaseClient,
   payload: TelemetryEventPayload
 ): Promise<OutcomeAttributionUpdateStats> {
