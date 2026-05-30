@@ -292,6 +292,28 @@ def build_ranker_relevance_labels(
     return labels
 
 
+def filter_rollout_decisions_by_spread(
+    frame: pd.DataFrame,
+    target_column: str,
+    min_spread: float,
+) -> tuple[pd.DataFrame, int, int]:
+    if min_spread <= 0:
+        return frame, 0, 0
+    if "decision_id" not in frame.columns:
+        raise ValueError(
+            "Rollout decision spread filtering requires decision_id groups."
+        )
+
+    grouped_spread = frame.groupby("decision_id", sort=False)[target_column].agg(
+        lambda values: float(values.max()) - float(values.min())
+    )
+    kept_decision_ids = grouped_spread[grouped_spread >= float(min_spread)].index
+    filtered = frame[frame["decision_id"].isin(kept_decision_ids)].copy()
+    filtered_out_decision_count = int(len(grouped_spread.index) - len(kept_decision_ids))
+    filtered_out_row_count = int(len(frame.index) - len(filtered.index))
+    return filtered, filtered_out_decision_count, filtered_out_row_count
+
+
 def top1_recall_by_decision(frame: pd.DataFrame, scores: pd.Series) -> float | None:
     if "decision_id" not in frame.columns or frame.empty:
         return None
@@ -426,6 +448,11 @@ def main() -> None:
         type=int,
         default=DEFAULT_RANKER_MAX_RELEVANCE,
     )
+    parser.add_argument(
+        "--min-rollout-decision-spread",
+        type=float,
+        default=0.0,
+    )
     args = parser.parse_args()
 
     label_mode, default_target = objective_defaults(args.objective)
@@ -445,6 +472,23 @@ def main() -> None:
     frame = frame[frame[target_column].notna()].copy()
     if frame.empty:
         raise ValueError(f"Target column '{target_column}' has no non-null rows after filtering.")
+
+    filtered_out_decision_count = 0
+    filtered_out_row_count = 0
+    if args.min_rollout_decision_spread > 0:
+        if args.objective not in {"rollout_regression", "rollout_ranker"}:
+            raise ValueError(
+                "--min-rollout-decision-spread is only supported for rollout objectives."
+            )
+        frame, filtered_out_decision_count, filtered_out_row_count = (
+            filter_rollout_decisions_by_spread(
+                frame, target_column, args.min_rollout_decision_spread
+            )
+        )
+        if frame.empty:
+            raise ValueError(
+                "No rollout training rows remain after applying the decision spread filter."
+            )
 
     feature_columns = apply_feature_profile(
         default_feature_columns(frame, manifest), args.feature_profile
@@ -597,6 +641,9 @@ def main() -> None:
         "rollout_dataset_path": str(Path(args.rollout_input)) if args.rollout_input else None,
         "ranking_label_strategy": ranker_label_strategy,
         "ranker_max_relevance": args.ranker_max_relevance if args.objective == "rollout_ranker" else None,
+        "min_rollout_decision_spread": args.min_rollout_decision_spread,
+        "filtered_out_decision_count": filtered_out_decision_count,
+        "filtered_out_row_count": filtered_out_row_count,
         "model_id": model_id,
         "model_version": model_id,
     }
@@ -621,6 +668,9 @@ def main() -> None:
         "rollout_dataset_path": str(Path(args.rollout_input)) if args.rollout_input else None,
         "ranking_label_strategy": ranker_label_strategy,
         "ranker_max_relevance": args.ranker_max_relevance if args.objective == "rollout_ranker" else None,
+        "min_rollout_decision_spread": args.min_rollout_decision_spread,
+        "filtered_out_decision_count": filtered_out_decision_count,
+        "filtered_out_row_count": filtered_out_row_count,
         "model_output_path": str(model_path),
         "meta_output_path": str(meta_path),
         "feature_importance_output_path": str(feature_importance_output),
