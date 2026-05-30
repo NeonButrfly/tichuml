@@ -160,6 +160,93 @@ describe("ml export and training regressions", () => {
     15000
   );
 
+  it(
+    "trains rollout_ranker on continuous rollout values by deriving relevance labels",
+    () => {
+      const tempDir = mkdtempSync(join(tmpdir(), "ml-ranker-rollout-"));
+      const datasetPath = join(tempDir, "train.parquet");
+      const manifestPath = join(tempDir, "dataset_metadata.json");
+      const modelPath = join(tempDir, "model.txt");
+      const metaPath = join(tempDir, "model.meta.json");
+      const reportPath = join(tempDir, "training-report.json");
+      const importancePath = join(tempDir, "feature-importance.csv");
+
+      try {
+        const buildDataset = runPythonSnippet(
+          [
+            "from pathlib import Path",
+            "import pandas as pd",
+            "dataset = Path(__import__('sys').argv[1])",
+            "frame = pd.DataFrame([",
+            "    {'phase': 'trick_play', 'game_id': 'g1', 'decision_id': 'd1', 'rollout_mean_actor_team_delta': 90.0, 'actor_team_score': 100.0, 'opponent_team_score': 80.0, 'pass_action_flag': 0},",
+            "    {'phase': 'trick_play', 'game_id': 'g1', 'decision_id': 'd1', 'rollout_mean_actor_team_delta': 15.0, 'actor_team_score': 95.0, 'opponent_team_score': 85.0, 'pass_action_flag': 1},",
+            "    {'phase': 'trick_play', 'game_id': 'g2', 'decision_id': 'd2', 'rollout_mean_actor_team_delta': 40.0, 'actor_team_score': 88.0, 'opponent_team_score': 102.0, 'pass_action_flag': 0},",
+            "    {'phase': 'trick_play', 'game_id': 'g2', 'decision_id': 'd2', 'rollout_mean_actor_team_delta': -10.0, 'actor_team_score': 84.0, 'opponent_team_score': 106.0, 'pass_action_flag': 1},",
+            "])",
+            "frame.to_parquet(dataset, index=False)",
+            "print('dataset-ok')",
+          ].join("\n"),
+          [datasetPath]
+        );
+        expect(buildDataset.status).toBe(0);
+
+        writeFileSync(
+          manifestPath,
+          JSON.stringify(
+            {
+              schema_version: 2,
+              feature_columns: [
+                "actor_team_score",
+                "opponent_team_score",
+                "pass_action_flag",
+              ],
+            },
+            null,
+            2
+          ),
+          "utf8"
+        );
+
+        const result = spawnSync(
+          process.execPath,
+          [
+            join("node_modules", "tsx", "dist", "cli.mjs"),
+            "scripts/run-python.ts",
+            "ml/train_lightgbm.py",
+            "--input",
+            datasetPath,
+            "--manifest-input",
+            manifestPath,
+            "--output",
+            modelPath,
+            "--meta-output",
+            metaPath,
+            "--report-output",
+            reportPath,
+            "--feature-importance-output",
+            importancePath,
+            "--phase",
+            "trick_play",
+            "--objective",
+            "rollout_ranker",
+            "--validation-fraction",
+            "0",
+          ],
+          {
+            cwd: REPO_ROOT,
+            encoding: "utf8",
+          }
+        );
+
+        expect(result.status).toBe(0);
+        expect(result.stdout).toContain('"accepted": true');
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    },
+    15000
+  );
+
   it("switches scoped rollout exports onto candidate-action rows", () => {
     const result = runPythonSnippet(
       [

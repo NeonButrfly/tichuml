@@ -112,7 +112,31 @@ function createDefaultCalls() {
   };
 }
 
+function createDefaultCollectedCards(): Record<SeatId, Card[]> {
+  return createEmptyHandMap();
+}
+
 function cloneState(state: GameState): GameState {
+  const grandTichuQueue = Array.isArray(state.grandTichuQueue)
+    ? [...state.grandTichuQueue]
+    : [];
+  const passSelections =
+    typeof state.passSelections === "object" && state.passSelections !== null
+      ? { ...state.passSelections }
+      : {};
+  const revealedPasses =
+    typeof state.revealedPasses === "object" && state.revealedPasses !== null
+      ? { ...state.revealedPasses }
+      : {};
+  const collectedCardsSource =
+    typeof state.collectedCards === "object" && state.collectedCards !== null
+      ? state.collectedCards
+      : createDefaultCollectedCards();
+  const finishedOrder = Array.isArray(state.finishedOrder)
+    ? [...state.finishedOrder]
+    : [];
+  const matchHistory = Array.isArray(state.matchHistory) ? state.matchHistory : [];
+
   return {
     ...state,
     hands: {
@@ -127,9 +151,9 @@ function cloneState(state: GameState): GameState {
       "seat-2": { ...state.calls["seat-2"] },
       "seat-3": { ...state.calls["seat-3"] }
     },
-    grandTichuQueue: [...state.grandTichuQueue],
-    passSelections: { ...state.passSelections },
-    revealedPasses: { ...state.revealedPasses },
+    grandTichuQueue,
+    passSelections,
+    revealedPasses,
     currentTrick: state.currentTrick
       ? {
           leader: state.currentTrick.leader,
@@ -140,12 +164,12 @@ function cloneState(state: GameState): GameState {
         }
       : null,
     collectedCards: {
-      "seat-0": [...state.collectedCards["seat-0"]],
-      "seat-1": [...state.collectedCards["seat-1"]],
-      "seat-2": [...state.collectedCards["seat-2"]],
-      "seat-3": [...state.collectedCards["seat-3"]]
+      "seat-0": [...(collectedCardsSource["seat-0"] ?? [])],
+      "seat-1": [...(collectedCardsSource["seat-1"] ?? [])],
+      "seat-2": [...(collectedCardsSource["seat-2"] ?? [])],
+      "seat-3": [...(collectedCardsSource["seat-3"] ?? [])]
     },
-    finishedOrder: [...state.finishedOrder],
+    finishedOrder,
     pendingDragonGift: state.pendingDragonGift
       ? {
           winner: state.pendingDragonGift.winner,
@@ -165,7 +189,7 @@ function cloneState(state: GameState): GameState {
         }
       : null,
     matchScore: { ...state.matchScore },
-    matchHistory: state.matchHistory.map((entry) => ({
+    matchHistory: matchHistory.map((entry) => ({
       handNumber: entry.handNumber,
       roundSeed: entry.roundSeed,
       teamScores: { ...entry.teamScores },

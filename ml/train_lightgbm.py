@@ -23,6 +23,7 @@ from json_utils import dumps_json_safe, make_json_safe
 DEFAULT_MANIFEST = Path("artifacts/ml/export-manifest.json")
 DEFAULT_REPORT_JSON = Path("artifacts/ml/training-report.json")
 DEFAULT_FEATURE_IMPORTANCE = Path("artifacts/ml/feature-importance.csv")
+DEFAULT_RANKER_MAX_RELEVANCE = 4
 RUNTIME_TACTICAL_FEATURES = {
     "likely_wins_current_trick_flag",
     "hand_quality_score",
@@ -261,6 +262,36 @@ def split_frame(
     )
 
 
+def build_ranker_relevance_labels(
+    frame: pd.DataFrame,
+    target_column: str,
+    *,
+    max_relevance: int = DEFAULT_RANKER_MAX_RELEVANCE,
+) -> pd.Series:
+    if "decision_id" not in frame.columns:
+        raise ValueError("Ranking objective requires decision_id groups.")
+    if max_relevance < 1:
+        raise ValueError("ranker_max_relevance must be at least 1.")
+
+    labels = pd.Series(0, index=frame.index, dtype="int32")
+    for _, group in frame.groupby("decision_id", sort=False):
+        values = group[target_column].astype(float)
+        if len(group.index) <= 1 or values.nunique() <= 1:
+            labels.loc[group.index] = 0
+            continue
+
+        dense_ranks = values.rank(method="dense", ascending=True) - 1
+        max_rank = float(dense_ranks.max())
+        if max_rank <= 0:
+            labels.loc[group.index] = 0
+            continue
+
+        scaled = ((dense_ranks / max_rank) * max_relevance).round().astype("int32")
+        labels.loc[group.index] = scaled
+
+    return labels
+
+
 def top1_recall_by_decision(frame: pd.DataFrame, scores: pd.Series) -> float | None:
     if "decision_id" not in frame.columns or frame.empty:
         return None
@@ -390,6 +421,11 @@ def main() -> None:
         choices=["runtime_raw", "full"],
         default="runtime_raw",
     )
+    parser.add_argument(
+        "--ranker-max-relevance",
+        type=int,
+        default=DEFAULT_RANKER_MAX_RELEVANCE,
+    )
     args = parser.parse_args()
 
     label_mode, default_target = objective_defaults(args.objective)
@@ -426,6 +462,9 @@ def main() -> None:
         args.validation_fraction,
         args.random_state,
     )
+    ranker_label_strategy = None
+    ranker_train_labels: pd.Series | None = None
+    ranker_validation_labels: pd.Series | None = None
 
     validation_metrics: dict[str, Any] = {}
     if args.objective == "imitation_binary":
@@ -456,8 +495,17 @@ def main() -> None:
                 ),
             }
     elif args.objective == "rollout_ranker":
-        if "decision_id" not in train_frame.columns:
-            raise ValueError("Ranking objective requires decision_id groups.")
+        ranker_label_strategy = "per_decision_dense_rank_scaled"
+        ranker_train_labels = build_ranker_relevance_labels(
+            train_frame,
+            target_column,
+            max_relevance=args.ranker_max_relevance,
+        )
+        ranker_validation_labels = build_ranker_relevance_labels(
+            validation_frame,
+            target_column,
+            max_relevance=args.ranker_max_relevance,
+        )
         grouped = train_frame.groupby("decision_id", sort=False)
         group_sizes = grouped.size().tolist()
         model = LGBMRanker(
@@ -470,7 +518,7 @@ def main() -> None:
         )
         model.fit(
             train_frame[feature_columns],
-            train_frame[target_column].astype(float),
+            ranker_train_labels,
             group=group_sizes,
         )
         if not validation_frame.empty:
@@ -547,6 +595,8 @@ def main() -> None:
         "phase": phase_alias(args.phase),
         "source_dataset_path": str(Path(args.input)),
         "rollout_dataset_path": str(Path(args.rollout_input)) if args.rollout_input else None,
+        "ranking_label_strategy": ranker_label_strategy,
+        "ranker_max_relevance": args.ranker_max_relevance if args.objective == "rollout_ranker" else None,
         "model_id": model_id,
         "model_version": model_id,
     }
@@ -569,6 +619,8 @@ def main() -> None:
         "validation_metrics": validation_metrics,
         "source_dataset_path": str(Path(args.input)),
         "rollout_dataset_path": str(Path(args.rollout_input)) if args.rollout_input else None,
+        "ranking_label_strategy": ranker_label_strategy,
+        "ranker_max_relevance": args.ranker_max_relevance if args.objective == "rollout_ranker" else None,
         "model_output_path": str(model_path),
         "meta_output_path": str(meta_path),
         "feature_importance_output_path": str(feature_importance_output),

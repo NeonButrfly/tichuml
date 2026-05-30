@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { LegalAction } from "@tichuml/engine";
-import { createScenarioState } from "@tichuml/engine";
+import {
+  applyEngineAction,
+  createScenarioState,
+  getLegalActions
+} from "@tichuml/engine";
 import {
   buildRolloutSeed,
   extractRolloutSampleMetrics,
@@ -8,7 +12,10 @@ import {
   summarizeRolloutSamples,
   teamForSeat
 } from "../../apps/sim-runner/src/ml-rollout-utils";
-import { resolveForcedActionFromCandidate as resolveForcedActionForRollout } from "../../apps/sim-runner/src/ml-rollouts";
+import {
+  resolveForcedActionFromCandidate as resolveForcedActionForRollout,
+  shouldUseFullStateRolloutContinuation
+} from "../../apps/sim-runner/src/ml-rollouts";
 
 describe("ml rollout helpers", () => {
   it("maps seats to stable teams", () => {
@@ -124,6 +131,12 @@ describe("ml rollout helpers", () => {
     );
   });
 
+  it("keeps full-state backend continuation enabled for server-backed rollouts", () => {
+    expect(shouldUseFullStateRolloutContinuation("local")).toBe(false);
+    expect(shouldUseFullStateRolloutContinuation("server_heuristic")).toBe(true);
+    expect(shouldUseFullStateRolloutContinuation("lightgbm_model")).toBe(true);
+  });
+
   it("treats malformed candidate actions as row-level rollout failures", () => {
     const state = createScenarioState({
       phase: "finished"
@@ -137,5 +150,49 @@ describe("ml rollout helpers", () => {
 
     expect(resolution.forcedAction).toBeNull();
     expect(resolution.failureReason).toBeTruthy();
+  });
+
+  it("accepts persisted rollout states that omit empty grand Tichu queues", () => {
+    const state = createScenarioState({
+      phase: "trick_play",
+      activeSeat: "seat-0",
+      hands: {
+        "seat-0": [
+          { id: "jade-8", kind: "standard", rank: 8, suit: "jade" },
+          { id: "sword-9", kind: "standard", rank: 9, suit: "sword" },
+          { id: "pagoda-12", kind: "standard", rank: 12, suit: "pagoda" },
+          { id: "dragon", kind: "special", special: "dragon" }
+        ],
+        "seat-1": [
+          { id: "jade-3", kind: "standard", rank: 3, suit: "jade" },
+          { id: "sword-4", kind: "standard", rank: 4, suit: "sword" },
+          { id: "pagoda-5", kind: "standard", rank: 5, suit: "pagoda" }
+        ],
+        "seat-2": [
+          { id: "jade-6", kind: "standard", rank: 6, suit: "jade" },
+          { id: "sword-6", kind: "standard", rank: 6, suit: "sword" },
+          { id: "pagoda-6", kind: "standard", rank: 6, suit: "pagoda" },
+          { id: "star-6", kind: "standard", rank: 6, suit: "star" }
+        ],
+        "seat-3": [
+          { id: "jade-10", kind: "standard", rank: 10, suit: "jade" },
+          { id: "sword-10", kind: "standard", rank: 10, suit: "sword" },
+          { id: "pagoda-10", kind: "standard", rank: 10, suit: "pagoda" }
+        ]
+      }
+    });
+    const legalAction = (getLegalActions(state)["seat-0"] ?? []).find(
+      (action) => action.type === "play_cards"
+    );
+
+    expect(legalAction).toBeTruthy();
+
+    const persistedState = {
+      ...state
+    } as typeof state & Record<string, unknown>;
+    delete persistedState.grandTichuQueue;
+
+    const next = applyEngineAction(persistedState, legalAction!);
+    expect(next.nextState.grandTichuQueue).toEqual([]);
   });
 });

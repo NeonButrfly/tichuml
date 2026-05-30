@@ -163,6 +163,12 @@ export function resolveForcedActionFromCandidate(
   }
 }
 
+export function shouldUseFullStateRolloutContinuation(
+  continuationProvider: ProviderMode
+): boolean {
+  return continuationProvider !== "local";
+}
+
 function parseArgs(argv: string[]): ParsedArgs {
   if (argv.includes("--help") || argv.includes("-h")) {
     process.stdout.write(
@@ -687,7 +693,9 @@ async function runSingleRolloutJob(
           defaultProvider: args.continuationProvider,
           quiet: true,
           serverFallbackEnabled: true,
-          fullStateDecisionRequests: args.continuationProvider !== "server_heuristic"
+          fullStateDecisionRequests: shouldUseFullStateRolloutContinuation(
+            args.continuationProvider
+          )
         });
         result = applyEngineAction(result.nextState, resolved.chosenAction);
         continuationDecisionIndex += 1;
