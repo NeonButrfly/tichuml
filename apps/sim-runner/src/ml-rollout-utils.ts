@@ -34,6 +34,53 @@ export function stableJsonString(value: unknown): string {
     .join(",")}}`;
 }
 
+function serializedActionType(action: JsonObject): string | null {
+  return typeof action.type === "string" ? action.type : null;
+}
+
+function scalarOrNull(value: unknown): string | number | boolean | null {
+  return typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean" ||
+    value === null
+    ? value
+    : null;
+}
+
+// Keep rollout candidate keys aligned with ml/export_training_rows.py action_signature().
+export function exportCompatibleActionKey(action: JsonObject): string {
+  const actionType = serializedActionType(action);
+  if (actionType === "play_cards") {
+    return stableJsonString([
+      actionType,
+      scalarOrNull(action.seat),
+      sortedStringList(action.cardIds),
+      scalarOrNull(action.phoenixAsRank),
+      scalarOrNull(action.wishRank)
+    ]);
+  }
+  if (actionType === "select_pass") {
+    return stableJsonString([
+      actionType,
+      scalarOrNull(action.seat),
+      scalarOrNull(action.left),
+      scalarOrNull(action.partner),
+      scalarOrNull(action.right)
+    ]);
+  }
+  if (actionType === "assign_dragon_trick") {
+    return stableJsonString([
+      actionType,
+      scalarOrNull(action.seat),
+      scalarOrNull(action.recipient ?? action.target)
+    ]);
+  }
+  if (actionType === "advance_phase") {
+    return stableJsonString([actionType, scalarOrNull(action.actor)]);
+  }
+  return stableJsonString([actionType, scalarOrNull(action.seat ?? action.actor)]);
+}
+
 function readJsonObject(value: unknown): JsonObject | null {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as JsonObject)

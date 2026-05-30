@@ -20,10 +20,9 @@ import {
 import {
   buildRolloutSeed,
   coerceEngineAction,
+  exportCompatibleActionKey,
   extractRolloutSampleMetrics,
   findMatchingLegalAction,
-  legalActionKey,
-  stableJsonString,
   summarizeRolloutSamples
 } from "./ml-rollout-utils.js";
 import {
@@ -460,7 +459,12 @@ function buildJobs(
   let skippedParseFailures = 0;
 
   for (const decision of decisions) {
-    decisionsById.set(decision.id, decision);
+    const decisionId = Number(decision.id);
+    if (!Number.isFinite(decisionId)) {
+      skippedParseFailures += 1;
+      continue;
+    }
+    decisionsById.set(decisionId, decision);
     const stateRaw = decision.state_raw as unknown as GameState | null;
     if (!stateRaw) {
       skippedMissingStateRaw += 1;
@@ -479,7 +483,7 @@ function buildJobs(
       skippedParseFailures += 1;
       continue;
     }
-    const selection = exportSelection.get(decision.id);
+    const selection = exportSelection.get(decisionId);
     for (const action of actorActions) {
       const actionObject =
         typeof action === "object" && action !== null && !Array.isArray(action)
@@ -489,12 +493,12 @@ function buildJobs(
         skippedParseFailures += 1;
         continue;
       }
-      const candidateActionKey = stableJsonString(actionObject);
+      const candidateActionKey = exportCompatibleActionKey(actionObject);
       if (selection && !selection.has(candidateActionKey)) {
         continue;
       }
       jobs.push({
-        decisionId: decision.id,
+        decisionId,
         gameId: decision.game_id,
         handId: decision.hand_id,
         phase: decision.phase,
