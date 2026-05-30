@@ -93,12 +93,22 @@ def merge_rollout_input(frame: pd.DataFrame, rollout_input: str | None) -> pd.Da
         for column in rollout_frame.columns
         if column not in join_keys
     ]
-    return frame.merge(
+    merged = frame.merge(
         rollout_frame[join_keys + rollout_columns],
         on=join_keys,
         how="left",
         suffixes=("", "_rollout"),
     )
+    for column in rollout_columns:
+        merged_column = f"{column}_rollout"
+        if merged_column not in merged.columns:
+            continue
+        if column in merged.columns:
+            merged[column] = merged[merged_column].combine_first(merged[column])
+            merged = merged.drop(columns=[merged_column])
+            continue
+        merged = merged.rename(columns={merged_column: column})
+    return merged
 
 
 def objective_defaults(objective: str) -> tuple[str, str]:

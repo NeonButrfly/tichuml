@@ -17,6 +17,7 @@ import {
   resolveForcedActionFromCandidate as resolveForcedActionForRollout,
   shouldUseFullStateRolloutContinuation
 } from "../../apps/sim-runner/src/ml-rollouts";
+import { buildHeuristicDecisionOptions } from "../../apps/sim-runner/src/self-play-batch";
 
 describe("ml rollout helpers", () => {
   it("maps seats to stable teams", () => {
@@ -130,6 +131,29 @@ describe("ml rollout helpers", () => {
     expect(buildRolloutSeed("base", 42, "candidate", 0)).toBe(
       "base:42:candidate:0"
     );
+  });
+
+  it("includes rollout sample variants in heuristic selection keys", () => {
+    const sampleA = buildHeuristicDecisionOptions({
+      run_id: "rollout",
+      game_id: "game-1",
+      hand_id: "hand-1",
+      decision_index: 12,
+      exploration_profile: "training_diversity",
+      rollout_sample_variant: "seed-a"
+    });
+    const sampleB = buildHeuristicDecisionOptions({
+      run_id: "rollout",
+      game_id: "game-1",
+      hand_id: "hand-1",
+      decision_index: 12,
+      exploration_profile: "training_diversity",
+      rollout_sample_variant: "seed-b"
+    });
+
+    expect(sampleA.exploration.profile).toBe("training_diversity");
+    expect(sampleA.selectionKey).not.toBe(sampleB.selectionKey);
+    expect(sampleA.selectionKey).toContain("seed-a");
   });
 
   it("keeps full-state backend continuation enabled for server-backed rollouts", () => {

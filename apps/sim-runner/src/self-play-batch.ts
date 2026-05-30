@@ -2084,7 +2084,9 @@ function metadataNumberValue(
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function buildHeuristicDecisionOptions(metadata: JsonObject | undefined): HeuristicDecisionOptions {
+export function buildHeuristicDecisionOptions(
+  metadata: JsonObject | undefined
+): HeuristicDecisionOptions {
   const profile = metadataStringValue(metadata, "exploration_profile");
   const rate = metadataNumberValue(metadata, "exploration_rate");
   const topN = metadataNumberValue(metadata, "exploration_top_n");
@@ -2093,7 +2095,8 @@ function buildHeuristicDecisionOptions(metadata: JsonObject | undefined): Heuris
     metadataStringValue(metadata, "run_id") ?? "",
     metadataStringValue(metadata, "game_id") ?? "",
     metadataStringValue(metadata, "hand_id") ?? "",
-    String(metadataNumberValue(metadata, "decision_index") ?? "")
+    String(metadataNumberValue(metadata, "decision_index") ?? ""),
+    metadataStringValue(metadata, "rollout_sample_variant") ?? ""
   ].join("|");
   return {
     exploration: {

@@ -355,4 +355,150 @@ describe("ml export and training regressions", () => {
     expect(result.status).toBe(0);
     expect(result.stdout.trim()).toBe("candidate_rows");
   });
+
+  it(
+    "prefers rollout_input values over null placeholder rollout columns in candidate exports",
+    () => {
+      const tempDir = mkdtempSync(join(tmpdir(), "ml-rollout-merge-"));
+      const datasetPath = join(tempDir, "train.jsonl");
+      const rolloutPath = join(tempDir, "rollout.jsonl");
+      const manifestPath = join(tempDir, "dataset_metadata.json");
+      const modelPath = join(tempDir, "model.txt");
+      const metaPath = join(tempDir, "model.meta.json");
+      const reportPath = join(tempDir, "training-report.json");
+      const importancePath = join(tempDir, "feature-importance.csv");
+
+      try {
+        writeFileSync(
+          datasetPath,
+          [
+            JSON.stringify({
+              phase: "trick_play",
+              game_id: "g1",
+              decision_id: 1,
+              candidate_action_key: "a",
+              rollout_mean_actor_team_delta: null,
+              actor_team_score: 100,
+              opponent_team_score: 80,
+              pass_action_flag: 0
+            }),
+            JSON.stringify({
+              phase: "trick_play",
+              game_id: "g1",
+              decision_id: 1,
+              candidate_action_key: "b",
+              rollout_mean_actor_team_delta: null,
+              actor_team_score: 96,
+              opponent_team_score: 84,
+              pass_action_flag: 1
+            }),
+            JSON.stringify({
+              phase: "trick_play",
+              game_id: "g2",
+              decision_id: 2,
+              candidate_action_key: "a",
+              rollout_mean_actor_team_delta: null,
+              actor_team_score: 88,
+              opponent_team_score: 102,
+              pass_action_flag: 0
+            }),
+            JSON.stringify({
+              phase: "trick_play",
+              game_id: "g2",
+              decision_id: 2,
+              candidate_action_key: "b",
+              rollout_mean_actor_team_delta: null,
+              actor_team_score: 84,
+              opponent_team_score: 106,
+              pass_action_flag: 1
+            }),
+          ].join("\n") + "\n",
+          "utf8"
+        );
+
+        writeFileSync(
+          rolloutPath,
+          [
+            JSON.stringify({
+              decision_id: 1,
+              candidate_action_key: "a",
+              rollout_mean_actor_team_delta: 100
+            }),
+            JSON.stringify({
+              decision_id: 1,
+              candidate_action_key: "b",
+              rollout_mean_actor_team_delta: 0
+            }),
+            JSON.stringify({
+              decision_id: 2,
+              candidate_action_key: "a",
+              rollout_mean_actor_team_delta: 40
+            }),
+            JSON.stringify({
+              decision_id: 2,
+              candidate_action_key: "b",
+              rollout_mean_actor_team_delta: -10
+            }),
+          ].join("\n") + "\n",
+          "utf8"
+        );
+
+        writeFileSync(
+          manifestPath,
+          JSON.stringify(
+            {
+              schema_version: 2,
+              feature_columns: [
+                "actor_team_score",
+                "opponent_team_score",
+                "pass_action_flag",
+              ],
+            },
+            null,
+            2
+          ),
+          "utf8"
+        );
+
+        const result = spawnSync(
+          process.execPath,
+          [
+            join("node_modules", "tsx", "dist", "cli.mjs"),
+            "scripts/run-python.ts",
+            "ml/train_lightgbm.py",
+            "--input",
+            datasetPath,
+            "--rollout-input",
+            rolloutPath,
+            "--manifest-input",
+            manifestPath,
+            "--output",
+            modelPath,
+            "--meta-output",
+            metaPath,
+            "--report-output",
+            reportPath,
+            "--feature-importance-output",
+            importancePath,
+            "--phase",
+            "trick_play",
+            "--objective",
+            "rollout_ranker",
+            "--validation-fraction",
+            "0",
+          ],
+          {
+            cwd: REPO_ROOT,
+            encoding: "utf8",
+          }
+        );
+
+        expect(result.status).toBe(0);
+        expect(result.stdout).toContain('"accepted": true');
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    },
+    15000
+  );
 });

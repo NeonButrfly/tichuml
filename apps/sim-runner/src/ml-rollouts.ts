@@ -636,6 +636,33 @@ function qualityMarkdown(payload: RolloutQuality): string {
   ].join("\n");
 }
 
+function buildRolloutContinuationMetadata(config: {
+  args: ParsedArgs;
+  job: RolloutJob;
+  decisionIndex: number;
+  sampleSeed: string;
+  sampleIndex: number;
+}): JsonObject | undefined {
+  if (
+    config.args.continuationProvider !== "local" ||
+    config.args.rolloutsPerAction <= 1
+  ) {
+    return undefined;
+  }
+
+  return {
+    run_id: "rollout",
+    game_id: config.job.gameId,
+    hand_id: config.job.handId,
+    decision_index: config.decisionIndex,
+    exploration_profile: "training_diversity",
+    exploration_rate: 1,
+    exploration_top_n: 4,
+    exploration_max_score_gap: 20,
+    rollout_sample_variant: `${config.sampleIndex}:${config.sampleSeed}`
+  };
+}
+
 async function runSingleRolloutJob(
   job: RolloutJob,
   args: ParsedArgs,
@@ -720,6 +747,13 @@ async function runSingleRolloutJob(
         }
         safetyCounter += 1;
         const actor = resolveNextActor(result.legalActions, result.nextState);
+        const continuationMetadata = buildRolloutContinuationMetadata({
+          args,
+          job,
+          decisionIndex: continuationDecisionIndex,
+          sampleSeed,
+          sampleIndex
+        });
         const resolved = await resolveDecision({
           backendBaseUrl: args.backendUrl,
           telemetryEnabled: false,
@@ -734,6 +768,7 @@ async function runSingleRolloutJob(
           defaultProvider: args.continuationProvider,
           quiet: true,
           serverFallbackEnabled: true,
+          ...(continuationMetadata ? { metadata: continuationMetadata } : {}),
           fullStateDecisionRequests: shouldUseFullStateRolloutContinuation(
             args.continuationProvider
           )
