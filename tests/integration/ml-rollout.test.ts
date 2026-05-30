@@ -13,6 +13,7 @@ import {
   teamForSeat
 } from "../../apps/sim-runner/src/ml-rollout-utils";
 import {
+  limitDecisionRowsRoundRobinByGame,
   resolveForcedActionFromCandidate as resolveForcedActionForRollout,
   shouldUseFullStateRolloutContinuation
 } from "../../apps/sim-runner/src/ml-rollouts";
@@ -135,6 +136,94 @@ describe("ml rollout helpers", () => {
     expect(shouldUseFullStateRolloutContinuation("local")).toBe(false);
     expect(shouldUseFullStateRolloutContinuation("server_heuristic")).toBe(true);
     expect(shouldUseFullStateRolloutContinuation("lightgbm_model")).toBe(true);
+  });
+
+  it("spreads capped rollout decision selection across games", () => {
+    const selected = limitDecisionRowsRoundRobinByGame(
+      [
+        {
+          id: 1,
+          game_id: "game-a",
+          hand_id: "game-a-hand-1",
+          phase: "trick_play",
+          actor_seat: "seat-0",
+          decision_index: 1,
+          requested_provider: "server_heuristic",
+          provider_used: "server_heuristic",
+          engine_version: "milestone-1",
+          sim_version: "test",
+          state_raw: {},
+          state_norm: {},
+          legal_actions: {}
+        },
+        {
+          id: 2,
+          game_id: "game-a",
+          hand_id: "game-a-hand-1",
+          phase: "trick_play",
+          actor_seat: "seat-0",
+          decision_index: 2,
+          requested_provider: "server_heuristic",
+          provider_used: "server_heuristic",
+          engine_version: "milestone-1",
+          sim_version: "test",
+          state_raw: {},
+          state_norm: {},
+          legal_actions: {}
+        },
+        {
+          id: 3,
+          game_id: "game-a",
+          hand_id: "game-a-hand-1",
+          phase: "trick_play",
+          actor_seat: "seat-0",
+          decision_index: 3,
+          requested_provider: "server_heuristic",
+          provider_used: "server_heuristic",
+          engine_version: "milestone-1",
+          sim_version: "test",
+          state_raw: {},
+          state_norm: {},
+          legal_actions: {}
+        },
+        {
+          id: 10,
+          game_id: "game-b",
+          hand_id: "game-b-hand-1",
+          phase: "trick_play",
+          actor_seat: "seat-1",
+          decision_index: 1,
+          requested_provider: "server_heuristic",
+          provider_used: "server_heuristic",
+          engine_version: "milestone-1",
+          sim_version: "test",
+          state_raw: {},
+          state_norm: {},
+          legal_actions: {}
+        },
+        {
+          id: 11,
+          game_id: "game-b",
+          hand_id: "game-b-hand-1",
+          phase: "trick_play",
+          actor_seat: "seat-1",
+          decision_index: 2,
+          requested_provider: "server_heuristic",
+          provider_used: "server_heuristic",
+          engine_version: "milestone-1",
+          sim_version: "test",
+          state_raw: {},
+          state_norm: {},
+          legal_actions: {}
+        }
+      ],
+      4
+    );
+
+    expect(selected.map((row) => row.id)).toEqual([1, 10, 2, 11]);
+    expect(new Set(selected.map((row) => row.game_id))).toEqual(
+      new Set(["game-a", "game-b"])
+    );
   });
 
   it("treats malformed candidate actions as row-level rollout failures", () => {

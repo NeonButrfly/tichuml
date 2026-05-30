@@ -68,6 +68,55 @@ type DecisionRow = {
   legal_actions: JsonObject | null;
 };
 
+export function limitDecisionRowsRoundRobinByGame(
+  decisions: DecisionRow[],
+  maxDecisions?: number
+): DecisionRow[] {
+  if (
+    typeof maxDecisions !== "number" ||
+    !Number.isFinite(maxDecisions) ||
+    maxDecisions <= 0 ||
+    decisions.length <= maxDecisions
+  ) {
+    return decisions;
+  }
+
+  const gameOrder: string[] = [];
+  const queuedByGame = new Map<string, DecisionRow[]>();
+  for (const decision of decisions) {
+    const gameId = decision.game_id;
+    const existing = queuedByGame.get(gameId);
+    if (existing) {
+      existing.push(decision);
+      continue;
+    }
+    queuedByGame.set(gameId, [decision]);
+    gameOrder.push(gameId);
+  }
+
+  const limited: DecisionRow[] = [];
+  while (limited.length < maxDecisions) {
+    let selectedInRound = false;
+    for (const gameId of gameOrder) {
+      const queue = queuedByGame.get(gameId);
+      const next = queue?.shift();
+      if (!next) {
+        continue;
+      }
+      limited.push(next);
+      selectedInRound = true;
+      if (limited.length >= maxDecisions) {
+        break;
+      }
+    }
+    if (!selectedInRound) {
+      break;
+    }
+  }
+
+  return limited;
+}
+
 type RolloutJob = {
   decisionId: number;
   gameId: string;
@@ -448,14 +497,6 @@ async function fetchDecisionRows(
   }
 
   const whereClause = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
-  const limitClause =
-    typeof args.maxDecisions === "number" && args.maxDecisions > 0
-      ? `LIMIT $${params.length + 1}`
-      : "";
-  if (limitClause) {
-    params.push(args.maxDecisions);
-  }
-
   const query = `
     SELECT
       id,
@@ -474,10 +515,10 @@ async function fetchDecisionRows(
     FROM decisions
     ${whereClause}
     ORDER BY game_id ASC, hand_id ASC, decision_index ASC, id ASC
-    ${limitClause}
   `;
 
-  return await sql.unsafe<DecisionRow[]>(query, params as never[]);
+  const rows = await sql.unsafe<DecisionRow[]>(query, params as never[]);
+  return limitDecisionRowsRoundRobinByGame(rows, args.maxDecisions);
 }
 
 function buildJobs(
