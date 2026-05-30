@@ -131,6 +131,38 @@ const DEFAULT_JOBS_OUTPUT = "artifacts/ml/rollout-jobs.jsonl";
 const DEFAULT_QUALITY_JSON = "artifacts/ml/rollout-quality.json";
 const DEFAULT_QUALITY_MD = "artifacts/ml/rollout-quality.md";
 
+export function resolveForcedActionFromCandidate(
+  stateRaw: GameState | null,
+  actorSeat: SeatId,
+  candidateActionCanonicalJson: string
+): {
+  forcedAction: LegalAction | null;
+  failureReason: string | null;
+} {
+  if (!stateRaw) {
+    return {
+      forcedAction: null,
+      failureReason: "missing_state_raw"
+    };
+  }
+
+  try {
+    const candidateAction = JSON.parse(candidateActionCanonicalJson) as JsonObject;
+    const legalActions = getLegalActions(stateRaw);
+    const actorLegalActions = legalActions[actorSeat] ?? [];
+    const forcedAction = findMatchingLegalAction(actorLegalActions, candidateAction);
+    return {
+      forcedAction,
+      failureReason: forcedAction ? null : "invalid_forced_action"
+    };
+  } catch (error) {
+    return {
+      forcedAction: null,
+      failureReason: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
 function parseArgs(argv: string[]): ParsedArgs {
   if (argv.includes("--help") || argv.includes("-h")) {
     process.stdout.write(
@@ -586,11 +618,12 @@ async function runSingleRolloutJob(
     };
   }
 
-  const candidateAction = JSON.parse(job.candidateActionCanonicalJson) as JsonObject;
-  const legalActions = getLegalActions(stateRaw);
-  const actorLegalActions = legalActions[job.actorSeat] ?? [];
-  const forcedAction = findMatchingLegalAction(actorLegalActions, candidateAction);
-  if (!forcedAction) {
+  const forcedActionResolution = resolveForcedActionFromCandidate(
+    stateRaw,
+    job.actorSeat,
+    job.candidateActionCanonicalJson
+  );
+  if (!forcedActionResolution.forcedAction) {
     return {
       decision_id: job.decisionId,
       candidate_action_key: job.candidateActionKey,
@@ -609,9 +642,10 @@ async function runSingleRolloutJob(
       rollout_continuation_provider: args.continuationProvider,
       rollout_seed: buildRolloutSeed(args.seed, job.decisionId, job.candidateActionKey, 0),
       rollout_engine_version: job.engineVersion,
-      rollout_failure_reason: "invalid_forced_action"
+      rollout_failure_reason: forcedActionResolution.failureReason
     };
   }
+  const forcedAction = forcedActionResolution.forcedAction;
 
   const samples = [];
   let rolloutFailures = 0;

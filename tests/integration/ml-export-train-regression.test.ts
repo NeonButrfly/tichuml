@@ -24,6 +24,27 @@ function runPythonSnippet(snippet: string, args: string[] = []) {
 }
 
 describe("ml export and training regressions", () => {
+  it("fails fast when rollout export mode is requested without rollout labels", () => {
+    const result = spawnSync(
+      process.execPath,
+      [
+        join("node_modules", "tsx", "dist", "cli.mjs"),
+        "scripts/run-python.ts",
+        "ml/export_training_rows.py",
+        "--label-mode",
+        "rollout",
+        "--validate-only",
+      ],
+      {
+        cwd: REPO_ROOT,
+        encoding: "utf8",
+      }
+    );
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("--rollout-input");
+  });
+
   it("writes parquet across chunks when the first chunk only has null numeric values", () => {
     const tempDir = mkdtempSync(join(tmpdir(), "ml-export-schema-"));
     const outputPath = join(tempDir, "schema-drift.parquet");
@@ -52,7 +73,9 @@ describe("ml export and training regressions", () => {
     }
   });
 
-  it("trains on exported numeric feature columns even when parquet stored them as strings", () => {
+  it(
+    "trains on exported numeric feature columns even when parquet stored them as strings",
+    () => {
     const tempDir = mkdtempSync(join(tmpdir(), "ml-train-dtypes-"));
     const datasetPath = join(tempDir, "train.parquet");
     const manifestPath = join(tempDir, "dataset_metadata.json");
@@ -133,5 +156,22 @@ describe("ml export and training regressions", () => {
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }
+    },
+    15000
+  );
+
+  it("switches scoped rollout exports onto candidate-action rows", () => {
+    const result = runPythonSnippet(
+      [
+        "from pathlib import Path",
+        "import sys",
+        "sys.path.insert(0, str(Path('ml').resolve()))",
+        "from export_training_rows import resolve_export_mode",
+        "print(resolve_export_mode('rollout', True, True))",
+      ].join("; ")
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout.trim()).toBe("candidate_rows");
   });
 });

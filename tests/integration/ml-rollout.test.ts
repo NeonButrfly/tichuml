@@ -8,6 +8,7 @@ import {
   summarizeRolloutSamples,
   teamForSeat
 } from "../../apps/sim-runner/src/ml-rollout-utils";
+import { resolveForcedActionFromCandidate as resolveForcedActionForRollout } from "../../apps/sim-runner/src/ml-rollouts";
 
 describe("ml rollout helpers", () => {
   it("maps seats to stable teams", () => {
@@ -121,5 +122,20 @@ describe("ml rollout helpers", () => {
     expect(buildRolloutSeed("base", 42, "candidate", 0)).toBe(
       "base:42:candidate:0"
     );
+  });
+
+  it("treats malformed candidate actions as row-level rollout failures", () => {
+    const state = createScenarioState({
+      phase: "finished"
+    });
+
+    const resolution = resolveForcedActionForRollout(
+      state,
+      "seat-0",
+      "{not-json"
+    );
+
+    expect(resolution.forcedAction).toBeNull();
+    expect(resolution.failureReason).toBeTruthy();
   });
 });

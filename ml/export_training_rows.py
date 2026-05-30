@@ -1140,6 +1140,16 @@ def choose_label(
     raise ValueError(f"Unsupported label mode: {label_mode}")
 
 
+def resolve_export_mode(
+    label_mode: str,
+    include_rollouts: bool,
+    has_rollout_input: bool,
+) -> str:
+    if label_mode == "rollout" or include_rollouts or has_rollout_input:
+        return "candidate_rows"
+    return "chosen_decision_rows"
+
+
 def parse_rollout_file(path: str | None) -> dict[tuple[int, str], dict[str, Any]]:
     if not path:
         return {}
@@ -1607,6 +1617,14 @@ def build_training_feature_columns(frame_columns: list[str]) -> list[str]:
     return ordered
 
 
+def build_label_columns(frame_columns: list[str]) -> list[str]:
+    return [
+        column
+        for column in ["label", *OBSERVED_OUTCOME_COLUMNS, *ROLLOUT_COLUMNS]
+        if column in frame_columns
+    ]
+
+
 def build_metadata_columns(
     frame_columns: list[str], feature_columns: list[str], label_columns: list[str]
 ) -> list[str]:
@@ -1785,6 +1803,8 @@ def build_training_rows_for_chunk(
 def build_validation_report(
     *,
     args: argparse.Namespace,
+    export_mode: str,
+    total_exported_rows: int,
     stats: ExportStats,
     feature_columns: list[str],
     label_columns: list[str],
@@ -1798,7 +1818,7 @@ def build_validation_report(
 ) -> dict[str, Any]:
     ml_safe_accepted = (
         len(leakage_errors) == 0
-        and stats.exported_decision_rows > 0
+        and total_exported_rows > 0
         and scope_integrity["invalid_decision_count"] == 0
         and scope_integrity["non_completed_match_count"] == 0
         and (len(scoped_provider_distribution) <= 1 or args.provider is not None)
@@ -1819,13 +1839,13 @@ def build_validation_report(
         "validation_status": "accepted"
         if ml_safe_accepted
         else "failed",
-        "export_mode": "chosen_decision_rows",
+        "export_mode": export_mode,
         "phase": resolve_phase_filter(args.phase),
         "provider": args.provider,
         "run_id": args.run_id,
         "game_id_prefix": args.game_id_prefix,
         "candidate_row_count_before_filters": source_row_counts.get("decisions", 0),
-        "total_exported_rows": stats.exported_decision_rows,
+        "total_exported_rows": total_exported_rows,
         "dropped_rows_by_reason": dict(stats.dropped_rows_by_reason),
         "provider_distribution": dict(stats.rows_by_provider),
         "provider_distribution_all_scoped": scoped_provider_distribution,
@@ -1867,8 +1887,8 @@ def build_validation_report(
             "exploration_excluded", 0
         ),
         "explored_decision_rate": (
-            stats.exploration_selected_count / stats.exported_decision_rows
-            if stats.exported_decision_rows > 0
+            stats.exploration_selected_count / total_exported_rows
+            if total_exported_rows > 0
             else 0.0
         ),
         "reward_distribution_by_exploration": exploration_reward_distribution,
@@ -1896,6 +1916,7 @@ def build_manifest(
     created_at: str,
     label_mode: str,
     *,
+    export_mode: str = "chosen_decision_rows",
     run_id: str | None = None,
     game_id_prefix: str | None = None,
     source_row_counts: dict[str, int] | None = None,
@@ -1905,10 +1926,7 @@ def build_manifest(
     ml_export_command: str | None = None,
 ) -> dict[str, Any]:
     feature_columns = [column for column in FEATURE_ORDER if column in frame_columns]
-    label_columns = [
-        column for column in ["label", *OBSERVED_OUTCOME_COLUMNS, *ROLLOUT_COLUMNS]
-        if column in frame_columns
-    ]
+    label_columns = build_label_columns(frame_columns)
     diagnostic_columns = [
         column
         for column in (
@@ -1964,6 +1982,7 @@ def build_manifest(
         "source_tables": ["decisions", "events", "matches"],
         "source_row_counts": source_row_counts or {},
         "exported_training_row_count": exported_training_row_count,
+        "export_mode": export_mode,
         "validation_status": validation_status or "accepted",
         "ml_export_command": ml_export_command,
     }
@@ -2304,6 +2323,20 @@ def main() -> None:
     validation_report_output = resolved_paths["validation_report_output"]
     phase = resolve_phase_filter(args.phase)
     output_format = str(resolved_paths["output_format"])
+    effective_include_rollouts = (
+        bool(args.include_rollouts)
+        or bool(args.rollout_input)
+        or args.label_mode == "rollout"
+    )
+    export_mode = resolve_export_mode(
+        args.label_mode,
+        effective_include_rollouts,
+        bool(args.rollout_input),
+    )
+    if args.label_mode == "rollout" and not args.rollout_input:
+        raise ValueError(
+            "ml:export rollout label mode requires --rollout-input with candidate-action rollout rows."
+        )
     default_provider_applied = False
     if args.provider is None and (args.run_id or args.game_id_prefix):
         args.provider = "server_heuristic"
@@ -2332,6 +2365,11 @@ def main() -> None:
     writer = DatasetWriter(output_path, output_format)
     first_row: dict[str, Any] | None = None
     written_columns: list[str] = []
+    rollout_rows = (
+        parse_rollout_file(args.rollout_input)
+        if effective_include_rollouts
+        else {}
+    )
     database_url_used = default_database_url()
     database_url_source = "default"
     database_url_fallback_used = False
@@ -2391,14 +2429,26 @@ def main() -> None:
                     events = load_events_for_games(connection, game_ids)
                     matches = load_matches_for_games(connection, game_ids)
                     hand_outcomes, match_outcomes = build_outcome_maps(events, matches)
-                    rows = build_training_rows_for_chunk(
-                        decisions,
-                        hand_outcomes=hand_outcomes,
-                        match_outcomes=match_outcomes,
-                        stats=stats,
-                        include_exploration=args.include_exploration,
-                        exploration_profile_filter=exploration_profile_filter,
-                    )
+                    if export_mode == "candidate_rows":
+                        rows = build_rows_for_chunk(
+                            decisions,
+                            hand_outcomes=hand_outcomes,
+                            match_outcomes=match_outcomes,
+                            rollout_rows=rollout_rows,
+                            label_mode=args.label_mode,
+                            include_outcomes=args.include_outcomes,
+                            include_rollouts=effective_include_rollouts,
+                            stats=stats,
+                        )
+                    else:
+                        rows = build_training_rows_for_chunk(
+                            decisions,
+                            hand_outcomes=hand_outcomes,
+                            match_outcomes=match_outcomes,
+                            stats=stats,
+                            include_exploration=args.include_exploration,
+                            exploration_profile_filter=exploration_profile_filter,
+                        )
                     if rows and first_row is None:
                         first_row = rows[0]
                         written_columns = list(rows[0].keys())
@@ -2419,8 +2469,13 @@ def main() -> None:
 
     if first_row is None:
         first_row = {}
+    total_exported_rows = (
+        stats.candidate_rows_written
+        if export_mode == "candidate_rows"
+        else stats.exported_decision_rows
+    )
     feature_columns = build_training_feature_columns(written_columns)
-    label_columns = TRAINING_LABEL_COLUMNS if written_columns else []
+    label_columns = build_label_columns(written_columns) if written_columns else []
     metadata_columns = build_metadata_columns(
         written_columns, feature_columns, label_columns
     )
@@ -2434,11 +2489,12 @@ def main() -> None:
     manifest = build_manifest(
         written_columns,
         created_at,
-        "outcome_reward",
+        args.label_mode,
+        export_mode=export_mode,
         run_id=args.run_id,
         game_id_prefix=args.game_id_prefix,
         source_row_counts=source_row_counts,
-        exported_training_row_count=stats.exported_decision_rows,
+        exported_training_row_count=total_exported_rows,
         validation_status="validated" if validation_only else "accepted",
         filtering_strategy="game_id_prefix" if args.game_id_prefix else "run_id_metadata"
         if args.run_id
@@ -2450,7 +2506,7 @@ def main() -> None:
     manifest["feature_columns"] = feature_columns
     manifest["label_columns"] = label_columns
     manifest["metadata_columns"] = metadata_columns
-    manifest["export_mode"] = "chosen_decision_rows"
+    manifest["export_mode"] = export_mode
     manifest["include_exploration"] = bool(args.include_exploration)
     manifest["exploration_profile_filter"] = exploration_profile_filter or "any"
     manifest["split_row_counts"] = dict(stats.split_row_counts)
@@ -2490,6 +2546,8 @@ def main() -> None:
     manifest["leakage_denylist_pass"] = len(leakage_errors) == 0
     validation_report = build_validation_report(
         args=args,
+        export_mode=export_mode,
+        total_exported_rows=total_exported_rows,
         stats=stats,
         feature_columns=feature_columns,
         label_columns=label_columns,
@@ -2507,9 +2565,9 @@ def main() -> None:
             validation_errors.append("No scoped decisions were found for the requested run.")
         if source_row_counts["events"] == 0:
             validation_errors.append("No scoped events were found for the requested run.")
-        if stats.exported_decision_rows == 0 and source_row_counts["decisions"] > 0:
+        if total_exported_rows == 0 and source_row_counts["decisions"] > 0:
             validation_errors.append(
-                "Scoped decisions were found, but no clean chosen-decision training rows passed export filters."
+                "Scoped decisions were found, but no clean export rows passed the requested filters."
             )
         if source_row_counts["matches"] == 0:
             validation_warnings.append(
@@ -2538,9 +2596,9 @@ def main() -> None:
             sys.exit(1)
         return
 
-    if stats.exported_decision_rows == 0:
+    if total_exported_rows == 0:
         raise ValueError(
-            "ml:export produced zero clean chosen-decision training rows. Verify scoped telemetry includes legal chosen actions, state features, and outcome rewards."
+            "ml:export produced zero clean rows for the requested export mode. Verify the scoped telemetry and rollout inputs match the selected label mode."
         )
     if leakage_errors:
         raise ValueError("ml:export rejected the dataset because leakage fields appeared in feature columns.")
@@ -2566,7 +2624,7 @@ def main() -> None:
     write_json(validation_report_output, validation_report)
 
     quality_payload = stats.to_quality_payload(
-        label_mode="outcome_reward",
+        label_mode=args.label_mode,
         output_format=output_format,
         chunk_size=args.chunk_size,
         peak_memory_bytes=peak,
@@ -2579,13 +2637,14 @@ def main() -> None:
         json.dumps(
             {
                 "accepted": True,
-                "rows": stats.exported_decision_rows,
+                "rows": total_exported_rows,
                 "decisions": stats.decisions_processed,
                 "phase": phase,
                 "provider": args.provider,
                 "output": str(output_path),
                 "format": output_format,
-                "label_mode": "outcome_reward",
+                "label_mode": args.label_mode,
+                "export_mode": export_mode,
                 "include_exploration": args.include_exploration,
                 "feature_schema": str(feature_schema_output),
                 "schema_output": str(schema_output),
