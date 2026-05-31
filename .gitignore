@@ -12,6 +12,7 @@ ml/data/*
 !ml/data/.gitkeep
 ml/model_registry/*
 !ml/model_registry/.gitkeep
+!ml/model_registry/promoted-model.json
 ml/feature_schema.json
 eval/results/*
 !eval/results/.gitkeep

@@ -54,6 +54,17 @@ function runPowerShellHelp(cwd: string, scriptPath: string) {
   );
 }
 
+function runPowerShellDryRun(cwd: string, scriptPath: string) {
+  return spawnSync(
+    "powershell",
+    ["-ExecutionPolicy", "Bypass", "-File", scriptPath, "-DryRun"],
+    {
+      cwd,
+      encoding: "utf8"
+    }
+  );
+}
+
 const shouldRunPowerShellLaunchers =
   process.platform === "win32" &&
   ["powershell", "git", "npx", "psql", "tar"].every(hasCommand);
@@ -160,6 +171,40 @@ windowsDescribe("training-data PowerShell launchers", () => {
       expect(result.status).toBe(0);
       expect(result.stdout).toContain("status-training.ps1");
       expect(result.stdout).toContain("SessionName");
+    },
+    30000
+  );
+
+  it(
+    "exposes the Windows LightGBM deploy launcher help",
+    () => {
+      const root = repoRoot();
+      const result = runPowerShellHelp(
+        root,
+        path.join(root, "scripts", "deploy-lightgbm-model.ps1")
+      );
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("deploy-lightgbm-model.ps1");
+      expect(result.stdout).toContain("RemoteHost");
+    },
+    30000
+  );
+
+  it(
+    "renders a dry-run deployment plan for the Windows LightGBM deploy launcher",
+    () => {
+      const root = repoRoot();
+      const result = runPowerShellDryRun(
+        root,
+        path.join(root, "scripts", "deploy-lightgbm-model.ps1")
+      );
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("Resolved repo root: C:\\tichu\\tichuml");
+      expect(result.stdout).toContain("SSH target: kay@192.168.50.36:22");
+      expect(result.stdout).toContain("Manifest version: lightgbm-action-model-20260530101110");
+      expect(result.stdout).toContain("Remote model path: /opt/tichuml/ml/model_registry/lightgbm_action_model.txt");
     },
     30000
   );

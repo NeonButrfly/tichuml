@@ -1,0 +1,36 @@
+{
+  "promoted_at": "2026-05-31T18:32:17.237Z",
+  "validated_on_commit": "c47b54ac6dd11a7a9718ac6120036e834e83e10e",
+  "deployment_target": {
+    "host": "192.168.50.36",
+    "repo_root": "/opt/tichuml"
+  },
+  "model": {
+    "created_at": "2026-05-30T10:11:10.581172+00:00",
+    "objective": "rollout_ranker",
+    "label_mode": "rollout",
+    "feature_profile": "runtime_raw",
+    "phase": "trick_play",
+    "model_version": "lightgbm-action-model-20260530101110",
+    "model_sha256": "756f3c04196d383b056f4b870a6a073e053676e354453d7b1e0cccf7250ff257",
+    "meta_sha256": "c1ba8d26abe68305f8279aec82bf859fc595a2405bb0fcd00cd0205efdea9d55"
+  },
+  "validation": {
+    "evaluation_mode": "mirrored",
+    "games": 4,
+    "improvement_gate_passed": true,
+    "win_rate_by_team": {
+      "team-0": 0.75,
+      "team-1": 0.25,
+      "tie": 0.0
+    },
+    "hand_win_rate_by_team": {
+      "team-0": 0.4918,
+      "team-1": 0.4426,
+      "tie": 0.0656
+    },
+    "average_score_margin": 450,
+    "fallback_count": 0,
+    "invalid_decision_count": 0
+  }
+}

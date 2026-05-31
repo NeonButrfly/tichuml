@@ -73,6 +73,12 @@ Quick reference:
   `ml/model_registry/lightgbm_action_model.*`, restart the backend before
   evaluating or serving `lightgbm_model` so the runtime reloads the new model
   metadata.
+- The tracked deployment contract for the validated promoted model now lives in
+  `ml/model_registry/promoted-model.json`. Use
+  `scripts/deploy-lightgbm-model.ps1` from Windows or
+  `scripts/deploy-lightgbm-model.sh` from macOS/Linux to push that exact
+  promoted artifact to the Linux backend host, verify hashes, and restart the
+  backend.
 - `npm run ml:evaluate` compares providers, supports mirrored seating, and
   writes an improvement gate report.
 
@@ -251,6 +257,21 @@ Manual Linux update-only flow:
 bash scripts/update-backend.sh
 ```
 
+When a newer validated LightGBM artifact has been promoted locally, follow the
+backend code update with model deployment from the validated workspace:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\deploy-lightgbm-model.ps1
+```
+
+```sh
+bash scripts/deploy-lightgbm-model.sh
+```
+
+The Linux update script now marks the host `degraded` if the active
+`ml/model_registry/lightgbm_action_model.*` files do not match the tracked
+`ml/model_registry/promoted-model.json` manifest.
+
 Status/health check:
 
 ```sh
@@ -397,6 +418,8 @@ the runtime-safe `runtime_raw` feature profile to
 `ml/model_registry/lightgbm_action_model.*`. Use
 `--feature-profile full --objective imitation_binary` when you explicitly want
 the older richer imitation experiment path.
+`ml/model_registry/promoted-model.json` tracks the exact promoted artifact hash
+and validation snapshot that Linux deployment should serve.
 For rollout-based `runtime_raw` trick-play models, `ml:train` now excludes
 delegated `call_tichu` rows by default so the model is aligned with the current
 backend serving contract. Use `--include-delegated-runtime-actions` if you need

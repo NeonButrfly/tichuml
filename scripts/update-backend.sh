@@ -27,7 +27,7 @@ main() {
   ensure_runtime_dirs
   require_command git
 
-  local branch before_local_commit before_remote_commit_live after_local_commit after_remote_commit_live remote_commit ahead behind dirty update_applied restart_triggered status message code_changed
+  local branch before_local_commit before_remote_commit_live after_local_commit after_remote_commit_live remote_commit ahead behind dirty update_applied restart_triggered status message code_changed promoted_manifest_state
   branch="$GIT_BRANCH"
   update_applied=false
   restart_triggered=false
@@ -95,6 +95,19 @@ main() {
     verify_backend_http_endpoints
     restart_triggered=true
     message="$message Backend restarted."
+  fi
+
+  promoted_manifest_state="$(node -e 'const fs=require("node:fs"); const crypto=require("node:crypto"); const repoRoot=process.argv[1]; const manifestPath=`${repoRoot}/ml/model_registry/promoted-model.json`; const modelPath=`${repoRoot}/ml/model_registry/lightgbm_action_model.txt`; const metaPath=`${repoRoot}/ml/model_registry/lightgbm_action_model.meta.json`; if (!fs.existsSync(manifestPath)) { process.stdout.write(JSON.stringify({state:"no_manifest"})); process.exit(0); } if (!fs.existsSync(modelPath) || !fs.existsSync(metaPath)) { process.stdout.write(JSON.stringify({state:"missing_model_files"})); process.exit(0); } const manifest=JSON.parse(fs.readFileSync(manifestPath,"utf8")); const hash=(filePath)=>crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex"); const actualModel=hash(modelPath); const actualMeta=hash(metaPath); const expectedModel=String(manifest?.model?.model_sha256 ?? ""); const expectedMeta=String(manifest?.model?.meta_sha256 ?? ""); process.stdout.write(JSON.stringify({state: actualModel===expectedModel && actualMeta===expectedMeta ? "match" : "mismatch", model_version: String(manifest?.model?.model_version ?? ""), actual_model: actualModel, actual_meta: actualMeta, expected_model: expectedModel, expected_meta: expectedMeta}));' "$BACKEND_REPO_ROOT" 2>/dev/null || printf '{}')"
+  if printf '%s' "$promoted_manifest_state" | grep -q '"state":"mismatch"'; then
+    status="degraded"
+    message="$message Active LightGBM artifact does not match ml/model_registry/promoted-model.json; run scripts/deploy-lightgbm-model from the validated workspace."
+    log_warn "Promoted model manifest mismatch: $promoted_manifest_state"
+  elif printf '%s' "$promoted_manifest_state" | grep -q '"state":"missing_model_files"'; then
+    status="degraded"
+    message="$message Tracked promoted model manifest exists but active LightGBM files are missing."
+    log_warn "Promoted model manifest is present but active LightGBM files are missing."
+  elif printf '%s' "$promoted_manifest_state" | grep -q '"state":"match"'; then
+    log_ok "Promoted model manifest matches the active LightGBM artifact."
   fi
 
   after_local_commit="$(git_local_commit)"

@@ -45,6 +45,70 @@ http_status_ok() {
   [ "$status" = "200" ]
 }
 
+model_sha256() {
+  local file_path="$1"
+  if has_command sha256sum; then
+    sha256sum "$file_path" | awk '{print $1}'
+    return 0
+  fi
+
+  if has_command shasum; then
+    shasum -a 256 "$file_path" | awk '{print $1}'
+    return 0
+  fi
+
+  return 1
+}
+
+print_model_status() {
+  local model_file="$BACKEND_REPO_ROOT/ml/model_registry/lightgbm_action_model.txt"
+  local meta_file="$BACKEND_REPO_ROOT/ml/model_registry/lightgbm_action_model.meta.json"
+  local manifest_file="$BACKEND_REPO_ROOT/ml/model_registry/promoted-model.json"
+
+  if [ -f "$model_file" ]; then
+    status_line "[OK]" "LightGBM model file exists"
+  else
+    status_line "[WARN]" "LightGBM model file is missing"
+    return
+  fi
+
+  if [ -f "$meta_file" ]; then
+    status_line "[OK]" "LightGBM model metadata exists"
+  else
+    status_line "[WARN]" "LightGBM model metadata is missing"
+  fi
+
+  if model_hash="$(model_sha256 "$model_file" 2>/dev/null)"; then
+    status_line "[OK]" "LightGBM model sha256: $model_hash"
+  else
+    status_line "[WARN]" "LightGBM model sha256 unavailable because no sha256 helper is installed"
+  fi
+
+  if [ -f "$meta_file" ] && meta_hash="$(model_sha256 "$meta_file" 2>/dev/null)"; then
+    status_line "[OK]" "LightGBM meta sha256: $meta_hash"
+  fi
+
+  if [ -f "$meta_file" ] && has_command node; then
+    local meta_summary
+    meta_summary="$(node -e 'const fs=require("node:fs"); const meta=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); const summary={version: meta.model_version ?? "unknown", created_at: meta.created_at ?? "unknown", objective: meta.objective ?? "unknown", label_mode: meta.label_mode ?? "unknown", feature_profile: meta.feature_profile ?? "unknown"}; process.stdout.write(JSON.stringify(summary));' "$meta_file" 2>/dev/null || true)"
+    if [ -n "$meta_summary" ]; then
+      status_line "[OK]" "LightGBM meta summary: $meta_summary"
+    fi
+  fi
+
+  if [ -f "$manifest_file" ] && [ -f "$meta_file" ] && has_command node; then
+    local manifest_status
+    manifest_status="$(node -e 'const fs=require("node:fs"); const crypto=require("node:crypto"); const [manifestPath, modelPath, metaPath] = process.argv.slice(1); const hash = (filePath) => crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex"); const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8")); const actualModel = hash(modelPath); const actualMeta = hash(metaPath); const expectedModel = String(manifest?.model?.model_sha256 ?? ""); const expectedMeta = String(manifest?.model?.meta_sha256 ?? ""); const payload = { match: actualModel === expectedModel && actualMeta === expectedMeta, expected_model: expectedModel, expected_meta: expectedMeta, actual_model: actualModel, actual_meta: actualMeta, model_version: String(manifest?.model?.model_version ?? "") }; process.stdout.write(JSON.stringify(payload));' "$manifest_file" "$model_file" "$meta_file" 2>/dev/null || true)"
+    if [ -n "$manifest_status" ]; then
+      if printf '%s' "$manifest_status" | grep -q '"match":true'; then
+        status_line "[OK]" "Promoted model manifest matches the active LightGBM artifact: $manifest_status"
+      else
+        status_line "[FAIL]" "Promoted model manifest does not match the active LightGBM artifact: $manifest_status"
+      fi
+    fi
+  fi
+}
+
 print_update_status() {
   if [ ! -f "$BACKEND_UPDATE_STATUS_FILE" ]; then
     status_line "[WARN]" "No update status has been recorded yet."
@@ -255,11 +319,7 @@ main() {
     status_line "[FAIL]" "Runtime build artifacts are incomplete"
   fi
 
-  if [ -f "$BACKEND_REPO_ROOT/ml/model_registry/lightgbm_action_model.txt" ]; then
-    status_line "[OK]" "LightGBM model file exists"
-  else
-    status_line "[WARN]" "LightGBM model file is missing"
-  fi
+  print_model_status
 
   if has_command git; then
     local branch local_commit remote_commit ahead behind
