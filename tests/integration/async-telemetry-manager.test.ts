@@ -292,6 +292,150 @@ describe("async telemetry pipeline resilience", () => {
     expect(replayedFiles).toHaveLength(2);
   });
 
+  it("quarantines provably non-replayable loopback port-one telemetry", async () => {
+    const root = await createTempDir();
+    const pendingDir = path.join(root, "pending");
+    const quarantinedDir = path.join(root, "quarantined");
+    const payloads = buildDecisionPayloads();
+    const fetchMock = vi.fn(async () => {
+      throw new Error("network down");
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const manager = new AsyncTelemetryManager({
+      enabled: true,
+      storageRoot: root,
+      quiet: true,
+      maxConcurrency: 1
+    });
+    await manager.enqueueDecision({
+      telemetry: {
+        enabled: true,
+        strictTelemetry: false,
+        backendBaseUrl: "http://127.0.0.1:1",
+        source: "selfplay",
+        mode: "minimal"
+      },
+      payloads,
+      context: { phase: "play" },
+      strictTelemetry: false
+    });
+    await manager.flush(500);
+
+    expect(
+      (await fsp.readdir(pendingDir)).filter((entry) => entry.endsWith(".ndjson"))
+    ).toHaveLength(1);
+
+    fetchMock.mockClear();
+    const replay = await replayPersistedTelemetry({
+      storageRoot: root,
+      quiet: true
+    });
+
+    expect(replay).toMatchObject({
+      scanned_files: 1,
+      replayed_files: 0,
+      failed_files: 0,
+      quarantined_files: 1,
+      quarantined_records: 1
+    });
+    expect(replay.quarantine_reasons.loopback_port_one).toBe(1);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(
+      (await fsp.readdir(pendingDir)).filter((entry) => entry.endsWith(".ndjson"))
+    ).toHaveLength(0);
+    expect(
+      (await fsp.readdir(quarantinedDir)).filter((entry) => entry.endsWith(".ndjson"))
+    ).toHaveLength(1);
+  });
+
+  it("quarantines records with invalid persisted endpoints", async () => {
+    const root = await createTempDir();
+    const pendingDir = path.join(root, "pending");
+    const quarantinedDir = path.join(root, "quarantined");
+    await fsp.mkdir(pendingDir, { recursive: true });
+    await fsp.writeFile(
+      path.join(pendingDir, "invalid-endpoint.ndjson"),
+      `${JSON.stringify({
+        schema_version: 1,
+        saved_at: new Date().toISOString(),
+        item_id: "invalid-endpoint-1",
+        request_kind: "telemetry_event",
+        endpoint: "-TimeoutSeconds/api/telemetry/event",
+        failure_kind: "network_failure",
+        failure_message: "bad endpoint",
+        strict_telemetry: false,
+        telemetry: {
+          enabled: true,
+          strictTelemetry: false,
+          backendBaseUrl: "-TimeoutSeconds",
+          source: "selfplay",
+          mode: "minimal"
+        },
+        payloads: {
+          full: {
+            ts: new Date().toISOString(),
+            game_id: "invalid-endpoint-game",
+            hand_id: "hand-1",
+            phase: "play",
+            event_type: "hand_started",
+            actor_seat: null,
+            event_index: 0,
+            schema_version: 2,
+            engine_version: "milestone-1",
+            sim_version: "milestone-2",
+            requested_provider: "system_local",
+            provider_used: "system_local",
+            fallback_used: false,
+            metadata: {},
+            state_norm: null,
+            payload: { event_type: "hand_started" }
+          },
+          minimal: {
+            ts: new Date().toISOString(),
+            game_id: "invalid-endpoint-game",
+            hand_id: "hand-1",
+            phase: "play",
+            event_type: "hand_started",
+            actor_seat: null,
+            event_index: 0,
+            schema_version: 2,
+            engine_version: "milestone-1",
+            sim_version: "milestone-2",
+            requested_provider: "system_local",
+            provider_used: "system_local",
+            fallback_used: false,
+            metadata: {},
+            state_norm: null,
+            payload: { event_type: "hand_started" }
+          }
+        },
+        context: { game_id: "invalid-endpoint-game", hand_id: "hand-1" }
+      })}\n`,
+      "utf8"
+    );
+
+    const replay = await replayPersistedTelemetry({
+      storageRoot: root,
+      quiet: true
+    });
+
+    expect(replay).toMatchObject({
+      scanned_files: 1,
+      replayed_files: 0,
+      failed_files: 0,
+      quarantined_files: 1,
+      quarantined_records: 1
+    });
+    expect(replay.quarantine_reasons.invalid_backend_base_url).toBe(1);
+    expect(
+      (await fsp.readdir(pendingDir)).filter((entry) => entry.endsWith(".ndjson"))
+    ).toHaveLength(0);
+    expect(
+      (await fsp.readdir(quarantinedDir)).filter((entry) => entry.endsWith(".ndjson"))
+    ).toHaveLength(1);
+  });
+
   it("keeps self-play running and spools telemetry locally when the backend is down", async () => {
     const root = await createTempDir();
     const pendingDir = path.join(root, "pending");

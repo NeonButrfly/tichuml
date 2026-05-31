@@ -79,8 +79,12 @@ export type ReplayTelemetrySummary = {
   replayed_records: number;
   failed_files: number;
   failed_records: number;
+  quarantined_files: number;
+  quarantined_records: number;
   pending_dir: string;
   replayed_dir: string;
+  quarantined_dir: string;
+  quarantine_reasons: Record<string, number>;
 };
 
 type MutableEndpointState = TelemetryEndpointRuntimeState;
@@ -127,6 +131,10 @@ function pendingDir(storageRoot: string): string {
 
 function replayedDir(storageRoot: string): string {
   return path.join(storageRoot, "replayed");
+}
+
+function quarantinedDir(storageRoot: string): string {
+  return path.join(storageRoot, "quarantined");
 }
 
 function pendingFileCount(targetDir: string): number {
@@ -206,6 +214,44 @@ export function createDefaultTelemetryStorageRoot(
   cwd = process.cwd()
 ): string {
   return path.join(cwd, ".runtime", "telemetry");
+}
+
+type ReplayQuarantineReason =
+  | "invalid_backend_base_url"
+  | "invalid_endpoint"
+  | "loopback_port_one";
+
+function isLoopbackHost(hostname: string): boolean {
+  const normalized = hostname.trim().toLowerCase();
+  return normalized === "127.0.0.1" || normalized === "localhost" || normalized === "::1";
+}
+
+function classifyReplayQuarantine(
+  record: PersistedTelemetryRecord
+): ReplayQuarantineReason | null {
+  const configuredBaseUrl =
+    record.telemetry.backendBaseUrl ?? record.telemetry.backend_url;
+  if (typeof configuredBaseUrl === "string" && configuredBaseUrl.trim().length > 0) {
+    try {
+      const parsed = new URL(configuredBaseUrl);
+      if (isLoopbackHost(parsed.hostname) && parsed.port === "1") {
+        return "loopback_port_one";
+      }
+    } catch {
+      return "invalid_backend_base_url";
+    }
+  }
+
+  try {
+    const parsedEndpoint = new URL(record.endpoint);
+    if (isLoopbackHost(parsedEndpoint.hostname) && parsedEndpoint.port === "1") {
+      return "loopback_port_one";
+    }
+  } catch {
+    return "invalid_endpoint";
+  }
+
+  return null;
 }
 
 export class AsyncTelemetryManager {
@@ -638,8 +684,10 @@ export async function replayPersistedTelemetry(config: {
   const storageRoot = config.storageRoot ?? createDefaultTelemetryStorageRoot();
   const pendingRoot = pendingDir(storageRoot);
   const replayedRoot = replayedDir(storageRoot);
+  const quarantinedRoot = quarantinedDir(storageRoot);
   ensureDirSync(pendingRoot);
   ensureDirSync(replayedRoot);
+  ensureDirSync(quarantinedRoot);
 
   const files = (await fsp.readdir(pendingRoot))
     .filter((entry) => entry.endsWith(".ndjson"))
@@ -651,8 +699,12 @@ export async function replayPersistedTelemetry(config: {
     replayed_records: 0,
     failed_files: 0,
     failed_records: 0,
+    quarantined_files: 0,
+    quarantined_records: 0,
     pending_dir: pendingRoot,
-    replayed_dir: replayedRoot
+    replayed_dir: replayedRoot,
+    quarantined_dir: quarantinedRoot,
+    quarantine_reasons: {}
   };
 
   for (const fileName of files) {
@@ -663,9 +715,25 @@ export async function replayPersistedTelemetry(config: {
         .split(/\r?\n/u)
         .map((line) => line.trim())
         .filter((line) => line.length > 0);
+      const records = lines.map((line) => JSON.parse(line) as PersistedTelemetryRecord);
+      const quarantineReasons = records
+        .map((record) => classifyReplayQuarantine(record))
+        .filter((reason): reason is ReplayQuarantineReason => reason !== null);
+      if (
+        records.length > 0 &&
+        quarantineReasons.length === records.length
+      ) {
+        await fsp.rename(sourcePath, path.join(quarantinedRoot, fileName));
+        summary.quarantined_files += 1;
+        summary.quarantined_records += records.length;
+        for (const reason of quarantineReasons) {
+          summary.quarantine_reasons[reason] =
+            (summary.quarantine_reasons[reason] ?? 0) + 1;
+        }
+        continue;
+      }
       let fileFailed = false;
-      for (const line of lines) {
-        const record = JSON.parse(line) as PersistedTelemetryRecord;
+      for (const record of records) {
         const telemetry = {
           ...record.telemetry,
           strictTelemetry: false

@@ -180,7 +180,10 @@ simulator-side transport path with:
 
 Replay moves successfully resent files into `.runtime/telemetry/replayed/` so
 operators can distinguish still-pending telemetry from already recovered local
-spillover.
+spillover. Records that are provably non-replayable, such as malformed
+endpoints or persisted loopback `:1` test targets, are moved into
+`.runtime/telemetry/quarantined/` instead of being left to fail forever in the
+pending queue.
 
 ## Sanity And Deterministic Export
 
