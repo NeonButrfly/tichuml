@@ -1,4 +1,6 @@
 import fs from "node:fs";
+import fsp from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -174,6 +176,35 @@ const MAHJONG_WISH_TEMPLATE = {
     containsMahjong: true
   }
 } as JsonObject;
+
+const REPO_TELEMETRY_PENDING_DIR = path.join(
+  process.cwd(),
+  ".runtime",
+  "telemetry",
+  "pending"
+);
+
+async function withTempTelemetryStorageRoot<T>(
+  callback: (storageRoot: string) => Promise<T>
+): Promise<T> {
+  const storageRoot = await fsp.mkdtemp(
+    path.join(os.tmpdir(), "tichuml-telemetry-test-")
+  );
+  try {
+    return await callback(storageRoot);
+  } finally {
+    await fsp.rm(storageRoot, { recursive: true, force: true });
+  }
+}
+
+function repoPendingTelemetryFileCount(): number {
+  if (!fs.existsSync(REPO_TELEMETRY_PENDING_DIR)) {
+    return 0;
+  }
+  return fs
+    .readdirSync(REPO_TELEMETRY_PENDING_DIR)
+    .filter((entry) => entry.endsWith(".ndjson")).length;
+}
 
 const STATE_RAW = {
   phase: "play",
@@ -1485,24 +1516,33 @@ describe("central telemetry subsystem", () => {
     expect(
       decision.telemetryFailureStats.telemetryFailuresTotal
     ).toBeGreaterThan(0);
+    await withTempTelemetryStorageRoot(async (telemetryStorageRoot) => {
+      const repoPendingBefore = repoPendingTelemetryFileCount();
+      const summary = await runSelfPlayBatch({
+        games: 1,
+        baseSeed: "central-telemetry-failure",
+        defaultProvider: "local",
+        telemetryEnabled: true,
+        strictTelemetry: false,
+        telemetryMode: "minimal",
+        telemetryMaxBytes: 65_536,
+        backendBaseUrl: "http://127.0.0.1:1",
+        telemetryStorageRoot,
+        quiet: true,
+        progress: false,
+        controllerMode: true,
+        workerId: "worker-test",
+        maxDecisionsPerGame: 1
+      });
 
-    const summary = await runSelfPlayBatch({
-      games: 1,
-      baseSeed: "central-telemetry-failure",
-      defaultProvider: "local",
-      telemetryEnabled: true,
-      strictTelemetry: false,
-      telemetryMode: "minimal",
-      telemetryMaxBytes: 1,
-      backendBaseUrl: "http://127.0.0.1:1",
-      quiet: true,
-      progress: false,
-      controllerMode: true,
-      workerId: "worker-test",
-      maxDecisionsPerGame: 1
+      expect(summary.errors).toBe(1);
+      expect(repoPendingTelemetryFileCount()).toBe(repoPendingBefore);
+      expect(
+        fs
+          .readdirSync(path.join(telemetryStorageRoot, "pending"))
+          .filter((entry) => entry.endsWith(".ndjson")).length
+      ).toBeGreaterThan(0);
     });
-
-    expect(summary.errors).toBe(1);
   });
 
   it("runs a bounded local telemetry-enabled sim without select_pass mismatch spam", async () => {
@@ -1524,18 +1564,21 @@ describe("central telemetry subsystem", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     try {
-      const summary = await runSelfPlayBatch({
-        games: 1,
-        baseSeed: "select-pass-telemetry-ok",
-        defaultProvider: "local",
-        telemetryEnabled: true,
-        strictTelemetry: false,
-        telemetryMode: "minimal",
-        backendBaseUrl: "http://127.0.0.1:4310",
-        quiet: true,
-        progress: false,
-        maxDecisionsPerGame: 5
-      });
+      const summary = await withTempTelemetryStorageRoot(async (telemetryStorageRoot) =>
+        runSelfPlayBatch({
+          games: 1,
+          baseSeed: "select-pass-telemetry-ok",
+          defaultProvider: "local",
+          telemetryEnabled: true,
+          strictTelemetry: false,
+          telemetryMode: "minimal",
+          backendBaseUrl: "http://127.0.0.1:4310",
+          telemetryStorageRoot,
+          quiet: true,
+          progress: false,
+          maxDecisionsPerGame: 5
+        })
+      );
 
       expect(summary.errors).toBe(1);
       expect(summary.telemetryFailuresTotal).toBe(0);
@@ -1574,57 +1617,61 @@ describe("central telemetry subsystem", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    const fullSummary = await runSelfPlayBatch({
-      games: 1,
-      baseSeed: "full-selfplay-state-snapshot",
-      defaultProvider: "local",
-      telemetryEnabled: true,
-      strictTelemetry: true,
-      telemetryMode: "full",
-      fullStateDecisionRequests: true,
-      backendBaseUrl: "http://127.0.0.1:4310",
-      quiet: true,
-      progress: false,
-      maxDecisionsPerGame: 1
+    await withTempTelemetryStorageRoot(async (telemetryStorageRoot) => {
+      const fullSummary = await runSelfPlayBatch({
+        games: 1,
+        baseSeed: "full-selfplay-state-snapshot",
+        defaultProvider: "local",
+        telemetryEnabled: true,
+        strictTelemetry: true,
+        telemetryMode: "full",
+        fullStateDecisionRequests: true,
+        backendBaseUrl: "http://127.0.0.1:4310",
+        telemetryStorageRoot,
+        quiet: true,
+        progress: false,
+        maxDecisionsPerGame: 1
+      });
+
+      expect(fullSummary.errors).toBe(1);
+      expect(fullSummary.telemetryFailuresTotal).toBe(0);
+      expect(postedDecisions.length).toBeGreaterThan(0);
+      const fullDecision = postedDecisions[0] as TelemetryDecisionPayload;
+      expect(fullDecision.metadata.telemetry_mode).toBe("full");
+      expect(Object.keys(fullDecision.state_raw).length).toBeGreaterThan(0);
+      expect(fullDecision.state_norm).not.toBeNull();
+      expect(
+        Object.keys(fullDecision.state_norm as JsonObject).length
+      ).toBeGreaterThan(0);
+      expect(fullDecision.legal_actions).toBeDefined();
+      expect(fullDecision.candidateScores).not.toBeNull();
+      expect(fullDecision.stateFeatures).not.toBeNull();
+
+      postedDecisions.length = 0;
+      const minimalSummary = await runSelfPlayBatch({
+        games: 1,
+        baseSeed: "minimal-selfplay-state-snapshot",
+        defaultProvider: "local",
+        telemetryEnabled: true,
+        strictTelemetry: true,
+        telemetryMode: "minimal",
+        fullStateDecisionRequests: true,
+        backendBaseUrl: "http://127.0.0.1:4310",
+        telemetryStorageRoot,
+        quiet: true,
+        progress: false,
+        maxDecisionsPerGame: 1
+      });
+
+      expect(minimalSummary.errors).toBe(1);
+      expect(minimalSummary.telemetryFailuresTotal).toBe(0);
+      expect(postedDecisions.length).toBeGreaterThan(0);
+      const minimalDecision = postedDecisions[0] as TelemetryDecisionPayload;
+      expect(minimalDecision.metadata.telemetry_mode).toBe("minimal");
+      expect(minimalDecision.state_raw).toEqual({});
+      expect(minimalDecision.state_norm).toBeNull();
+      expect(minimalDecision.legal_actions).toBeDefined();
     });
-
-    expect(fullSummary.errors).toBe(1);
-    expect(fullSummary.telemetryFailuresTotal).toBe(0);
-    expect(postedDecisions.length).toBeGreaterThan(0);
-    const fullDecision = postedDecisions[0] as TelemetryDecisionPayload;
-    expect(fullDecision.metadata.telemetry_mode).toBe("full");
-    expect(Object.keys(fullDecision.state_raw).length).toBeGreaterThan(0);
-    expect(fullDecision.state_norm).not.toBeNull();
-    expect(
-      Object.keys(fullDecision.state_norm as JsonObject).length
-    ).toBeGreaterThan(0);
-    expect(fullDecision.legal_actions).toBeDefined();
-    expect(fullDecision.candidateScores).not.toBeNull();
-    expect(fullDecision.stateFeatures).not.toBeNull();
-
-    postedDecisions.length = 0;
-    const minimalSummary = await runSelfPlayBatch({
-      games: 1,
-      baseSeed: "minimal-selfplay-state-snapshot",
-      defaultProvider: "local",
-      telemetryEnabled: true,
-      strictTelemetry: true,
-      telemetryMode: "minimal",
-      fullStateDecisionRequests: true,
-      backendBaseUrl: "http://127.0.0.1:4310",
-      quiet: true,
-      progress: false,
-      maxDecisionsPerGame: 1
-    });
-
-    expect(minimalSummary.errors).toBe(1);
-    expect(minimalSummary.telemetryFailuresTotal).toBe(0);
-    expect(postedDecisions.length).toBeGreaterThan(0);
-    const minimalDecision = postedDecisions[0] as TelemetryDecisionPayload;
-    expect(minimalDecision.metadata.telemetry_mode).toBe("minimal");
-    expect(minimalDecision.state_raw).toEqual({});
-    expect(minimalDecision.state_norm).toBeNull();
-    expect(minimalDecision.legal_actions).toBeDefined();
   });
 
   it("tags selfplay telemetry with scoped training run metadata and game id prefixes", async () => {
@@ -1658,28 +1705,31 @@ describe("central telemetry subsystem", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    await runSelfPlayBatch({
-      games: 1,
-      baseSeed: "training-tagged-selfplay",
-      defaultProvider: "local",
-      telemetryEnabled: true,
-      strictTelemetry: true,
-      telemetryMode: "minimal",
-      backendBaseUrl: "http://127.0.0.1:4310",
-      quiet: true,
-      progress: false,
-      gameIdPrefix:
-        "selfplay-training-20260503-184455-a1b2c3d4-batch-000001",
-      runMetadata: {
-        run_id: "training-20260503-184455-a1b2c3d4",
-        batch_id: "batch-000001",
-        seed: "feedfacecafebeef",
-        seed_hash: "1234abcd",
-        game_id_prefix:
-          "selfplay-training-20260503-184455-a1b2c3d4-batch-000001"
-      },
-      maxDecisionsPerGame: 1
-    });
+    await withTempTelemetryStorageRoot(async (telemetryStorageRoot) =>
+      runSelfPlayBatch({
+        games: 1,
+        baseSeed: "training-tagged-selfplay",
+        defaultProvider: "local",
+        telemetryEnabled: true,
+        strictTelemetry: true,
+        telemetryMode: "minimal",
+        backendBaseUrl: "http://127.0.0.1:4310",
+        telemetryStorageRoot,
+        quiet: true,
+        progress: false,
+        gameIdPrefix:
+          "selfplay-training-20260503-184455-a1b2c3d4-batch-000001",
+        runMetadata: {
+          run_id: "training-20260503-184455-a1b2c3d4",
+          batch_id: "batch-000001",
+          seed: "feedfacecafebeef",
+          seed_hash: "1234abcd",
+          game_id_prefix:
+            "selfplay-training-20260503-184455-a1b2c3d4-batch-000001"
+        },
+        maxDecisionsPerGame: 1
+      })
+    );
 
     expect(postedDecisions.length).toBeGreaterThan(0);
     expect(postedEvents.length).toBeGreaterThan(0);
@@ -1710,19 +1760,22 @@ describe("central telemetry subsystem", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const startedAt = Date.now();
-    const summary = await runSelfPlayBatch({
-      games: 1,
-      baseSeed: "async-telemetry-failure",
-      defaultProvider: "local",
-      telemetryEnabled: true,
-      strictTelemetry: false,
-      telemetryMode: "minimal",
-      backendBaseUrl: "http://127.0.0.1:4310",
-      telemetryRetryAttempts: 0,
-      quiet: true,
-      progress: false,
-      maxDecisionsPerGame: 3
-    });
+    const summary = await withTempTelemetryStorageRoot(async (telemetryStorageRoot) =>
+      runSelfPlayBatch({
+        games: 1,
+        baseSeed: "async-telemetry-failure",
+        defaultProvider: "local",
+        telemetryEnabled: true,
+        strictTelemetry: false,
+        telemetryMode: "minimal",
+        backendBaseUrl: "http://127.0.0.1:4310",
+        telemetryStorageRoot,
+        telemetryRetryAttempts: 0,
+        quiet: true,
+        progress: false,
+        maxDecisionsPerGame: 3
+      })
+    );
     const elapsedMs = Date.now() - startedAt;
 
     expect(summary.errors).toBe(1);
