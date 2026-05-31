@@ -94,6 +94,7 @@ const TACTICAL_LIGHTGBM_FEATURES = new Set([
 ]);
 
 const TACTICAL_LIGHTGBM_FEATURE_PREFIXES = ["urgency_mode_"];
+const ROLLOUT_RUNTIME_LIGHTGBM_CONFIDENCE_MARGIN = 0.1;
 
 function findMatchingLegalAction(
   actorLegalActions: LegalAction[],
@@ -184,6 +185,32 @@ function hasCallTichuLegalAction(actorLegalActions: LegalAction[]): boolean {
     (action): action is Extract<LegalAction, { type: "call_tichu" }> =>
       action.type === "call_tichu"
   );
+}
+
+function lightgbmShouldDelegateLowConfidenceDecision(config: {
+  phase: string;
+  featureRequirements: LightgbmFeatureRequirements | null | undefined;
+  modelMetadata: JsonObject;
+  scoreMargin: number;
+}): boolean {
+  if (normalizeLightgbmPhase(config.phase) != "trick_play") {
+    return false;
+  }
+
+  const objective =
+    typeof config.modelMetadata.objective === "string"
+      ? config.modelMetadata.objective
+      : null;
+  const featureProfile =
+    config.featureRequirements?.featureProfile ??
+    (typeof config.modelMetadata.feature_profile === "string"
+      ? config.modelMetadata.feature_profile
+      : null);
+  if (objective !== "rollout_ranker" || featureProfile !== "runtime_raw") {
+    return false;
+  }
+
+  return config.scoreMargin <= ROLLOUT_RUNTIME_LIGHTGBM_CONFIDENCE_MARGIN;
 }
 
 export function lightgbmRequiresSharedTacticalFeatures(
@@ -415,6 +442,53 @@ export async function routeLightgbmDecision(
     if (!selected) {
       throw new Error("LightGBM provider did not produce a ranked legal action.");
     }
+    const secondBestScore = ranked[1]?.score ?? selected.score;
+    const selectedScoreMargin = selected.score - secondBestScore;
+
+    if (
+      lightgbmShouldDelegateLowConfidenceDecision({
+        phase: payload.phase,
+        featureRequirements,
+        modelMetadata: scored.modelMetadata,
+        scoreMargin: selectedScoreMargin,
+      })
+    ) {
+      const delegatedPayload = buildLightgbmFallbackPayload(
+        payload,
+        stateRaw,
+        canonicalActor,
+        actorLegalActions
+      );
+      return routeHeuristicDecision(delegatedPayload, {
+        providerReason:
+          "LightGBM delegated a low-confidence rollout-ranker decision to the backend heuristic.",
+        metadata: {
+          requested_provider: "lightgbm_model",
+          provider_path: "lightgbm_model",
+          fallback_used: false,
+          lightgbm_confidence_delegated: true,
+          lightgbm_confidence_margin: selectedScoreMargin,
+          lightgbm_confidence_threshold:
+            ROLLOUT_RUNTIME_LIGHTGBM_CONFIDENCE_MARGIN,
+          lightgbm_requested_scoring_path:
+            typeof payload.metadata.scoring_path === "string"
+              ? payload.metadata.scoring_path
+              : "rich_path",
+          lightgbm_delegate_scoring_path:
+            typeof delegatedPayload.metadata.scoring_path === "string"
+              ? delegatedPayload.metadata.scoring_path
+              : "fast_path",
+          lightgbm_feature_profile: featureRequirements?.featureProfile ?? null,
+          lightgbm_objective:
+            typeof scored.modelMetadata.objective === "string"
+              ? scored.modelMetadata.objective
+              : null,
+        },
+        ...(options.traceDecisionRequests !== undefined
+          ? { traceDecisionRequests: options.traceDecisionRequests }
+          : {})
+      });
+    }
 
     const concreteAction = selected.concreteAction;
     const topKCandidateScores = ranked.slice(0, 3).map((entry) => ({
@@ -503,6 +577,7 @@ export async function routeLightgbmDecision(
             typeof modelMetadata.target_column === "string"
               ? modelMetadata.target_column
               : null,
+          selected_score_margin: selectedScoreMargin,
           feature_schema_version:
             typeof modelMetadata.feature_schema_version === "number"
               ? modelMetadata.feature_schema_version
@@ -576,6 +651,7 @@ export async function routeLightgbmDecision(
           typeof modelMetadata.target_column === "string"
             ? modelMetadata.target_column
             : null,
+        selected_score_margin: selectedScoreMargin,
         feature_schema_version:
           typeof modelMetadata.feature_schema_version === "number"
             ? modelMetadata.feature_schema_version

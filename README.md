@@ -402,8 +402,10 @@ backend serving contract. Use `--include-delegated-runtime-actions` if you need
 the full action space for an experiment.
 
 When serving `lightgbm_model`, trick-play decision sets that include
-`call_tichu` still delegate to `server_heuristic`. Those sparse Tichu-call
-rows are tracked as part of the open model-quality work in
+`call_tichu` still delegate to `server_heuristic`, and low-confidence
+`rollout_ranker` `runtime_raw` trick-play decisions also fall back to the
+backend heuristic. Those sparse Tichu-call rows and the remaining quality gap
+are tracked as part of the open model-quality work in
 [#79](https://github.com/NeonButrfly/tichuml/issues/79).
 
 Both commands prefer the repo `.venv` automatically when it exists, so they use
