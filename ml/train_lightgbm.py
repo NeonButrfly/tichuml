@@ -324,6 +324,52 @@ def filter_rollout_decisions_by_spread(
     return filtered, filtered_out_decision_count, filtered_out_row_count
 
 
+def delegated_runtime_action_columns(
+    *, objective: str, feature_profile: str, phase: str | None
+) -> list[str]:
+    normalized_phase = phase_alias(phase) if phase else None
+    if (
+        objective in {"rollout_regression", "rollout_ranker"}
+        and feature_profile == "runtime_raw"
+        and normalized_phase == "trick_play"
+    ):
+        return ["action_type_call_tichu"]
+    return []
+
+
+def filter_delegated_runtime_actions(
+    frame: pd.DataFrame,
+    *,
+    objective: str,
+    feature_profile: str,
+    phase: str | None,
+    include_delegated_runtime_actions: bool,
+) -> tuple[pd.DataFrame, list[str], int]:
+    if include_delegated_runtime_actions:
+        return frame, [], 0
+
+    delegated_columns = delegated_runtime_action_columns(
+        objective=objective, feature_profile=feature_profile, phase=phase
+    )
+    if not delegated_columns:
+        return frame, [], 0
+
+    filtered = frame
+    filtered_out_row_count = 0
+    applied_columns: list[str] = []
+    for column in delegated_columns:
+        if column not in filtered.columns:
+            continue
+        before_count = int(len(filtered.index))
+        filtered = filtered[filtered[column] != 1].copy()
+        removed = before_count - int(len(filtered.index))
+        filtered_out_row_count += removed
+        if removed > 0:
+            applied_columns.append(column)
+
+    return filtered, applied_columns, filtered_out_row_count
+
+
 def top1_recall_by_decision(frame: pd.DataFrame, scores: pd.Series) -> float | None:
     if "decision_id" not in frame.columns or frame.empty:
         return None
@@ -463,6 +509,10 @@ def main() -> None:
         type=float,
         default=0.0,
     )
+    parser.add_argument(
+        "--include-delegated-runtime-actions",
+        action="store_true",
+    )
     args = parser.parse_args()
 
     label_mode, default_target = objective_defaults(args.objective)
@@ -482,6 +532,20 @@ def main() -> None:
     frame = frame[frame[target_column].notna()].copy()
     if frame.empty:
         raise ValueError(f"Target column '{target_column}' has no non-null rows after filtering.")
+
+    frame, excluded_delegated_action_types, filtered_out_delegated_action_row_count = (
+        filter_delegated_runtime_actions(
+            frame,
+            objective=args.objective,
+            feature_profile=args.feature_profile,
+            phase=args.phase,
+            include_delegated_runtime_actions=args.include_delegated_runtime_actions,
+        )
+    )
+    if frame.empty:
+        raise ValueError(
+            "No training rows remain after excluding delegated runtime action types."
+        )
 
     filtered_out_decision_count = 0
     filtered_out_row_count = 0
@@ -652,6 +716,8 @@ def main() -> None:
         "ranking_label_strategy": ranker_label_strategy,
         "ranker_max_relevance": args.ranker_max_relevance if args.objective == "rollout_ranker" else None,
         "min_rollout_decision_spread": args.min_rollout_decision_spread,
+        "excluded_delegated_action_types": excluded_delegated_action_types,
+        "filtered_out_delegated_action_row_count": filtered_out_delegated_action_row_count,
         "filtered_out_decision_count": filtered_out_decision_count,
         "filtered_out_row_count": filtered_out_row_count,
         "model_id": model_id,
@@ -679,6 +745,8 @@ def main() -> None:
         "ranking_label_strategy": ranker_label_strategy,
         "ranker_max_relevance": args.ranker_max_relevance if args.objective == "rollout_ranker" else None,
         "min_rollout_decision_spread": args.min_rollout_decision_spread,
+        "excluded_delegated_action_types": excluded_delegated_action_types,
+        "filtered_out_delegated_action_row_count": filtered_out_delegated_action_row_count,
         "filtered_out_decision_count": filtered_out_decision_count,
         "filtered_out_row_count": filtered_out_row_count,
         "model_output_path": str(model_path),

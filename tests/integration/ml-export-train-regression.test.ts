@@ -501,4 +501,98 @@ describe("ml export and training regressions", () => {
     },
     15000
   );
+
+  it(
+    "excludes delegated call_tichu rollout rows from runtime_raw trick-play training by default",
+    () => {
+      const tempDir = mkdtempSync(join(tmpdir(), "ml-runtime-delegated-filter-"));
+      const datasetPath = join(tempDir, "train.parquet");
+      const manifestPath = join(tempDir, "dataset_metadata.json");
+      const modelPath = join(tempDir, "model.txt");
+      const metaPath = join(tempDir, "model.meta.json");
+      const reportPath = join(tempDir, "training-report.json");
+      const importancePath = join(tempDir, "feature-importance.csv");
+
+      try {
+        const buildDataset = runPythonSnippet(
+          [
+            "from pathlib import Path",
+            "import pandas as pd",
+            "dataset = Path(__import__('sys').argv[1])",
+            "frame = pd.DataFrame([",
+            "    {'phase': 'trick_play', 'game_id': 'g1', 'decision_id': 'd1', 'rollout_mean_actor_team_delta': 120.0, 'action_type_call_tichu': 1, 'action_type_play_cards': 0, 'pass_action_flag': 0, 'actor_team_score': 100.0, 'opponent_team_score': 80.0},",
+            "    {'phase': 'trick_play', 'game_id': 'g1', 'decision_id': 'd1', 'rollout_mean_actor_team_delta': 60.0, 'action_type_call_tichu': 0, 'action_type_play_cards': 1, 'pass_action_flag': 0, 'actor_team_score': 98.0, 'opponent_team_score': 82.0},",
+            "    {'phase': 'trick_play', 'game_id': 'g2', 'decision_id': 'd2', 'rollout_mean_actor_team_delta': 40.0, 'action_type_call_tichu': 0, 'action_type_play_cards': 1, 'pass_action_flag': 0, 'actor_team_score': 90.0, 'opponent_team_score': 88.0},",
+            "    {'phase': 'trick_play', 'game_id': 'g2', 'decision_id': 'd2', 'rollout_mean_actor_team_delta': -10.0, 'action_type_call_tichu': 0, 'action_type_play_cards': 0, 'pass_action_flag': 1, 'actor_team_score': 84.0, 'opponent_team_score': 96.0},",
+            "])",
+            "frame.to_parquet(dataset, index=False)",
+            "print('dataset-ok')",
+          ].join("\n"),
+          [datasetPath]
+        );
+        expect(buildDataset.status).toBe(0);
+
+        writeFileSync(
+          manifestPath,
+          JSON.stringify(
+            {
+              schema_version: 2,
+              feature_columns: [
+                "actor_team_score",
+                "opponent_team_score",
+                "pass_action_flag",
+                "action_type_call_tichu",
+                "action_type_play_cards",
+              ],
+            },
+            null,
+            2
+          ),
+          "utf8"
+        );
+
+        const result = spawnSync(
+          process.execPath,
+          [
+            join("node_modules", "tsx", "dist", "cli.mjs"),
+            "scripts/run-python.ts",
+            "ml/train_lightgbm.py",
+            "--input",
+            datasetPath,
+            "--manifest-input",
+            manifestPath,
+            "--output",
+            modelPath,
+            "--meta-output",
+            metaPath,
+            "--report-output",
+            reportPath,
+            "--feature-importance-output",
+            importancePath,
+            "--phase",
+            "trick_play",
+            "--objective",
+            "rollout_ranker",
+            "--validation-fraction",
+            "0",
+          ],
+          {
+            cwd: REPO_ROOT,
+            encoding: "utf8",
+          }
+        );
+
+        expect(result.status).toBe(0);
+        const meta = JSON.parse(readFileSync(metaPath, "utf8"));
+        expect(meta.row_count).toBe(3);
+        expect(meta.filtered_out_delegated_action_row_count).toBe(1);
+        expect(meta.excluded_delegated_action_types).toEqual([
+          "action_type_call_tichu",
+        ]);
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    },
+    15000
+  );
 });

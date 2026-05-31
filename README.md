@@ -396,6 +396,10 @@ the runtime-safe `runtime_raw` feature profile to
 `ml/model_registry/lightgbm_action_model.*`. Use
 `--feature-profile full --objective imitation_binary` when you explicitly want
 the older richer imitation experiment path.
+For rollout-based `runtime_raw` trick-play models, `ml:train` now excludes
+delegated `call_tichu` rows by default so the model is aligned with the current
+backend serving contract. Use `--include-delegated-runtime-actions` if you need
+the full action space for an experiment.
 
 When serving `lightgbm_model`, trick-play decision sets that include
 `call_tichu` still delegate to `server_heuristic`. Those sparse Tichu-call
