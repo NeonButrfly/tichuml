@@ -690,6 +690,7 @@ export function createRouter({
             {
               ...(lightgbmScorer ? { lightgbmScorer } : {}),
               traceDecisionRequests: config.traceDecisionRequests,
+              lightgbmConfidenceMargin: config.lightgbmConfidenceMargin,
               parseMs,
               validateMs,
               payloadBytes,

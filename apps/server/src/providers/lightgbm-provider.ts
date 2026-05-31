@@ -94,7 +94,6 @@ const TACTICAL_LIGHTGBM_FEATURES = new Set([
 ]);
 
 const TACTICAL_LIGHTGBM_FEATURE_PREFIXES = ["urgency_mode_"];
-const ROLLOUT_RUNTIME_LIGHTGBM_CONFIDENCE_MARGIN = 0.1;
 
 function findMatchingLegalAction(
   actorLegalActions: LegalAction[],
@@ -192,8 +191,13 @@ function lightgbmShouldDelegateLowConfidenceDecision(config: {
   featureRequirements: LightgbmFeatureRequirements | null | undefined;
   modelMetadata: JsonObject;
   scoreMargin: number;
+  confidenceMargin: number | null;
 }): boolean {
   if (normalizeLightgbmPhase(config.phase) != "trick_play") {
+    return false;
+  }
+
+  if (config.confidenceMargin === null) {
     return false;
   }
 
@@ -210,7 +214,7 @@ function lightgbmShouldDelegateLowConfidenceDecision(config: {
     return false;
   }
 
-  return config.scoreMargin <= ROLLOUT_RUNTIME_LIGHTGBM_CONFIDENCE_MARGIN;
+  return config.scoreMargin <= config.confidenceMargin;
 }
 
 export function lightgbmRequiresSharedTacticalFeatures(
@@ -316,9 +320,14 @@ export function buildLightgbmFeatureInputs(config: {
 export async function routeLightgbmDecision(
   payload: DecisionRequestPayload,
   scorer: LightgbmScorer,
-  options: { traceDecisionRequests?: boolean } = {}
+  options: {
+    traceDecisionRequests?: boolean;
+    confidenceMargin?: number | null;
+  } = {}
 ): Promise<RoutedDecision> {
   const startedAt = Date.now();
+  const configuredConfidenceMargin =
+    options.confidenceMargin === undefined ? 1.0 : options.confidenceMargin;
   const stateRaw = payload.state_raw;
   if (!isUsableState(stateRaw)) {
     throw new Error(
@@ -451,6 +460,7 @@ export async function routeLightgbmDecision(
         featureRequirements,
         modelMetadata: scored.modelMetadata,
         scoreMargin: selectedScoreMargin,
+        confidenceMargin: configuredConfidenceMargin
       })
     ) {
       const delegatedPayload = buildLightgbmFallbackPayload(
@@ -468,8 +478,7 @@ export async function routeLightgbmDecision(
           fallback_used: false,
           lightgbm_confidence_delegated: true,
           lightgbm_confidence_margin: selectedScoreMargin,
-          lightgbm_confidence_threshold:
-            ROLLOUT_RUNTIME_LIGHTGBM_CONFIDENCE_MARGIN,
+          lightgbm_confidence_threshold: configuredConfidenceMargin,
           lightgbm_requested_scoring_path:
             typeof payload.metadata.scoring_path === "string"
               ? payload.metadata.scoring_path

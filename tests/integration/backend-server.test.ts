@@ -572,7 +572,8 @@ const TEST_SERVER_CONFIG: ServerConfig = {
   pythonExecutable: "python",
   lightgbmInferScript: "ml/infer.py",
   lightgbmModelPath: "ml/model_registry/lightgbm_action_model.txt",
-  lightgbmModelMetaPath: "ml/model_registry/lightgbm_action_model.meta.json"
+  lightgbmModelMetaPath: "ml/model_registry/lightgbm_action_model.meta.json",
+  lightgbmConfidenceMargin: 1.0
 };
 
 async function withServer<T>(
@@ -1621,6 +1622,7 @@ describe("backend foundation server routes", () => {
           metadata?: {
             lightgbm_confidence_delegated?: boolean;
             lightgbm_confidence_margin?: number;
+            lightgbm_confidence_threshold?: number | null;
           };
         };
         expect(payload.accepted).toBe(true);
@@ -1629,6 +1631,7 @@ describe("backend foundation server routes", () => {
         expect(payload.metadata?.lightgbm_confidence_margin).toBeLessThanOrEqual(
           0.1
         );
+        expect(payload.metadata?.lightgbm_confidence_threshold).toBe(1);
         expect(scoreCalls).toBe(1);
         await flushServerQueue();
         expect(repository.decisions).toHaveLength(1);
@@ -1638,6 +1641,60 @@ describe("backend foundation server routes", () => {
         ).toBe(true);
       },
       { lightgbmScorer: scorer }
+    );
+  });
+
+  it("keeps low-confidence rollout-ranker decisions on LightGBM when the confidence gate is disabled", async () => {
+    let scoreCalls = 0;
+    const scorer: LightgbmScorer = {
+      async score(request) {
+        scoreCalls += 1;
+        return {
+          scores: request.legalActions.map((_, index) => (index === 0 ? 10 : 9.95)),
+          modelMetadata: {
+            model_type: "lightgbm_action_model",
+            objective: "rollout_ranker",
+            feature_profile: "runtime_raw",
+          },
+          runtimeMetadata: {}
+        };
+      },
+      async close() {}
+    };
+
+    await withServer(
+      async ({ baseUrl, repository }) => {
+        const response = await fetch(`${baseUrl}/api/decision/request`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(createLargeTrickPlayDecisionRequestBody().payload)
+        });
+
+        expect(response.status).toBe(200);
+        const payload = (await response.json()) as {
+          accepted: boolean;
+          provider_used: string;
+          metadata?: {
+            lightgbm_confidence_delegated?: boolean;
+            lightgbm_confidence_threshold?: number | null;
+          };
+        };
+        expect(payload.accepted).toBe(true);
+        expect(payload.provider_used).toBe("lightgbm_model");
+        expect(payload.metadata?.lightgbm_confidence_delegated).toBeUndefined();
+        expect(payload.metadata?.lightgbm_confidence_threshold).toBeUndefined();
+        expect(scoreCalls).toBe(1);
+        await flushServerQueue();
+        expect(repository.decisions).toHaveLength(1);
+        expect(repository.decisions[0]?.provider_used).toBe("lightgbm_model");
+        expect(
+          repository.decisions[0]?.metadata.lightgbm_confidence_delegated
+        ).toBeUndefined();
+      },
+      {
+        lightgbmScorer: scorer,
+        serverConfig: { lightgbmConfidenceMargin: null }
+      }
     );
   });
 

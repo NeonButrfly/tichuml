@@ -145,6 +145,7 @@ The root `.env.example` now includes:
 - `LIGHTGBM_INFER_SCRIPT`
 - `LIGHTGBM_MODEL_PATH`
 - `LIGHTGBM_MODEL_META_PATH`
+- `LIGHTGBM_CONFIDENCE_MARGIN`
 - `VITE_DECISION_MODE`
 - `VITE_BACKEND_BASE_URL`
 - `VITE_SERVER_FALLBACK_ENABLED`
@@ -407,6 +408,10 @@ When serving `lightgbm_model`, trick-play decision sets that include
 backend heuristic. Those sparse Tichu-call rows and the remaining quality gap
 are tracked as part of the open model-quality work in
 [#79](https://github.com/NeonButrfly/tichuml/issues/79).
+Use `LIGHTGBM_CONFIDENCE_MARGIN` to tune that low-confidence delegation
+threshold, or leave it blank to disable the rollout-ranker confidence gate
+entirely for an experiment. The checked-in backend default is `1.0` after the
+May 31, 2026 mirrored validation pass.
 
 Both commands prefer the repo `.venv` automatically when it exists, so they use
 the same Python environment created by the bootstrap scripts.

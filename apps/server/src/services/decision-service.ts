@@ -27,6 +27,7 @@ export async function handleDecisionRequest(
   dependencies: {
     lightgbmScorer?: LightgbmScorer;
     traceDecisionRequests?: boolean;
+    lightgbmConfidenceMargin?: number | null;
     parseMs?: number;
     validateMs?: number;
     payloadBytes?: number;
@@ -56,9 +57,14 @@ export async function handleDecisionRequest(
               },
               close: async () => {}
             } satisfies LightgbmScorer),
-          dependencies.traceDecisionRequests !== undefined
-            ? { traceDecisionRequests: dependencies.traceDecisionRequests }
-            : {}
+          {
+            ...(dependencies.traceDecisionRequests !== undefined
+              ? { traceDecisionRequests: dependencies.traceDecisionRequests }
+              : {}),
+            ...(dependencies.lightgbmConfidenceMargin !== undefined
+              ? { confidenceMargin: dependencies.lightgbmConfidenceMargin }
+              : {})
+          }
         )
       : routeHeuristicDecision(payload, {
           ...(dependencies.traceDecisionRequests !== undefined

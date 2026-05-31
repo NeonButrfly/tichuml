@@ -217,7 +217,8 @@ const CONFIG_SCHEMA: Array<{
   { key: "PYTHON_EXECUTABLE", label: "Python executable", category: "ML", type: "string", restart_required: true, description: "Python executable for ML inference." },
   { key: "LIGHTGBM_INFER_SCRIPT", label: "LightGBM infer script", category: "ML", type: "string", restart_required: true, description: "LightGBM inference script path." },
   { key: "LIGHTGBM_MODEL_PATH", label: "LightGBM model", category: "ML", type: "string", restart_required: true, description: "LightGBM model file path." },
-  { key: "LIGHTGBM_MODEL_META_PATH", label: "LightGBM model metadata", category: "ML", type: "string", restart_required: true, description: "LightGBM model metadata path." }
+  { key: "LIGHTGBM_MODEL_META_PATH", label: "LightGBM model metadata", category: "ML", type: "string", restart_required: true, description: "LightGBM model metadata path." },
+  { key: "LIGHTGBM_CONFIDENCE_MARGIN", label: "LightGBM confidence margin", category: "ML", type: "number", restart_required: true, description: "Optional rollout-ranker score margin cutoff below which LightGBM delegates trick-play decisions back to the backend heuristic. Leave blank to disable the gate.", validate: validateOptionalNonNegativeNumber }
 ];
 
 const EDITABLE_KEYS = new Set(CONFIG_SCHEMA.map((entry) => entry.key));
@@ -584,7 +585,11 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
       PYTHON_EXECUTABLE: this.config.pythonExecutable,
       LIGHTGBM_INFER_SCRIPT: this.config.lightgbmInferScript,
       LIGHTGBM_MODEL_PATH: this.config.lightgbmModelPath,
-      LIGHTGBM_MODEL_META_PATH: this.config.lightgbmModelMetaPath
+      LIGHTGBM_MODEL_META_PATH: this.config.lightgbmModelMetaPath,
+      LIGHTGBM_CONFIDENCE_MARGIN:
+        this.config.lightgbmConfidenceMargin !== null
+          ? String(this.config.lightgbmConfidenceMargin)
+          : ""
     };
     return disk[key] ?? fallback[key] ?? "";
   }
@@ -694,6 +699,10 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
         return this.config.lightgbmModelPath;
       case "LIGHTGBM_MODEL_META_PATH":
         return this.config.lightgbmModelMetaPath;
+      case "LIGHTGBM_CONFIDENCE_MARGIN":
+        return this.config.lightgbmConfidenceMargin !== null
+          ? String(this.config.lightgbmConfidenceMargin)
+          : "";
       default:
         return undefined;
     }

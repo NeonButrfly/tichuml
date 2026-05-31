@@ -51,6 +51,7 @@ export type ServerConfig = {
   lightgbmInferScript: string;
   lightgbmModelPath: string;
   lightgbmModelMetaPath: string;
+  lightgbmConfidenceMargin: number | null;
 };
 
 const DEFAULT_REQUEST_BODY_LIMIT_MB = 25;
@@ -79,6 +80,17 @@ function parseOptionalNonNegativeNumber(value: string | undefined): number | nul
   }
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function parseOptionalNonNegativeNumberWithFallback(
+  value: string | undefined,
+  fallback: number | null
+): number | null {
+  if (value === undefined) {
+    return fallback;
+  }
+
+  return parseOptionalNonNegativeNumber(value);
 }
 
 function parseDecisionMode(value: string | undefined): DecisionMode {
@@ -352,6 +364,10 @@ export function loadServerConfig(
       repoRoot,
       mergedEnv.LIGHTGBM_MODEL_META_PATH,
       path.join("ml", "model_registry", "lightgbm_action_model.meta.json")
+    ),
+    lightgbmConfidenceMargin: parseOptionalNonNegativeNumberWithFallback(
+      mergedEnv.LIGHTGBM_CONFIDENCE_MARGIN,
+      1.0
     )
   };
 }

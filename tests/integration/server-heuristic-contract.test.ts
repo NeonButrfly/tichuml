@@ -234,7 +234,8 @@ const TEST_SERVER_CONFIG: ServerConfig = {
   pythonExecutable: "python",
   lightgbmInferScript: "ml/infer.py",
   lightgbmModelPath: "ml/model_registry/lightgbm_action_model.txt",
-  lightgbmModelMetaPath: "ml/model_registry/lightgbm_action_model.meta.json"
+  lightgbmModelMetaPath: "ml/model_registry/lightgbm_action_model.meta.json",
+  lightgbmConfidenceMargin: 1.0
 };
 
 let nextSafeTestPort = 43210;
