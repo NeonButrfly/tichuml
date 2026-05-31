@@ -188,6 +188,46 @@ type LatestSummary = {
   gate_passed: boolean;
 };
 
+export function resolveEvaluationOutputPaths(
+  repoRoot: string,
+  outputPathArg: string | undefined,
+  nsProvider: ProviderMode,
+  ewProvider: ProviderMode,
+  mirrorSeats: boolean
+): {
+  outputPath: string;
+  markdownPath: string;
+  latestPath: string;
+  timestampedCompatPath: string;
+} {
+  const defaultOutputPath = path.join(
+    repoRoot,
+    "eval",
+    "results",
+    "evaluation-report.json"
+  );
+  const outputPath = outputPathArg
+    ? path.isAbsolute(outputPathArg)
+      ? outputPathArg
+      : path.join(repoRoot, outputPathArg)
+    : defaultOutputPath;
+  const markdownPath = outputPath.replace(/\.json$/i, ".md");
+  const latestPath = path.join(repoRoot, "eval", "results", "latest_summary.json");
+  const timestampedCompatPath = path.join(
+    repoRoot,
+    "eval",
+    "results",
+    `${new Date().toISOString().replaceAll(":", "-").replaceAll(".", "-")}_${nsProvider}_vs_${ewProvider}${mirrorSeats ? "_mirrored" : ""}.json`
+  );
+
+  return {
+    outputPath,
+    markdownPath,
+    latestPath,
+    timestampedCompatPath
+  };
+}
+
 function parseBoolean(value: string | undefined, fallback: boolean): boolean {
   if (!value) {
     return fallback;
@@ -1150,26 +1190,19 @@ async function main(): Promise<void> {
     path.dirname(fileURLToPath(import.meta.url)),
     "../../.."
   );
-  const defaultOutputPath = path.join(
+  const {
+    outputPath,
+    markdownPath,
+    latestPath,
+    timestampedCompatPath
+  } = resolveEvaluationOutputPaths(
     repoRoot,
-    "artifacts",
-    "ml",
-    "evaluation-report.json"
+    args.outputPath,
+    args.nsProvider,
+    args.ewProvider,
+    args.mirrorSeats
   );
-  const outputPath = args.outputPath
-    ? path.isAbsolute(args.outputPath)
-      ? args.outputPath
-      : path.join(repoRoot, args.outputPath)
-    : defaultOutputPath;
   const outputDir = path.dirname(outputPath);
-  const markdownPath = outputPath.replace(/\.json$/i, ".md");
-  const latestPath = path.join(repoRoot, "eval", "results", "latest_summary.json");
-  const timestampedCompatPath = path.join(
-    repoRoot,
-    "eval",
-    "results",
-    `${new Date().toISOString().replaceAll(":", "-").replaceAll(".", "-")}_${args.nsProvider}_vs_${args.ewProvider}${args.mirrorSeats ? "_mirrored" : ""}.json`
-  );
   fs.mkdirSync(outputDir, { recursive: true });
   fs.mkdirSync(path.dirname(latestPath), { recursive: true });
 

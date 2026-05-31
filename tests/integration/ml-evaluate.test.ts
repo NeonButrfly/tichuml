@@ -1,9 +1,11 @@
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   buildLatestSummary,
   buildProviderComparisonSummary,
   evaluateImprovementGate,
-  parseArgs
+  parseArgs,
+  resolveEvaluationOutputPaths
 } from "../../apps/sim-runner/src/evaluate";
 
 describe("ml evaluation helpers", () => {
@@ -229,5 +231,41 @@ describe("ml evaluation helpers", () => {
     expect(
       parseArgs(["--decision-timeout-ms", "3500"]).decisionTimeoutMs
     ).toBe(3500);
+  });
+
+  it("writes default evaluation reports under eval/results instead of tracked artifacts", () => {
+    const resolved = resolveEvaluationOutputPaths(
+      "C:/tichu/tichuml",
+      undefined,
+      "lightgbm_model",
+      "server_heuristic",
+      true
+    );
+
+    expect(resolved.outputPath).toBe(
+      path.join(
+        "C:/tichu/tichuml",
+        "eval",
+        "results",
+        "evaluation-report.json"
+      )
+    );
+    expect(resolved.markdownPath).toBe(
+      path.join(
+        "C:/tichu/tichuml",
+        "eval",
+        "results",
+        "evaluation-report.md"
+      )
+    );
+    expect(resolved.latestPath).toBe(
+      path.join("C:/tichu/tichuml", "eval", "results", "latest_summary.json")
+    );
+    expect(resolved.timestampedCompatPath).toContain(
+      path.join("C:/tichu/tichuml", "eval", "results")
+    );
+    expect(resolved.timestampedCompatPath).toContain(
+      "lightgbm_model_vs_server_heuristic_mirrored.json"
+    );
   });
 });

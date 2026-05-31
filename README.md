@@ -387,6 +387,7 @@ That evaluation path:
 - uses the real simulator and legal-action generator
 - supports team-level or seat-level provider assignment
 - writes machine-readable summaries to `eval/results/latest_summary.json` and a timestamped `eval/results/*.json`
+- writes the default JSON/Markdown evaluation report to `eval/results/evaluation-report.{json,md}` so routine evaluation does not dirty tracked repo artifacts
 - reports win counts, win rate, score margin, provider usage, fallback count, invalid decisions, pass rate, bomb usage, wish satisfaction, and average decision latency by provider
 
 Export action rows from Postgres:
