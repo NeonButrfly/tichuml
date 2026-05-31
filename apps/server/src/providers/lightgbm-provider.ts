@@ -179,6 +179,13 @@ function prefilterLightgbmLegalActions(
   };
 }
 
+function hasCallTichuLegalAction(actorLegalActions: LegalAction[]): boolean {
+  return actorLegalActions.some(
+    (action): action is Extract<LegalAction, { type: "call_tichu" }> =>
+      action.type === "call_tichu"
+  );
+}
+
 export function lightgbmRequiresSharedTacticalFeatures(
   featureRequirements: LightgbmFeatureRequirements | null | undefined
 ): boolean {
@@ -313,6 +320,37 @@ export async function routeLightgbmDecision(
           lightgbm_phase_delegated: true,
           lightgbm_model_phase:
             normalizeLightgbmPhase(featureRequirements?.modelPhase) ?? null,
+          lightgbm_feature_profile: featureRequirements?.featureProfile ?? null
+        },
+        ...(options.traceDecisionRequests !== undefined
+          ? { traceDecisionRequests: options.traceDecisionRequests }
+          : {})
+      });
+    }
+
+    if (hasCallTichuLegalAction(actorLegalActions)) {
+      const delegatedPayload = buildLightgbmFallbackPayload(
+        payload,
+        stateRaw,
+        canonicalActor,
+        actorLegalActions
+      );
+      return routeHeuristicDecision(delegatedPayload, {
+        providerReason:
+          "LightGBM delegates trick-play Tichu-call decisions to the backend heuristic.",
+        metadata: {
+          requested_provider: "lightgbm_model",
+          provider_path: "lightgbm_model",
+          fallback_used: false,
+          lightgbm_tichu_call_delegated: true,
+          lightgbm_requested_scoring_path:
+            typeof payload.metadata.scoring_path === "string"
+              ? payload.metadata.scoring_path
+              : "rich_path",
+          lightgbm_delegate_scoring_path:
+            typeof delegatedPayload.metadata.scoring_path === "string"
+              ? delegatedPayload.metadata.scoring_path
+              : "fast_path",
           lightgbm_feature_profile: featureRequirements?.featureProfile ?? null
         },
         ...(options.traceDecisionRequests !== undefined

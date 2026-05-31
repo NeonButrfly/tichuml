@@ -772,6 +772,28 @@ function createPassSelectDecisionRequestBody() {
       entries: [{ type: "play", seat: "seat-1", combination: lead }],
       passingSeats: []
     },
+    calls: {
+      "seat-0": {
+        hasPlayedFirstCard: false,
+        smallTichu: true,
+        grandTichu: false
+      },
+      "seat-1": {
+        hasPlayedFirstCard: false,
+        smallTichu: false,
+        grandTichu: false
+      },
+      "seat-2": {
+        hasPlayedFirstCard: false,
+        smallTichu: false,
+        grandTichu: false
+      },
+      "seat-3": {
+        hasPlayedFirstCard: false,
+        smallTichu: false,
+        grandTichu: false
+      }
+    },
     hands: {
       "seat-0": cardsFromIds(["jade-8", "sword-9", "pagoda-12", "dragon"]),
       "seat-1": cardsFromIds(["jade-3", "sword-4", "pagoda-5"]),
@@ -796,6 +818,28 @@ function createLargeTrickPlayDecisionRequestBody() {
     phase: "trick_play",
     activeSeat: "seat-0",
     currentTrick: null,
+    calls: {
+      "seat-0": {
+        hasPlayedFirstCard: false,
+        smallTichu: true,
+        grandTichu: false
+      },
+      "seat-1": {
+        hasPlayedFirstCard: false,
+        smallTichu: false,
+        grandTichu: false
+      },
+      "seat-2": {
+        hasPlayedFirstCard: false,
+        smallTichu: false,
+        grandTichu: false
+      },
+      "seat-3": {
+        hasPlayedFirstCard: false,
+        smallTichu: false,
+        grandTichu: false
+      }
+    },
     hands: {
       "seat-0": cardsFromIds([
         "jade-2",
@@ -835,6 +879,31 @@ function createLargeTrickPlayDecisionRequestBody() {
     payload,
     legalActionCount: actorActions.length
   };
+}
+
+function createCallTichuDecisionRequestBody() {
+  const state = createScenarioState({
+    phase: "trick_play",
+    activeSeat: "seat-0",
+    currentTrick: null,
+    hands: {
+      "seat-0": cardsFromIds(["jade-14", "star-14", "jade-10"]),
+      "seat-1": cardsFromIds(["jade-3", "sword-4", "pagoda-5"]),
+      "seat-2": cardsFromIds(["jade-6", "sword-6", "pagoda-6"]),
+      "seat-3": cardsFromIds(["jade-7", "sword-7", "pagoda-7"])
+    }
+  } satisfies Partial<GameState>);
+
+  return buildDecisionRequestPayload({
+    gameId: "game-tichu",
+    handId: "hand-tichu",
+    stateRaw: state as unknown as Record<string, unknown>,
+    stateNorm: {} as Record<string, unknown>,
+    legalActions: getLegalActions(state),
+    phase: state.phase,
+    requestedProvider: "lightgbm_model",
+    decisionIndex: 1
+  });
 }
 
 afterEach(() => {
@@ -1463,6 +1532,55 @@ describe("backend foundation server routes", () => {
         await flushServerQueue();
         expect(repository.decisions).toHaveLength(1);
         expect(repository.decisions[0]?.metadata.candidate_prefilter_applied).toBe(
+          true
+        );
+      },
+      { lightgbmScorer: scorer }
+    );
+  });
+
+  it("delegates trick-play call_tichu decisions away from LightGBM", async () => {
+    let scoreCalls = 0;
+    const scorer: LightgbmScorer = {
+      async score() {
+        scoreCalls += 1;
+        return {
+          scores: [1],
+          modelMetadata: {
+            model_type: "lightgbm_action_model"
+          },
+          runtimeMetadata: {}
+        };
+      },
+      async close() {}
+    };
+
+    await withServer(
+      async ({ baseUrl, repository }) => {
+        const response = await fetch(`${baseUrl}/api/decision/request`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(createCallTichuDecisionRequestBody())
+        });
+
+        expect(response.status).toBe(200);
+        const payload = (await response.json()) as {
+          accepted: boolean;
+          provider_used: string;
+          metadata?: {
+            lightgbm_tichu_call_delegated?: boolean;
+            lightgbm_delegate_scoring_path?: string;
+          };
+        };
+        expect(payload.accepted).toBe(true);
+        expect(payload.provider_used).toBe("server_heuristic");
+        expect(payload.metadata?.lightgbm_tichu_call_delegated).toBe(true);
+        expect(payload.metadata?.lightgbm_delegate_scoring_path).toBe("fast_path");
+        expect(scoreCalls).toBe(0);
+        await flushServerQueue();
+        expect(repository.decisions).toHaveLength(1);
+        expect(repository.decisions[0]?.provider_used).toBe("server_heuristic");
+        expect(repository.decisions[0]?.metadata.lightgbm_tichu_call_delegated).toBe(
           true
         );
       },

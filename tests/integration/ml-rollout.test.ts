@@ -13,6 +13,7 @@ import {
   teamForSeat
 } from "../../apps/sim-runner/src/ml-rollout-utils";
 import {
+  buildRolloutContinuationMetadata,
   limitDecisionRowsRoundRobinByGame,
   resolveForcedActionFromCandidate as resolveForcedActionForRollout,
   shouldUseFullStateRolloutContinuation
@@ -154,6 +155,47 @@ describe("ml rollout helpers", () => {
     expect(sampleA.exploration.profile).toBe("training_diversity");
     expect(sampleA.selectionKey).not.toBe(sampleB.selectionKey);
     expect(sampleA.selectionKey).toContain("seed-a");
+  });
+
+  it("builds configurable local rollout continuation metadata", () => {
+    const metadata = buildRolloutContinuationMetadata({
+      args: {
+        databaseUrl: "postgres://example",
+        output: "out.jsonl",
+        continuationProvider: "local",
+        rolloutsPerAction: 2,
+        seed: "rollout",
+        concurrency: 1,
+        resume: false,
+        backendUrl: "http://127.0.0.1:4310",
+        continuationExplorationProfile: "conservative",
+        continuationExplorationRate: 1,
+        continuationExplorationTopN: 2,
+        continuationExplorationMaxScoreGap: 8
+      },
+      job: {
+        decisionId: 1,
+        gameId: "game-1",
+        handId: "hand-1",
+        phase: "trick_play",
+        actorSeat: "seat-0",
+        candidateActionKey: "candidate-a",
+        candidateActionCanonicalJson: "{}",
+        continuationProvider: "local",
+        engineVersion: "milestone-1"
+      },
+      decisionIndex: 12,
+      sampleSeed: "seed-a",
+      sampleIndex: 1
+    });
+
+    expect(metadata).toMatchObject({
+      exploration_profile: "conservative",
+      exploration_rate: 1,
+      exploration_top_n: 2,
+      exploration_max_score_gap: 8,
+      rollout_sample_variant: "1:seed-a"
+    });
   });
 
   it("keeps full-state backend continuation enabled for server-backed rollouts", () => {

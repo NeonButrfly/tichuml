@@ -397,6 +397,11 @@ the runtime-safe `runtime_raw` feature profile to
 `--feature-profile full --objective imitation_binary` when you explicitly want
 the older richer imitation experiment path.
 
+When serving `lightgbm_model`, trick-play decision sets that include
+`call_tichu` still delegate to `server_heuristic`. Those sparse Tichu-call
+rows are tracked as part of the open model-quality work in
+[#79](https://github.com/NeonButrfly/tichuml/issues/79).
+
 Both commands prefer the repo `.venv` automatically when it exists, so they use
 the same Python environment created by the bootstrap scripts.
 

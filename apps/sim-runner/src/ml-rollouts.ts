@@ -45,6 +45,10 @@ type ParsedArgs = {
   concurrency: number;
   resume: boolean;
   backendUrl: string;
+  continuationExplorationProfile?: "off" | "conservative" | "training_diversity";
+  continuationExplorationRate?: number;
+  continuationExplorationTopN?: number;
+  continuationExplorationMaxScoreGap?: number;
   decisionId?: number;
   gameId?: string;
   handId?: string;
@@ -237,6 +241,10 @@ function parseArgs(argv: string[]): ParsedArgs {
         "  --concurrency <count>",
         "  --resume",
         "  --backend-url <url>",
+        "  --continuation-exploration-profile <off|conservative|training_diversity>",
+        "  --continuation-exploration-rate <rate>",
+        "  --continuation-exploration-top-n <count>",
+        "  --continuation-exploration-max-score-gap <score>",
         "  --decision-id <id>",
         "  --game-id <game-id>",
         "  --hand-id <hand-id>"
@@ -333,6 +341,38 @@ function parseArgs(argv: string[]): ParsedArgs {
       case "--backend-url":
         if (next) {
           parsed.backendUrl = next;
+          index += 1;
+        }
+        break;
+      case "--continuation-exploration-profile":
+        if (
+          next === "off" ||
+          next === "conservative" ||
+          next === "training_diversity"
+        ) {
+          parsed.continuationExplorationProfile = next;
+          index += 1;
+        } else {
+          throw new Error(
+            `Unsupported continuation exploration profile: ${String(next)}`
+          );
+        }
+        break;
+      case "--continuation-exploration-rate":
+        if (next) {
+          parsed.continuationExplorationRate = Number(next);
+          index += 1;
+        }
+        break;
+      case "--continuation-exploration-top-n":
+        if (next) {
+          parsed.continuationExplorationTopN = Math.max(1, Number(next));
+          index += 1;
+        }
+        break;
+      case "--continuation-exploration-max-score-gap":
+        if (next) {
+          parsed.continuationExplorationMaxScoreGap = Number(next);
           index += 1;
         }
         break;
@@ -636,7 +676,7 @@ function qualityMarkdown(payload: RolloutQuality): string {
   ].join("\n");
 }
 
-function buildRolloutContinuationMetadata(config: {
+export function buildRolloutContinuationMetadata(config: {
   args: ParsedArgs;
   job: RolloutJob;
   decisionIndex: number;
@@ -655,10 +695,12 @@ function buildRolloutContinuationMetadata(config: {
     game_id: config.job.gameId,
     hand_id: config.job.handId,
     decision_index: config.decisionIndex,
-    exploration_profile: "training_diversity",
-    exploration_rate: 1,
-    exploration_top_n: 4,
-    exploration_max_score_gap: 20,
+    exploration_profile:
+      config.args.continuationExplorationProfile ?? "training_diversity",
+    exploration_rate: config.args.continuationExplorationRate ?? 1,
+    exploration_top_n: config.args.continuationExplorationTopN ?? 4,
+    exploration_max_score_gap:
+      config.args.continuationExplorationMaxScoreGap ?? 20,
     rollout_sample_variant: `${config.sampleIndex}:${config.sampleSeed}`
   };
 }
