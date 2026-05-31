@@ -523,6 +523,35 @@ def derive_hand_outcome_from_state(state_norm: Any) -> dict[str, Any]:
     }
 
 
+def derive_hand_outcome_from_decision(decision: dict[str, Any]) -> dict[str, Any]:
+    hand_result = safe_dict(decision.get("hand_result"))
+    if not hand_result:
+        return {
+            "observed_hand_outcome_available": False,
+            "missing_outcome_reason": "no_hand_result",
+        }
+
+    scoring_breakdown = safe_dict(hand_result.get("scoring_breakdown"))
+    team_scores = safe_dict(scoring_breakdown.get("hand_team_scores"))
+    finish_order = [str(entry) for entry in safe_list(hand_result.get("finish_order"))]
+    double_victory = hand_result.get("double_victory")
+    tichu_bonuses = safe_list(hand_result.get("tichu_bonuses"))
+    if not team_scores:
+        return {
+            "observed_hand_outcome_available": False,
+            "missing_outcome_reason": "no_hand_team_scores",
+        }
+
+    return {
+        "observed_hand_outcome_available": True,
+        "hand_team_scores": team_scores,
+        "finish_order": finish_order,
+        "double_victory_team": double_victory if isinstance(double_victory, str) else None,
+        "tichu_bonuses": tichu_bonuses,
+        "missing_outcome_reason": None,
+    }
+
+
 def derive_match_outcome_from_state(
     state_norm: Any, match_row: dict[str, Any] | None
 ) -> dict[str, Any]:
@@ -717,7 +746,8 @@ def build_query(
             explanation,
             candidate_scores,
             state_features,
-            metadata
+            metadata,
+            hand_result
         FROM decisions
         {where_clause}
         ORDER BY game_id ASC, hand_id ASC, decision_index ASC, ts ASC, id ASC
@@ -1476,6 +1506,8 @@ def build_rows_for_chunk(
         explanation = extract_explanation_metadata(decision)
         state_features, candidate_feature_map = build_candidate_feature_map(explanation, decision)
         hand_outcome = hand_outcomes.get((str(decision.get("game_id", "")), str(decision.get("hand_id", ""))), {})
+        if not hand_outcome.get("observed_hand_outcome_available"):
+            hand_outcome = derive_hand_outcome_from_decision(decision)
         match_outcome = match_outcomes.get(str(decision.get("game_id", "")), {})
         observed = observed_outcomes_for_actor(actor_seat, hand_outcome, match_outcome)
         if observed.get("observed_outcome_available"):
@@ -1761,6 +1793,8 @@ def build_training_rows_for_chunk(
         game_id = str(decision.get("game_id", ""))
         hand_id = str(decision.get("hand_id", ""))
         hand_outcome = hand_outcomes.get((game_id, hand_id), {})
+        if not hand_outcome.get("observed_hand_outcome_available"):
+            hand_outcome = derive_hand_outcome_from_decision(decision)
         match_outcome = match_outcomes.get(game_id, {})
         observed = observed_outcomes_for_actor(actor_seat, hand_outcome, match_outcome)
         split = choose_split_for_game(game_id)

@@ -356,6 +356,39 @@ describe("ml export and training regressions", () => {
     expect(result.stdout.trim()).toBe("candidate_rows");
   });
 
+  it("derives observed hand outcomes from attributed decision hand_result when roundSummary is absent", () => {
+    const result = runPythonSnippet(
+      [
+        "from pathlib import Path",
+        "import sys",
+        "sys.path.insert(0, str(Path('ml').resolve()))",
+        "from export_training_rows import derive_hand_outcome_from_decision, observed_outcomes_for_actor",
+        "decision = {",
+        "  'hand_result': {",
+        "    'finish_order': ['seat-0', 'seat-2', 'seat-1'],",
+        "    'double_victory': None,",
+        "    'tichu_bonuses': [],",
+        "    'scoring_breakdown': {",
+        "      'hand_team_scores': {'team-0': 80, 'team-1': 20}",
+        "    }",
+        "  }",
+        "}",
+        "hand = derive_hand_outcome_from_decision(decision)",
+        "observed = observed_outcomes_for_actor('seat-0', hand, {'observed_match_outcome_available': False})",
+        "print(hand['observed_hand_outcome_available'])",
+        "print(observed['observed_actor_team_hand_delta'])",
+      ].join("\n")
+    );
+
+    expect(result.status).toBe(0);
+    const lines = result.stdout
+      .replace(/\r?\n/gu, "\n")
+      .trim()
+      .split("\n")
+      .map((line) => line.trim());
+    expect(lines).toEqual(["True", "60.0"]);
+  });
+
   it(
     "prefers rollout_input values over null placeholder rollout columns in candidate exports",
     () => {

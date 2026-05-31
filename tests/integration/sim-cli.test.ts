@@ -111,6 +111,45 @@ describe("sim CLI", () => {
   );
 
   it(
+    "derives a unique training game id prefix from --run-id even without --batch-id",
+    async () => {
+      const runId = "goal-audit-run-123";
+      const result = await runSimCli(
+        [
+          "--games",
+          "1",
+          "--provider",
+          "local",
+          "--telemetry",
+          "false",
+          "--quiet",
+          "--telemetry-mode",
+          "minimal",
+          "--full-state",
+          "false",
+          "--run-id",
+          runId,
+          "--max-decisions-per-game",
+          "3000"
+        ],
+        60_000
+      );
+
+      expect(result.exitCode).toBe(0);
+      const summary = extractLastJsonObject(result.stdout);
+      expect(summary).toMatchObject({
+        gamesPlayed: 1,
+        errors: 0,
+        maxDecisionLimitHit: 0
+      });
+      expect(summary.lastCompletedGameId).toBe(
+        `selfplay-${runId}-game-000001`
+      );
+    },
+    60_000
+  );
+
+  it(
     "fails loudly with a nonzero exit when the max decision guard trips",
     async () => {
     const result = await runSimCli(

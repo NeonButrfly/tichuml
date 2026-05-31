@@ -532,10 +532,10 @@ function resolveGameIdPrefix(args: ParsedArgs): string | null {
   if (args.gameIdPrefix) {
     return args.gameIdPrefix;
   }
-  if (args.runId && args.batchId) {
+  if (args.runId) {
     return buildTrainingGameIdPrefix({
       runId: args.runId,
-      batchId: args.batchId
+      ...(args.batchId ? { batchId: args.batchId } : {})
     });
   }
   return null;
