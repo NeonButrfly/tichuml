@@ -124,6 +124,7 @@ type TelemetryReadinessAssessmentInput = {
   decisionProviderFailures: number;
   decisionTimeoutCount: number;
   invalidDecisionCount: number;
+  telemetryQueuePressureDropsBeforeRun: number | null;
   telemetryFlushStatus: Record<string, unknown> | null;
   persistenceMismatch: PersistenceMismatchSummary | null;
   concurrentWriterOverlap: ConcurrentWriterOverlap | null;
@@ -291,6 +292,76 @@ function isTrainingMetadataRecord(
 
 function finiteNumber(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function telemetryQueuePressureDrops(
+  telemetryHealth: Record<string, unknown> | null
+): number {
+  if (!isRecord(telemetryHealth)) {
+    return 0;
+  }
+  const nestedQueue = isRecord(telemetryHealth.queue)
+    ? telemetryHealth.queue
+    : null;
+  return Math.max(
+    finiteNumber(telemetryHealth.queue_dropped),
+    finiteNumber(nestedQueue?.dropped_queue_pressure)
+  );
+}
+
+function telemetryQueuePendingCount(
+  telemetryHealth: Record<string, unknown> | null
+): number {
+  if (!isRecord(telemetryHealth)) {
+    return 0;
+  }
+  const nestedQueue = isRecord(telemetryHealth.queue)
+    ? telemetryHealth.queue
+    : null;
+  return Math.max(
+    finiteNumber(telemetryHealth.queue_pending),
+    finiteNumber(nestedQueue?.pending)
+  );
+}
+
+function telemetryQueueInFlightCount(
+  telemetryHealth: Record<string, unknown> | null
+): number {
+  if (!isRecord(telemetryHealth)) {
+    return 0;
+  }
+  const nestedQueue = isRecord(telemetryHealth.queue)
+    ? telemetryHealth.queue
+    : null;
+  return Math.max(
+    finiteNumber(telemetryHealth.queue_in_flight),
+    finiteNumber(nestedQueue?.in_flight_batches)
+  );
+}
+
+function telemetryPersistenceFailureCount(
+  telemetryHealth: Record<string, unknown> | null
+): number {
+  if (!isRecord(telemetryHealth)) {
+    return 0;
+  }
+  const nestedQueue = isRecord(telemetryHealth.queue)
+    ? telemetryHealth.queue
+    : null;
+  return Math.max(
+    finiteNumber(telemetryHealth.persistence_failures),
+    finiteNumber(nestedQueue?.persistence_failures)
+  );
+}
+
+function telemetryFlushIsComplete(
+  telemetryHealth: Record<string, unknown> | null
+): boolean {
+  return (
+    telemetryQueuePendingCount(telemetryHealth) <= 0 &&
+    telemetryQueueInFlightCount(telemetryHealth) <= 0 &&
+    telemetryPersistenceFailureCount(telemetryHealth) <= 0
+  );
 }
 
 function mergeNumberCounts(
@@ -799,25 +870,18 @@ async function fetchTelemetryHealth(
   }
 }
 
-async function waitForTelemetryFlush(
+export async function waitForTelemetryFlush(
   backendUrl: string,
-  timeoutMs = 20000
+  timeoutMs = 300000,
+  pollIntervalMs = 1000
 ): Promise<Record<string, unknown> | null> {
   const startedAt = Date.now();
   let latest = await fetchTelemetryHealth(backendUrl);
   while (Date.now() - startedAt < timeoutMs) {
-    const queuePending = finiteNumber(
-      isRecord(latest) ? latest.queue_pending : undefined
-    );
-    const queue = isRecord(latest) ? latest.queue : null;
-    const queueDepth = finiteNumber(isRecord(queue) ? queue.queue_depth : undefined);
-    const persistenceFailures = finiteNumber(
-      isRecord(latest) ? latest.persistence_failures : undefined
-    );
-    if (queuePending <= 0 && queueDepth <= 0 && persistenceFailures <= 0) {
+    if (telemetryFlushIsComplete(latest)) {
       break;
     }
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
     latest = await fetchTelemetryHealth(backendUrl);
   }
   return latest;
@@ -1044,15 +1108,9 @@ export function assessTelemetryReadiness(
     );
   }
 
-  const queuePending = finiteNumber(
-    isRecord(input.telemetryFlushStatus)
-      ? input.telemetryFlushStatus.queue_pending
-      : undefined
-  );
-  const persistenceFailures = finiteNumber(
-    isRecord(input.telemetryFlushStatus)
-      ? input.telemetryFlushStatus.persistence_failures
-      : undefined
+  const queuePending = telemetryQueuePendingCount(input.telemetryFlushStatus);
+  const persistenceFailures = telemetryPersistenceFailureCount(
+    input.telemetryFlushStatus
   );
   if (queuePending > 0) {
     failures.push(`telemetry queue still had ${queuePending} pending item(s).`);
@@ -1060,6 +1118,19 @@ export function assessTelemetryReadiness(
   if (persistenceFailures > 0) {
     failures.push(
       `telemetry persistence_failures was ${persistenceFailures}.`
+    );
+  }
+  const queuePressureDropsAfterFlush = telemetryQueuePressureDrops(
+    input.telemetryFlushStatus
+  );
+  const queuePressureDropsDelta = Math.max(
+    0,
+    queuePressureDropsAfterFlush -
+      Math.max(0, input.telemetryQueuePressureDropsBeforeRun ?? 0)
+  );
+  if (queuePressureDropsDelta > 0) {
+    failures.push(
+      `telemetry queue dropped ${queuePressureDropsDelta} item(s) due to queue pressure during the scoped run.`
     );
   }
 
@@ -1647,6 +1718,11 @@ async function collectTelemetryReadinessArtifacts(
         metadataOptionalNumber(metadata, "decision_timeout_count") ?? 0,
       invalidDecisionCount:
         metadataOptionalNumber(metadata, "invalid_decision_count") ?? 0,
+      telemetryQueuePressureDropsBeforeRun:
+        metadataOptionalNumber(
+          metadata,
+          "telemetry_queue_pressure_drops_before_run"
+        ) ?? 0,
       telemetryFlushStatus: isRecord(metadata.telemetry_flush_status)
         ? metadata.telemetry_flush_status
         : null,
@@ -1681,6 +1757,16 @@ async function collectTelemetryReadinessArtifacts(
       requested_games: requestedGames,
       ok: readiness.ok,
       failures: readiness.failures,
+      telemetry_queue_pressure_drops_before_run:
+        metadataOptionalNumber(
+          metadata,
+          "telemetry_queue_pressure_drops_before_run"
+        ) ?? 0,
+      telemetry_queue_pressure_drops_after_flush: telemetryQueuePressureDrops(
+        isRecord(metadata.telemetry_flush_status)
+          ? metadata.telemetry_flush_status
+          : null
+      ),
       finalize_summary: finalizeSummary,
       training_data_validation_summary: trainingDataValidationSummary,
       scoped_run_validation_summary: scopedRunValidationSummary
@@ -2088,6 +2174,8 @@ async function prepareDatabase(options: CliOptions): Promise<void> {
       pre_clear_counts: preCounts,
       sql: TRAINING_CLEAR_SQL,
     });
+    metadata.telemetry_queue_pressure_drops_before_run =
+      telemetryQueuePressureDrops(telemetryHealth);
     if (metadataBoolean(metadata, "clear_database") && !optionBoolean(options, "dry-run", false)) {
       await sql.unsafe(TRAINING_CLEAR_SQL);
       metadata.post_clear_counts = await collectTableCounts(sql);
@@ -2825,6 +2913,33 @@ async function runLoop(options: CliOptions): Promise<void> {
               parsedSummary.averageLatencyByProvider
           })
         );
+      }
+      metadata.telemetry_flush_status = await waitForTelemetryFlush(
+        metadataString(metadata, "backend_url")
+      );
+      appendLine(
+        runLog,
+        JSON.stringify({
+          ts: nowIso(),
+          event: "batch_telemetry_flush",
+          batch_id: batchId,
+          telemetry_flush_status: metadata.telemetry_flush_status,
+        })
+      );
+      if (!telemetryFlushIsComplete(metadata.telemetry_flush_status)) {
+        metadata.failure_reason = `telemetry queue did not fully flush after ${batchId}`;
+        saveMetadata(metadataFile, metadata);
+        appendLine(
+          runLog,
+          JSON.stringify({
+            ts: nowIso(),
+            event: "batch_telemetry_flush_timeout",
+            batch_id: batchId,
+            telemetry_flush_status: metadata.telemetry_flush_status,
+          })
+        );
+        fatalError = new Error(metadata.failure_reason);
+        break;
       }
       const afterSnapshot = await collectSnapshot();
       persistSnapshot(afterSnapshot);

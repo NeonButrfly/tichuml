@@ -154,6 +154,9 @@ and repeats until the run is warning-free and coverage-complete or the max
 attempt limit is exhausted. Each attempt writes machine-readable summaries for
 finalization, training-data validation, scoped run validation, and the final
 readiness gate into its run directory plus an outer attempt summary file.
+Readiness now also fails explicitly when backend `queue_dropped` increases
+during the scoped run, so queue-pressure loss is reported directly instead of
+only surfacing later as reward-coverage holes.
 
 ## Recommended capture mode
 

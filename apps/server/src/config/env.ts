@@ -313,7 +313,7 @@ export function loadServerConfig(
     ),
     telemetryIngestQueueMaxDepth: parsePositiveInteger(
       mergedEnv.TELEMETRY_INGEST_QUEUE_MAX_DEPTH,
-      5000
+      50000
     ),
     telemetryPersistenceBatchSize: parsePositiveInteger(
       mergedEnv.TELEMETRY_PERSISTENCE_BATCH_SIZE,

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   buildTrainingBatchId,
   buildTrainingGameId,
@@ -20,7 +20,8 @@ import {
   parseSimBatchSummaryFromLines,
   mergeBatchSummaries,
   summarizePersistenceMismatch,
-  selectMlExportValidationSummaryFromOutput
+  selectMlExportValidationSummaryFromOutput,
+  waitForTelemetryFlush
 } from "../../scripts/training-data.js";
 import fs from "node:fs";
 import os from "node:os";
@@ -448,11 +449,13 @@ describe("training run helpers", () => {
       decisionProviderFailures: 0,
       decisionTimeoutCount: 0,
       invalidDecisionCount: 0,
+      telemetryQueuePressureDropsBeforeRun: 4,
       telemetryFlushStatus: {
         accepted: true,
         ready: true,
         queue_pending: 0,
-        persistence_failures: 0
+        persistence_failures: 0,
+        queue_dropped: 29
       },
       persistenceMismatch: {
         games: { requested: 12, executed: 12, persisted: 12, missing: 0, extra: 0 },
@@ -572,7 +575,8 @@ describe("training run helpers", () => {
         expect.stringContaining("game_result_coverage"),
         expect.stringContaining("warning"),
         expect.stringContaining("candidate_scores_count"),
-        expect.stringContaining("tichu_calls")
+        expect.stringContaining("tichu_calls"),
+        expect.stringContaining("queue dropped 25 item(s)")
       ])
     );
   });
@@ -586,11 +590,13 @@ describe("training run helpers", () => {
       decisionProviderFailures: 0,
       decisionTimeoutCount: 0,
       invalidDecisionCount: 0,
+      telemetryQueuePressureDropsBeforeRun: 12,
       telemetryFlushStatus: {
         accepted: true,
         ready: true,
         queue_pending: 0,
-        persistence_failures: 0
+        persistence_failures: 0,
+        queue_dropped: 12
       },
       persistenceMismatch: {
         games: { requested: 12, executed: 12, persisted: 12, missing: 0, extra: 0 },
@@ -727,5 +733,100 @@ describe("training run helpers", () => {
         "missing_reward remained for provider=system_local phase=round_scoring: 12."
       ])
     );
+  });
+
+  it("waits for telemetry flush until pending and in-flight work reach zero", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        async json() {
+          return {
+            accepted: true,
+            queue_pending: 714,
+            queue_in_flight: 1,
+            persistence_failures: 0,
+            queue: {
+              pending: 714,
+              in_flight_batches: 1
+            }
+          };
+        }
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        async json() {
+          return {
+            accepted: true,
+            queue_pending: 112,
+            queue_in_flight: 1,
+            persistence_failures: 0,
+            queue: {
+              pending: 112,
+              in_flight_batches: 1
+            }
+          };
+        }
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        async json() {
+          return {
+            accepted: true,
+            queue_pending: 0,
+            queue_in_flight: 0,
+            persistence_failures: 0,
+            queue: {
+              pending: 0,
+              in_flight_batches: 0
+            }
+          };
+        }
+      });
+
+    vi.stubGlobal("fetch", fetchMock);
+    const result = await waitForTelemetryFlush(
+      "http://127.0.0.1:4310",
+      50,
+      1
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(result).toMatchObject({
+      queue_pending: 0,
+      queue_in_flight: 0,
+      persistence_failures: 0
+    });
+  });
+
+  it("returns the latest telemetry flush status after timeout if the queue never drains", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      async json() {
+        return {
+          accepted: true,
+          queue_pending: 9,
+          queue_in_flight: 0,
+          persistence_failures: 0,
+          queue: {
+            pending: 9,
+            in_flight_batches: 0
+          }
+        };
+      }
+    }));
+
+    vi.stubGlobal("fetch", fetchMock);
+    const result = await waitForTelemetryFlush(
+      "http://127.0.0.1:4310",
+      5,
+      1
+    );
+
+    expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(1);
+    expect(result).toMatchObject({
+      queue_pending: 9,
+      queue_in_flight: 0
+    });
   });
 });

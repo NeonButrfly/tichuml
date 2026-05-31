@@ -217,6 +217,16 @@ describe("server config env loading", () => {
     expect(config.simDefaultGamesPerBatch).toBe(9);
   });
 
+  it("uses the deeper default telemetry ingest queue depth when env is absent", async () => {
+    const repoRoot = await createTempRepo();
+
+    const config = loadServerConfig({}, { repoRoot });
+
+    expect(config.telemetryIngestQueueMaxDepth).toBe(50000);
+    expect(config.telemetryPersistenceBatchSize).toBe(1);
+    expect(config.telemetryPersistenceConcurrency).toBe(1);
+  });
+
   it("falls back to the repo venv when the configured python executable is unusable", async () => {
     const repoRoot = await createTempRepo();
     const venvPython =

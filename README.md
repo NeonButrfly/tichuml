@@ -152,10 +152,18 @@ The root `.env.example` now includes:
 - `LIGHTGBM_MODEL_PATH`
 - `LIGHTGBM_MODEL_META_PATH`
 - `LIGHTGBM_CONFIDENCE_MARGIN`
+- `TELEMETRY_INGEST_QUEUE_MAX_DEPTH`
+- `TELEMETRY_PERSISTENCE_BATCH_SIZE`
+- `TELEMETRY_PERSISTENCE_CONCURRENCY`
 - `VITE_DECISION_MODE`
 - `VITE_BACKEND_BASE_URL`
 - `VITE_SERVER_FALLBACK_ENABLED`
 - `VITE_TELEMETRY_ENABLED`
+
+The checked-in backend defaults keep telemetry persistence single-writer for
+stability, but now use a deeper ingest queue (`TELEMETRY_INGEST_QUEUE_MAX_DEPTH=50000`)
+so bounded training-readiness runs do not silently lose telemetry to queue-pressure
+drops before outcome attribution completes.
 
 `apps/server/.env.example` mirrors the server-specific defaults when you want a backend-only env reference.
 
