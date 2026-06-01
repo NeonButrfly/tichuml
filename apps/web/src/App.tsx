@@ -22,6 +22,7 @@ import {
   SEAT_IDS,
   createInitialGameState,
   createNextDealCarryState as createEngineNextDealCarryState,
+  getCurrentHandNumber,
   getCanonicalActiveSeatFromState,
   getLegalActionOwner,
   getPartnerSeat,
@@ -188,7 +189,7 @@ function createActorPlayOnlyLegalActions(
 }
 
 function getCurrentHandId(state: GameState): string {
-  return `hand-${state.matchHistory.length + 1}`;
+  return `hand-${getCurrentHandNumber(state)}`;
 }
 
 function buildDecisionRequestPayload(config: {

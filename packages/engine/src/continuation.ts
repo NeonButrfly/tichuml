@@ -7,6 +7,7 @@ import {
   type InitialGameSeedConfig,
   type LegalAction,
   type LegalActionMap,
+  type MatchHandHistoryEntry,
   type SeatId,
   type TeamId
 } from "./types.js";
@@ -62,8 +63,63 @@ function cloneMatchHistory(
   }));
 }
 
+type MatchHistoryState = Pick<GameState, "matchHistory" | "matchScore"> &
+  Partial<Pick<GameState, "phase" | "roundSummary" | "seed">>;
+
+function createFinishedHandHistoryEntry(
+  state: MatchHistoryState
+): MatchHandHistoryEntry | null {
+  if (
+    state.phase !== "finished" ||
+    !state.roundSummary ||
+    typeof state.seed !== "string" ||
+    state.seed.length === 0
+  ) {
+    return null;
+  }
+
+  const lastEntry = state.matchHistory.at(-1);
+  if (lastEntry?.roundSeed === state.seed) {
+    return null;
+  }
+
+  return {
+    handNumber: state.matchHistory.length + 1,
+    roundSeed: state.seed,
+    teamScores: { ...state.roundSummary.teamScores },
+    cumulativeScores: { ...state.matchScore },
+    finishOrder: [...state.roundSummary.finishOrder],
+    doubleVictory: state.roundSummary.doubleVictory,
+    tichuBonuses: state.roundSummary.tichuBonuses.map((bonus) => ({ ...bonus }))
+  };
+}
+
+export function getContinuationMatchHistory(
+  state: MatchHistoryState
+): GameState["matchHistory"] {
+  const cloned = cloneMatchHistory(state.matchHistory);
+  const finishedEntry = createFinishedHandHistoryEntry(state);
+  if (!finishedEntry) {
+    return cloned;
+  }
+
+  return [...cloned, finishedEntry];
+}
+
+export function getCurrentHandNumber(
+  state: MatchHistoryState
+): number {
+  const history = getContinuationMatchHistory(state);
+  if (state.phase === "finished" && history.length > 0) {
+    return history[history.length - 1]!.handNumber;
+  }
+
+  return history.length + 1;
+}
+
 export function createNextDealCarryState(
-  state: Pick<GameState, "matchComplete" | "matchHistory" | "matchScore">
+  state: Pick<GameState, "matchComplete" | "matchHistory" | "matchScore"> &
+    Partial<Pick<GameState, "phase" | "roundSummary" | "seed">>
 ): Pick<InitialGameSeedConfig, "matchScore" | "matchHistory"> {
   if (state.matchComplete) {
     throw new Error("Cannot create another deal after the match is complete.");
@@ -71,7 +127,7 @@ export function createNextDealCarryState(
 
   return {
     matchScore: { ...state.matchScore },
-    matchHistory: cloneMatchHistory(state.matchHistory)
+    matchHistory: getContinuationMatchHistory(state)
   };
 }
 
@@ -340,7 +396,7 @@ export function planMatchContinuation(config: {
 
     return {
       kind: "next_hand",
-      nextHandNumber: state.matchHistory.length + 1,
+      nextHandNumber: getContinuationMatchHistory(state).length + 1,
       carryState: createNextDealCarryState(state)
     };
   }

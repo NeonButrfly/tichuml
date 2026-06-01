@@ -3,6 +3,7 @@ import {
   type LegalAction,
   cardsFromIds,
   createScenarioState,
+  getCurrentHandNumber,
   getLegalActions,
   listCombinationInterpretations
 } from "@tichuml/engine";
@@ -1041,5 +1042,101 @@ describe("table model helpers", () => {
         matchHistory: []
       })
     ).toThrow("Cannot create another deal after the match is complete.");
+  });
+
+  it("backfills the finished hand into carry state when live history lags the finished round", () => {
+    const carryState = createNextDealCarryState({
+      matchComplete: false,
+      phase: "finished",
+      seed: "seed-4",
+      roundSummary: {
+        teamScores: { "team-0": 40, "team-1": 60 },
+        finishOrder: ["seat-3", "seat-1", "seat-2", "seat-0"],
+        doubleVictory: null,
+        tichuBonuses: []
+      },
+      matchScore: { "team-0": 380, "team-1": 280 },
+      matchHistory: [
+        {
+          handNumber: 1,
+          roundSeed: "seed-1",
+          teamScores: { "team-0": 120, "team-1": -20 },
+          cumulativeScores: { "team-0": 120, "team-1": -20 },
+          finishOrder: ["seat-0", "seat-2", "seat-1", "seat-3"],
+          doubleVictory: "team-0",
+          tichuBonuses: []
+        },
+        {
+          handNumber: 2,
+          roundSeed: "seed-2",
+          teamScores: { "team-0": 100, "team-1": 0 },
+          cumulativeScores: { "team-0": 220, "team-1": -20 },
+          finishOrder: ["seat-1", "seat-3", "seat-0", "seat-2"],
+          doubleVictory: null,
+          tichuBonuses: []
+        },
+        {
+          handNumber: 3,
+          roundSeed: "seed-3",
+          teamScores: { "team-0": 120, "team-1": 300 },
+          cumulativeScores: { "team-0": 340, "team-1": 280 },
+          finishOrder: ["seat-2", "seat-0", "seat-1", "seat-3"],
+          doubleVictory: null,
+          tichuBonuses: []
+        }
+      ]
+    });
+
+    expect(carryState.matchHistory).toHaveLength(4);
+    expect(carryState.matchHistory.at(-1)).toMatchObject({
+      handNumber: 4,
+      roundSeed: "seed-4",
+      cumulativeScores: { "team-0": 380, "team-1": 280 }
+    });
+  });
+
+  it("derives the current hand number from the finished round when history is one hand behind", () => {
+    expect(
+      getCurrentHandNumber({
+        phase: "finished",
+        seed: "seed-4",
+        roundSummary: {
+          teamScores: { "team-0": 40, "team-1": 60 },
+          finishOrder: ["seat-3", "seat-1", "seat-2", "seat-0"],
+          doubleVictory: null,
+          tichuBonuses: []
+        },
+        matchScore: { "team-0": 380, "team-1": 280 },
+        matchHistory: [
+          {
+            handNumber: 1,
+            roundSeed: "seed-1",
+            teamScores: { "team-0": 120, "team-1": -20 },
+            cumulativeScores: { "team-0": 120, "team-1": -20 },
+            finishOrder: ["seat-0", "seat-2", "seat-1", "seat-3"],
+            doubleVictory: "team-0",
+            tichuBonuses: []
+          },
+          {
+            handNumber: 2,
+            roundSeed: "seed-2",
+            teamScores: { "team-0": 100, "team-1": 0 },
+            cumulativeScores: { "team-0": 220, "team-1": -20 },
+            finishOrder: ["seat-1", "seat-3", "seat-0", "seat-2"],
+            doubleVictory: null,
+            tichuBonuses: []
+          },
+          {
+            handNumber: 3,
+            roundSeed: "seed-3",
+            teamScores: { "team-0": 120, "team-1": 300 },
+            cumulativeScores: { "team-0": 340, "team-1": 280 },
+            finishOrder: ["seat-2", "seat-0", "seat-1", "seat-3"],
+            doubleVictory: null,
+            tichuBonuses: []
+          }
+        ]
+      })
+    ).toBe(4);
   });
 });

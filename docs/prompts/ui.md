@@ -1065,3 +1065,19 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 - Linked GitHub Issue: [#58](https://github.com/NeonButrfly/tichuml/issues/58)
 - Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
 - Status Source: GitHub issue state only.
+
+### 2026-06-01 - Hosted standard table must advance Next Deal with a fresh hand lifecycle
+
+- Prompt Signal: The live Chrome multi-hand verification pass found that the
+  hosted standard table continued gameplay after `Next Deal`, but part of the
+  next live deal still reported the previous hand id before later catching up.
+- Interpreted Requirement: `finished -> Next Deal -> trick_play` must mint and
+  propagate the next hand identity immediately across the normal table, control
+  panel, backend decision payloads, and gameplay telemetry instead of reusing
+  the previous finished hand id during rollover.
+- Affected Systems: `packages/engine/src/continuation.ts`,
+  `apps/web/src/App.tsx`,
+  `tests/integration/web-table-model.test.ts`.
+- Linked GitHub Issue: [#91](https://github.com/NeonButrfly/tichuml/issues/91)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.
