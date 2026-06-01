@@ -36,6 +36,7 @@ export async function handleDecisionRequest(
     lightgbmRolloutRerankSamples?: number | null;
     lightgbmRolloutRerankMaxScoreMargin?: number | null;
     lightgbmRolloutRerankMaxContinuationDecisions?: number | null;
+    lightgbmRolloutRerankMaxActorHandSize?: number | null;
     parseMs?: number;
     validateMs?: number;
     payloadBytes?: number;
@@ -108,6 +109,12 @@ export async function handleDecisionRequest(
               ? {
                   rolloutRerankMaxContinuationDecisions:
                     dependencies.lightgbmRolloutRerankMaxContinuationDecisions,
+                }
+              : {}),
+            ...(dependencies.lightgbmRolloutRerankMaxActorHandSize !== undefined
+              ? {
+                  rolloutRerankMaxActorHandSize:
+                    dependencies.lightgbmRolloutRerankMaxActorHandSize,
                 }
               : {})
           }

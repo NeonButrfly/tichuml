@@ -225,7 +225,8 @@ const CONFIG_SCHEMA: Array<{
   { key: "LIGHTGBM_ROLLOUT_RERANK_TOP_K", label: "LightGBM rollout top K", category: "ML", type: "number", restart_required: true, description: "Optional top-K LightGBM trick-play candidates to rerank with bounded heuristic rollouts. Leave blank to disable rollout reranking.", validate: validateOptionalPositiveNumber },
   { key: "LIGHTGBM_ROLLOUT_RERANK_SAMPLES", label: "LightGBM rollout samples", category: "ML", type: "number", restart_required: true, description: "Optional rollout samples per LightGBM candidate during bounded live reranking. Leave blank to disable rollout reranking.", validate: validateOptionalPositiveNumber },
   { key: "LIGHTGBM_ROLLOUT_RERANK_MAX_SCORE_MARGIN", label: "LightGBM rollout max score margin", category: "ML", type: "number", restart_required: true, description: "Optional raw LightGBM top-vs-second score margin cutoff for live rollout reranking. Wider margins skip reranking and keep the deterministic top score.", validate: validateOptionalNonNegativeNumber },
-  { key: "LIGHTGBM_ROLLOUT_RERANK_MAX_CONTINUATION_DECISIONS", label: "LightGBM rollout max continuation decisions", category: "ML", type: "number", restart_required: true, description: "Optional per-sample continuation depth cap for live rollout reranking. Shorter caps trade some lookahead for lower latency.", validate: validateOptionalPositiveNumber }
+  { key: "LIGHTGBM_ROLLOUT_RERANK_MAX_CONTINUATION_DECISIONS", label: "LightGBM rollout max continuation decisions", category: "ML", type: "number", restart_required: true, description: "Optional per-sample continuation depth cap for live rollout reranking. Shorter caps trade some lookahead for lower latency.", validate: validateOptionalPositiveNumber },
+  { key: "LIGHTGBM_ROLLOUT_RERANK_MAX_ACTOR_HAND_SIZE", label: "LightGBM rollout max actor hand size", category: "ML", type: "number", restart_required: true, description: "Optional actor-hand-size cutoff for live rollout reranking. Larger hands skip reranking and stay on the faster deterministic or delegated path.", validate: validateOptionalPositiveNumber }
 ];
 
 const EDITABLE_KEYS = new Set(CONFIG_SCHEMA.map((entry) => entry.key));
@@ -621,6 +622,10 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
       LIGHTGBM_ROLLOUT_RERANK_MAX_CONTINUATION_DECISIONS:
         this.config.lightgbmRolloutRerankMaxContinuationDecisions !== null
           ? String(this.config.lightgbmRolloutRerankMaxContinuationDecisions)
+          : "",
+      LIGHTGBM_ROLLOUT_RERANK_MAX_ACTOR_HAND_SIZE:
+        this.config.lightgbmRolloutRerankMaxActorHandSize !== null
+          ? String(this.config.lightgbmRolloutRerankMaxActorHandSize)
           : ""
     };
     return disk[key] ?? fallback[key] ?? "";
@@ -760,6 +765,10 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
       case "LIGHTGBM_ROLLOUT_RERANK_MAX_CONTINUATION_DECISIONS":
         return this.config.lightgbmRolloutRerankMaxContinuationDecisions !== null
           ? String(this.config.lightgbmRolloutRerankMaxContinuationDecisions)
+          : "";
+      case "LIGHTGBM_ROLLOUT_RERANK_MAX_ACTOR_HAND_SIZE":
+        return this.config.lightgbmRolloutRerankMaxActorHandSize !== null
+          ? String(this.config.lightgbmRolloutRerankMaxActorHandSize)
           : "";
       default:
         return undefined;

@@ -241,7 +241,8 @@ const TEST_SERVER_CONFIG: ServerConfig = {
   lightgbmRolloutRerankTopK: 2,
   lightgbmRolloutRerankSamples: 1,
   lightgbmRolloutRerankMaxScoreMargin: 0.1,
-  lightgbmRolloutRerankMaxContinuationDecisions: 12
+  lightgbmRolloutRerankMaxContinuationDecisions: 12,
+  lightgbmRolloutRerankMaxActorHandSize: 10
 };
 
 let nextSafeTestPort = 43210;

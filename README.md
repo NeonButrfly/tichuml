@@ -164,6 +164,7 @@ The root `.env.example` now includes:
 - `LIGHTGBM_ROLLOUT_RERANK_SAMPLES`
 - `LIGHTGBM_ROLLOUT_RERANK_MAX_SCORE_MARGIN`
 - `LIGHTGBM_ROLLOUT_RERANK_MAX_CONTINUATION_DECISIONS`
+- `LIGHTGBM_ROLLOUT_RERANK_MAX_ACTOR_HAND_SIZE`
 - `TELEMETRY_INGEST_QUEUE_MAX_DEPTH`
 - `TELEMETRY_PERSISTENCE_BATCH_SIZE`
 - `TELEMETRY_PERSISTENCE_CONCURRENCY`
@@ -488,6 +489,9 @@ or disable that live rerank stage. Use
 decisions instead of paying rollout cost on obvious winners, and use
 `LIGHTGBM_ROLLOUT_RERANK_MAX_CONTINUATION_DECISIONS` to cap each live
 continuation sample before the backend falls back to the raw LightGBM winner.
+Use `LIGHTGBM_ROLLOUT_RERANK_MAX_ACTOR_HAND_SIZE` to skip reranking on larger
+early-hand positions where bounded continuation rollouts are still too slow to
+justify the live latency cost.
 Backend startup now also prewarms the Python LightGBM inference worker before
 the HTTP listener comes up, so the first scored request does not pay cold-start
 model-load cost inside the normal decision timeout budget.

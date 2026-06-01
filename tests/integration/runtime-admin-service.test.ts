@@ -72,7 +72,8 @@ function createConfig(repoRoot: string): ServerConfig {
     lightgbmRolloutRerankTopK: 2,
     lightgbmRolloutRerankSamples: 1,
     lightgbmRolloutRerankMaxScoreMargin: 0.1,
-    lightgbmRolloutRerankMaxContinuationDecisions: 12
+    lightgbmRolloutRerankMaxContinuationDecisions: 12,
+    lightgbmRolloutRerankMaxActorHandSize: 10
   };
 }
 
@@ -222,7 +223,8 @@ describe("runtime admin config manager", () => {
       LIGHTGBM_MIN_LEGAL_ACTIONS_FOR_SCORING: "4",
       LIGHTGBM_CONFIDENCE_DELEGATION_MAX_PRE_DELEGATION_MS: "650",
       LIGHTGBM_ROLLOUT_RERANK_MAX_SCORE_MARGIN: "0.05",
-      LIGHTGBM_ROLLOUT_RERANK_MAX_CONTINUATION_DECISIONS: "9"
+      LIGHTGBM_ROLLOUT_RERANK_MAX_CONTINUATION_DECISIONS: "9",
+      LIGHTGBM_ROLLOUT_RERANK_MAX_ACTOR_HAND_SIZE: "8"
     });
 
     expect(result.accepted).toBe(true);
@@ -244,6 +246,7 @@ describe("runtime admin config manager", () => {
     expect(envText).toContain("LIGHTGBM_CONFIDENCE_DELEGATION_MAX_PRE_DELEGATION_MS=650");
     expect(envText).toContain("LIGHTGBM_ROLLOUT_RERANK_MAX_SCORE_MARGIN=0.05");
     expect(envText).toContain("LIGHTGBM_ROLLOUT_RERANK_MAX_CONTINUATION_DECISIONS=9");
+    expect(envText).toContain("LIGHTGBM_ROLLOUT_RERANK_MAX_ACTOR_HAND_SIZE=8");
 
     const reloaded = await service.readConfig();
     expect(reloaded.entries.find((entry) => entry.key === "SIM_PROVIDER")?.savedValue).toBe(
@@ -293,5 +296,11 @@ describe("runtime admin config manager", () => {
           entry.key === "LIGHTGBM_ROLLOUT_RERANK_MAX_CONTINUATION_DECISIONS"
       )?.savedValue
     ).toBe("9");
+    expect(
+      reloaded.entries.find(
+        (entry) =>
+          entry.key === "LIGHTGBM_ROLLOUT_RERANK_MAX_ACTOR_HAND_SIZE"
+      )?.savedValue
+    ).toBe("8");
   });
 });

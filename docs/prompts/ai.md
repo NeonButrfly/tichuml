@@ -41,6 +41,32 @@ Use this file to preserve AI and bot-behavior prompt intent and link it to GitHu
 - Milestone: [6.5 – Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
 - Status Source: GitHub issue state only.
 
+### 2026-06-01 - LightGBM rollout reranking should stay selective on large early-hand positions
+
+- Prompt Signal: The follow-up tuning request kept the same top-K plus rollout
+  serving direction, but fresh local and Linux measurements showed the
+  remaining caller-side timeouts were clustering in low-margin trick-play
+  decisions where the actor still held a large hand and the bounded rerank
+  attempt consumed the whole latency budget without producing a useful
+  override.
+- Interpreted Requirement: Issue
+  [#79](https://github.com/NeonButrfly/tichuml/issues/79) now also tracks a
+  stricter live rerank gate that skips rollout reranking when the acting seat
+  still holds a large hand, records that skip reason in backend metadata, and
+  leaves those spots on the faster deterministic or confidence-delegated path.
+- Affected Systems: `apps/server/src/providers/lightgbm-provider.ts`,
+  `apps/server/src/config/env.ts`,
+  `apps/server/src/services/decision-service.ts`,
+  `apps/server/src/routes/router.ts`,
+  `apps/server/src/services/runtime-admin-service.ts`,
+  `tests/integration/backend-server.test.ts`,
+  `tests/integration/runtime-admin-service.test.ts`,
+  `tests/integration/server-heuristic-contract.test.ts`,
+  `README.md`, `.env.example`.
+- Linked GitHub Issue: [#79](https://github.com/NeonButrfly/tichuml/issues/79)
+- Milestone: [6.5 – Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status Source: GitHub issue state only.
+
 ### 2026-06-01 - LightGBM live serving should avoid spending Python scorer time on tiny trick-play branches
 
 - Prompt Signal: The follow-up AI serving work kept pushing on the same

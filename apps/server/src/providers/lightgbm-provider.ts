@@ -261,6 +261,11 @@ function mean(values: number[]): number | null {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
+function readActorHandSize(stateRaw: GameState, actorSeat: string): number | null {
+  const hand = stateRaw.hands?.[actorSeat as keyof typeof stateRaw.hands];
+  return Array.isArray(hand) ? hand.length : null;
+}
+
 function extractRolloutActorTeamDelta(
   state: GameState,
   actorSeat: SeatId
@@ -398,6 +403,8 @@ function shouldAttemptLightgbmRolloutRerank(config: {
   samplesPerCandidate: number | null | undefined;
   scoreMargin: number;
   maxScoreMargin: number | null | undefined;
+  actorHandSize: number | null;
+  maxActorHandSize: number | null | undefined;
 }): LightgbmRolloutRerankDecision {
   const supported = lightgbmSupportsRolloutRerank(config);
   if (!supported) {
@@ -416,6 +423,19 @@ function shouldAttemptLightgbmRolloutRerank(config: {
     return {
       shouldAttempt: false,
       skippedReason: "score_margin_above_threshold"
+    };
+  }
+
+  if (
+    typeof config.maxActorHandSize === "number" &&
+    Number.isFinite(config.maxActorHandSize) &&
+    config.maxActorHandSize > 0 &&
+    typeof config.actorHandSize === "number" &&
+    config.actorHandSize > config.maxActorHandSize
+  ) {
+    return {
+      shouldAttempt: false,
+      skippedReason: "actor_hand_size_above_threshold"
     };
   }
 
@@ -839,6 +859,7 @@ export async function routeLightgbmDecision(
     rolloutRerankSamples?: number | null;
     rolloutRerankMaxScoreMargin?: number | null;
     rolloutRerankMaxContinuationDecisions?: number | null;
+    rolloutRerankMaxActorHandSize?: number | null;
   } = {}
 ): Promise<RoutedDecision> {
   const startedAt = Date.now();
@@ -864,6 +885,10 @@ export async function routeLightgbmDecision(
     options.rolloutRerankMaxContinuationDecisions === undefined
       ? 12
       : options.rolloutRerankMaxContinuationDecisions;
+  const configuredRolloutMaxActorHandSize =
+    options.rolloutRerankMaxActorHandSize === undefined
+      ? 10
+      : options.rolloutRerankMaxActorHandSize;
   const stateRaw = payload.state_raw;
   if (!isUsableState(stateRaw)) {
     throw new Error(
@@ -1030,6 +1055,7 @@ export async function routeLightgbmDecision(
     if (!selected) {
       throw new Error("LightGBM provider did not produce a ranked legal action.");
     }
+    const actorHandSize = readActorHandSize(stateRaw, canonicalActor);
     const secondBestScore = ranked[1]?.score ?? selected.score;
     const selectedScoreMargin = selected.score - secondBestScore;
     const rolloutRerankDecision = shouldAttemptLightgbmRolloutRerank({
@@ -1039,7 +1065,9 @@ export async function routeLightgbmDecision(
       topK: configuredRolloutTopK,
       samplesPerCandidate: configuredRolloutSamples,
       scoreMargin: selectedScoreMargin,
-      maxScoreMargin: configuredRolloutMaxScoreMargin
+      maxScoreMargin: configuredRolloutMaxScoreMargin,
+      actorHandSize,
+      maxActorHandSize: configuredRolloutMaxActorHandSize
     });
 
     let rolloutRerankResult: LightgbmRolloutRerankResult | null = null;
@@ -1101,6 +1129,22 @@ export async function routeLightgbmDecision(
           provider_path: "lightgbm_model",
           fallback_used: false,
           lightgbm_confidence_delegated: true,
+          lightgbm_rollout_rerank_applied: false,
+          lightgbm_rollout_rerank_top_k:
+            parsePositiveIntegerWithFallback(configuredRolloutTopK, 2),
+          lightgbm_rollout_rerank_samples:
+            parsePositiveIntegerWithFallback(configuredRolloutSamples, 1),
+          lightgbm_rollout_rerank_max_continuation_decisions:
+            parsePositiveIntegerWithFallback(
+              configuredRolloutMaxContinuationDecisions,
+              12
+            ),
+          lightgbm_rollout_rerank_score_margin: selectedScoreMargin,
+          lightgbm_rollout_rerank_score_margin_threshold:
+            configuredRolloutMaxScoreMargin,
+          lightgbm_rollout_rerank_actor_hand_size: actorHandSize,
+          lightgbm_rollout_rerank_actor_hand_size_threshold:
+            configuredRolloutMaxActorHandSize,
           lightgbm_confidence_margin: selectedScoreMargin,
           lightgbm_confidence_threshold: configuredConfidenceMargin,
           lightgbm_confidence_delegation_pre_ms: preDelegationLatencyMs,
@@ -1119,6 +1163,15 @@ export async function routeLightgbmDecision(
             typeof scored.modelMetadata.objective === "string"
               ? scored.modelMetadata.objective
               : null,
+          ...(rolloutRerankDecision.skippedReason
+            ? {
+                lightgbm_rollout_rerank_skipped_reason:
+                  rolloutRerankDecision.skippedReason
+              }
+            : {}),
+          ...(rolloutRerankError
+            ? { lightgbm_rollout_rerank_error: rolloutRerankError }
+            : {}),
         },
         ...(options.traceDecisionRequests !== undefined
           ? { traceDecisionRequests: options.traceDecisionRequests }
@@ -1245,6 +1298,9 @@ export async function routeLightgbmDecision(
           lightgbm_rollout_rerank_score_margin: selectedScoreMargin,
           lightgbm_rollout_rerank_score_margin_threshold:
             configuredRolloutMaxScoreMargin,
+          lightgbm_rollout_rerank_actor_hand_size: actorHandSize,
+          lightgbm_rollout_rerank_actor_hand_size_threshold:
+            configuredRolloutMaxActorHandSize,
           lightgbm_rollout_rerank_overrode_top_score:
             rolloutRerankResult?.overrodeTopScore ?? false,
           lightgbm_confidence_delegation_pre_ms: preDelegationLatencyMs,
@@ -1326,6 +1382,9 @@ export async function routeLightgbmDecision(
         lightgbm_rollout_rerank_score_margin: selectedScoreMargin,
         lightgbm_rollout_rerank_score_margin_threshold:
           configuredRolloutMaxScoreMargin,
+        lightgbm_rollout_rerank_actor_hand_size: actorHandSize,
+        lightgbm_rollout_rerank_actor_hand_size_threshold:
+          configuredRolloutMaxActorHandSize,
         lightgbm_rollout_rerank_overrode_top_score:
           rolloutRerankResult?.overrodeTopScore ?? false,
         lightgbm_confidence_delegation_pre_ms: preDelegationLatencyMs,

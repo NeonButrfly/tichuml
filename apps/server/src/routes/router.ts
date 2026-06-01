@@ -704,6 +704,8 @@ export function createRouter({
                 config.lightgbmRolloutRerankMaxScoreMargin,
               lightgbmRolloutRerankMaxContinuationDecisions:
                 config.lightgbmRolloutRerankMaxContinuationDecisions,
+              lightgbmRolloutRerankMaxActorHandSize:
+                config.lightgbmRolloutRerankMaxActorHandSize,
               ...(lightgbmRolloutReranker
                 ? { lightgbmRolloutReranker }
                 : {}),
