@@ -55,6 +55,7 @@ export type ServerConfig = {
   lightgbmRolloutRerankTopK: number | null;
   lightgbmRolloutRerankSamples: number | null;
   lightgbmRolloutRerankMaxScoreMargin: number | null;
+  lightgbmRolloutRerankMaxContinuationDecisions: number | null;
 };
 
 const DEFAULT_REQUEST_BODY_LIMIT_MB = 25;
@@ -402,6 +403,11 @@ export function loadServerConfig(
       parseOptionalNonNegativeNumberWithFallback(
         mergedEnv.LIGHTGBM_ROLLOUT_RERANK_MAX_SCORE_MARGIN,
         0.1
+      ),
+    lightgbmRolloutRerankMaxContinuationDecisions:
+      parseOptionalPositiveIntegerWithFallback(
+        mergedEnv.LIGHTGBM_ROLLOUT_RERANK_MAX_CONTINUATION_DECISIONS,
+        12
       )
   };
 }

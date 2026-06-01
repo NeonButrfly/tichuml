@@ -577,7 +577,8 @@ const TEST_SERVER_CONFIG: ServerConfig = {
   lightgbmConfidenceMargin: 1.0,
   lightgbmRolloutRerankTopK: 2,
   lightgbmRolloutRerankSamples: 1,
-  lightgbmRolloutRerankMaxScoreMargin: 0.1
+  lightgbmRolloutRerankMaxScoreMargin: 0.1,
+  lightgbmRolloutRerankMaxContinuationDecisions: 12
 };
 
 async function withServer<T>(
@@ -1750,6 +1751,7 @@ describe("backend foundation server routes", () => {
         selected,
         topK: 2,
         samplesPerCandidate: 1,
+        maxContinuationDecisions: 7,
         overrodeTopScore: true,
         candidateResults: ranked.slice(0, 2).map((candidate, index) => ({
           actionKey: candidate.actionKey,
@@ -1777,18 +1779,26 @@ describe("backend foundation server routes", () => {
           metadata?: {
             lightgbm_rollout_rerank_applied?: boolean;
             lightgbm_rollout_rerank_overrode_top_score?: boolean;
+            lightgbm_rollout_rerank_max_continuation_decisions?: number | null;
           };
         };
         expect(payload.accepted).toBe(true);
         expect(payload.provider_used).toBe("lightgbm_model");
         expect(payload.metadata?.lightgbm_rollout_rerank_applied).toBe(true);
         expect(payload.metadata?.lightgbm_rollout_rerank_overrode_top_score).toBe(true);
+        expect(payload.metadata?.lightgbm_rollout_rerank_max_continuation_decisions).toBe(
+          7
+        );
         expect(rerankerCalls).toBe(1);
         await flushServerQueue();
         expect(repository.decisions).toHaveLength(1);
         expect(repository.decisions[0]?.metadata.lightgbm_rollout_rerank_applied).toBe(
           true
         );
+        expect(
+          repository.decisions[0]?.metadata
+            .lightgbm_rollout_rerank_max_continuation_decisions
+        ).toBe(7);
       },
       {
         lightgbmScorer: scorer,
@@ -1798,6 +1808,7 @@ describe("backend foundation server routes", () => {
           lightgbmRolloutRerankTopK: 2,
           lightgbmRolloutRerankSamples: 1,
           lightgbmRolloutRerankMaxScoreMargin: null,
+          lightgbmRolloutRerankMaxContinuationDecisions: 7,
         }
       }
     );
@@ -1831,6 +1842,7 @@ describe("backend foundation server routes", () => {
         selected,
         topK: 2,
         samplesPerCandidate: 1,
+        maxContinuationDecisions: 12,
         overrodeTopScore: true,
         candidateResults: ranked.slice(0, 2).map((candidate, index) => ({
           actionKey: candidate.actionKey,

@@ -79,4 +79,36 @@ describe("rerankLightgbmCandidatesWithRollouts", () => {
 
     expect(result).toBeNull();
   });
+
+  it("passes a configured continuation decision cap into rollout simulation", async () => {
+    const ranked = [
+      createRankedCandidate("candidate-a", 0.9),
+      createRankedCandidate("candidate-b", 0.6),
+    ];
+    const observedCaps: number[] = [];
+
+    const result = await rerankLightgbmCandidatesWithRollouts(
+      {
+        ranked,
+        topK: 2,
+        samplesPerCandidate: 1,
+        maxContinuationDecisions: 7,
+      },
+      {
+        simulateCandidate: async (_candidate, context) => {
+          observedCaps.push(context.maxContinuationDecisions);
+          return {
+            rolloutSamples: 1,
+            rolloutFailures: 0,
+            rolloutMeanActorTeamDelta: 10,
+            rolloutFailureReason: null,
+          };
+        },
+      }
+    );
+
+    expect(result).not.toBeNull();
+    expect(observedCaps).toEqual([7, 7]);
+    expect(result?.maxContinuationDecisions).toBe(7);
+  });
 });

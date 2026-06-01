@@ -238,7 +238,8 @@ const TEST_SERVER_CONFIG: ServerConfig = {
   lightgbmConfidenceMargin: 1.0,
   lightgbmRolloutRerankTopK: 2,
   lightgbmRolloutRerankSamples: 1,
-  lightgbmRolloutRerankMaxScoreMargin: 0.1
+  lightgbmRolloutRerankMaxScoreMargin: 0.1,
+  lightgbmRolloutRerankMaxContinuationDecisions: 12
 };
 
 let nextSafeTestPort = 43210;

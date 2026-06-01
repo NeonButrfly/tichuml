@@ -88,6 +88,7 @@ export type LightgbmRolloutRerankResult = {
   selected: LightgbmRankedCandidate;
   topK: number;
   samplesPerCandidate: number;
+  maxContinuationDecisions: number;
   overrodeTopScore: boolean;
   candidateResults: LightgbmRolloutCandidateResult[];
 };
@@ -104,6 +105,7 @@ export type LightgbmRolloutReranker = (config: {
   ranked: LightgbmRankedCandidate[];
   topK: number;
   samplesPerCandidate: number;
+  maxContinuationDecisions: number;
 }) => Promise<LightgbmRolloutRerankResult | null>;
 
 const TACTICAL_LIGHTGBM_FEATURES = new Set([
@@ -431,15 +433,21 @@ export async function rerankLightgbmCandidatesWithRollouts(
     ranked: LightgbmRankedCandidate[];
     topK: number;
     samplesPerCandidate: number;
+    maxContinuationDecisions: number;
   },
   options: {
     simulateCandidate?: (
-      candidate: LightgbmRankedCandidate
+      candidate: LightgbmRankedCandidate,
+      context: { maxContinuationDecisions: number }
     ) => Promise<Omit<LightgbmRolloutCandidateResult, "actionKey" | "baseScore">>;
   } = {}
 ): Promise<LightgbmRolloutRerankResult | null> {
   const topK = Math.max(2, Math.floor(config.topK));
   const samplesPerCandidate = Math.max(1, Math.floor(config.samplesPerCandidate));
+  const maxContinuationDecisions = Math.max(
+    1,
+    Math.floor(config.maxContinuationDecisions)
+  );
   const rerankCandidates = config.ranked.slice(0, topK);
   if (rerankCandidates.length < 2) {
     return null;
@@ -466,7 +474,7 @@ export async function rerankLightgbmCandidatesWithRollouts(
           let safetyCounter = 0;
 
           while (result.nextState.phase !== "finished") {
-            if (safetyCounter >= 5_000) {
+            if (safetyCounter >= maxContinuationDecisions) {
               throw new Error("lightgbm_rollout_decision_limit_reached");
             }
             safetyCounter += 1;
@@ -513,7 +521,9 @@ export async function rerankLightgbmCandidatesWithRollouts(
 
   const candidateResults: LightgbmRolloutCandidateResult[] = [];
   for (const candidate of rerankCandidates) {
-    const summary = await simulateCandidate(candidate);
+    const summary = await simulateCandidate(candidate, {
+      maxContinuationDecisions,
+    });
     candidateResults.push({
       actionKey: candidate.actionKey,
       baseScore: candidate.score,
@@ -538,6 +548,7 @@ export async function rerankLightgbmCandidatesWithRollouts(
     selected,
     topK,
     samplesPerCandidate,
+    maxContinuationDecisions,
     overrodeTopScore: selected.actionKey !== config.ranked[0]?.actionKey,
     candidateResults,
   };
@@ -691,6 +702,7 @@ export async function routeLightgbmDecision(
     rolloutRerankTopK?: number | null;
     rolloutRerankSamples?: number | null;
     rolloutRerankMaxScoreMargin?: number | null;
+    rolloutRerankMaxContinuationDecisions?: number | null;
   } = {}
 ): Promise<RoutedDecision> {
   const startedAt = Date.now();
@@ -704,6 +716,10 @@ export async function routeLightgbmDecision(
     options.rolloutRerankMaxScoreMargin === undefined
       ? 0.1
       : options.rolloutRerankMaxScoreMargin;
+  const configuredRolloutMaxContinuationDecisions =
+    options.rolloutRerankMaxContinuationDecisions === undefined
+      ? 12
+      : options.rolloutRerankMaxContinuationDecisions;
   const stateRaw = payload.state_raw;
   if (!isUsableState(stateRaw)) {
     throw new Error(
@@ -856,7 +872,11 @@ export async function routeLightgbmDecision(
           samplesPerCandidate: parsePositiveIntegerWithFallback(
             configuredRolloutSamples,
             1
-          )
+          ),
+          maxContinuationDecisions: parsePositiveIntegerWithFallback(
+            configuredRolloutMaxContinuationDecisions,
+            12
+          ),
         });
         if (rolloutRerankResult) {
           selected = rolloutRerankResult.selected;
@@ -1023,6 +1043,12 @@ export async function routeLightgbmDecision(
           lightgbm_rollout_rerank_top_k: rolloutRerankResult?.topK ?? null,
           lightgbm_rollout_rerank_samples:
             rolloutRerankResult?.samplesPerCandidate ?? null,
+          lightgbm_rollout_rerank_max_continuation_decisions:
+            rolloutRerankResult?.maxContinuationDecisions ??
+            parsePositiveIntegerWithFallback(
+              configuredRolloutMaxContinuationDecisions,
+              12
+            ),
           lightgbm_rollout_rerank_score_margin: selectedScoreMargin,
           lightgbm_rollout_rerank_score_margin_threshold:
             configuredRolloutMaxScoreMargin,
@@ -1089,6 +1115,12 @@ export async function routeLightgbmDecision(
         lightgbm_rollout_rerank_top_k: rolloutRerankResult?.topK ?? null,
         lightgbm_rollout_rerank_samples:
           rolloutRerankResult?.samplesPerCandidate ?? null,
+        lightgbm_rollout_rerank_max_continuation_decisions:
+          rolloutRerankResult?.maxContinuationDecisions ??
+          parsePositiveIntegerWithFallback(
+            configuredRolloutMaxContinuationDecisions,
+            12
+          ),
         lightgbm_rollout_rerank_score_margin: selectedScoreMargin,
         lightgbm_rollout_rerank_score_margin_threshold:
           configuredRolloutMaxScoreMargin,
