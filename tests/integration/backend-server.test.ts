@@ -35,6 +35,7 @@ import {
 import { createAppServer } from "../../apps/server/src/app";
 import type { ServerConfig } from "../../apps/server/src/config/env";
 import type { LightgbmScorer } from "../../apps/server/src/ml/lightgbm-scorer";
+import type { LightgbmRolloutReranker } from "../../apps/server/src/providers/lightgbm-provider";
 import type {
   RuntimeActionResult,
   RuntimeAdminService,
@@ -573,13 +574,16 @@ const TEST_SERVER_CONFIG: ServerConfig = {
   lightgbmInferScript: "ml/infer.py",
   lightgbmModelPath: "ml/model_registry/lightgbm_action_model.txt",
   lightgbmModelMetaPath: "ml/model_registry/lightgbm_action_model.meta.json",
-  lightgbmConfidenceMargin: 1.0
+  lightgbmConfidenceMargin: 1.0,
+  lightgbmRolloutRerankTopK: 2,
+  lightgbmRolloutRerankSamples: 1
 };
 
 async function withServer<T>(
   callback: (config: { baseUrl: string; repository: InMemoryTelemetryRepository }) => Promise<T>,
   options: {
     lightgbmScorer?: LightgbmScorer;
+    lightgbmRolloutReranker?: LightgbmRolloutReranker;
     serverConfig?: Partial<ServerConfig>;
     simController?: SimControllerService;
     runtimeAdmin?: RuntimeAdminService;
@@ -590,6 +594,7 @@ async function withServer<T>(
     serverConfig: { ...TEST_SERVER_CONFIG, ...(options.serverConfig ?? {}) },
     repository,
     lightgbmScorer: options.lightgbmScorer,
+    lightgbmRolloutReranker: options.lightgbmRolloutReranker,
     simController: options.simController ?? new InMemorySimController(),
     runtimeAdmin: options.runtimeAdmin ?? new InMemoryRuntimeAdmin()
   });
@@ -1536,7 +1541,13 @@ describe("backend foundation server routes", () => {
           true
         );
       },
-      { lightgbmScorer: scorer }
+      {
+        lightgbmScorer: scorer,
+        serverConfig: {
+          lightgbmRolloutRerankTopK: null,
+          lightgbmRolloutRerankSamples: null
+        }
+      }
     );
   });
 
@@ -1585,7 +1596,13 @@ describe("backend foundation server routes", () => {
           true
         );
       },
-      { lightgbmScorer: scorer }
+      {
+        lightgbmScorer: scorer,
+        serverConfig: {
+          lightgbmRolloutRerankTopK: null,
+          lightgbmRolloutRerankSamples: null
+        }
+      }
     );
   });
 
@@ -1640,7 +1657,13 @@ describe("backend foundation server routes", () => {
           repository.decisions[0]?.metadata.lightgbm_confidence_delegated
         ).toBe(true);
       },
-      { lightgbmScorer: scorer }
+      {
+        lightgbmScorer: scorer,
+        serverConfig: {
+          lightgbmRolloutRerankTopK: null,
+          lightgbmRolloutRerankSamples: null
+        }
+      }
     );
   });
 
@@ -1694,6 +1717,86 @@ describe("backend foundation server routes", () => {
       {
         lightgbmScorer: scorer,
         serverConfig: { lightgbmConfidenceMargin: null }
+      }
+    );
+  });
+
+  it("chooses the rollout-reranked winner instead of the top raw LightGBM score", async () => {
+    const scorer: LightgbmScorer = {
+      async score(request) {
+        return {
+          scores: request.legalActions.map((_, index) => (index === 0 ? 0.95 : 0.5)),
+          modelMetadata: {
+            model_type: "lightgbm_action_model",
+            objective: "rollout_ranker",
+            feature_profile: "runtime_raw",
+          },
+          runtimeMetadata: {}
+        };
+      },
+      async close() {}
+    };
+
+    let rerankerCalls = 0;
+    const reranker: LightgbmRolloutReranker = async ({ ranked }) => {
+      rerankerCalls += 1;
+      const selected = ranked[1];
+      if (!selected) {
+        return null;
+      }
+
+      return {
+        selected,
+        topK: 2,
+        samplesPerCandidate: 1,
+        overrodeTopScore: true,
+        candidateResults: ranked.slice(0, 2).map((candidate, index) => ({
+          actionKey: candidate.actionKey,
+          baseScore: candidate.score,
+          rolloutSamples: 1,
+          rolloutFailures: 0,
+          rolloutMeanActorTeamDelta: index === 0 ? -50 : 125,
+          rolloutFailureReason: null,
+        })),
+      };
+    };
+
+    await withServer(
+      async ({ baseUrl, repository }) => {
+        const response = await fetch(`${baseUrl}/api/decision/request`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(createLargeTrickPlayDecisionRequestBody().payload)
+        });
+
+        expect(response.status).toBe(200);
+        const payload = (await response.json()) as {
+          accepted: boolean;
+          provider_used: string;
+          metadata?: {
+            lightgbm_rollout_rerank_applied?: boolean;
+            lightgbm_rollout_rerank_overrode_top_score?: boolean;
+          };
+        };
+        expect(payload.accepted).toBe(true);
+        expect(payload.provider_used).toBe("lightgbm_model");
+        expect(payload.metadata?.lightgbm_rollout_rerank_applied).toBe(true);
+        expect(payload.metadata?.lightgbm_rollout_rerank_overrode_top_score).toBe(true);
+        expect(rerankerCalls).toBe(1);
+        await flushServerQueue();
+        expect(repository.decisions).toHaveLength(1);
+        expect(repository.decisions[0]?.metadata.lightgbm_rollout_rerank_applied).toBe(
+          true
+        );
+      },
+      {
+        lightgbmScorer: scorer,
+        lightgbmRolloutReranker: reranker,
+        serverConfig: {
+          lightgbmConfidenceMargin: null,
+          lightgbmRolloutRerankTopK: 2,
+          lightgbmRolloutRerankSamples: 1,
+        }
       }
     );
   });

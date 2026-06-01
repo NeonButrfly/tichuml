@@ -1,12 +1,21 @@
 import {
   buildServerFastPathState,
+  buildCanonicalDecisionRequest,
   type CandidateActionFeatureSnapshot,
   createHeuristicFeatureAnalyzer,
   generateFastTrickPlayCandidates,
   SERVER_HEURISTIC_FAST_PATH_LIMITS,
   type TacticalFeatureSnapshot
 } from "@tichuml/ai-heuristics";
-import type { GameState, LegalAction } from "@tichuml/engine";
+import {
+  applyEngineAction,
+  resolveContinuationActor,
+  SYSTEM_ACTOR,
+  type EngineAction,
+  type GameState,
+  type LegalAction,
+  type SeatId,
+} from "@tichuml/engine";
 import type { DecisionRequestPayload, JsonObject } from "@tichuml/shared";
 import type {
   LightgbmFeatureRequirements,
@@ -57,6 +66,40 @@ type PreparedLightgbmFeatureInputs = {
   candidateFeatures: Array<CandidateActionFeatureSnapshot | null>;
   metadata: JsonObject;
 };
+
+export type LightgbmRankedCandidate = {
+  legalAction: LegalAction;
+  score: number;
+  concreteAction: JsonObject;
+  actionKey: string;
+  features: CandidateActionFeatureSnapshot | null;
+};
+
+export type LightgbmRolloutCandidateResult = {
+  actionKey: string;
+  baseScore: number;
+  rolloutSamples: number;
+  rolloutFailures: number;
+  rolloutMeanActorTeamDelta: number | null;
+  rolloutFailureReason: string | null;
+};
+
+export type LightgbmRolloutRerankResult = {
+  selected: LightgbmRankedCandidate;
+  topK: number;
+  samplesPerCandidate: number;
+  overrodeTopScore: boolean;
+  candidateResults: LightgbmRolloutCandidateResult[];
+};
+
+export type LightgbmRolloutReranker = (config: {
+  payload: DecisionRequestPayload;
+  stateRaw: GameState;
+  actorSeat: string;
+  ranked: LightgbmRankedCandidate[];
+  topK: number;
+  samplesPerCandidate: number;
+}) => Promise<LightgbmRolloutRerankResult | null>;
 
 const TACTICAL_LIGHTGBM_FEATURES = new Set([
   "likely_wins_current_trick_flag",
@@ -176,6 +219,287 @@ function prefilterLightgbmLegalActions(
       candidate_prefilter_limit:
         SERVER_HEURISTIC_FAST_PATH_LIMITS.trick_play_candidate_cap
     }
+  };
+}
+
+function parsePositiveIntegerWithFallback(
+  value: number | null | undefined,
+  fallback: number
+): number {
+  return typeof value === "number" &&
+    Number.isFinite(value) &&
+    value > 0
+    ? Math.floor(value)
+    : fallback;
+}
+
+function partnerSeatFor(actorSeat: SeatId): SeatId {
+  return actorSeat === "seat-0"
+    ? "seat-2"
+    : actorSeat === "seat-2"
+      ? "seat-0"
+      : actorSeat === "seat-1"
+        ? "seat-3"
+        : "seat-1";
+}
+
+function teamForSeat(seat: SeatId): "team-0" | "team-1" {
+  return seat === "seat-0" || seat === "seat-2" ? "team-0" : "team-1";
+}
+
+function mean(values: number[]): number | null {
+  if (values.length === 0) {
+    return null;
+  }
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function extractRolloutActorTeamDelta(
+  state: GameState,
+  actorSeat: SeatId
+): number | null {
+  const actorTeam = teamForSeat(actorSeat);
+  const opponentTeam = actorTeam === "team-0" ? "team-1" : "team-0";
+  const handSummary =
+    state.roundSummary ??
+    (state.matchHistory.length > 0
+      ? {
+          teamScores:
+            state.matchHistory[state.matchHistory.length - 1]?.teamScores ??
+            state.matchScore,
+        }
+      : null);
+  const actorTeamScore = handSummary?.teamScores?.[actorTeam] ?? null;
+  const opponentTeamScore = handSummary?.teamScores?.[opponentTeam] ?? null;
+  return actorTeamScore !== null && opponentTeamScore !== null
+    ? actorTeamScore - opponentTeamScore
+    : null;
+}
+
+function selectSystemContinuationAction(
+  stateRaw: GameState,
+  legalActions: Record<string, LegalAction[]>
+): JsonObject {
+  const actions = legalActions[SYSTEM_ACTOR] ?? [];
+  if (actions.length === 0) {
+    throw new Error(
+      `No system-owned continuation action was available for phase ${stateRaw.phase}.`
+    );
+  }
+
+  const sorted = [...actions].sort((left, right) =>
+    toLegalActionKey(stateRaw, left).localeCompare(toLegalActionKey(stateRaw, right))
+  );
+  const selectedAction = sorted[0];
+  if (!selectedAction) {
+    throw new Error(
+      `System continuation sorting produced no action for phase ${stateRaw.phase}.`
+    );
+  }
+
+  return toConcreteActionForLegalAction(stateRaw, selectedAction);
+}
+
+function resolveRolloutContinuationAction(config: {
+  payload: DecisionRequestPayload;
+  stateRaw: GameState;
+  legalActions: Record<string, LegalAction[]>;
+  actor: SeatId | typeof SYSTEM_ACTOR;
+  decisionIndex: number;
+}): JsonObject {
+  if (config.actor === SYSTEM_ACTOR) {
+    return selectSystemContinuationAction(config.stateRaw, config.legalActions);
+  }
+
+  const request = buildCanonicalDecisionRequest({
+    gameId: config.payload.game_id,
+    handId: config.payload.hand_id,
+    state: config.stateRaw,
+    derived: config.stateRaw as unknown as JsonObject,
+    legalActions: config.legalActions,
+    requestedProvider: "server_heuristic",
+    decisionIndex: config.decisionIndex,
+    actorSeat: config.actor,
+  });
+  const routed = routeHeuristicDecision(request.payload);
+  return routed.chosen.action as unknown as JsonObject;
+}
+
+function compareLightgbmRolloutCandidates(
+  left: LightgbmRolloutCandidateResult,
+  right: LightgbmRolloutCandidateResult
+): number {
+  const leftDelta = left.rolloutMeanActorTeamDelta;
+  const rightDelta = right.rolloutMeanActorTeamDelta;
+
+  if (leftDelta !== null && rightDelta !== null && rightDelta !== leftDelta) {
+    return rightDelta - leftDelta;
+  }
+  if (leftDelta !== null && rightDelta === null) {
+    return -1;
+  }
+  if (leftDelta === null && rightDelta !== null) {
+    return 1;
+  }
+  if (left.rolloutFailures !== right.rolloutFailures) {
+    return left.rolloutFailures - right.rolloutFailures;
+  }
+  if (right.baseScore !== left.baseScore) {
+    return right.baseScore - left.baseScore;
+  }
+  return left.actionKey.localeCompare(right.actionKey);
+}
+
+function lightgbmSupportsRolloutRerank(config: {
+  phase: string;
+  featureRequirements: LightgbmFeatureRequirements | null | undefined;
+  modelMetadata: JsonObject;
+  topK: number | null | undefined;
+  samplesPerCandidate: number | null | undefined;
+}): boolean {
+  if (normalizeLightgbmPhase(config.phase) !== "trick_play") {
+    return false;
+  }
+
+  const topK = parsePositiveIntegerWithFallback(config.topK, 0);
+  const samplesPerCandidate = parsePositiveIntegerWithFallback(
+    config.samplesPerCandidate,
+    0
+  );
+  if (topK < 2 || samplesPerCandidate < 1) {
+    return false;
+  }
+
+  const objective =
+    typeof config.modelMetadata.objective === "string"
+      ? config.modelMetadata.objective
+      : null;
+  const featureProfile =
+    config.featureRequirements?.featureProfile ??
+    (typeof config.modelMetadata.feature_profile === "string"
+      ? config.modelMetadata.feature_profile
+      : null);
+
+  return objective === "rollout_ranker" && featureProfile === "runtime_raw";
+}
+
+export async function rerankLightgbmCandidatesWithRollouts(
+  config: {
+    payload: DecisionRequestPayload;
+    stateRaw: GameState;
+    actorSeat: string;
+    ranked: LightgbmRankedCandidate[];
+    topK: number;
+    samplesPerCandidate: number;
+  },
+  options: {
+    simulateCandidate?: (
+      candidate: LightgbmRankedCandidate
+    ) => Promise<Omit<LightgbmRolloutCandidateResult, "actionKey" | "baseScore">>;
+  } = {}
+): Promise<LightgbmRolloutRerankResult | null> {
+  const topK = Math.max(2, Math.floor(config.topK));
+  const samplesPerCandidate = Math.max(1, Math.floor(config.samplesPerCandidate));
+  const rerankCandidates = config.ranked.slice(0, topK);
+  if (rerankCandidates.length < 2) {
+    return null;
+  }
+
+  const actorSeat = config.actorSeat as SeatId;
+  const simulateCandidate =
+    options.simulateCandidate ??
+    (async (candidate: LightgbmRankedCandidate) => {
+      const deltas: number[] = [];
+      let rolloutFailures = 0;
+      let rolloutFailureReason: string | null = null;
+
+      for (let sampleIndex = 0; sampleIndex < samplesPerCandidate; sampleIndex += 1) {
+        try {
+          let result = applyEngineAction(
+            config.stateRaw,
+            candidate.concreteAction as never
+          );
+          let continuationDecisionIndex =
+            (typeof config.payload.metadata.decision_index === "number"
+              ? config.payload.metadata.decision_index
+              : 0) + 1;
+          let safetyCounter = 0;
+
+          while (result.nextState.phase !== "finished") {
+            if (safetyCounter >= 5_000) {
+              throw new Error("lightgbm_rollout_decision_limit_reached");
+            }
+            safetyCounter += 1;
+
+            const continuation = resolveContinuationActor({
+              legalActions: result.legalActions,
+              state: result.nextState,
+            });
+            if (!continuation.ok) {
+              throw new Error(
+                `lightgbm_rollout_continuation_unavailable:${continuation.stopReason}`
+              );
+            }
+
+            const chosenAction = resolveRolloutContinuationAction({
+              payload: config.payload,
+              stateRaw: result.nextState,
+              legalActions: result.legalActions,
+              actor: continuation.actor,
+              decisionIndex: continuationDecisionIndex,
+            });
+            result = applyEngineAction(result.nextState, chosenAction as never);
+            continuationDecisionIndex += 1;
+          }
+
+          const delta = extractRolloutActorTeamDelta(result.nextState, actorSeat);
+          if (delta !== null) {
+            deltas.push(delta);
+          }
+        } catch (error) {
+          rolloutFailures += 1;
+          rolloutFailureReason =
+            error instanceof Error ? error.message : String(error);
+        }
+      }
+
+      return {
+        rolloutSamples: deltas.length,
+        rolloutFailures,
+        rolloutMeanActorTeamDelta: mean(deltas),
+        rolloutFailureReason,
+      };
+    });
+
+  const candidateResults: LightgbmRolloutCandidateResult[] = [];
+  for (const candidate of rerankCandidates) {
+    const summary = await simulateCandidate(candidate);
+    candidateResults.push({
+      actionKey: candidate.actionKey,
+      baseScore: candidate.score,
+      ...summary,
+    });
+  }
+
+  const selectedResult = [...candidateResults].sort(compareLightgbmRolloutCandidates)[0];
+  if (!selectedResult || selectedResult.rolloutMeanActorTeamDelta === null) {
+    return null;
+  }
+
+  const selected =
+    rerankCandidates.find(
+      (candidate) => candidate.actionKey === selectedResult.actionKey
+    ) ?? null;
+  if (!selected) {
+    return null;
+  }
+
+  return {
+    selected,
+    topK,
+    samplesPerCandidate,
+    overrodeTopScore: selected.actionKey !== config.ranked[0]?.actionKey,
+    candidateResults,
   };
 }
 
@@ -323,11 +647,18 @@ export async function routeLightgbmDecision(
   options: {
     traceDecisionRequests?: boolean;
     confidenceMargin?: number | null;
+    rolloutReranker?: LightgbmRolloutReranker;
+    rolloutRerankTopK?: number | null;
+    rolloutRerankSamples?: number | null;
   } = {}
 ): Promise<RoutedDecision> {
   const startedAt = Date.now();
   const configuredConfidenceMargin =
     options.confidenceMargin === undefined ? 1.0 : options.confidenceMargin;
+  const configuredRolloutTopK =
+    options.rolloutRerankTopK === undefined ? 2 : options.rolloutRerankTopK;
+  const configuredRolloutSamples =
+    options.rolloutRerankSamples === undefined ? 1 : options.rolloutRerankSamples;
   const stateRaw = payload.state_raw;
   if (!isUsableState(stateRaw)) {
     throw new Error(
@@ -431,10 +762,13 @@ export async function routeLightgbmDecision(
       throw new Error("LightGBM returned non-finite candidate scores.");
     }
 
-    const ranked = scoringLegalActions.map((legalAction, index) => ({
+    const ranked: LightgbmRankedCandidate[] = scoringLegalActions.map((legalAction, index) => ({
       legalAction,
       score: scored.scores[index] ?? 0,
-      concreteAction: toConcreteActionForLegalAction(stateRaw, legalAction),
+      concreteAction: toConcreteActionForLegalAction(
+        stateRaw,
+        legalAction
+      ) as unknown as JsonObject,
       actionKey: toLegalActionKey(stateRaw, legalAction),
       features: featureInputs.candidateFeatures[index] ?? null
     }));
@@ -447,14 +781,48 @@ export async function routeLightgbmDecision(
       return left.actionKey.localeCompare(right.actionKey);
     });
 
-    const selected = ranked[0];
+    let selected = ranked[0];
     if (!selected) {
       throw new Error("LightGBM provider did not produce a ranked legal action.");
     }
     const secondBestScore = ranked[1]?.score ?? selected.score;
     const selectedScoreMargin = selected.score - secondBestScore;
 
+    let rolloutRerankResult: LightgbmRolloutRerankResult | null = null;
+    let rolloutRerankError: string | null = null;
+    const reranker = options.rolloutReranker ?? rerankLightgbmCandidatesWithRollouts;
     if (
+      lightgbmSupportsRolloutRerank({
+        phase: payload.phase,
+        featureRequirements,
+        modelMetadata: scored.modelMetadata,
+        topK: configuredRolloutTopK,
+        samplesPerCandidate: configuredRolloutSamples
+      })
+    ) {
+      try {
+        rolloutRerankResult = await reranker({
+          payload,
+          stateRaw,
+          actorSeat: canonicalActor,
+          ranked,
+          topK: parsePositiveIntegerWithFallback(configuredRolloutTopK, 2),
+          samplesPerCandidate: parsePositiveIntegerWithFallback(
+            configuredRolloutSamples,
+            1
+          )
+        });
+        if (rolloutRerankResult) {
+          selected = rolloutRerankResult.selected;
+        }
+      } catch (error) {
+        rolloutRerankError =
+          error instanceof Error ? error.message : String(error);
+      }
+    }
+
+    if (
+      !rolloutRerankResult &&
       lightgbmShouldDelegateLowConfidenceDecision({
         phase: payload.phase,
         featureRequirements,
@@ -499,7 +867,7 @@ export async function routeLightgbmDecision(
       });
     }
 
-    const concreteAction = selected.concreteAction;
+    const concreteAction = selected.concreteAction as unknown as EngineAction;
     const topKCandidateScores = ranked.slice(0, 3).map((entry) => ({
       action_key: entry.actionKey,
       score: entry.score,
@@ -513,9 +881,11 @@ export async function routeLightgbmDecision(
       feature_build_ms: featureBuildMs,
       ...featureInputs.metadata
     } as JsonObject;
-    const providerReason = "Resolved by the LightGBM action model on the backend.";
+    const providerReason = rolloutRerankResult
+      ? "Resolved by LightGBM candidate scoring plus bounded heuristic rollout reranking on the backend."
+      : "Resolved by the LightGBM action model on the backend.";
     const explanation = {
-      policy: "lightgbm-action-model",
+      policy: rolloutRerankResult ? "lightgbm-rollout-rerank" : "lightgbm-action-model",
       actor: canonicalActor,
       stateFeatures: featureInputs.stateFeatures,
       candidateScores: ranked.map((entry) => ({
@@ -525,10 +895,16 @@ export async function routeLightgbmDecision(
         reasons: ["LightGBM model score"],
         tags: []
       })),
-      selectedReasonSummary: [
-        "ranked legal actions with the shared LightGBM feature builder",
-        "selected the highest-scoring deterministic candidate"
-      ],
+      selectedReasonSummary: rolloutRerankResult
+        ? [
+            "ranked legal actions with the shared LightGBM feature builder",
+            `reranked the top ${rolloutRerankResult.topK} LightGBM candidates with bounded backend-heuristic continuation rollouts`,
+            "selected the strongest projected team outcome among the reranked candidates"
+          ]
+        : [
+            "ranked legal actions with the shared LightGBM feature builder",
+            "selected the highest-scoring deterministic candidate"
+          ],
       selectedTags: ["TEMPO_WIN"]
     };
 
@@ -541,7 +917,12 @@ export async function routeLightgbmDecision(
         "lightgbm-action-model",
         [
           "ranked legal actions with the shared LightGBM feature builder",
-          "selected the highest-scoring deterministic candidate"
+          ...(rolloutRerankResult
+            ? [
+                `reranked the top ${rolloutRerankResult.topK} LightGBM candidates with bounded backend-heuristic continuation rollouts`,
+                "selected the strongest projected team outcome among the reranked candidates"
+              ]
+            : ["selected the highest-scoring deterministic candidate"])
         ],
         ["TEMPO_WIN"]
       ),
@@ -592,6 +973,17 @@ export async function routeLightgbmDecision(
               ? modelMetadata.feature_schema_version
               : null,
           selected_candidate_score: selected.score,
+          lightgbm_rollout_rerank_applied: rolloutRerankResult !== null,
+          lightgbm_rollout_rerank_top_k: rolloutRerankResult?.topK ?? null,
+          lightgbm_rollout_rerank_samples:
+            rolloutRerankResult?.samplesPerCandidate ?? null,
+          lightgbm_rollout_rerank_overrode_top_score:
+            rolloutRerankResult?.overrodeTopScore ?? false,
+          lightgbm_rollout_rerank_results:
+            rolloutRerankResult?.candidateResults ?? null,
+          ...(rolloutRerankError
+            ? { lightgbm_rollout_rerank_error: rolloutRerankError }
+            : {}),
           candidate_score_distribution: scoreDistribution,
           top_k_candidate_scores: topKCandidateScores,
           provider_used: "lightgbm_model",
@@ -638,6 +1030,17 @@ export async function routeLightgbmDecision(
         })),
         chosen_action: concreteAction,
         selected_candidate_score: selected.score,
+        lightgbm_rollout_rerank_applied: rolloutRerankResult !== null,
+        lightgbm_rollout_rerank_top_k: rolloutRerankResult?.topK ?? null,
+        lightgbm_rollout_rerank_samples:
+          rolloutRerankResult?.samplesPerCandidate ?? null,
+        lightgbm_rollout_rerank_overrode_top_score:
+          rolloutRerankResult?.overrodeTopScore ?? false,
+        lightgbm_rollout_rerank_results:
+          rolloutRerankResult?.candidateResults ?? null,
+        ...(rolloutRerankError
+          ? { lightgbm_rollout_rerank_error: rolloutRerankError }
+          : {}),
         candidate_score_distribution: scoreDistribution,
         top_k_candidate_scores: topKCandidateScores,
         model_id:

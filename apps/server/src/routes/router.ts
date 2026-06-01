@@ -28,6 +28,7 @@ import {
 } from "../entropy/index.js";
 import type { ServerConfig } from "../config/env.js";
 import type { LightgbmScorer } from "../ml/lightgbm-scorer.js";
+import type { LightgbmRolloutReranker } from "../providers/lightgbm-provider.js";
 import { handleDecisionRequest } from "../services/decision-service.js";
 import { summarizeDecisionRequest } from "../providers/provider-utils.js";
 import type { RuntimeAdminService } from "../services/runtime-admin-service.js";
@@ -55,6 +56,7 @@ type RouterDependencies = {
   runtimeAdmin: RuntimeAdminService;
   telemetryQueue: TelemetryIngestQueue;
   lightgbmScorer?: LightgbmScorer;
+  lightgbmRolloutReranker?: LightgbmRolloutReranker;
 };
 
 const SIM_DASHBOARD_PATHS = new Set(["/admin/sim", "/sim/control"]);
@@ -295,7 +297,8 @@ export function createRouter({
   simController,
   runtimeAdmin,
   telemetryQueue,
-  lightgbmScorer
+  lightgbmScorer,
+  lightgbmRolloutReranker
 }: RouterDependencies): http.RequestListener {
   return async (request, response) => {
     if (!request.url) {
@@ -684,13 +687,18 @@ export function createRouter({
         });
         let decisionResponse;
         try {
-          decisionResponse = await handleDecisionRequest(
+            decisionResponse = await handleDecisionRequest(
             repository,
             parsed.value,
             {
               ...(lightgbmScorer ? { lightgbmScorer } : {}),
               traceDecisionRequests: config.traceDecisionRequests,
               lightgbmConfidenceMargin: config.lightgbmConfidenceMargin,
+              lightgbmRolloutRerankTopK: config.lightgbmRolloutRerankTopK,
+              lightgbmRolloutRerankSamples: config.lightgbmRolloutRerankSamples,
+              ...(lightgbmRolloutReranker
+                ? { lightgbmRolloutReranker }
+                : {}),
               parseMs,
               validateMs,
               payloadBytes,

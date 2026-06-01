@@ -218,7 +218,9 @@ const CONFIG_SCHEMA: Array<{
   { key: "LIGHTGBM_INFER_SCRIPT", label: "LightGBM infer script", category: "ML", type: "string", restart_required: true, description: "LightGBM inference script path." },
   { key: "LIGHTGBM_MODEL_PATH", label: "LightGBM model", category: "ML", type: "string", restart_required: true, description: "LightGBM model file path." },
   { key: "LIGHTGBM_MODEL_META_PATH", label: "LightGBM model metadata", category: "ML", type: "string", restart_required: true, description: "LightGBM model metadata path." },
-  { key: "LIGHTGBM_CONFIDENCE_MARGIN", label: "LightGBM confidence margin", category: "ML", type: "number", restart_required: true, description: "Optional rollout-ranker score margin cutoff below which LightGBM delegates trick-play decisions back to the backend heuristic. Leave blank to disable the gate.", validate: validateOptionalNonNegativeNumber }
+  { key: "LIGHTGBM_CONFIDENCE_MARGIN", label: "LightGBM confidence margin", category: "ML", type: "number", restart_required: true, description: "Optional rollout-ranker score margin cutoff below which LightGBM delegates trick-play decisions back to the backend heuristic. Leave blank to disable the gate.", validate: validateOptionalNonNegativeNumber },
+  { key: "LIGHTGBM_ROLLOUT_RERANK_TOP_K", label: "LightGBM rollout top K", category: "ML", type: "number", restart_required: true, description: "Optional top-K LightGBM trick-play candidates to rerank with bounded heuristic rollouts. Leave blank to disable rollout reranking.", validate: validateOptionalPositiveNumber },
+  { key: "LIGHTGBM_ROLLOUT_RERANK_SAMPLES", label: "LightGBM rollout samples", category: "ML", type: "number", restart_required: true, description: "Optional rollout samples per LightGBM candidate during bounded live reranking. Leave blank to disable rollout reranking.", validate: validateOptionalPositiveNumber }
 ];
 
 const EDITABLE_KEYS = new Set(CONFIG_SCHEMA.map((entry) => entry.key));
@@ -589,6 +591,14 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
       LIGHTGBM_CONFIDENCE_MARGIN:
         this.config.lightgbmConfidenceMargin !== null
           ? String(this.config.lightgbmConfidenceMargin)
+          : "",
+      LIGHTGBM_ROLLOUT_RERANK_TOP_K:
+        this.config.lightgbmRolloutRerankTopK !== null
+          ? String(this.config.lightgbmRolloutRerankTopK)
+          : "",
+      LIGHTGBM_ROLLOUT_RERANK_SAMPLES:
+        this.config.lightgbmRolloutRerankSamples !== null
+          ? String(this.config.lightgbmRolloutRerankSamples)
           : ""
     };
     return disk[key] ?? fallback[key] ?? "";
@@ -702,6 +712,14 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
       case "LIGHTGBM_CONFIDENCE_MARGIN":
         return this.config.lightgbmConfidenceMargin !== null
           ? String(this.config.lightgbmConfidenceMargin)
+          : "";
+      case "LIGHTGBM_ROLLOUT_RERANK_TOP_K":
+        return this.config.lightgbmRolloutRerankTopK !== null
+          ? String(this.config.lightgbmRolloutRerankTopK)
+          : "";
+      case "LIGHTGBM_ROLLOUT_RERANK_SAMPLES":
+        return this.config.lightgbmRolloutRerankSamples !== null
+          ? String(this.config.lightgbmRolloutRerankSamples)
           : "";
       default:
         return undefined;

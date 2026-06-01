@@ -1,6 +1,7 @@
 import http from "node:http";
 import type { ServerConfig } from "./config/env.js";
 import type { LightgbmScorer } from "./ml/lightgbm-scorer.js";
+import type { LightgbmRolloutReranker } from "./providers/lightgbm-provider.js";
 import { createRouter } from "./routes/router.js";
 import {
   FileRuntimeAdminService,
@@ -17,6 +18,7 @@ export function createAppServer(config: {
   serverConfig: ServerConfig;
   repository: TelemetryRepository;
   lightgbmScorer?: LightgbmScorer;
+  lightgbmRolloutReranker?: LightgbmRolloutReranker;
   simController?: SimControllerService;
   runtimeAdmin?: RuntimeAdminService;
   telemetryQueue?: TelemetryIngestQueue;
@@ -35,13 +37,16 @@ export function createAppServer(config: {
   const server = http.createServer(
     createRouter(
       config.lightgbmScorer
-        ? {
+          ? {
             config: config.serverConfig,
             repository: config.repository,
             lightgbmScorer: config.lightgbmScorer,
             simController,
             runtimeAdmin,
-            telemetryQueue
+            telemetryQueue,
+            ...(config.lightgbmRolloutReranker
+              ? { lightgbmRolloutReranker: config.lightgbmRolloutReranker }
+              : {})
           }
         : {
             config: config.serverConfig,

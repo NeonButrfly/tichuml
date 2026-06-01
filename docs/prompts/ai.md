@@ -14,6 +14,33 @@ Use this file to preserve AI and bot-behavior prompt intent and link it to GitHu
 
 ## Entries
 
+### 2026-06-01 - LightGBM serving should step up from raw move scoring to top-K plus rollout choice
+
+- Prompt Signal: The latest AI-behavior request explicitly pushed the project
+  past plain LightGBM move ranking and asked for the next practical step:
+  keep LightGBM as the first-pass scorer, then choose the final trick-play move
+  from the top candidates using rollout continuation instead of trusting the top
+  raw score alone.
+- Interpreted Requirement: Issue
+  [#79](https://github.com/NeonButrfly/tichuml/issues/79) now also tracks a
+  bounded live serving path where eligible `rollout_ranker` `runtime_raw`
+  LightGBM trick-play requests are scored first, reranked through a small
+  backend-heuristic continuation rollout over the top `K` candidates, and only
+  then finalized for live backend play, while keeping the older low-confidence
+  delegation gate available when rollout reranking is disabled.
+- Affected Systems: `apps/server/src/providers/lightgbm-provider.ts`,
+  `apps/server/src/config/env.ts`,
+  `apps/server/src/services/decision-service.ts`,
+  `apps/server/src/routes/router.ts`,
+  `apps/server/src/services/runtime-admin-service.ts`,
+  `tests/integration/lightgbm-rollout-rerank.test.ts`,
+  `tests/integration/backend-server.test.ts`,
+  `tests/integration/runtime-admin-service.test.ts`,
+  `README.md`, `docs/ml-strategy-improvement.md`, `.env.example`.
+- Linked GitHub Issue: [#79](https://github.com/NeonButrfly/tichuml/issues/79)
+- Milestone: [6.5 – Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status Source: GitHub issue state only.
+
 ### 2026-06-01 - LightGBM should keep improving from live human and AI gameplay, not only self-play
 
 - Prompt Signal: The latest model-improvement request explicitly asked for a

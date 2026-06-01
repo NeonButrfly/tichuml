@@ -52,6 +52,8 @@ export type ServerConfig = {
   lightgbmModelPath: string;
   lightgbmModelMetaPath: string;
   lightgbmConfidenceMargin: number | null;
+  lightgbmRolloutRerankTopK: number | null;
+  lightgbmRolloutRerankSamples: number | null;
 };
 
 const DEFAULT_REQUEST_BODY_LIMIT_MB = 25;
@@ -80,6 +82,24 @@ function parseOptionalNonNegativeNumber(value: string | undefined): number | nul
   }
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function parseOptionalPositiveInteger(value: string | undefined): number | null {
+  if (!value) {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : null;
+}
+
+function parseOptionalPositiveIntegerWithFallback(
+  value: string | undefined,
+  fallback: number | null
+): number | null {
+  if (value === undefined) {
+    return fallback;
+  }
+  return parseOptionalPositiveInteger(value);
 }
 
 function parseOptionalNonNegativeNumberWithFallback(
@@ -368,6 +388,14 @@ export function loadServerConfig(
     lightgbmConfidenceMargin: parseOptionalNonNegativeNumberWithFallback(
       mergedEnv.LIGHTGBM_CONFIDENCE_MARGIN,
       1.0
+    ),
+    lightgbmRolloutRerankTopK: parseOptionalPositiveIntegerWithFallback(
+      mergedEnv.LIGHTGBM_ROLLOUT_RERANK_TOP_K,
+      2
+    ),
+    lightgbmRolloutRerankSamples: parseOptionalPositiveIntegerWithFallback(
+      mergedEnv.LIGHTGBM_ROLLOUT_RERANK_SAMPLES,
+      1
     )
   };
 }

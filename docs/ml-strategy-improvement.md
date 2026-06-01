@@ -253,6 +253,11 @@ The current evaluation harness writes pass or fail details into
   instead of letting evaluation crash the backend
 - telemetry records model metadata, score summaries, selected score, runtime
   feature counts, and fallback reason
+- eligible `rollout_ranker` `runtime_raw` trick-play requests can now do a
+  bounded live rerank after raw LightGBM scoring, where the backend scores all
+  legal actions, simulates the top `K` candidates forward with tiny
+  backend-heuristic continuation rollouts, and then chooses the best projected
+  team outcome instead of blindly trusting the top raw score
 
 If a validation run shows large fallback counts or poor head-to-head results, do
 not claim the model is ready. Treat the evaluation report as authoritative.

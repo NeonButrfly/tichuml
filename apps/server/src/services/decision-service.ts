@@ -8,6 +8,7 @@ import type { TelemetryRepository } from "./telemetry-repository.js";
 import { routeHeuristicDecision } from "../providers/heuristic-provider.js";
 import { routeLightgbmDecision } from "../providers/lightgbm-provider.js";
 import type { LightgbmScorer } from "../ml/lightgbm-scorer.js";
+import type { LightgbmRolloutReranker } from "../providers/lightgbm-provider.js";
 import type { TelemetryEnqueueResult } from "./telemetry-ingest-queue.js";
 
 function logDecisionTrace(
@@ -28,6 +29,9 @@ export async function handleDecisionRequest(
     lightgbmScorer?: LightgbmScorer;
     traceDecisionRequests?: boolean;
     lightgbmConfidenceMargin?: number | null;
+    lightgbmRolloutReranker?: LightgbmRolloutReranker;
+    lightgbmRolloutRerankTopK?: number | null;
+    lightgbmRolloutRerankSamples?: number | null;
     parseMs?: number;
     validateMs?: number;
     payloadBytes?: number;
@@ -63,6 +67,18 @@ export async function handleDecisionRequest(
               : {}),
             ...(dependencies.lightgbmConfidenceMargin !== undefined
               ? { confidenceMargin: dependencies.lightgbmConfidenceMargin }
+              : {}),
+            ...(dependencies.lightgbmRolloutReranker !== undefined
+              ? { rolloutReranker: dependencies.lightgbmRolloutReranker }
+              : {}),
+            ...(dependencies.lightgbmRolloutRerankTopK !== undefined
+              ? { rolloutRerankTopK: dependencies.lightgbmRolloutRerankTopK }
+              : {}),
+            ...(dependencies.lightgbmRolloutRerankSamples !== undefined
+              ? {
+                  rolloutRerankSamples:
+                    dependencies.lightgbmRolloutRerankSamples,
+                }
               : {})
           }
         )
