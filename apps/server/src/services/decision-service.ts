@@ -29,6 +29,7 @@ export async function handleDecisionRequest(
     lightgbmScorer?: LightgbmScorer;
     traceDecisionRequests?: boolean;
     lightgbmConfidenceMargin?: number | null;
+    lightgbmConfidenceDelegationMaxPreDelegationMs?: number | null;
     lightgbmRolloutReranker?: LightgbmRolloutReranker;
     lightgbmRolloutRerankTopK?: number | null;
     lightgbmRolloutRerankSamples?: number | null;
@@ -69,6 +70,13 @@ export async function handleDecisionRequest(
               : {}),
             ...(dependencies.lightgbmConfidenceMargin !== undefined
               ? { confidenceMargin: dependencies.lightgbmConfidenceMargin }
+              : {}),
+            ...(dependencies.lightgbmConfidenceDelegationMaxPreDelegationMs !==
+            undefined
+              ? {
+                  confidenceDelegationMaxPreDelegationMs:
+                    dependencies.lightgbmConfidenceDelegationMaxPreDelegationMs,
+                }
               : {}),
             ...(dependencies.lightgbmRolloutReranker !== undefined
               ? { rolloutReranker: dependencies.lightgbmRolloutReranker }

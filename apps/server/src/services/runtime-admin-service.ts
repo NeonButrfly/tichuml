@@ -219,6 +219,7 @@ const CONFIG_SCHEMA: Array<{
   { key: "LIGHTGBM_MODEL_PATH", label: "LightGBM model", category: "ML", type: "string", restart_required: true, description: "LightGBM model file path." },
   { key: "LIGHTGBM_MODEL_META_PATH", label: "LightGBM model metadata", category: "ML", type: "string", restart_required: true, description: "LightGBM model metadata path." },
   { key: "LIGHTGBM_CONFIDENCE_MARGIN", label: "LightGBM confidence margin", category: "ML", type: "number", restart_required: true, description: "Optional rollout-ranker score margin cutoff below which LightGBM delegates trick-play decisions back to the backend heuristic. Leave blank to disable the gate.", validate: validateOptionalNonNegativeNumber },
+  { key: "LIGHTGBM_CONFIDENCE_DELEGATION_MAX_PRE_DELEGATION_MS", label: "LightGBM confidence delegation max pre-delegation ms", category: "ML", type: "number", restart_required: true, description: "Optional latency budget before low-confidence LightGBM requests are allowed to hand off to the backend heuristic. Slower requests keep the LightGBM choice instead of risking a timeout.", validate: validateOptionalPositiveNumber },
   { key: "LIGHTGBM_ROLLOUT_RERANK_TOP_K", label: "LightGBM rollout top K", category: "ML", type: "number", restart_required: true, description: "Optional top-K LightGBM trick-play candidates to rerank with bounded heuristic rollouts. Leave blank to disable rollout reranking.", validate: validateOptionalPositiveNumber },
   { key: "LIGHTGBM_ROLLOUT_RERANK_SAMPLES", label: "LightGBM rollout samples", category: "ML", type: "number", restart_required: true, description: "Optional rollout samples per LightGBM candidate during bounded live reranking. Leave blank to disable rollout reranking.", validate: validateOptionalPositiveNumber },
   { key: "LIGHTGBM_ROLLOUT_RERANK_MAX_SCORE_MARGIN", label: "LightGBM rollout max score margin", category: "ML", type: "number", restart_required: true, description: "Optional raw LightGBM top-vs-second score margin cutoff for live rollout reranking. Wider margins skip reranking and keep the deterministic top score.", validate: validateOptionalNonNegativeNumber },
@@ -594,6 +595,10 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
         this.config.lightgbmConfidenceMargin !== null
           ? String(this.config.lightgbmConfidenceMargin)
           : "",
+      LIGHTGBM_CONFIDENCE_DELEGATION_MAX_PRE_DELEGATION_MS:
+        this.config.lightgbmConfidenceDelegationMaxPreDelegationMs !== null
+          ? String(this.config.lightgbmConfidenceDelegationMaxPreDelegationMs)
+          : "",
       LIGHTGBM_ROLLOUT_RERANK_TOP_K:
         this.config.lightgbmRolloutRerankTopK !== null
           ? String(this.config.lightgbmRolloutRerankTopK)
@@ -722,6 +727,10 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
       case "LIGHTGBM_CONFIDENCE_MARGIN":
         return this.config.lightgbmConfidenceMargin !== null
           ? String(this.config.lightgbmConfidenceMargin)
+          : "";
+      case "LIGHTGBM_CONFIDENCE_DELEGATION_MAX_PRE_DELEGATION_MS":
+        return this.config.lightgbmConfidenceDelegationMaxPreDelegationMs !== null
+          ? String(this.config.lightgbmConfidenceDelegationMaxPreDelegationMs)
           : "";
       case "LIGHTGBM_ROLLOUT_RERANK_TOP_K":
         return this.config.lightgbmRolloutRerankTopK !== null

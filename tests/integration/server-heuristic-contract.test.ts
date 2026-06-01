@@ -236,6 +236,7 @@ const TEST_SERVER_CONFIG: ServerConfig = {
   lightgbmModelPath: "ml/model_registry/lightgbm_action_model.txt",
   lightgbmModelMetaPath: "ml/model_registry/lightgbm_action_model.meta.json",
   lightgbmConfidenceMargin: 1.0,
+  lightgbmConfidenceDelegationMaxPreDelegationMs: 1000,
   lightgbmRolloutRerankTopK: 2,
   lightgbmRolloutRerankSamples: 1,
   lightgbmRolloutRerankMaxScoreMargin: 0.1,

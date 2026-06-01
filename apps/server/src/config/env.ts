@@ -52,6 +52,7 @@ export type ServerConfig = {
   lightgbmModelPath: string;
   lightgbmModelMetaPath: string;
   lightgbmConfidenceMargin: number | null;
+  lightgbmConfidenceDelegationMaxPreDelegationMs: number | null;
   lightgbmRolloutRerankTopK: number | null;
   lightgbmRolloutRerankSamples: number | null;
   lightgbmRolloutRerankMaxScoreMargin: number | null;
@@ -391,6 +392,11 @@ export function loadServerConfig(
       mergedEnv.LIGHTGBM_CONFIDENCE_MARGIN,
       1.0
     ),
+    lightgbmConfidenceDelegationMaxPreDelegationMs:
+      parseOptionalPositiveIntegerWithFallback(
+        mergedEnv.LIGHTGBM_CONFIDENCE_DELEGATION_MAX_PRE_DELEGATION_MS,
+        1000
+      ),
     lightgbmRolloutRerankTopK: parseOptionalPositiveIntegerWithFallback(
       mergedEnv.LIGHTGBM_ROLLOUT_RERANK_TOP_K,
       2

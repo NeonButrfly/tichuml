@@ -698,6 +698,7 @@ export async function routeLightgbmDecision(
   options: {
     traceDecisionRequests?: boolean;
     confidenceMargin?: number | null;
+    confidenceDelegationMaxPreDelegationMs?: number | null;
     rolloutReranker?: LightgbmRolloutReranker;
     rolloutRerankTopK?: number | null;
     rolloutRerankSamples?: number | null;
@@ -708,6 +709,10 @@ export async function routeLightgbmDecision(
   const startedAt = Date.now();
   const configuredConfidenceMargin =
     options.confidenceMargin === undefined ? 1.0 : options.confidenceMargin;
+  const configuredConfidenceDelegationMaxPreDelegationMs =
+    options.confidenceDelegationMaxPreDelegationMs === undefined
+      ? 1000
+      : options.confidenceDelegationMaxPreDelegationMs;
   const configuredRolloutTopK =
     options.rolloutRerankTopK === undefined ? 2 : options.rolloutRerankTopK;
   const configuredRolloutSamples =
@@ -886,9 +891,15 @@ export async function routeLightgbmDecision(
           error instanceof Error ? error.message : String(error);
       }
     }
+    const preDelegationLatencyMs = Date.now() - startedAt;
+    const confidenceDelegationBudgetExceeded =
+      configuredConfidenceDelegationMaxPreDelegationMs !== null &&
+      preDelegationLatencyMs >
+        configuredConfidenceDelegationMaxPreDelegationMs;
 
     if (
       !rolloutRerankResult &&
+      !confidenceDelegationBudgetExceeded &&
       lightgbmShouldDelegateLowConfidenceDecision({
         phase: payload.phase,
         featureRequirements,
@@ -913,6 +924,9 @@ export async function routeLightgbmDecision(
           lightgbm_confidence_delegated: true,
           lightgbm_confidence_margin: selectedScoreMargin,
           lightgbm_confidence_threshold: configuredConfidenceMargin,
+          lightgbm_confidence_delegation_pre_ms: preDelegationLatencyMs,
+          lightgbm_confidence_delegation_pre_ms_threshold:
+            configuredConfidenceDelegationMaxPreDelegationMs,
           lightgbm_requested_scoring_path:
             typeof payload.metadata.scoring_path === "string"
               ? payload.metadata.scoring_path
@@ -1054,8 +1068,17 @@ export async function routeLightgbmDecision(
             configuredRolloutMaxScoreMargin,
           lightgbm_rollout_rerank_overrode_top_score:
             rolloutRerankResult?.overrodeTopScore ?? false,
+          lightgbm_confidence_delegation_pre_ms: preDelegationLatencyMs,
+          lightgbm_confidence_delegation_pre_ms_threshold:
+            configuredConfidenceDelegationMaxPreDelegationMs,
           lightgbm_rollout_rerank_results:
             rolloutRerankResult?.candidateResults ?? null,
+          ...(confidenceDelegationBudgetExceeded
+            ? {
+                lightgbm_confidence_delegation_skipped_reason:
+                  "pre_delegation_latency_budget_exceeded",
+              }
+            : {}),
           ...(rolloutRerankDecision.skippedReason
             ? {
                 lightgbm_rollout_rerank_skipped_reason:
@@ -1126,8 +1149,17 @@ export async function routeLightgbmDecision(
           configuredRolloutMaxScoreMargin,
         lightgbm_rollout_rerank_overrode_top_score:
           rolloutRerankResult?.overrodeTopScore ?? false,
+        lightgbm_confidence_delegation_pre_ms: preDelegationLatencyMs,
+        lightgbm_confidence_delegation_pre_ms_threshold:
+          configuredConfidenceDelegationMaxPreDelegationMs,
         lightgbm_rollout_rerank_results:
           rolloutRerankResult?.candidateResults ?? null,
+        ...(confidenceDelegationBudgetExceeded
+          ? {
+              lightgbm_confidence_delegation_skipped_reason:
+                "pre_delegation_latency_budget_exceeded",
+            }
+          : {}),
         ...(rolloutRerankDecision.skippedReason
           ? {
               lightgbm_rollout_rerank_skipped_reason:

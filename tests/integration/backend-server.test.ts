@@ -575,6 +575,7 @@ const TEST_SERVER_CONFIG: ServerConfig = {
   lightgbmModelPath: "ml/model_registry/lightgbm_action_model.txt",
   lightgbmModelMetaPath: "ml/model_registry/lightgbm_action_model.meta.json",
   lightgbmConfidenceMargin: 1.0,
+  lightgbmConfidenceDelegationMaxPreDelegationMs: 1000,
   lightgbmRolloutRerankTopK: 2,
   lightgbmRolloutRerankSamples: 1,
   lightgbmRolloutRerankMaxScoreMargin: 0.1,
@@ -1546,6 +1547,7 @@ describe("backend foundation server routes", () => {
       {
         lightgbmScorer: scorer,
         serverConfig: {
+          lightgbmConfidenceDelegationMaxPreDelegationMs: null,
           lightgbmRolloutRerankTopK: null,
           lightgbmRolloutRerankSamples: null
         }
@@ -1719,6 +1721,74 @@ describe("backend foundation server routes", () => {
       {
         lightgbmScorer: scorer,
         serverConfig: { lightgbmConfidenceMargin: null }
+      }
+    );
+  });
+
+  it("keeps low-confidence rollout-ranker decisions on LightGBM when the delegation latency budget is exceeded", async () => {
+    let scoreCalls = 0;
+    const scorer: LightgbmScorer = {
+      async score(request) {
+        scoreCalls += 1;
+        await new Promise((resolve) => setTimeout(resolve, 15));
+        return {
+          scores: request.legalActions.map((_, index) => (index === 0 ? 10 : 9.95)),
+          modelMetadata: {
+            model_type: "lightgbm_action_model",
+            objective: "rollout_ranker",
+            feature_profile: "runtime_raw",
+          },
+          runtimeMetadata: {}
+        };
+      },
+      async close() {}
+    };
+
+    await withServer(
+      async ({ baseUrl, repository }) => {
+        const response = await fetch(`${baseUrl}/api/decision/request`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(createLargeTrickPlayDecisionRequestBody().payload)
+        });
+
+        expect(response.status).toBe(200);
+        const payload = (await response.json()) as {
+          accepted: boolean;
+          provider_used: string;
+          metadata?: {
+            lightgbm_confidence_delegation_skipped_reason?: string;
+            lightgbm_confidence_delegation_pre_ms?: number | null;
+            lightgbm_confidence_delegation_pre_ms_threshold?: number | null;
+          };
+        };
+        expect(payload.accepted).toBe(true);
+        expect(payload.provider_used).toBe("lightgbm_model");
+        expect(payload.metadata?.lightgbm_confidence_delegation_skipped_reason).toBe(
+          "pre_delegation_latency_budget_exceeded"
+        );
+        expect(payload.metadata?.lightgbm_confidence_delegation_pre_ms).toBeGreaterThan(
+          5
+        );
+        expect(payload.metadata?.lightgbm_confidence_delegation_pre_ms_threshold).toBe(
+          5
+        );
+        expect(scoreCalls).toBe(1);
+        await flushServerQueue();
+        expect(repository.decisions).toHaveLength(1);
+        expect(repository.decisions[0]?.provider_used).toBe("lightgbm_model");
+        expect(
+          repository.decisions[0]?.metadata
+            .lightgbm_confidence_delegation_skipped_reason
+        ).toBe("pre_delegation_latency_budget_exceeded");
+      },
+      {
+        lightgbmScorer: scorer,
+        serverConfig: {
+          lightgbmRolloutRerankTopK: null,
+          lightgbmRolloutRerankSamples: null,
+          lightgbmConfidenceDelegationMaxPreDelegationMs: 5,
+        }
       }
     );
   });

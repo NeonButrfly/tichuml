@@ -157,6 +157,7 @@ The root `.env.example` now includes:
 - `LIGHTGBM_MODEL_PATH`
 - `LIGHTGBM_MODEL_META_PATH`
 - `LIGHTGBM_CONFIDENCE_MARGIN`
+- `LIGHTGBM_CONFIDENCE_DELEGATION_MAX_PRE_DELEGATION_MS`
 - `LIGHTGBM_ROLLOUT_RERANK_TOP_K`
 - `LIGHTGBM_ROLLOUT_RERANK_SAMPLES`
 - `LIGHTGBM_ROLLOUT_RERANK_MAX_SCORE_MARGIN`
@@ -485,7 +486,10 @@ model-load cost inside the normal decision timeout budget.
 Use `LIGHTGBM_CONFIDENCE_MARGIN` to tune that low-confidence delegation
 threshold, or leave it blank to disable the rollout-ranker confidence gate
 entirely for an experiment. The checked-in backend default is `1.0` after the
-May 31, 2026 mirrored validation pass.
+May 31, 2026 mirrored validation pass. Use
+`LIGHTGBM_CONFIDENCE_DELEGATION_MAX_PRE_DELEGATION_MS` to skip that extra
+heuristic handoff when LightGBM has already spent too much of the client-side
+timeout budget before delegation would even begin.
 
 Both commands prefer the repo `.venv` automatically when it exists, so they use
 the same Python environment created by the bootstrap scripts.

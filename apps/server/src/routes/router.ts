@@ -694,6 +694,8 @@ export function createRouter({
               ...(lightgbmScorer ? { lightgbmScorer } : {}),
               traceDecisionRequests: config.traceDecisionRequests,
               lightgbmConfidenceMargin: config.lightgbmConfidenceMargin,
+              lightgbmConfidenceDelegationMaxPreDelegationMs:
+                config.lightgbmConfidenceDelegationMaxPreDelegationMs,
               lightgbmRolloutRerankTopK: config.lightgbmRolloutRerankTopK,
               lightgbmRolloutRerankSamples: config.lightgbmRolloutRerankSamples,
               lightgbmRolloutRerankMaxScoreMargin:
