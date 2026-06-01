@@ -356,6 +356,28 @@ describe("ml export and training regressions", () => {
     expect(result.stdout.trim()).toBe("candidate_rows");
   });
 
+  it("adds gameplay source filtering to ml export queries", () => {
+    const result = runPythonSnippet(
+      [
+        "from pathlib import Path",
+        "import sys",
+        "sys.path.insert(0, str(Path('ml').resolve()))",
+        "from export_training_rows import build_query",
+        "query, params = build_query('trick_play', None, None, None, None, 'gameplay')",
+        "print(\"telemetry_source\" in query)",
+        "print('gameplay' in [str(value) for value in params])",
+      ].join("\n")
+    );
+
+    expect(result.status).toBe(0);
+    const lines = result.stdout
+      .replace(/\r?\n/gu, "\n")
+      .trim()
+      .split("\n")
+      .map((line) => line.trim());
+    expect(lines).toEqual(["True", "True"]);
+  });
+
   it("derives observed hand outcomes from attributed decision hand_result when roundSummary is absent", () => {
     const result = runPythonSnippet(
       [

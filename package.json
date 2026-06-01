@@ -50,6 +50,7 @@
     "ml:rollouts": "tsx apps/sim-runner/src/ml-rollouts.ts",
     "ml:train": "tsx scripts/run-python.ts ml/train_lightgbm.py",
     "ml:bootstrap": "tsx scripts/ml-bootstrap.ts",
+    "ml:live-bootstrap": "tsx scripts/ml-live-bootstrap.ts",
     "ml:evaluate": "tsx apps/sim-runner/src/evaluate.ts"
   },
   "devDependencies": {

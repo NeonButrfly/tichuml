@@ -671,6 +671,14 @@ def observed_outcomes_for_actor(
     }
 
 
+def append_metadata_source_clause(
+    clauses: list[str], params: list[Any], source: str | None
+) -> None:
+    if source and source.strip():
+        clauses.append("COALESCE(metadata->>'telemetry_source', metadata->>'source') = %s")
+        params.append(source.strip())
+
+
 def build_scope_where(
     run_id: str | None, game_id_prefix: str | None
 ) -> tuple[list[str], list[Any]]:
@@ -693,8 +701,10 @@ def build_query(
     limit: int | None,
     run_id: str | None = None,
     game_id_prefix: str | None = None,
+    source: str | None = None,
 ) -> tuple[str, list[Any]]:
     clauses, params = build_scope_where(run_id, game_id_prefix)
+    append_metadata_source_clause(clauses, params, source)
 
     if phase:
         clauses.append("phase = %s")
@@ -807,8 +817,11 @@ def count_rows_for_scope(
     table: str,
     run_id: str | None,
     game_id_prefix: str | None,
+    source: str | None = None,
 ) -> int:
     clauses, params = build_scope_where(run_id, game_id_prefix)
+    if table in {"decisions", "events"}:
+        append_metadata_source_clause(clauses, params, source)
     where_clause = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     query = f"SELECT count(*) AS row_count FROM {table} {where_clause}"
     with connection.cursor(row_factory=dict_row) as cursor:
@@ -861,8 +874,10 @@ def count_decisions_by_provider_for_scope(
     connection: psycopg.Connection[Any],
     run_id: str | None,
     game_id_prefix: str | None,
+    source: str | None = None,
 ) -> dict[str, int]:
     clauses, params = build_scope_where(run_id, game_id_prefix)
+    append_metadata_source_clause(clauses, params, source)
     where_clause = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     with connection.cursor(row_factory=dict_row) as cursor:
         cursor.execute(
@@ -887,8 +902,10 @@ def count_requested_provider_for_scope(
     connection: psycopg.Connection[Any],
     run_id: str | None,
     game_id_prefix: str | None,
+    source: str | None = None,
 ) -> dict[str, int]:
     clauses, params = build_scope_where(run_id, game_id_prefix)
+    append_metadata_source_clause(clauses, params, source)
     where_clause = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     with connection.cursor(row_factory=dict_row) as cursor:
         cursor.execute(
@@ -913,8 +930,10 @@ def collect_scope_integrity_summary(
     connection: psycopg.Connection[Any],
     run_id: str | None,
     game_id_prefix: str | None,
+    source: str | None = None,
 ) -> dict[str, Any]:
     clauses, params = build_scope_where(run_id, game_id_prefix)
+    append_metadata_source_clause(clauses, params, source)
     where_clause = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     with connection.cursor(row_factory=dict_row) as cursor:
         cursor.execute(
@@ -2223,6 +2242,7 @@ def build_validation_summary(
 ) -> dict[str, Any]:
     mixed_policy_detected = len(scoped_provider_distribution) > 1
     filtered_provider = args.provider or None
+    mixed_policy_allowed = bool(args.allow_mixed_providers)
     filtered_provider_total = (
         filtered_provider_distribution.get(filtered_provider, 0)
         if filtered_provider
@@ -2260,11 +2280,13 @@ def build_validation_summary(
             "validation_report.json",
         ],
         "provider_filter": filtered_provider,
+        "source_filter": args.source or None,
         "provider_distribution_all_scoped": scoped_provider_distribution,
         "requested_provider_distribution_all_scoped": scoped_requested_provider_distribution,
         "provider_distribution_exported": filtered_provider_distribution,
         "filtered_provider_row_count": filtered_provider_total,
         "mixed_policy_detected": mixed_policy_detected,
+        "mixed_policy_explicitly_allowed": mixed_policy_allowed,
         "mixed_policy_rows_excluded": (
             source_row_counts["decisions"] - filtered_provider_total
             if filtered_provider
@@ -2282,7 +2304,11 @@ def build_validation_summary(
             "accepted": accepted,
             "leakage_denylist_pass": manifest.get("leakage_denylist_pass") is True,
             "uses_predecision_state_only": True,
-            "mixed_policy_safe": not mixed_policy_detected or filtered_provider is not None,
+            "mixed_policy_safe": (
+                not mixed_policy_detected
+                or filtered_provider is not None
+                or mixed_policy_allowed
+            ),
             "invalid_decision_count_scoped": scope_integrity["invalid_decision_count"],
             "non_completed_match_count": scope_integrity["non_completed_match_count"],
         },
@@ -2297,6 +2323,7 @@ def main() -> None:
     parser.add_argument("--database-url", default=None)
     parser.add_argument("--phase", default="trick_play")
     parser.add_argument("--provider", default=None)
+    parser.add_argument("--source", default=None)
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--game-id-prefix", default=None)
     parser.add_argument("--limit", type=int, default=None)
@@ -2342,6 +2369,7 @@ def main() -> None:
     )
     parser.add_argument("--validate-only", action="store_true", default=False)
     parser.add_argument("--dry-run", action="store_true", default=False)
+    parser.add_argument("--allow-mixed-providers", action="store_true", default=False)
     args = parser.parse_args()
 
     validation_only = args.validate_only or args.dry_run
@@ -2417,6 +2445,7 @@ def main() -> None:
             args.limit,
             args.run_id,
             args.game_id_prefix,
+            args.source,
         )
         connection = None
         try:
@@ -2428,21 +2457,21 @@ def main() -> None:
             ) = connect_with_fallback(args.database_url)
             source_row_counts = {
                 "decisions": count_rows_for_scope(
-                    connection, "decisions", args.run_id, args.game_id_prefix
+                    connection, "decisions", args.run_id, args.game_id_prefix, args.source
                 ),
                 "events": count_rows_for_scope(
-                    connection, "events", args.run_id, args.game_id_prefix
+                    connection, "events", args.run_id, args.game_id_prefix, args.source
                 ),
                 "matches": count_matches_for_scope(connection, args.game_id_prefix),
             }
             scope_integrity = collect_scope_integrity_summary(
-                connection, args.run_id, args.game_id_prefix
+                connection, args.run_id, args.game_id_prefix, args.source
             )
             scoped_provider_distribution = count_decisions_by_provider_for_scope(
-                connection, args.run_id, args.game_id_prefix
+                connection, args.run_id, args.game_id_prefix, args.source
             )
             scoped_requested_provider_distribution = count_requested_provider_for_scope(
-                connection, args.run_id, args.game_id_prefix
+                connection, args.run_id, args.game_id_prefix, args.source
             )
             with connection.cursor(
                 name="decision_export_cursor",
@@ -2537,6 +2566,8 @@ def main() -> None:
     )
     manifest["database_url_source"] = database_url_source
     manifest["database_url_fallback_used"] = database_url_fallback_used
+    manifest["source_filter"] = args.source or None
+    manifest["allow_mixed_providers"] = bool(args.allow_mixed_providers)
     manifest["feature_columns"] = feature_columns
     manifest["label_columns"] = label_columns
     manifest["metadata_columns"] = metadata_columns
@@ -2548,9 +2579,13 @@ def main() -> None:
         split: len(game_ids) for split, game_ids in stats.split_game_ids.items()
     }
     validation_warnings: list[str] = []
-    if len(scoped_provider_distribution) > 1 and not args.provider:
+    if len(scoped_provider_distribution) > 1 and not args.provider and not args.allow_mixed_providers:
         validation_errors.append(
             "Mixed provider decisions were detected in the scoped dataset. Pass --provider to export a single canonical policy."
+        )
+    elif len(scoped_provider_distribution) > 1 and args.allow_mixed_providers:
+        validation_warnings.append(
+            "Mixed provider decisions were explicitly allowed for this export."
         )
     if scope_integrity["invalid_decision_count"] > 0:
         validation_errors.append(
@@ -2644,7 +2679,7 @@ def main() -> None:
         raise ValueError(
             "ml:export rejected the dataset because scoped incomplete matches were detected."
         )
-    if len(scoped_provider_distribution) > 1 and not args.provider:
+    if len(scoped_provider_distribution) > 1 and not args.provider and not args.allow_mixed_providers:
         raise ValueError(
             "ml:export rejected the dataset because mixed providers were detected without an explicit --provider filter."
         )

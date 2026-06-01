@@ -134,6 +134,19 @@ keep the gate threshold aligned with the smaller evaluation sample:
 npm run ml:bootstrap -- --run-id <run_id> --game-id-prefix <game_id_prefix> --output-dir training-runs/<run_id>/ml --provider server_heuristic --backend-url http://127.0.0.1:4310 --evaluate-games 3 --evaluate-min-games-for-gate 3
 ```
 
+Build a live-gameplay rollout-training candidate without a new self-play batch:
+
+```powershell
+npm run ml:live-bootstrap -- --output-dir training-runs/live-gameplay-001/ml --allow-mixed-providers --rollout-max-decisions 250 --rollouts-per-action 2
+```
+
+`ml:live-bootstrap` exports `source=gameplay` trick-play rows as JSONL, keeps
+mixed live providers only when you opt in with `--allow-mixed-providers`, runs
+offline rollout relabeling against that export selection, and trains a
+rollout-based candidate model bundle into the requested output directory. This
+first version is intentionally candidate-only: it does not auto-promote or
+repoint the live backend model for you.
+
 ## Data products
 
 `ml:export` writes:
@@ -154,6 +167,11 @@ bundle such as:
 - `training-runs/<run_id>/ml/feature_schema.json`
 - `training-runs/<run_id>/ml/feature_columns.json`
 - `training-runs/<run_id>/ml/label_columns.json`
+
+For live gameplay candidate work, the same output-dir mode now also supports a
+`--source gameplay` slice and JSONL export for rollout selection. Mixed live
+providers remain opt-in through `--allow-mixed-providers`; the default export
+behavior still prefers a single canonical provider slice.
 
 `--validate-only` uses the same scoped filters and LightGBM shape checks, but
 it does not emit the full dataset. Its single JSON payload is intended to be

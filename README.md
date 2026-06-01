@@ -43,6 +43,7 @@ The repository no longer reflects a Milestone 0-only scaffold. Historical milest
 - `npm run ml:rollouts -- --phase trick_play --provider local_heuristic --continuation-provider local`
 - `npm run ml:train -- --phase play`
 - `npm run ml:bootstrap -- --games 1000 --provider server_heuristic`
+- `npm run ml:live-bootstrap -- --output-dir training-runs/live-gameplay/ml`
 - `npm run ml:evaluate -- --games 100 --ns-provider lightgbm_model --ew-provider server_heuristic --mirror-seats true`
 
 ## ML Strategy
@@ -69,6 +70,9 @@ Quick reference:
 - `npm run ml:train` supports `imitation_binary`,
   `observed_outcome_regression`, `rollout_regression`, and
   `rollout_ranker`.
+- `npm run ml:live-bootstrap` builds a rollout-labeled candidate model from
+  live `gameplay` telemetry, including mixed `human_ui` and AI-provider rows
+  when explicitly allowed.
 - After any host-side `ml:train` run that updates
   `ml/model_registry/lightgbm_action_model.*`, restart the backend before
   evaluating or serving `lightgbm_model` so the runtime reloads the new model
@@ -379,6 +383,18 @@ npm run ml:bootstrap -- --games 5000 --provider server_heuristic
 ```
 
 That runs self-play, exports training rows, and trains the first model in sequence.
+
+For live gameplay improvement, build a rollout-labeled candidate from persisted
+`gameplay` telemetry instead of starting from a fresh self-play run:
+
+```powershell
+npm run ml:live-bootstrap -- --output-dir training-runs/live-gameplay-001/ml --allow-mixed-providers --rollout-max-decisions 250 --rollouts-per-action 2
+```
+
+That first-version flow exports gameplay-tagged decision rows as JSONL, relabels
+them with offline rollouts, and trains a candidate model bundle inside the
+requested output directory. It does not auto-promote the candidate into the
+served backend model.
 
 Provider evaluation:
 

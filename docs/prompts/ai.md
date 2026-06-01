@@ -14,6 +14,27 @@ Use this file to preserve AI and bot-behavior prompt intent and link it to GitHu
 
 ## Entries
 
+### 2026-06-01 - LightGBM should keep improving from live human and AI gameplay, not only self-play
+
+- Prompt Signal: The latest model-improvement request explicitly asked for a
+  first version where `lightgbm_model` can continue improving without relying
+  only on simulator training, using live games against both human and AI
+  opponents as training fuel.
+- Interpreted Requirement: Issue
+  [#79](https://github.com/NeonButrfly/tichuml/issues/79) now also tracks a
+  live-gameplay bootstrap flow that exports `source=gameplay` telemetry, allows
+  an explicit mixed-provider slice when human and AI rows are intentionally
+  combined, relabels those positions with offline rollouts, and trains a
+  rollout-based LightGBM candidate bundle without blindly auto-promoting it.
+- Affected Systems: `ml/export_training_rows.py`,
+  `scripts/ml-live-bootstrap.ts`, `package.json`,
+  `tests/integration/ml-live-bootstrap.test.ts`,
+  `tests/integration/ml-export-train-regression.test.ts`,
+  `docs/ml-strategy-improvement.md`, `README.md`.
+- Linked GitHub Issue: [#79](https://github.com/NeonButrfly/tichuml/issues/79)
+- Milestone: [6.5 – Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status Source: GitHub issue state only.
+
 ### 2026-05-02 - Outcome reward telemetry and controlled aggression tuning for LightGBM training
 
 - Prompt Signal: The latest combined ML and behavior-quality request required
