@@ -218,6 +218,7 @@ const CONFIG_SCHEMA: Array<{
   { key: "LIGHTGBM_INFER_SCRIPT", label: "LightGBM infer script", category: "ML", type: "string", restart_required: true, description: "LightGBM inference script path." },
   { key: "LIGHTGBM_MODEL_PATH", label: "LightGBM model", category: "ML", type: "string", restart_required: true, description: "LightGBM model file path." },
   { key: "LIGHTGBM_MODEL_META_PATH", label: "LightGBM model metadata", category: "ML", type: "string", restart_required: true, description: "LightGBM model metadata path." },
+  { key: "LIGHTGBM_MIN_LEGAL_ACTIONS_FOR_SCORING", label: "LightGBM min legal actions for scoring", category: "ML", type: "number", restart_required: true, description: "Optional minimum trick-play legal-action count before the backend spends time on LightGBM scoring. Smaller branches delegate directly to the fast heuristic path.", validate: validateOptionalPositiveNumber },
   { key: "LIGHTGBM_CONFIDENCE_MARGIN", label: "LightGBM confidence margin", category: "ML", type: "number", restart_required: true, description: "Optional rollout-ranker score margin cutoff below which LightGBM delegates trick-play decisions back to the backend heuristic. Leave blank to disable the gate.", validate: validateOptionalNonNegativeNumber },
   { key: "LIGHTGBM_CONFIDENCE_DELEGATION_MAX_PRE_DELEGATION_MS", label: "LightGBM confidence delegation max pre-delegation ms", category: "ML", type: "number", restart_required: true, description: "Optional latency budget before low-confidence LightGBM requests are allowed to hand off to the backend heuristic. Slower requests keep the LightGBM choice instead of risking a timeout.", validate: validateOptionalPositiveNumber },
   { key: "LIGHTGBM_ROLLOUT_RERANK_TOP_K", label: "LightGBM rollout top K", category: "ML", type: "number", restart_required: true, description: "Optional top-K LightGBM trick-play candidates to rerank with bounded heuristic rollouts. Leave blank to disable rollout reranking.", validate: validateOptionalPositiveNumber },
@@ -591,6 +592,10 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
       LIGHTGBM_INFER_SCRIPT: this.config.lightgbmInferScript,
       LIGHTGBM_MODEL_PATH: this.config.lightgbmModelPath,
       LIGHTGBM_MODEL_META_PATH: this.config.lightgbmModelMetaPath,
+      LIGHTGBM_MIN_LEGAL_ACTIONS_FOR_SCORING:
+        this.config.lightgbmMinLegalActionsForScoring !== null
+          ? String(this.config.lightgbmMinLegalActionsForScoring)
+          : "",
       LIGHTGBM_CONFIDENCE_MARGIN:
         this.config.lightgbmConfidenceMargin !== null
           ? String(this.config.lightgbmConfidenceMargin)
@@ -724,6 +729,10 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
         return this.config.lightgbmModelPath;
       case "LIGHTGBM_MODEL_META_PATH":
         return this.config.lightgbmModelMetaPath;
+      case "LIGHTGBM_MIN_LEGAL_ACTIONS_FOR_SCORING":
+        return this.config.lightgbmMinLegalActionsForScoring !== null
+          ? String(this.config.lightgbmMinLegalActionsForScoring)
+          : "";
       case "LIGHTGBM_CONFIDENCE_MARGIN":
         return this.config.lightgbmConfidenceMargin !== null
           ? String(this.config.lightgbmConfidenceMargin)

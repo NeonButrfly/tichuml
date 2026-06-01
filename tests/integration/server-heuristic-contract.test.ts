@@ -235,6 +235,7 @@ const TEST_SERVER_CONFIG: ServerConfig = {
   lightgbmInferScript: "ml/infer.py",
   lightgbmModelPath: "ml/model_registry/lightgbm_action_model.txt",
   lightgbmModelMetaPath: "ml/model_registry/lightgbm_action_model.meta.json",
+  lightgbmMinLegalActionsForScoring: 5,
   lightgbmConfidenceMargin: 1.0,
   lightgbmConfidenceDelegationMaxPreDelegationMs: 1000,
   lightgbmRolloutRerankTopK: 2,

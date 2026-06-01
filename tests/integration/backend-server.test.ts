@@ -574,6 +574,7 @@ const TEST_SERVER_CONFIG: ServerConfig = {
   lightgbmInferScript: "ml/infer.py",
   lightgbmModelPath: "ml/model_registry/lightgbm_action_model.txt",
   lightgbmModelMetaPath: "ml/model_registry/lightgbm_action_model.meta.json",
+  lightgbmMinLegalActionsForScoring: 5,
   lightgbmConfidenceMargin: 1.0,
   lightgbmConfidenceDelegationMaxPreDelegationMs: 1000,
   lightgbmRolloutRerankTopK: 2,
@@ -1788,6 +1789,76 @@ describe("backend foundation server routes", () => {
           lightgbmRolloutRerankTopK: null,
           lightgbmRolloutRerankSamples: null,
           lightgbmConfidenceDelegationMaxPreDelegationMs: 5,
+        }
+      }
+    );
+  });
+
+  it("delegates low-branching trick-play decisions to the backend heuristic", async () => {
+    let scoreCalls = 0;
+    const scorer: LightgbmScorer = {
+      async score() {
+        scoreCalls += 1;
+        return {
+          scores: [1],
+          modelMetadata: {
+            model_type: "lightgbm_action_model",
+            objective: "rollout_ranker",
+            feature_profile: "runtime_raw",
+          },
+          runtimeMetadata: {}
+        };
+      },
+      async close() {}
+    };
+
+    await withServer(
+      async ({ baseUrl, repository }) => {
+        const request = createLargeTrickPlayDecisionRequestBody();
+        const payloadBody = structuredClone(request.payload) as typeof request.payload;
+        const actorActions = Array.isArray(payloadBody.legal_actions)
+          ? payloadBody.legal_actions
+          : payloadBody.legal_actions["seat-0"];
+        const scopedActions = actorActions
+          .filter((action) => action.type !== "call_tichu")
+          .slice(0, 4);
+        payloadBody.legal_actions = scopedActions;
+
+        const response = await fetch(`${baseUrl}/api/decision/request`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payloadBody)
+        });
+
+        expect(response.status).toBe(200);
+        const payload = (await response.json()) as {
+          accepted: boolean;
+          provider_used: string;
+          metadata?: {
+            lightgbm_small_branch_delegated?: boolean;
+            lightgbm_small_branch_legal_action_count?: number;
+            lightgbm_small_branch_threshold?: number;
+          };
+        };
+        expect(payload.accepted).toBe(true);
+        expect(payload.provider_used).toBe("server_heuristic");
+        expect(payload.metadata?.lightgbm_small_branch_delegated).toBe(true);
+        expect(payload.metadata?.lightgbm_small_branch_legal_action_count).toBe(4);
+        expect(payload.metadata?.lightgbm_small_branch_threshold).toBe(5);
+        expect(scoreCalls).toBe(0);
+        await flushServerQueue();
+        expect(repository.decisions).toHaveLength(1);
+        expect(repository.decisions[0]?.provider_used).toBe("server_heuristic");
+        expect(
+          repository.decisions[0]?.metadata.lightgbm_small_branch_delegated
+        ).toBe(true);
+      },
+      {
+        lightgbmScorer: scorer,
+        serverConfig: {
+          lightgbmRolloutRerankTopK: null,
+          lightgbmRolloutRerankSamples: null,
+          lightgbmMinLegalActionsForScoring: 5,
         }
       }
     );

@@ -65,6 +65,7 @@ function createConfig(repoRoot: string): ServerConfig {
       "model_registry",
       "lightgbm_action_model.meta.json"
     ),
+    lightgbmMinLegalActionsForScoring: 5,
     lightgbmConfidenceMargin: 1.0,
     lightgbmConfidenceDelegationMaxPreDelegationMs: 1000,
     lightgbmRolloutRerankTopK: 2,
@@ -216,6 +217,7 @@ describe("runtime admin config manager", () => {
       TELEMETRY_RETRY_ATTEMPTS: "4",
       TELEMETRY_RETRY_DELAY_MS: "345",
       TELEMETRY_BACKOFF_MS: "4567",
+      LIGHTGBM_MIN_LEGAL_ACTIONS_FOR_SCORING: "4",
       LIGHTGBM_CONFIDENCE_DELEGATION_MAX_PRE_DELEGATION_MS: "650",
       LIGHTGBM_ROLLOUT_RERANK_MAX_SCORE_MARGIN: "0.05",
       LIGHTGBM_ROLLOUT_RERANK_MAX_CONTINUATION_DECISIONS: "9"
@@ -235,6 +237,7 @@ describe("runtime admin config manager", () => {
     expect(envText).toContain("TELEMETRY_RETRY_ATTEMPTS=4");
     expect(envText).toContain("TELEMETRY_RETRY_DELAY_MS=345");
     expect(envText).toContain("TELEMETRY_BACKOFF_MS=4567");
+    expect(envText).toContain("LIGHTGBM_MIN_LEGAL_ACTIONS_FOR_SCORING=4");
     expect(envText).toContain("LIGHTGBM_CONFIDENCE_DELEGATION_MAX_PRE_DELEGATION_MS=650");
     expect(envText).toContain("LIGHTGBM_ROLLOUT_RERANK_MAX_SCORE_MARGIN=0.05");
     expect(envText).toContain("LIGHTGBM_ROLLOUT_RERANK_MAX_CONTINUATION_DECISIONS=9");
@@ -260,6 +263,11 @@ describe("runtime admin config manager", () => {
       reloaded.entries.find((entry) => entry.key === "TELEMETRY_MAX_POST_BYTES")
         ?.savedValue
     ).toBe("123456");
+    expect(
+      reloaded.entries.find(
+        (entry) => entry.key === "LIGHTGBM_MIN_LEGAL_ACTIONS_FOR_SCORING"
+      )?.savedValue
+    ).toBe("4");
     expect(
       reloaded.entries.find(
         (entry) =>

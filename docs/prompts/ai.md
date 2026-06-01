@@ -41,6 +41,31 @@ Use this file to preserve AI and bot-behavior prompt intent and link it to GitHu
 - Milestone: [6.5 – Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
 - Status Source: GitHub issue state only.
 
+### 2026-06-01 - LightGBM live serving should avoid spending Python scorer time on tiny trick-play branches
+
+- Prompt Signal: The follow-up AI serving work kept pushing on the same
+  LightGBM-plus-rollout direction, but bounded live evaluations showed that the
+  remaining timeout failures clustered in low-branching trick-play spots where
+  LightGBM still spent multiple seconds despite only three or four legal moves.
+- Interpreted Requirement: Issue
+  [#79](https://github.com/NeonButrfly/tichuml/issues/79) now also tracks a
+  live serving rule that delegates tiny trick-play branches directly to the
+  fast backend heuristic before invoking the Python LightGBM scorer, because
+  those spots offer little ranking upside and were the main remaining source of
+  timeout-driven local fallbacks.
+- Affected Systems: `apps/server/src/providers/lightgbm-provider.ts`,
+  `apps/server/src/config/env.ts`,
+  `apps/server/src/services/decision-service.ts`,
+  `apps/server/src/routes/router.ts`,
+  `apps/server/src/services/runtime-admin-service.ts`,
+  `tests/integration/backend-server.test.ts`,
+  `tests/integration/runtime-admin-service.test.ts`,
+  `tests/integration/server-heuristic-contract.test.ts`,
+  `README.md`, `.env.example`.
+- Linked GitHub Issue: [#79](https://github.com/NeonButrfly/tichuml/issues/79)
+- Milestone: [6.5 – Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status Source: GitHub issue state only.
+
 ### 2026-06-01 - LightGBM should keep improving from live human and AI gameplay, not only self-play
 
 - Prompt Signal: The latest model-improvement request explicitly asked for a

@@ -156,6 +156,7 @@ The root `.env.example` now includes:
 - `LIGHTGBM_INFER_SCRIPT`
 - `LIGHTGBM_MODEL_PATH`
 - `LIGHTGBM_MODEL_META_PATH`
+- `LIGHTGBM_MIN_LEGAL_ACTIONS_FOR_SCORING`
 - `LIGHTGBM_CONFIDENCE_MARGIN`
 - `LIGHTGBM_CONFIDENCE_DELEGATION_MAX_PRE_DELEGATION_MS`
 - `LIGHTGBM_ROLLOUT_RERANK_TOP_K`
@@ -174,6 +175,12 @@ The checked-in backend defaults keep telemetry persistence single-writer for
 stability, but now use a deeper ingest queue (`TELEMETRY_INGEST_QUEUE_MAX_DEPTH=50000`)
 so bounded training-readiness runs do not silently lose telemetry to queue-pressure
 drops before outcome attribution completes.
+
+The checked-in LightGBM serving defaults also skip model scoring for tiny
+trick-play branches (`LIGHTGBM_MIN_LEGAL_ACTIONS_FOR_SCORING=5`). In practice,
+one-to-four-action spots are where the fast backend heuristic is already very
+cheap, while the Python scorer can still spike badly enough to trip the client
+timeout.
 
 `apps/server/.env.example` mirrors the server-specific defaults when you want a backend-only env reference.
 

@@ -698,6 +698,7 @@ export async function routeLightgbmDecision(
   options: {
     traceDecisionRequests?: boolean;
     confidenceMargin?: number | null;
+    minLegalActionsForScoring?: number | null;
     confidenceDelegationMaxPreDelegationMs?: number | null;
     rolloutReranker?: LightgbmRolloutReranker;
     rolloutRerankTopK?: number | null;
@@ -709,6 +710,10 @@ export async function routeLightgbmDecision(
   const startedAt = Date.now();
   const configuredConfidenceMargin =
     options.confidenceMargin === undefined ? 1.0 : options.confidenceMargin;
+  const configuredMinLegalActionsForScoring =
+    options.minLegalActionsForScoring === undefined
+      ? 5
+      : options.minLegalActionsForScoring;
   const configuredConfidenceDelegationMaxPreDelegationMs =
     options.confidenceDelegationMaxPreDelegationMs === undefined
       ? 1000
@@ -785,6 +790,43 @@ export async function routeLightgbmDecision(
               ? delegatedPayload.metadata.scoring_path
               : "fast_path",
           lightgbm_feature_profile: featureRequirements?.featureProfile ?? null
+        },
+        ...(options.traceDecisionRequests !== undefined
+          ? { traceDecisionRequests: options.traceDecisionRequests }
+          : {})
+      });
+    }
+
+    if (
+      payload.phase === "trick_play" &&
+      configuredMinLegalActionsForScoring !== null &&
+      actorLegalActions.length < configuredMinLegalActionsForScoring
+    ) {
+      const delegatedPayload = buildLightgbmFallbackPayload(
+        payload,
+        stateRaw,
+        canonicalActor,
+        actorLegalActions
+      );
+      return routeHeuristicDecision(delegatedPayload, {
+        providerReason:
+          "LightGBM delegated a low-branching trick-play decision to the backend heuristic.",
+        metadata: {
+          requested_provider: "lightgbm_model",
+          provider_path: "lightgbm_model",
+          fallback_used: false,
+          lightgbm_small_branch_delegated: true,
+          lightgbm_small_branch_legal_action_count: actorLegalActions.length,
+          lightgbm_small_branch_threshold:
+            configuredMinLegalActionsForScoring,
+          lightgbm_requested_scoring_path:
+            typeof payload.metadata.scoring_path === "string"
+              ? payload.metadata.scoring_path
+              : "rich_path",
+          lightgbm_delegate_scoring_path:
+            typeof delegatedPayload.metadata.scoring_path === "string"
+              ? delegatedPayload.metadata.scoring_path
+              : "fast_path",
         },
         ...(options.traceDecisionRequests !== undefined
           ? { traceDecisionRequests: options.traceDecisionRequests }

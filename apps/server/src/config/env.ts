@@ -51,6 +51,7 @@ export type ServerConfig = {
   lightgbmInferScript: string;
   lightgbmModelPath: string;
   lightgbmModelMetaPath: string;
+  lightgbmMinLegalActionsForScoring: number | null;
   lightgbmConfidenceMargin: number | null;
   lightgbmConfidenceDelegationMaxPreDelegationMs: number | null;
   lightgbmRolloutRerankTopK: number | null;
@@ -387,6 +388,10 @@ export function loadServerConfig(
       repoRoot,
       mergedEnv.LIGHTGBM_MODEL_META_PATH,
       path.join("ml", "model_registry", "lightgbm_action_model.meta.json")
+    ),
+    lightgbmMinLegalActionsForScoring: parseOptionalPositiveIntegerWithFallback(
+      mergedEnv.LIGHTGBM_MIN_LEGAL_ACTIONS_FOR_SCORING,
+      5
     ),
     lightgbmConfidenceMargin: parseOptionalNonNegativeNumberWithFallback(
       mergedEnv.LIGHTGBM_CONFIDENCE_MARGIN,
