@@ -360,6 +360,12 @@ That dialog lets you change, at runtime and without rebuild:
 
 Env values provide first-run defaults. After the first UI change, the client persists the effective values in `localStorage` and uses those persisted settings on later runs.
 
+When the gameplay frontend is hosted from a non-loopback browser origin such as
+`http://192.168.50.36:5174`, the client now infers the Linux backend at
+`http://<same-host>:4310` and defaults `Decision Mode` to
+`server_heuristic`. Localhost Vite sessions still default to `local` so browser
+development does not silently depend on a backend.
+
 ### Self-play and LightGBM workflow
 
 Run a local self-play batch:

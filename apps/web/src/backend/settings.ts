@@ -32,18 +32,79 @@ type BrowserLocationLike = Pick<
   "host" | "origin" | "port" | "protocol"
 >;
 
-export function resolveBrowserBackendBaseUrl(
+function readBrowserHostname(
   location: BrowserLocationLike | undefined
 ): string | null {
   if (!location || !["http:", "https:"].includes(location.protocol)) {
     return null;
   }
 
-  if (!location.host || location.port !== String(DEFAULT_SERVER_PORT)) {
+  try {
+    return new URL(location.origin).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function isLoopbackHostname(hostname: string | null): boolean {
+  if (!hostname) {
+    return false;
+  }
+
+  return (
+    hostname === "localhost" ||
+    hostname === "0.0.0.0" ||
+    hostname === "::1" ||
+    hostname.startsWith("127.")
+  );
+}
+
+export function resolveBrowserBackendBaseUrl(
+  location: BrowserLocationLike | undefined
+): string | null {
+  const hostname = readBrowserHostname(location);
+  if (!location || !["http:", "https:"].includes(location.protocol)) {
     return null;
   }
 
-  return normalizeBackendBaseUrl(location.origin);
+  if (!location.host) {
+    return null;
+  }
+
+  if (location.port === String(DEFAULT_SERVER_PORT)) {
+    return normalizeBackendBaseUrl(location.origin);
+  }
+
+  if (isLoopbackHostname(hostname)) {
+    return null;
+  }
+
+  const origin = `${location.protocol}//${hostname}:${DEFAULT_SERVER_PORT}`;
+  return normalizeBackendBaseUrl(origin);
+}
+
+export function resolveHostedDecisionModeDefault(
+  location: BrowserLocationLike | undefined
+): DecisionMode | null {
+  const hostname = readBrowserHostname(location);
+  if (!hostname || isLoopbackHostname(hostname)) {
+    return null;
+  }
+
+  return "server_heuristic";
+}
+
+function resolveDefaultDecisionMode(): DecisionMode {
+  const configured = import.meta.env.VITE_DECISION_MODE;
+  if (configured) {
+    return readDecisionMode(configured);
+  }
+
+  return (
+    resolveHostedDecisionModeDefault(
+      typeof window === "undefined" ? undefined : window.location
+    ) ?? "local"
+  );
 }
 
 function resolveDefaultBackendBaseUrl(): string {
@@ -61,7 +122,7 @@ function resolveDefaultBackendBaseUrl(): string {
 
 export function getBackendSettingsDefaults(): BackendRuntimeSettings {
   return {
-    decisionMode: readDecisionMode(import.meta.env.VITE_DECISION_MODE),
+    decisionMode: resolveDefaultDecisionMode(),
     backendBaseUrl: resolveDefaultBackendBaseUrl(),
     serverFallbackEnabled: parseBooleanEnv(
       import.meta.env.VITE_SERVER_FALLBACK_ENABLED,

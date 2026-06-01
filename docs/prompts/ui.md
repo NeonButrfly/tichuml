@@ -1049,3 +1049,19 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 - Linked GitHub Issue: [#81](https://github.com/NeonButrfly/tichuml/issues/81)
 - Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
 - Status Source: GitHub issue state only.
+
+### 2026-06-01 - Hosted standard table should default to Linux backend decisions
+
+- Prompt Signal: The latest standard-table functional pass asked for the
+  regular TichuML UX to run from the Linux-hosted frontend and to connect to
+  the backend for live decisions, then verified the hosted route interactively.
+- Interpreted Requirement: Fresh non-loopback hosted browser sessions such as
+  `http://192.168.50.36:5174/?table=normal` must infer the Linux backend at the
+  same host on port `4310` and default `Decision Mode` to
+  `server_heuristic`, while localhost dev sessions stay local-first.
+- Affected Systems: `apps/web/src/backend/settings.ts`,
+  `tests/integration/backend-settings.test.ts`,
+  `README.md`.
+- Linked GitHub Issue: [#58](https://github.com/NeonButrfly/tichuml/issues/58)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.
