@@ -220,7 +220,8 @@ const CONFIG_SCHEMA: Array<{
   { key: "LIGHTGBM_MODEL_META_PATH", label: "LightGBM model metadata", category: "ML", type: "string", restart_required: true, description: "LightGBM model metadata path." },
   { key: "LIGHTGBM_CONFIDENCE_MARGIN", label: "LightGBM confidence margin", category: "ML", type: "number", restart_required: true, description: "Optional rollout-ranker score margin cutoff below which LightGBM delegates trick-play decisions back to the backend heuristic. Leave blank to disable the gate.", validate: validateOptionalNonNegativeNumber },
   { key: "LIGHTGBM_ROLLOUT_RERANK_TOP_K", label: "LightGBM rollout top K", category: "ML", type: "number", restart_required: true, description: "Optional top-K LightGBM trick-play candidates to rerank with bounded heuristic rollouts. Leave blank to disable rollout reranking.", validate: validateOptionalPositiveNumber },
-  { key: "LIGHTGBM_ROLLOUT_RERANK_SAMPLES", label: "LightGBM rollout samples", category: "ML", type: "number", restart_required: true, description: "Optional rollout samples per LightGBM candidate during bounded live reranking. Leave blank to disable rollout reranking.", validate: validateOptionalPositiveNumber }
+  { key: "LIGHTGBM_ROLLOUT_RERANK_SAMPLES", label: "LightGBM rollout samples", category: "ML", type: "number", restart_required: true, description: "Optional rollout samples per LightGBM candidate during bounded live reranking. Leave blank to disable rollout reranking.", validate: validateOptionalPositiveNumber },
+  { key: "LIGHTGBM_ROLLOUT_RERANK_MAX_SCORE_MARGIN", label: "LightGBM rollout max score margin", category: "ML", type: "number", restart_required: true, description: "Optional raw LightGBM top-vs-second score margin cutoff for live rollout reranking. Wider margins skip reranking and keep the deterministic top score.", validate: validateOptionalNonNegativeNumber }
 ];
 
 const EDITABLE_KEYS = new Set(CONFIG_SCHEMA.map((entry) => entry.key));
@@ -599,6 +600,10 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
       LIGHTGBM_ROLLOUT_RERANK_SAMPLES:
         this.config.lightgbmRolloutRerankSamples !== null
           ? String(this.config.lightgbmRolloutRerankSamples)
+          : "",
+      LIGHTGBM_ROLLOUT_RERANK_MAX_SCORE_MARGIN:
+        this.config.lightgbmRolloutRerankMaxScoreMargin !== null
+          ? String(this.config.lightgbmRolloutRerankMaxScoreMargin)
           : ""
     };
     return disk[key] ?? fallback[key] ?? "";
@@ -720,6 +725,10 @@ export class FileRuntimeAdminService implements RuntimeAdminService {
       case "LIGHTGBM_ROLLOUT_RERANK_SAMPLES":
         return this.config.lightgbmRolloutRerankSamples !== null
           ? String(this.config.lightgbmRolloutRerankSamples)
+          : "";
+      case "LIGHTGBM_ROLLOUT_RERANK_MAX_SCORE_MARGIN":
+        return this.config.lightgbmRolloutRerankMaxScoreMargin !== null
+          ? String(this.config.lightgbmRolloutRerankMaxScoreMargin)
           : "";
       default:
         return undefined;

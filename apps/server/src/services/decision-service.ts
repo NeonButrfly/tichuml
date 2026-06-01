@@ -32,6 +32,7 @@ export async function handleDecisionRequest(
     lightgbmRolloutReranker?: LightgbmRolloutReranker;
     lightgbmRolloutRerankTopK?: number | null;
     lightgbmRolloutRerankSamples?: number | null;
+    lightgbmRolloutRerankMaxScoreMargin?: number | null;
     parseMs?: number;
     validateMs?: number;
     payloadBytes?: number;
@@ -78,6 +79,12 @@ export async function handleDecisionRequest(
               ? {
                   rolloutRerankSamples:
                     dependencies.lightgbmRolloutRerankSamples,
+                }
+              : {}),
+            ...(dependencies.lightgbmRolloutRerankMaxScoreMargin !== undefined
+              ? {
+                  rolloutRerankMaxScoreMargin:
+                    dependencies.lightgbmRolloutRerankMaxScoreMargin,
                 }
               : {})
           }

@@ -92,6 +92,11 @@ export type LightgbmRolloutRerankResult = {
   candidateResults: LightgbmRolloutCandidateResult[];
 };
 
+type LightgbmRolloutRerankDecision = {
+  shouldAttempt: boolean;
+  skippedReason: string | null;
+};
+
 export type LightgbmRolloutReranker = (config: {
   payload: DecisionRequestPayload;
   stateRaw: GameState;
@@ -383,6 +388,41 @@ function lightgbmSupportsRolloutRerank(config: {
   return objective === "rollout_ranker" && featureProfile === "runtime_raw";
 }
 
+function shouldAttemptLightgbmRolloutRerank(config: {
+  phase: string;
+  featureRequirements: LightgbmFeatureRequirements | null | undefined;
+  modelMetadata: JsonObject;
+  topK: number | null | undefined;
+  samplesPerCandidate: number | null | undefined;
+  scoreMargin: number;
+  maxScoreMargin: number | null | undefined;
+}): LightgbmRolloutRerankDecision {
+  const supported = lightgbmSupportsRolloutRerank(config);
+  if (!supported) {
+    return {
+      shouldAttempt: false,
+      skippedReason: "unsupported_model_or_phase"
+    };
+  }
+
+  if (
+    typeof config.maxScoreMargin === "number" &&
+    Number.isFinite(config.maxScoreMargin) &&
+    config.maxScoreMargin >= 0 &&
+    config.scoreMargin > config.maxScoreMargin
+  ) {
+    return {
+      shouldAttempt: false,
+      skippedReason: "score_margin_above_threshold"
+    };
+  }
+
+  return {
+    shouldAttempt: true,
+    skippedReason: null
+  };
+}
+
 export async function rerankLightgbmCandidatesWithRollouts(
   config: {
     payload: DecisionRequestPayload;
@@ -650,6 +690,7 @@ export async function routeLightgbmDecision(
     rolloutReranker?: LightgbmRolloutReranker;
     rolloutRerankTopK?: number | null;
     rolloutRerankSamples?: number | null;
+    rolloutRerankMaxScoreMargin?: number | null;
   } = {}
 ): Promise<RoutedDecision> {
   const startedAt = Date.now();
@@ -659,6 +700,10 @@ export async function routeLightgbmDecision(
     options.rolloutRerankTopK === undefined ? 2 : options.rolloutRerankTopK;
   const configuredRolloutSamples =
     options.rolloutRerankSamples === undefined ? 1 : options.rolloutRerankSamples;
+  const configuredRolloutMaxScoreMargin =
+    options.rolloutRerankMaxScoreMargin === undefined
+      ? 0.1
+      : options.rolloutRerankMaxScoreMargin;
   const stateRaw = payload.state_raw;
   if (!isUsableState(stateRaw)) {
     throw new Error(
@@ -787,19 +832,20 @@ export async function routeLightgbmDecision(
     }
     const secondBestScore = ranked[1]?.score ?? selected.score;
     const selectedScoreMargin = selected.score - secondBestScore;
+    const rolloutRerankDecision = shouldAttemptLightgbmRolloutRerank({
+      phase: payload.phase,
+      featureRequirements,
+      modelMetadata: scored.modelMetadata,
+      topK: configuredRolloutTopK,
+      samplesPerCandidate: configuredRolloutSamples,
+      scoreMargin: selectedScoreMargin,
+      maxScoreMargin: configuredRolloutMaxScoreMargin
+    });
 
     let rolloutRerankResult: LightgbmRolloutRerankResult | null = null;
     let rolloutRerankError: string | null = null;
     const reranker = options.rolloutReranker ?? rerankLightgbmCandidatesWithRollouts;
-    if (
-      lightgbmSupportsRolloutRerank({
-        phase: payload.phase,
-        featureRequirements,
-        modelMetadata: scored.modelMetadata,
-        topK: configuredRolloutTopK,
-        samplesPerCandidate: configuredRolloutSamples
-      })
-    ) {
+    if (rolloutRerankDecision.shouldAttempt) {
       try {
         rolloutRerankResult = await reranker({
           payload,
@@ -977,10 +1023,19 @@ export async function routeLightgbmDecision(
           lightgbm_rollout_rerank_top_k: rolloutRerankResult?.topK ?? null,
           lightgbm_rollout_rerank_samples:
             rolloutRerankResult?.samplesPerCandidate ?? null,
+          lightgbm_rollout_rerank_score_margin: selectedScoreMargin,
+          lightgbm_rollout_rerank_score_margin_threshold:
+            configuredRolloutMaxScoreMargin,
           lightgbm_rollout_rerank_overrode_top_score:
             rolloutRerankResult?.overrodeTopScore ?? false,
           lightgbm_rollout_rerank_results:
             rolloutRerankResult?.candidateResults ?? null,
+          ...(rolloutRerankDecision.skippedReason
+            ? {
+                lightgbm_rollout_rerank_skipped_reason:
+                  rolloutRerankDecision.skippedReason
+              }
+            : {}),
           ...(rolloutRerankError
             ? { lightgbm_rollout_rerank_error: rolloutRerankError }
             : {}),
@@ -1034,10 +1089,19 @@ export async function routeLightgbmDecision(
         lightgbm_rollout_rerank_top_k: rolloutRerankResult?.topK ?? null,
         lightgbm_rollout_rerank_samples:
           rolloutRerankResult?.samplesPerCandidate ?? null,
+        lightgbm_rollout_rerank_score_margin: selectedScoreMargin,
+        lightgbm_rollout_rerank_score_margin_threshold:
+          configuredRolloutMaxScoreMargin,
         lightgbm_rollout_rerank_overrode_top_score:
           rolloutRerankResult?.overrodeTopScore ?? false,
         lightgbm_rollout_rerank_results:
           rolloutRerankResult?.candidateResults ?? null,
+        ...(rolloutRerankDecision.skippedReason
+          ? {
+              lightgbm_rollout_rerank_skipped_reason:
+                rolloutRerankDecision.skippedReason
+            }
+          : {}),
         ...(rolloutRerankError
           ? { lightgbm_rollout_rerank_error: rolloutRerankError }
           : {}),

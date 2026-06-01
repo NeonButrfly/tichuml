@@ -159,6 +159,7 @@ The root `.env.example` now includes:
 - `LIGHTGBM_CONFIDENCE_MARGIN`
 - `LIGHTGBM_ROLLOUT_RERANK_TOP_K`
 - `LIGHTGBM_ROLLOUT_RERANK_SAMPLES`
+- `LIGHTGBM_ROLLOUT_RERANK_MAX_SCORE_MARGIN`
 - `TELEMETRY_INGEST_QUEUE_MAX_DEPTH`
 - `TELEMETRY_PERSISTENCE_BATCH_SIZE`
 - `TELEMETRY_PERSISTENCE_CONCURRENCY`
@@ -466,7 +467,9 @@ The serving path now also does a bounded second-pass rerank for eligible
 actions first, then the backend reranks the top `K` candidates with small
 backend-heuristic continuation rollouts before choosing the final move. Use
 `LIGHTGBM_ROLLOUT_RERANK_TOP_K` and `LIGHTGBM_ROLLOUT_RERANK_SAMPLES` to tune
-or disable that live rerank stage.
+or disable that live rerank stage. Use
+`LIGHTGBM_ROLLOUT_RERANK_MAX_SCORE_MARGIN` to keep reranking focused on close
+decisions instead of paying rollout cost on obvious winners.
 Backend startup now also prewarms the Python LightGBM inference worker before
 the HTTP listener comes up, so the first scored request does not pay cold-start
 model-load cost inside the normal decision timeout budget.

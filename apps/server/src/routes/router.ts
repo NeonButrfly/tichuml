@@ -696,6 +696,8 @@ export function createRouter({
               lightgbmConfidenceMargin: config.lightgbmConfidenceMargin,
               lightgbmRolloutRerankTopK: config.lightgbmRolloutRerankTopK,
               lightgbmRolloutRerankSamples: config.lightgbmRolloutRerankSamples,
+              lightgbmRolloutRerankMaxScoreMargin:
+                config.lightgbmRolloutRerankMaxScoreMargin,
               ...(lightgbmRolloutReranker
                 ? { lightgbmRolloutReranker }
                 : {}),
