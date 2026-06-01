@@ -143,9 +143,11 @@ npm run ml:live-bootstrap -- --output-dir training-runs/live-gameplay-001/ml --a
 `ml:live-bootstrap` exports `source=gameplay` trick-play rows as JSONL, keeps
 mixed live providers only when you opt in with `--allow-mixed-providers`, runs
 offline rollout relabeling against that export selection, and trains a
-rollout-based candidate model bundle into the requested output directory. This
-first version is intentionally candidate-only: it does not auto-promote or
-repoint the live backend model for you.
+rollout-based candidate model bundle into the requested output directory. It
+then starts a temporary backend pinned to that candidate model and runs the
+normal mirrored `ml:evaluate` improvement gate against it. The command still
+does not auto-promote or repoint the live backend model for you; it only tells
+you whether the newly trained live-data candidate cleared the gate.
 
 ## Data products
 

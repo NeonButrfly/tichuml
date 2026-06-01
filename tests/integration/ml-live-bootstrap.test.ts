@@ -16,16 +16,23 @@ describe("live ml bootstrap orchestration", () => {
       featureProfile: "runtime_raw",
       objective: "rollout_ranker",
       minRolloutDecisionSpread: 20,
+      evaluateGames: 8,
+      evaluateMinGamesForGate: 8,
+      evaluateBaselineProvider: "server_heuristic",
+      candidateBackendPort: 4312,
+      skipEvaluate: false,
     });
 
     expect(plan.steps.map((step) => step.label)).toEqual([
       "ml:export",
       "ml:rollouts",
       "ml:train",
+      "build:server",
+      "ml:evaluate",
     ]);
     expect(plan.steps[0]?.args).toEqual([
       "run",
-      "ml:export",
+      "ml:export:raw",
       "--",
       "--phase",
       "trick_play",
@@ -86,6 +93,28 @@ describe("live ml bootstrap orchestration", () => {
       "--min-rollout-decision-spread",
       "20",
     ]);
+    expect(plan.steps[3]?.args).toEqual(["run", "build", "-w", "@tichuml/server"]);
+    expect(plan.steps[4]?.args).toEqual([
+      "run",
+      "ml:evaluate",
+      "--",
+      "--games",
+      "8",
+      "--min-games-for-gate",
+      "8",
+      "--ns-provider",
+      "lightgbm_model",
+      "--ew-provider",
+      "server_heuristic",
+      "--mirror-seats",
+      "true",
+      "--telemetry",
+      "false",
+      "--backend-url",
+      "http://127.0.0.1:4312",
+      "--output",
+      plan.evaluationReportPath,
+    ]);
   });
 
   it("switches to a single-provider gameplay slice when requested", () => {
@@ -102,6 +131,11 @@ describe("live ml bootstrap orchestration", () => {
       featureProfile: "runtime_raw",
       objective: "rollout_ranker",
       minRolloutDecisionSpread: 0,
+      evaluateGames: 8,
+      evaluateMinGamesForGate: 8,
+      evaluateBaselineProvider: "server_heuristic",
+      candidateBackendPort: 4312,
+      skipEvaluate: true,
     });
 
     expect(plan.steps[0]?.args).toContain("--provider");
@@ -109,6 +143,11 @@ describe("live ml bootstrap orchestration", () => {
     expect(plan.steps[0]?.args).not.toContain("--allow-mixed-providers");
     expect(plan.steps[1]?.args).not.toContain("--max-decisions");
     expect(plan.steps[2]?.args).not.toContain("--min-rollout-decision-spread");
+    expect(plan.steps.map((step) => step.label)).toEqual([
+      "ml:export",
+      "ml:rollouts",
+      "ml:train",
+    ]);
   });
 
   it("requires a non-empty output directory", () => {
@@ -126,6 +165,11 @@ describe("live ml bootstrap orchestration", () => {
         featureProfile: "runtime_raw",
         objective: "rollout_ranker",
         minRolloutDecisionSpread: 0,
+        evaluateGames: 8,
+        evaluateMinGamesForGate: 8,
+        evaluateBaselineProvider: "server_heuristic",
+        candidateBackendPort: 4312,
+        skipEvaluate: false,
       })
     ).toThrow(/output-dir/i);
   });

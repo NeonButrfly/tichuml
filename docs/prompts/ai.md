@@ -24,8 +24,10 @@ Use this file to preserve AI and bot-behavior prompt intent and link it to GitHu
   [#79](https://github.com/NeonButrfly/tichuml/issues/79) now also tracks a
   live-gameplay bootstrap flow that exports `source=gameplay` telemetry, allows
   an explicit mixed-provider slice when human and AI rows are intentionally
-  combined, relabels those positions with offline rollouts, and trains a
-  rollout-based LightGBM candidate bundle without blindly auto-promoting it.
+  combined, relabels those positions with offline rollouts, trains a
+  rollout-based LightGBM candidate bundle, and screens that candidate through
+  the normal mirrored evaluation gate on a temporary backend without blindly
+  auto-promoting it.
 - Affected Systems: `ml/export_training_rows.py`,
   `scripts/ml-live-bootstrap.ts`, `package.json`,
   `tests/integration/ml-live-bootstrap.test.ts`,

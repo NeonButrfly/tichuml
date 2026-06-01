@@ -72,7 +72,8 @@ Quick reference:
   `rollout_ranker`.
 - `npm run ml:live-bootstrap` builds a rollout-labeled candidate model from
   live `gameplay` telemetry, including mixed `human_ui` and AI-provider rows
-  when explicitly allowed.
+  when explicitly allowed, and can screen that candidate through the normal
+  mirrored evaluation gate on a temporary backend.
 - After any host-side `ml:train` run that updates
   `ml/model_registry/lightgbm_action_model.*`, restart the backend before
   evaluating or serving `lightgbm_model` so the runtime reloads the new model
@@ -391,10 +392,12 @@ For live gameplay improvement, build a rollout-labeled candidate from persisted
 npm run ml:live-bootstrap -- --output-dir training-runs/live-gameplay-001/ml --allow-mixed-providers --rollout-max-decisions 250 --rollouts-per-action 2
 ```
 
-That first-version flow exports gameplay-tagged decision rows as JSONL, relabels
-them with offline rollouts, and trains a candidate model bundle inside the
-requested output directory. It does not auto-promote the candidate into the
-served backend model.
+That flow exports gameplay-tagged decision rows as JSONL, relabels them with
+offline rollouts, trains a candidate model bundle inside the requested output
+directory, then evaluates that candidate on a temporary backend that points at
+the freshly trained model files. The command exits non-zero if the improvement
+gate fails. It still does not auto-promote the candidate into the served
+backend model.
 
 Provider evaluation:
 

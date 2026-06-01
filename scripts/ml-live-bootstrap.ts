@@ -1,5 +1,6 @@
+import fs from "node:fs";
 import path from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 type ProviderMode = "local" | "server_heuristic" | "lightgbm_model";
@@ -19,10 +20,15 @@ export type LiveMlBootstrapOptions = {
   featureProfile: FeatureProfile;
   objective: TrainingObjective;
   minRolloutDecisionSpread: number;
+  evaluateGames: number;
+  evaluateMinGamesForGate: number;
+  evaluateBaselineProvider: ProviderMode;
+  candidateBackendPort: number;
+  skipEvaluate: boolean;
 };
 
 export type LiveMlBootstrapStep = {
-  label: "ml:export" | "ml:rollouts" | "ml:train";
+  label: "ml:export" | "ml:rollouts" | "ml:train" | "build:server" | "ml:evaluate";
   command: string;
   args: string[];
 };
@@ -36,6 +42,8 @@ export type LiveMlBootstrapPlan = {
   modelMetaPath: string;
   trainingReportPath: string;
   featureImportancePath: string;
+  evaluationReportPath: string;
+  candidateBackendUrl: string | null;
   steps: LiveMlBootstrapStep[];
 };
 
@@ -120,6 +128,18 @@ export function buildLiveMlBootstrapPlan(
     options.minRolloutDecisionSpread,
     "--min-rollout-decision-spread"
   );
+  const evaluateGames = requirePositiveInteger(
+    options.evaluateGames,
+    "--evaluate-games"
+  );
+  const evaluateMinGamesForGate = requirePositiveInteger(
+    options.evaluateMinGamesForGate,
+    "--evaluate-min-games-for-gate"
+  );
+  const candidateBackendPort = requirePositiveInteger(
+    options.candidateBackendPort,
+    "--candidate-backend-port"
+  );
   const datasetPath = path.join(outputDir, "train.jsonl");
   const manifestPath = path.join(outputDir, "dataset_metadata.json");
   const rolloutPath = path.join(outputDir, "rollout_rows.jsonl");
@@ -127,10 +147,14 @@ export function buildLiveMlBootstrapPlan(
   const modelMetaPath = path.join(outputDir, "lightgbm_action_model.meta.json");
   const trainingReportPath = path.join(outputDir, "training-report.json");
   const featureImportancePath = path.join(outputDir, "feature-importance.csv");
+  const evaluationReportPath = path.join(outputDir, "evaluation-report.json");
+  const candidateBackendUrl = options.skipEvaluate
+    ? null
+    : `http://127.0.0.1:${candidateBackendPort}`;
 
   const exportArgs = [
     "run",
-    "ml:export",
+    "ml:export:raw",
     "--",
     "--phase",
     "trick_play",
@@ -200,6 +224,57 @@ export function buildLiveMlBootstrapPlan(
     );
   }
 
+  const steps: LiveMlBootstrapStep[] = [
+    {
+      label: "ml:export",
+      command: "npm",
+      args: exportArgs,
+    },
+    {
+      label: "ml:rollouts",
+      command: "npm",
+      args: rolloutArgs,
+    },
+    {
+      label: "ml:train",
+      command: "npm",
+      args: trainArgs,
+    },
+  ];
+
+  if (!options.skipEvaluate) {
+    steps.push({
+      label: "build:server",
+      command: "npm",
+      args: ["run", "build", "-w", "@tichuml/server"],
+    });
+    steps.push({
+      label: "ml:evaluate",
+      command: "npm",
+      args: [
+        "run",
+        "ml:evaluate",
+        "--",
+        "--games",
+        String(evaluateGames),
+        "--min-games-for-gate",
+        String(evaluateMinGamesForGate),
+        "--ns-provider",
+        "lightgbm_model",
+        "--ew-provider",
+        options.evaluateBaselineProvider,
+        "--mirror-seats",
+        "true",
+        "--telemetry",
+        "false",
+        "--backend-url",
+        candidateBackendUrl ?? "",
+        "--output",
+        evaluationReportPath,
+      ],
+    });
+  }
+
   return {
     outputDir,
     datasetPath,
@@ -209,31 +284,25 @@ export function buildLiveMlBootstrapPlan(
     modelMetaPath,
     trainingReportPath,
     featureImportancePath,
-    steps: [
-      {
-        label: "ml:export",
-        command: "npm",
-        args: exportArgs,
-      },
-      {
-        label: "ml:rollouts",
-        command: "npm",
-        args: rolloutArgs,
-      },
-      {
-        label: "ml:train",
-        command: "npm",
-        args: trainArgs,
-      },
-    ],
+    evaluationReportPath,
+    candidateBackendUrl,
+    steps,
   };
 }
 
-function runCommand(command: string, args: string[]): Promise<void> {
+function runCommand(
+  command: string,
+  args: string[],
+  envOverrides?: NodeJS.ProcessEnv
+): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       stdio: "inherit",
       shell: process.platform === "win32",
+      env: {
+        ...process.env,
+        ...(envOverrides ?? {}),
+      },
     });
 
     child.on("close", (code) => {
@@ -252,9 +321,76 @@ function runCommand(command: string, args: string[]): Promise<void> {
   });
 }
 
+function readGatePassed(reportPath: string): boolean {
+  if (!fs.existsSync(reportPath)) {
+    throw new Error(`Evaluation report was not written to ${reportPath}.`);
+  }
+  const parsed = JSON.parse(fs.readFileSync(reportPath, "utf8")) as {
+    gate?: { passed?: unknown };
+  };
+  return parsed.gate?.passed === true;
+}
+
+async function waitForHealth(url: string, timeoutMs = 30_000): Promise<void> {
+  const startedAt = Date.now();
+  let lastError: string | null = null;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const response = await fetch(url, { method: "GET" });
+      if (response.ok) {
+        return;
+      }
+      lastError = `HTTP ${response.status}`;
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+
+  throw new Error(
+    `Timed out waiting for candidate backend health at ${url}. Last error: ${lastError ?? "unknown"}.`
+  );
+}
+
+async function stopChildProcess(
+  child: ChildProcessWithoutNullStreams | null
+): Promise<void> {
+  if (!child || child.killed) {
+    return;
+  }
+
+  await new Promise<void>((resolve) => {
+    child.once("close", () => resolve());
+    child.kill();
+  });
+}
+
+function startCandidateBackend(config: {
+  repoRoot: string;
+  backendPort: number;
+  modelPath: string;
+  modelMetaPath: string;
+}): ChildProcessWithoutNullStreams {
+  return spawn("npm", ["run", "start:server"], {
+    cwd: config.repoRoot,
+    stdio: "inherit",
+    shell: process.platform === "win32",
+    env: {
+      ...process.env,
+      HOST: "127.0.0.1",
+      PORT: String(config.backendPort),
+      BACKEND_BASE_URL: `http://127.0.0.1:${config.backendPort}`,
+      LIGHTGBM_MODEL_PATH: config.modelPath,
+      LIGHTGBM_MODEL_META_PATH: config.modelMetaPath,
+    },
+  });
+}
+
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   const provider = readArg(argv, "--provider");
+  const repoRoot = process.cwd();
   const plan = buildLiveMlBootstrapPlan({
     outputDir: readArg(argv, "--output-dir") ?? "",
     backendUrl: readArg(argv, "--backend-url") ?? "http://127.0.0.1:4310",
@@ -276,10 +412,48 @@ async function main(): Promise<void> {
       "rollout_ranker",
     minRolloutDecisionSpread:
       readOptionalNumberArg(argv, "--min-rollout-decision-spread") ?? 0,
+    evaluateGames: readOptionalIntegerArg(argv, "--evaluate-games") ?? 8,
+    evaluateMinGamesForGate:
+      readOptionalIntegerArg(argv, "--evaluate-min-games-for-gate") ?? 8,
+    evaluateBaselineProvider:
+      (readArg(argv, "--evaluate-baseline-provider") as ProviderMode | null) ??
+      "server_heuristic",
+    candidateBackendPort:
+      readOptionalIntegerArg(argv, "--candidate-backend-port") ?? 4312,
+    skipEvaluate: argv.includes("--skip-evaluate"),
   });
 
-  for (const step of plan.steps) {
-    await runCommand(step.command, step.args);
+  let candidateBackend: ChildProcessWithoutNullStreams | null = null;
+  try {
+    for (const step of plan.steps) {
+      if (step.label === "ml:evaluate") {
+        const backendUrl = plan.candidateBackendUrl;
+        if (!backendUrl) {
+          throw new Error("Candidate backend URL was not configured for evaluation.");
+        }
+        const candidateBackendPort = Number.parseInt(
+          backendUrl.split(":").at(-1) ?? "",
+          10
+        );
+        candidateBackend = startCandidateBackend({
+          repoRoot,
+          backendPort: candidateBackendPort,
+          modelPath: path.resolve(plan.modelPath),
+          modelMetaPath: path.resolve(plan.modelMetaPath),
+        });
+        await waitForHealth(`${backendUrl}/health`);
+        await runCommand(step.command, step.args);
+        if (!readGatePassed(plan.evaluationReportPath)) {
+          throw new Error("Live gameplay bootstrap evaluation gate did not pass.");
+        }
+        await stopChildProcess(candidateBackend);
+        candidateBackend = null;
+        continue;
+      }
+      await runCommand(step.command, step.args);
+    }
+  } finally {
+    await stopChildProcess(candidateBackend);
   }
 
   process.stdout.write(
@@ -292,6 +466,7 @@ async function main(): Promise<void> {
         model_path: plan.modelPath,
         model_meta_path: plan.modelMetaPath,
         training_report_path: plan.trainingReportPath,
+        evaluation_report_path: plan.evaluationReportPath,
       },
       null,
       2
