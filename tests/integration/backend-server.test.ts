@@ -2174,10 +2174,10 @@ describe("backend foundation server routes", () => {
           "actor_hand_size_above_threshold"
         );
         expect(payload.metadata?.lightgbm_rollout_rerank_actor_hand_size).toBeGreaterThan(
-          10
+          8
         );
         expect(payload.metadata?.lightgbm_rollout_rerank_actor_hand_size_threshold).toBe(
-          10
+          8
         );
         expect(rerankerCalls).toBe(0);
         await flushServerQueue();
@@ -2195,7 +2195,7 @@ describe("backend foundation server routes", () => {
           lightgbmRolloutRerankTopK: 2,
           lightgbmRolloutRerankSamples: 1,
           lightgbmRolloutRerankMaxScoreMargin: 0.1,
-          lightgbmRolloutRerankMaxActorHandSize: 10,
+          lightgbmRolloutRerankMaxActorHandSize: 8,
         }
       }
     );

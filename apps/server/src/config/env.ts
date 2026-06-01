@@ -429,7 +429,7 @@ export function loadServerConfig(
     lightgbmRolloutRerankMaxActorHandSize:
       parseOptionalPositiveIntegerWithFallback(
         mergedEnv.LIGHTGBM_ROLLOUT_RERANK_MAX_ACTOR_HAND_SIZE,
-        10
+        8
       )
   };
 }

@@ -491,7 +491,9 @@ decisions instead of paying rollout cost on obvious winners, and use
 continuation sample before the backend falls back to the raw LightGBM winner.
 Use `LIGHTGBM_ROLLOUT_RERANK_MAX_ACTOR_HAND_SIZE` to skip reranking on larger
 early-hand positions where bounded continuation rollouts are still too slow to
-justify the live latency cost.
+justify the live latency cost. The checked-in default is `8`, which keeps the
+live path off the bigger early-hand branches that were still causing runtime
+timeout pressure on both local and Linux backends.
 Backend startup now also prewarms the Python LightGBM inference worker before
 the HTTP listener comes up, so the first scored request does not pay cold-start
 model-load cost inside the normal decision timeout budget.

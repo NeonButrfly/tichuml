@@ -54,6 +54,8 @@ Use this file to preserve AI and bot-behavior prompt intent and link it to GitHu
   stricter live rerank gate that skips rollout reranking when the acting seat
   still holds a large hand, records that skip reason in backend metadata, and
   leaves those spots on the faster deterministic or confidence-delegated path.
+  Fresh bounded local and Linux evaluation evidence tightened the checked-in
+  default hand-size threshold from `10` to `8`.
 - Affected Systems: `apps/server/src/providers/lightgbm-provider.ts`,
   `apps/server/src/config/env.ts`,
   `apps/server/src/services/decision-service.ts`,
