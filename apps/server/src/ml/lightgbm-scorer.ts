@@ -254,14 +254,30 @@ export class PythonLightgbmScorer implements LightgbmScorer {
   private async sendScoreRequest(
     request: LightgbmScoreRequest
   ): Promise<LightgbmScoreResult> {
-    const payload = await this.sendProtocolRequest({
-      state_raw: request.stateRaw,
-      actor_seat: request.actorSeat,
-      phase: request.phase,
-      legal_actions: request.legalActions,
-      state_features: request.stateFeatures,
-      candidate_features: request.candidateFeatures
-    });
+    let payload: Record<string, unknown>;
+    try {
+      payload = await this.sendProtocolRequest(
+        {
+          state_raw: request.stateRaw,
+          actor_seat: request.actorSeat,
+          phase: request.phase,
+          legal_actions: request.legalActions,
+          state_features: request.stateFeatures,
+          candidate_features: request.candidateFeatures
+        },
+        this.config.lightgbmScoringTimeoutMs
+      );
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      if (/timed out/i.test(detail)) {
+        const child = this.child;
+        this.child = null;
+        if (child && !child.killed) {
+          child.kill();
+        }
+      }
+      throw error;
+    }
 
     if (!Array.isArray(payload.scores)) {
       throw new Error("LightGBM inference returned a malformed score payload.");
@@ -297,6 +313,10 @@ export class PythonLightgbmScorer implements LightgbmScorer {
         return await this.sendScoreRequest(request);
       } catch (error) {
         lastError = error;
+        const detail = error instanceof Error ? error.message : String(error);
+        if (/timed out/i.test(detail)) {
+          break;
+        }
       }
     }
 

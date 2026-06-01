@@ -51,6 +51,7 @@ export type ServerConfig = {
   lightgbmInferScript: string;
   lightgbmModelPath: string;
   lightgbmModelMetaPath: string;
+  lightgbmScoringTimeoutMs: number;
   lightgbmMinLegalActionsForScoring: number | null;
   lightgbmConfidenceMargin: number | null;
   lightgbmConfidenceDelegationMaxPreDelegationMs: number | null;
@@ -388,6 +389,10 @@ export function loadServerConfig(
       repoRoot,
       mergedEnv.LIGHTGBM_MODEL_META_PATH,
       path.join("ml", "model_registry", "lightgbm_action_model.meta.json")
+    ),
+    lightgbmScoringTimeoutMs: parsePositiveInteger(
+      mergedEnv.LIGHTGBM_SCORING_TIMEOUT_MS,
+      1000
     ),
     lightgbmMinLegalActionsForScoring: parseOptionalPositiveIntegerWithFallback(
       mergedEnv.LIGHTGBM_MIN_LEGAL_ACTIONS_FOR_SCORING,

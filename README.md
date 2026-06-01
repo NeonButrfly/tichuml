@@ -156,6 +156,7 @@ The root `.env.example` now includes:
 - `LIGHTGBM_INFER_SCRIPT`
 - `LIGHTGBM_MODEL_PATH`
 - `LIGHTGBM_MODEL_META_PATH`
+- `LIGHTGBM_SCORING_TIMEOUT_MS`
 - `LIGHTGBM_MIN_LEGAL_ACTIONS_FOR_SCORING`
 - `LIGHTGBM_CONFIDENCE_MARGIN`
 - `LIGHTGBM_CONFIDENCE_DELEGATION_MAX_PRE_DELEGATION_MS`
@@ -490,6 +491,10 @@ continuation sample before the backend falls back to the raw LightGBM winner.
 Backend startup now also prewarms the Python LightGBM inference worker before
 the HTTP listener comes up, so the first scored request does not pay cold-start
 model-load cost inside the normal decision timeout budget.
+Use `LIGHTGBM_SCORING_TIMEOUT_MS` to cap how long a single Python inference
+request can consume before the backend abandons it and falls back to the fast
+heuristic path. The checked-in default is `1000`, which keeps LightGBM from
+burning the entire caller timeout budget on a single slow score request.
 Use `LIGHTGBM_CONFIDENCE_MARGIN` to tune that low-confidence delegation
 threshold, or leave it blank to disable the rollout-ranker confidence gate
 entirely for an experiment. The checked-in backend default is `1.0` after the

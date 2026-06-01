@@ -631,6 +631,140 @@ function normalizeLightgbmPhase(phase: string | null | undefined): string | null
   return phase === "play" ? "trick_play" : phase;
 }
 
+function compactComboForRuntimeRawState(
+  comboRaw: unknown
+): Record<string, unknown> | null {
+  if (!comboRaw || typeof comboRaw !== "object") {
+    return null;
+  }
+  const combo = comboRaw as Record<string, unknown>;
+  const compact: Record<string, unknown> = {};
+  if (typeof combo.kind === "string") {
+    compact.kind = combo.kind;
+  }
+  if (typeof combo.primaryRank === "number") {
+    compact.primaryRank = combo.primaryRank;
+  } else if (typeof combo.rank === "number") {
+    compact.rank = combo.rank;
+  }
+  if (typeof combo.cardCount === "number") {
+    compact.cardCount = combo.cardCount;
+  } else if (typeof combo.length === "number") {
+    compact.length = combo.length;
+  }
+  if (Array.isArray(combo.actualRanks)) {
+    compact.actualRanks = combo.actualRanks.filter(
+      (value): value is number => typeof value === "number"
+    );
+  }
+  return Object.keys(compact).length > 0 ? compact : null;
+}
+
+function compactCurrentTrickForRuntimeRawState(
+  currentTrickRaw: unknown
+): Record<string, unknown> | null {
+  if (!currentTrickRaw || typeof currentTrickRaw !== "object") {
+    return null;
+  }
+  const currentTrick = currentTrickRaw as Record<string, unknown>;
+  const plays = Array.isArray(currentTrick.plays)
+    ? currentTrick.plays
+    : Array.isArray(currentTrick.entries)
+      ? currentTrick.entries
+      : [];
+  const explicitCombo = compactComboForRuntimeRawState(
+    currentTrick.currentCombination
+  );
+  const trailingPlay =
+    plays.length > 0 && typeof plays[plays.length - 1] === "object"
+      ? (plays[plays.length - 1] as Record<string, unknown>)
+      : null;
+  const fallbackCombo = compactComboForRuntimeRawState(
+    trailingPlay?.combo ?? trailingPlay?.combination
+  );
+  const compact: Record<string, unknown> = {
+    plays: Array.from({ length: plays.length }, () => ({}))
+  };
+  if (typeof currentTrick.currentWinner === "string") {
+    compact.currentWinner = currentTrick.currentWinner;
+  }
+  const chosenCombo = explicitCombo ?? fallbackCombo;
+  if (chosenCombo) {
+    compact.currentCombination = chosenCombo;
+  }
+  return compact;
+}
+
+function compactCallsForRuntimeRawState(
+  stateRaw: GameState
+): Record<string, { smallTichu: boolean; grandTichu: boolean }> {
+  const stateWithLegacyCallLists = stateRaw as GameState & {
+    calledTichu?: string[];
+    calledGrandTichu?: string[];
+  };
+  const stateCalls =
+    typeof stateRaw.calls === "object" && stateRaw.calls !== null
+      ? (stateRaw.calls as Record<string, unknown>)
+      : {};
+  const calledTichu = Array.isArray(stateWithLegacyCallLists.calledTichu)
+    ? new Set(stateWithLegacyCallLists.calledTichu)
+    : new Set<string>();
+  const calledGrandTichu = Array.isArray(stateWithLegacyCallLists.calledGrandTichu)
+    ? new Set(stateWithLegacyCallLists.calledGrandTichu)
+    : new Set<string>();
+
+  return (["seat-0", "seat-1", "seat-2", "seat-3"] as const).reduce<
+    Record<string, { smallTichu: boolean; grandTichu: boolean }>
+  >((calls, seat) => {
+    const explicit =
+      typeof stateCalls[seat] === "object" && stateCalls[seat] !== null
+        ? (stateCalls[seat] as Record<string, unknown>)
+        : null;
+    calls[seat] = {
+      smallTichu:
+        explicit?.smallTichu === true || calledTichu.has(seat),
+      grandTichu:
+        explicit?.grandTichu === true || calledGrandTichu.has(seat)
+    };
+    return calls;
+  }, {});
+}
+
+function buildRuntimeRawCompactState(stateRaw: GameState): JsonObject {
+  const hands = (["seat-0", "seat-1", "seat-2", "seat-3"] as const).reduce<
+    Record<string, number[]>
+  >((result, seat) => {
+    const cards = Array.isArray(stateRaw.hands?.[seat]) ? stateRaw.hands[seat] : [];
+    result[seat] = Array.from({ length: cards.length }, () => 0);
+    return result;
+  }, {});
+
+  const compactState: Record<string, unknown> = {
+    phase: stateRaw.phase,
+    activeSeat: stateRaw.activeSeat ?? null,
+    hands,
+    calls: compactCallsForRuntimeRawState(stateRaw),
+    currentWish:
+      typeof stateRaw.currentWish === "number" ? stateRaw.currentWish : null,
+    currentTrick: compactCurrentTrickForRuntimeRawState(stateRaw.currentTrick),
+  };
+
+  return compactState as JsonObject;
+}
+
+function selectLightgbmScoringState(config: {
+  stateRaw: GameState;
+  featureRequirements: LightgbmFeatureRequirements | null | undefined;
+}): JsonObject {
+  if (
+    config.featureRequirements?.featureProfile === "runtime_raw" &&
+    !lightgbmRequiresSharedTacticalFeatures(config.featureRequirements)
+  ) {
+    return buildRuntimeRawCompactState(config.stateRaw);
+  }
+  return config.stateRaw as unknown as JsonObject;
+}
+
 function lightgbmSupportsPhase(config: {
   phase: string;
   featureRequirements: LightgbmFeatureRequirements | null | undefined;
@@ -852,7 +986,10 @@ export async function routeLightgbmDecision(
     const featureBuildMs = Date.now() - featureBuildStartedAt;
     const scoringStartedAt = Date.now();
     const scored = await scorer.score({
-      stateRaw,
+      stateRaw: selectLightgbmScoringState({
+        stateRaw,
+        featureRequirements
+      }),
       actorSeat: canonicalActor,
       phase: payload.phase,
       legalActions: scoringLegalActions,

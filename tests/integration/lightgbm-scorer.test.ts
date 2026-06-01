@@ -8,7 +8,11 @@ import {
   PythonLightgbmScorer
 } from "../../apps/server/src/ml/lightgbm-scorer";
 
-function createTestConfig(tempDir: string, inferScript: string): ServerConfig {
+function createTestConfig(
+  tempDir: string,
+  inferScript: string,
+  overrides: Partial<ServerConfig> = {}
+): ServerConfig {
   const resolved = loadServerConfig({}, { repoRoot: process.cwd() });
   return {
     ...resolved,
@@ -16,7 +20,8 @@ function createTestConfig(tempDir: string, inferScript: string): ServerConfig {
     pythonExecutable: resolved.pythonExecutable,
     lightgbmInferScript: inferScript,
     lightgbmModelPath: path.join(tempDir, "fake-model.txt"),
-    lightgbmModelMetaPath: path.join(tempDir, "fake-model.meta.json")
+    lightgbmModelMetaPath: path.join(tempDir, "fake-model.meta.json"),
+    ...overrides
   };
 }
 
@@ -195,6 +200,76 @@ describe("lightgbm scorer protocol", () => {
         runtimeMetadata: { warmed: true }
       });
       expect(Date.now() - startedAt).toBeLessThan(1000);
+    } finally {
+      await scorer.close();
+    }
+  });
+
+  it("times out a slow inference request and recovers on the next score", async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "lightgbm-scorer-test-"));
+    tempDirs.push(tempDir);
+    const inferScript = path.join(tempDir, "fake-infer.py");
+    const slowMarkerPath = path.join(tempDir, "slow-request.marker");
+    fs.writeFileSync(
+      inferScript,
+      [
+        "import json",
+        "import os",
+        "import sys",
+        "import time",
+        "",
+        `marker_path = ${JSON.stringify(slowMarkerPath)}`,
+        "",
+        "for line in sys.stdin:",
+        "    request = json.loads(line)",
+        "    if request.get('kind') == 'ping':",
+        "        sys.stdout.write(json.dumps({'id': request['id'], 'ready': True}) + '\\n')",
+        "        sys.stdout.flush()",
+        "        continue",
+        "    if not os.path.exists(marker_path):",
+        "        open(marker_path, 'w').close()",
+        "        time.sleep(1.2)",
+        "    sys.stdout.write(json.dumps({'id': request['id'], 'scores': [0.5], 'model_metadata': {}, 'runtime_metadata': {'marker_exists': os.path.exists(marker_path)}}) + '\\n')",
+        "    sys.stdout.flush()",
+      ].join("\n"),
+      "utf8"
+    );
+    fs.writeFileSync(path.join(tempDir, "fake-model.txt"), "model", "utf8");
+    fs.writeFileSync(path.join(tempDir, "fake-model.meta.json"), "{}", "utf8");
+
+    const scorer = new PythonLightgbmScorer(
+      createTestConfig(tempDir, inferScript, {
+        lightgbmScoringTimeoutMs: 200
+      })
+    );
+
+    try {
+      const startedAt = Date.now();
+      await expect(
+        scorer.score({
+          stateRaw: {},
+          actorSeat: "seat-0",
+          phase: "trick_play",
+          legalActions: [{} as never],
+          stateFeatures: null,
+          candidateFeatures: [null]
+        })
+      ).rejects.toThrow(/timed out/i);
+      expect(Date.now() - startedAt).toBeLessThan(1000);
+
+      await expect(
+        scorer.score({
+          stateRaw: {},
+          actorSeat: "seat-0",
+          phase: "trick_play",
+          legalActions: [{} as never],
+          stateFeatures: null,
+          candidateFeatures: [null]
+        })
+      ).resolves.toMatchObject({
+        scores: [0.5],
+        runtimeMetadata: { marker_exists: true }
+      });
     } finally {
       await scorer.close();
     }

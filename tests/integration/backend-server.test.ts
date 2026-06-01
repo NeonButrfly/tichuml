@@ -1864,6 +1864,70 @@ describe("backend foundation server routes", () => {
     );
   });
 
+  it("sends a compact runtime_raw state into LightGBM scoring", async () => {
+    const request = createLargeTrickPlayDecisionRequestBody();
+    let capturedStateRaw: unknown = null;
+
+    const scorer: LightgbmScorer = {
+      async score(scoreRequest) {
+        capturedStateRaw = scoreRequest.stateRaw;
+        return {
+          scores: scoreRequest.legalActions.map((_, index) => 1000 - index),
+          modelMetadata: {
+            model_type: "lightgbm_action_model",
+            objective: "rollout_ranker",
+            feature_profile: "runtime_raw",
+          },
+          runtimeMetadata: {}
+        };
+      },
+      async close() {},
+      getFeatureRequirements() {
+        return {
+          featureNames: null,
+          featureProfile: "runtime_raw",
+          modelPhase: "trick_play",
+        };
+      }
+    };
+
+    await withServer(
+      async ({ baseUrl }) => {
+        const response = await fetch(`${baseUrl}/api/decision/request`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(request.payload)
+        });
+
+        expect(response.status).toBe(200);
+        const stateRaw = capturedStateRaw as {
+          matchHistory?: unknown;
+          hands?: Record<string, unknown[]>;
+          players?: unknown;
+          currentWish?: number | null;
+        } | null;
+        expect(stateRaw).toBeTruthy();
+        expect(stateRaw?.matchHistory).toBeUndefined();
+        expect(stateRaw?.players).toBeUndefined();
+        expect(Array.isArray(stateRaw?.hands?.["seat-0"])).toBe(true);
+        expect(stateRaw?.hands?.["seat-0"]?.length).toBe(
+          request.payload.state_raw.hands["seat-0"].length
+        );
+        expect(stateRaw?.hands?.["seat-0"]?.[0]).not.toBe(
+          request.payload.state_raw.hands["seat-0"][0]
+        );
+        expect(stateRaw?.currentWish).toBe(request.payload.state_raw.currentWish);
+      },
+      {
+        lightgbmScorer: scorer,
+        serverConfig: {
+          lightgbmRolloutRerankTopK: null,
+          lightgbmRolloutRerankSamples: null,
+        }
+      }
+    );
+  });
+
   it("chooses the rollout-reranked winner instead of the top raw LightGBM score", async () => {
     const scorer: LightgbmScorer = {
       async score(request) {
