@@ -33,11 +33,12 @@ export type LightgbmFeatureRequirements = {
 export interface LightgbmScorer {
   score(request: LightgbmScoreRequest): Promise<LightgbmScoreResult>;
   close(): Promise<void>;
+  warmup?(): Promise<void>;
   getFeatureRequirements?(): LightgbmFeatureRequirements | null;
 }
 
 type PendingRequest = {
-  resolve: (value: LightgbmScoreResult) => void;
+  resolve: (value: Record<string, unknown>) => void;
   reject: (reason?: unknown) => void;
   timeout: NodeJS.Timeout;
 };
@@ -220,65 +221,93 @@ export class PythonLightgbmScorer implements LightgbmScorer {
         return;
       }
 
-      if (!Array.isArray(payload.scores)) {
-        pending.reject(
-          new Error("LightGBM inference returned a malformed score payload.")
-        );
-        return;
-      }
-
-      const parsedScores = payload.scores.map((value) =>
-        typeof value === "number" ? value : Number.NaN
-      );
-      if (parsedScores.some((value) => !Number.isFinite(value))) {
-        pending.reject(
-          new Error("LightGBM inference returned non-finite candidate scores.")
-        );
-        return;
-      }
-
-      pending.resolve({
-        scores: parsedScores,
-        modelMetadata:
-          typeof payload.model_metadata === "object" &&
-          payload.model_metadata !== null
-            ? (payload.model_metadata as JsonObject)
-            : {},
-        runtimeMetadata:
-          typeof payload.runtime_metadata === "object" &&
-          payload.runtime_metadata !== null
-            ? (payload.runtime_metadata as JsonObject)
-            : {}
-      });
+      pending.resolve(payload);
     });
 
     this.child = child;
     return child;
   }
 
-  async score(request: LightgbmScoreRequest): Promise<LightgbmScoreResult> {
+  private async sendProtocolRequest(
+    payload: Record<string, unknown>,
+    timeoutMs = 15_000
+  ): Promise<Record<string, unknown>> {
     const child = this.ensureProcess();
     const requestId = `score-${Date.now()}-${this.requestSequence++}`;
 
-    return await new Promise<LightgbmScoreResult>((resolve, reject) => {
+    return await new Promise<Record<string, unknown>>((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pending.delete(requestId);
-        reject(new Error("LightGBM inference timed out after 15 seconds."));
-      }, 15_000);
+        reject(new Error(`LightGBM inference timed out after ${timeoutMs}ms.`));
+      }, timeoutMs);
 
       this.pending.set(requestId, { resolve, reject, timeout });
       child.stdin.write(
         `${JSON.stringify({
           id: requestId,
-          state_raw: request.stateRaw,
-          actor_seat: request.actorSeat,
-          phase: request.phase,
-          legal_actions: request.legalActions,
-          state_features: request.stateFeatures,
-          candidate_features: request.candidateFeatures
+          ...payload
         })}\n`
       );
     });
+  }
+
+  private async sendScoreRequest(
+    request: LightgbmScoreRequest
+  ): Promise<LightgbmScoreResult> {
+    const payload = await this.sendProtocolRequest({
+      state_raw: request.stateRaw,
+      actor_seat: request.actorSeat,
+      phase: request.phase,
+      legal_actions: request.legalActions,
+      state_features: request.stateFeatures,
+      candidate_features: request.candidateFeatures
+    });
+
+    if (!Array.isArray(payload.scores)) {
+      throw new Error("LightGBM inference returned a malformed score payload.");
+    }
+
+    const parsedScores = payload.scores.map((value) =>
+      typeof value === "number" ? value : Number.NaN
+    );
+    if (parsedScores.some((value) => !Number.isFinite(value))) {
+      throw new Error("LightGBM inference returned non-finite candidate scores.");
+    }
+
+    return {
+      scores: parsedScores,
+      modelMetadata:
+        typeof payload.model_metadata === "object" &&
+        payload.model_metadata !== null
+          ? (payload.model_metadata as JsonObject)
+          : {},
+      runtimeMetadata:
+        typeof payload.runtime_metadata === "object" &&
+        payload.runtime_metadata !== null
+          ? (payload.runtime_metadata as JsonObject)
+          : {}
+    };
+  }
+
+  async score(request: LightgbmScoreRequest): Promise<LightgbmScoreResult> {
+    let lastError: unknown;
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        return await this.sendScoreRequest(request);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error(String(lastError));
+  }
+
+  async warmup(): Promise<void> {
+    const payload = await this.sendProtocolRequest({ kind: "ping" });
+    if (payload.ready !== true) {
+      throw new Error("LightGBM inference warmup did not acknowledge readiness.");
+    }
   }
 
   async close(): Promise<void> {

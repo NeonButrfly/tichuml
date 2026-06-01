@@ -71,6 +71,18 @@ export async function startServer() {
   console.info("[server] startup", { stage: "repository_created" });
   const lightgbmScorer = createLightgbmScorer(serverConfig);
   console.info("[server] startup", { stage: "lightgbm_scorer_created" });
+  if (typeof lightgbmScorer.warmup === "function") {
+    console.info("[server] startup", { stage: "lightgbm_warmup_begin" });
+    try {
+      await lightgbmScorer.warmup();
+      console.info("[server] startup", { stage: "lightgbm_warmup_complete" });
+    } catch (error) {
+      console.warn("[server] startup", {
+        stage: "lightgbm_warmup_failed",
+        error: serializeStartupError(error)
+      });
+    }
+  }
   const server = createAppServer({
     serverConfig,
     repository,

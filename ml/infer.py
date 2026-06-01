@@ -101,7 +101,15 @@ def serve(runtime: ModelRuntime) -> None:
         request = json.loads(text)
         request_id = request.get("id")
         try:
-            response = runtime.score_request(request)
+            if request.get("kind") == "ping":
+                response = {
+                    "ready": True,
+                    "runtime_metadata": {
+                        "model_feature_count": int(len(runtime.feature_names)),
+                    },
+                }
+            else:
+                response = runtime.score_request(request)
             emit_response(str(request_id) if request_id is not None else None, response)
         except Exception as error:  # pragma: no cover
             emit_response(

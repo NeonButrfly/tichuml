@@ -440,6 +440,9 @@ When serving `lightgbm_model`, trick-play decision sets that include
 backend heuristic. Those sparse Tichu-call rows and the remaining quality gap
 are tracked as part of the open model-quality work in
 [#79](https://github.com/NeonButrfly/tichuml/issues/79).
+Backend startup now also prewarms the Python LightGBM inference worker before
+the HTTP listener comes up, so the first scored request does not pay cold-start
+model-load cost inside the normal decision timeout budget.
 Use `LIGHTGBM_CONFIDENCE_MARGIN` to tune that low-confidence delegation
 threshold, or leave it blank to disable the rollout-ranker confidence gate
 entirely for an experiment. The checked-in backend default is `1.0` after the
