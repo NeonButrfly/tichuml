@@ -5899,6 +5899,19 @@ export function NormalGameTableView(props: GameTableViewProps) {
 
 export function DebugGameTableView(props: GameTableViewProps) {
   const snapshot = props.masterControlSnapshot;
+  const decisionSourceLabel = snapshot.decision.fallbackUsed
+    ? `Fallback: ${snapshot.decision.actualProviderUsed ?? "pending"}`
+    : snapshot.decision.actualProviderUsed ?? "Pending";
+  const decisionLatencyLabel =
+    snapshot.decision.latencyMs === null
+      ? "Pending"
+      : `${snapshot.decision.latencyMs} ms`;
+  const decisionSourceTone =
+    snapshot.decision.actualProviderUsed === null
+      ? "yellow"
+      : snapshot.decision.fallbackUsed
+        ? "yellow"
+        : "green";
   const statusBadges = [
     { label: "Phase", value: snapshot.game.phase, tone: "green" },
     {
@@ -5970,6 +5983,24 @@ export function DebugGameTableView(props: GameTableViewProps) {
           : snapshot.telemetry.collectionReadiness === "PARTIAL"
             ? "yellow"
             : "red"
+    },
+    {
+      label: "Decision Source",
+      value: decisionSourceLabel,
+      tone: decisionSourceTone,
+      title: snapshot.decision.fallbackReason
+        ? `Fallback reason: ${snapshot.decision.fallbackReason}`
+        : undefined
+    },
+    {
+      label: "Decision Latency",
+      value: decisionLatencyLabel,
+      tone:
+        snapshot.decision.latencyMs === null
+          ? "yellow"
+          : snapshot.decision.latencyMs > 2500
+            ? "red"
+            : "green"
     }
   ] as const;
 
@@ -6001,6 +6032,7 @@ export function DebugGameTableView(props: GameTableViewProps) {
             <section
               key={badge.label}
               className={`status-card master-status-badge master-status-badge--${badge.tone}`}
+              title={badge.title}
             >
               <span className="status-card__label">{badge.label}</span>
               <strong>{badge.value}</strong>
