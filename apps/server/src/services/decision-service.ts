@@ -11,6 +11,17 @@ import type { LightgbmScorer } from "../ml/lightgbm-scorer.js";
 import type { LightgbmRolloutReranker } from "../providers/lightgbm-provider.js";
 import type { TelemetryEnqueueResult } from "./telemetry-ingest-queue.js";
 
+const HEAVY_SIMULATION_RESPONSE_METADATA_KEYS = [
+  "explanation",
+  "chosen_action",
+  "scores",
+  "state_features",
+  "candidate_features",
+  "model_metadata",
+  "runtime_metadata",
+  "lightgbm_rollout_rerank_results",
+] as const;
+
 function logDecisionTrace(
   enabled: boolean,
   event: string,
@@ -20,6 +31,27 @@ function logDecisionTrace(
     return;
   }
   console.info(JSON.stringify({ ts: new Date().toISOString(), event, ...payload }));
+}
+
+function shouldSlimSimulationResponseMetadata(payload: DecisionRequestPayload): boolean {
+  if (payload.metadata.simulation_mode !== true) {
+    return false;
+  }
+  return payload.metadata.response_detail !== "full";
+}
+
+function slimSimulationResponseMetadata(
+  responseMetadata: JsonObject | undefined
+): JsonObject | undefined {
+  if (!responseMetadata) {
+    return responseMetadata;
+  }
+  const slimmed = { ...responseMetadata };
+  for (const key of HEAVY_SIMULATION_RESPONSE_METADATA_KEYS) {
+    delete slimmed[key];
+  }
+  slimmed.simulation_response_detail = "slim";
+  return slimmed;
 }
 
 export async function handleDecisionRequest(
@@ -163,6 +195,9 @@ export async function handleDecisionRequest(
     total_latency_ms: latencyMs,
     payload_bytes: dependencies.payloadBytes ?? 0
   } as JsonObject;
+  const responseMetadata = shouldSlimSimulationResponseMetadata(payload)
+    ? slimSimulationResponseMetadata(routed.responseMetadata)
+    : routed.responseMetadata;
   logDecisionTrace(dependencies.traceDecisionRequests === true, "decision_request_resolved", {
     game_id: payload.game_id,
     hand_id: payload.hand_id,
@@ -193,7 +228,7 @@ export async function handleDecisionRequest(
     provider_used: routed.providerUsed,
     provider_reason: routed.providerReason,
     metadata: {
-      ...(routed.responseMetadata ?? {}),
+      ...(responseMetadata ?? {}),
       response_phase: payload.phase,
       response_actor_seat: payload.actor_seat,
       chosen_action_type: routed.chosen.action.type,

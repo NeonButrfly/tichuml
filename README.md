@@ -494,6 +494,11 @@ early-hand positions where bounded continuation rollouts are still too slow to
 justify the live latency cost. The checked-in default is `8`, which keeps the
 live path off the bigger early-hand branches that were still causing runtime
 timeout pressure on both local and Linux backends.
+Simulation-mode backend decision requests now return a slimmed metadata shape
+by default so headless eval/sim clients do not pay to serialize the full
+diagnostic explanation blob on every backend move. Use
+`metadata.response_detail=full` only when a caller explicitly needs the richer
+per-candidate response payload.
 Backend startup now also prewarms the Python LightGBM inference worker before
 the HTTP listener comes up, so the first scored request does not pay cold-start
 model-load cost inside the normal decision timeout budget.

@@ -739,6 +739,7 @@ function createEventPayload(ts: string, eventType: string): TelemetryEventPayloa
 
 function createDecisionRequestBody(options: {
   fullStateDecisionRequests?: boolean;
+  metadata?: JsonObject;
 } = {}) {
   let result = createInitialGameState({ seed: "backend-route-test" });
   while (result.nextState.phase !== "grand_tichu_window") {
@@ -762,6 +763,7 @@ function createDecisionRequestBody(options: {
     phase: result.nextState.phase,
     requestedProvider: "server_heuristic",
     decisionIndex: 1,
+    ...(options.metadata ? { metadata: options.metadata } : {}),
     ...(options.fullStateDecisionRequests === true
       ? { fullStateDecisionRequests: true }
       : {})
@@ -1365,7 +1367,10 @@ describe("backend foundation server routes", () => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            ...createDecisionRequestBody({ fullStateDecisionRequests: true }),
+            ...createDecisionRequestBody({
+              fullStateDecisionRequests: true,
+              metadata: { response_detail: "full" }
+            }),
             requested_provider: "lightgbm_model"
           })
         });
@@ -1389,6 +1394,77 @@ describe("backend foundation server routes", () => {
         await flushServerQueue();
         expect(repository.decisions).toHaveLength(1);
         expect(repository.decisions[0]?.policy_source).toBe("lightgbm_model");
+      },
+      { lightgbmScorer: scorer }
+    );
+  });
+
+  it("slims simulation-mode LightGBM response metadata by default while keeping telemetry detail", async () => {
+    const scorer: LightgbmScorer = {
+      async score(request) {
+        return {
+          scores: request.legalActions.map((_, index) => (index === 0 ? 0.9 : 0.1)),
+          modelMetadata: {
+            model_type: "lightgbm_action_model",
+            feature_names: ["phase_trick_play"],
+            model_id: "model-123",
+            model_version: "model-123",
+            objective: "rollout_ranker",
+            label_mode: "rollout",
+            target_column: "rollout_mean_actor_team_delta",
+            feature_schema_version: 2
+          },
+          runtimeMetadata: {
+            runtime_feature_count: 64,
+            missing_feature_count: 3,
+            model_feature_count: 41
+          }
+        };
+      },
+      async close() {}
+    };
+
+    await withServer(
+      async ({ baseUrl, repository }) => {
+        const response = await fetch(`${baseUrl}/api/decision/request`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...createDecisionRequestBody({ fullStateDecisionRequests: true }),
+            requested_provider: "lightgbm_model"
+          })
+        });
+
+        expect(response.status).toBe(200);
+        const payload = (await response.json()) as {
+          accepted: boolean;
+          provider_used: string;
+          metadata?: {
+            simulation_response_detail?: string;
+            scores?: Array<{ score: number }>;
+            model_metadata?: unknown;
+            runtime_metadata?: unknown;
+            explanation?: unknown;
+            state_features?: unknown;
+            candidate_features?: unknown;
+            top_k_candidate_scores?: Array<{ score: number }>;
+          };
+        };
+        expect(payload.accepted).toBe(true);
+        expect(payload.provider_used).toBe("lightgbm_model");
+        expect(payload.metadata?.simulation_response_detail).toBe("slim");
+        expect(payload.metadata?.scores).toBeUndefined();
+        expect(payload.metadata?.model_metadata).toBeUndefined();
+        expect(payload.metadata?.runtime_metadata).toBeUndefined();
+        expect(payload.metadata?.explanation).toBeUndefined();
+        expect(payload.metadata?.state_features).toBeUndefined();
+        expect(payload.metadata?.candidate_features).toBeUndefined();
+        expect(payload.metadata?.top_k_candidate_scores?.[0]?.score).toBe(0.9);
+        await flushServerQueue();
+        expect(repository.decisions).toHaveLength(1);
+        expect(repository.decisions[0]?.policy_source).toBe("lightgbm_model");
+        expect(repository.decisions[0]?.has_candidate_scores).toBe(true);
+        expect(repository.decisions[0]?.has_state_features).toBe(true);
       },
       { lightgbmScorer: scorer }
     );
