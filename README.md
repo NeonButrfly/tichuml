@@ -513,6 +513,15 @@ May 31, 2026 mirrored validation pass. Use
 `LIGHTGBM_CONFIDENCE_DELEGATION_MAX_PRE_DELEGATION_MS` to skip that extra
 heuristic handoff when LightGBM has already spent too much of the client-side
 timeout budget before delegation would even begin.
+When a self-play smoke uses `--provider lightgbm_model`, the summary now also
+reports a `lightgbmDiagnostics` block so low model usage is explainable without
+manual database queries. That block surfaces how many requested LightGBM
+decisions stayed on the model, how many delegated back to
+`server_heuristic`, how many fell back locally after transport failure, and
+which delegation gates dominated (`phase_delegated`, `tichu_call_delegated`,
+`small_branch_delegated`, `confidence_delegated`, plus rollout-rerank skip
+reasons). This workflow is tracked in
+[#93](https://github.com/NeonButrfly/tichuml/issues/93).
 
 Both commands prefer the repo `.venv` automatically when it exists, so they use
 the same Python environment created by the bootstrap scripts.
