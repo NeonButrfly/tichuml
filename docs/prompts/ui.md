@@ -1109,3 +1109,34 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 - Linked GitHub Issue: [#85](https://github.com/NeonButrfly/tichuml/issues/85)
 - Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
 - Status Source: GitHub issue state only.
+
+### 2026-06-08 - ALT table should restart from the immutable table.png base and drop the old tv7 overlay stack
+
+- Prompt Signal: The follow-up ALT-table prompt rejected another incremental
+  patch on the previous luxury-table path and supplied a new immutable base
+  image at `apps/web/public/table/table.png`. The prompt explicitly required a
+  fresh rebuild under a new namespace, readable east and west rack-card fans,
+  dynamic pass lanes only during the exchange phases, and continued reuse of
+  the existing `tv_ed` card art without touching the default table.
+- Interpreted Requirement: Keep the normal table and shared gameplay logic
+  untouched, but replace the live alternate route with a fresh 1536x1024
+  contain-fit renderer rooted at `/table/table.png`. The old alternate route’s
+  tv7-driven plate math, preview chrome, side instruction panel, and footer
+  debug previews should no longer drive the luxury table. The live ALT route
+  should instead render from `apps/web/src/altTableFresh/`, use
+  `/tv_ed/c/back/green.png` plus the existing `tv_ed` face assets, expose
+  `window.__freshAltTableSnapshot`, and keep passing lanes dynamic and
+  phase-bound.
+- Affected Systems: `apps/web/src/altTableFresh/FreshAltTable.tsx`,
+  `apps/web/src/altTableFresh/FreshCardsLayer.tsx`,
+  `apps/web/src/altTableFresh/FreshPassingLayer.tsx`,
+  `apps/web/src/altTableFresh/FreshTrickLayer.tsx`,
+  `apps/web/src/altTableFresh/freshAltTableChecks.ts`,
+  `apps/web/src/altTableFresh/freshTableMath.ts`,
+  `apps/web/src/altTableFresh/tableFit.ts`,
+  `apps/web/src/alt-table-3d/AltTable3DRoute.tsx`,
+  `tests/integration/alternate-table-route-guards.test.ts`,
+  `tests/integration/alternate-table-view.test.ts`.
+- Linked GitHub Issue: [#85](https://github.com/NeonButrfly/tichuml/issues/85)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.

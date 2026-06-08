@@ -7,75 +7,62 @@ const routeSource = readFileSync(
   resolve("apps/web/src/alt-table-3d/AltTable3DRoute.tsx"),
   "utf8"
 );
-const tableSource = readFileSync(
-  resolve("apps/web/src/alt-table-3d/AltTichuTable3D.tsx"),
+const freshTableSource = readFileSync(
+  resolve("apps/web/src/altTableFresh/FreshAltTable.tsx"),
   "utf8"
 );
-const altTableSource = readFileSync(
-  resolve("apps/web/src/altTable/AltTable3D.tsx"),
-  "utf8"
-);
-const rackMathSource = readFileSync(
-  resolve("apps/web/src/altTable/v18CardRackMath.ts"),
+const freshMathSource = readFileSync(
+  resolve("apps/web/src/altTableFresh/freshTableMath.ts"),
   "utf8"
 );
 const tableFitSource = readFileSync(
-  resolve("apps/web/src/altTable/tableFit.ts"),
+  resolve("apps/web/src/altTableFresh/tableFit.ts"),
   "utf8"
 );
-const runtimeSource = readFileSync(
-  resolve("apps/web/src/alt-table-3d/tv7-runtime.ts"),
+const checksSource = readFileSync(
+  resolve("apps/web/src/altTableFresh/freshAltTableChecks.ts"),
   "utf8"
 );
-const stylesSource = readFileSync(
-  resolve("apps/web/src/alt-table-3d/alt-table-3d.css"),
-  "utf8"
-);
-const browserVerifySource = readFileSync(resolve("scripts/browser-verify.ts"), "utf8");
 
 describe("alternate table route guards", () => {
-  it("routes the ALT table through the dedicated route while keeping the normal table intact", () => {
+  it("routes the luxury table through the fresh alternate renderer while keeping the default table intact", () => {
     expect(appSource).toContain(
       'import { AltTable3DRoute } from "./alt-table-3d/AltTable3DRoute";'
     );
     expect(appSource).toContain("<AltTable3DRoute {...viewProps} />");
     expect(appSource).toContain("<NormalGameTableView {...viewProps} />");
-    expect(appSource).not.toContain("AlternateGameTableView");
+    expect(routeSource).toContain('import { FreshAltTable } from "../altTableFresh/FreshAltTable";');
+    expect(routeSource).toContain("<FreshAltTable");
   });
 
-  it("locks the production alt-table math assets to tv7 while using the clean tv_ed plate", () => {
-    expect(runtimeSource).toContain('export const TV7_ASSET_ROOT = "/tv7";');
-    expect(runtimeSource).toContain('export const TV7_TABLE_PLATE_SRC = "/tv_ed/t/plate.png";');
-    expect(runtimeSource).toContain(
-      'export const TV7_PASSING_OVERLAY_SRC = `${TV7_ASSET_ROOT}/p/o.png`;'
-    );
-    expect(runtimeSource).toContain(
-      'export const TV7_PASSING_ANCHOR_JSON_SRC = `${TV7_ASSET_ROOT}/p/a.json`;'
-    );
-    expect(runtimeSource).toContain(
-      'export const TV7_CARD_ANCHOR_JSON_SRC = `${TV7_ASSET_ROOT}/h/a.json`;'
-    );
-    expect(routeSource).not.toContain("/tv6");
-    expect(tableSource).not.toContain("/tv6");
+  it("locks the fresh alt table to /table/table.png and tv_ed card art", () => {
+    expect(checksSource).toContain('export const FRESH_ALT_TABLE_SRC = "/table/table.png";');
+    expect(checksSource).toContain('export const FRESH_ALT_CARD_BACK_SRC = "/tv_ed/c/back/green.png";');
+    expect(checksSource).not.toContain("/tv14");
+    expect(checksSource).not.toContain("/tv15");
+    expect(checksSource).not.toContain("/tv16");
+    expect(checksSource).not.toContain("/tv17");
+    expect(checksSource).not.toContain("/tv18");
+    expect(checksSource).not.toContain("plate.png");
   });
 
-  it("routes the ALT board through the fixed 1536x1024 plane-plus-overlay R3F stack", () => {
-    expect(tableSource).toContain('from "../altTable/AltTable3D";');
-    expect(tableSource).toContain("<AltTable3D");
-    expect(altTableSource).toContain("@react-three/fiber");
-    expect(altTableSource).toContain("OrthographicCamera");
-    expect(altTableSource).toContain("single_image_plane");
-    expect(altTableSource).toContain("react-three-fiber");
-    expect(altTableSource).toContain("1536 / 1024");
-    expect(rackMathSource).toContain("north_rack_back_mostly_visible");
-    expect(rackMathSource).toContain("side_rack_readable_fan");
-    expect(rackMathSource).toContain("south_player_fan");
-    expect(rackMathSource).toContain("scaleX: 0.72");
-    expect(tableFitSource).toContain("DESIGN_W = 1536");
-    expect(tableFitSource).toContain("DESIGN_H = 1024");
-    expect(stylesSource).toContain("alt-table-board__canvas");
-    expect(stylesSource).toContain("aspect-ratio: 1536 / 1024");
-    expect(browserVerifySource).toContain("__tichuAltTableSnapshot");
-    expect(browserVerifySource).toContain("apps/web/public/tv7/x/check.mjs");
+  it("keeps the fresh alt table in the fixed 1536x1024 contain-fit coordinate system", () => {
+    expect(tableFitSource).toContain("export const DESIGN_W = 1536;");
+    expect(tableFitSource).toContain("export const DESIGN_H = 1024;");
+    expect(tableFitSource).toContain("Math.min(viewW / DESIGN_W, viewH / DESIGN_H)");
+    expect(freshTableSource).toContain('data-testid="fresh-alt-table"');
+    expect(freshTableSource).toContain('data-alt-table-root="fresh"');
+    expect(freshTableSource).toContain("__freshAltTableSnapshot");
+  });
+
+  it("uses the fresh readable rack math instead of the retired projected side-card variants", () => {
+    expect(freshMathSource).toContain("north_rack_back_mostly_visible");
+    expect(freshMathSource).toContain("side_rack_readable_fan");
+    expect(freshMathSource).toContain("south_player_fan");
+    expect(freshMathSource).toContain("scaleX: 0.72");
+    expect(freshMathSource).not.toContain("polygon_px");
+    expect(freshMathSource).not.toContain("projected_quad");
+    expect(freshMathSource).not.toContain("quad_projected");
+    expect(freshMathSource).not.toContain("side_rack_readable_fan_v2");
   });
 });
