@@ -11,12 +11,16 @@ const tableSource = readFileSync(
   resolve("apps/web/src/alt-table-3d/AltTichuTable3D.tsx"),
   "utf8"
 );
-const sceneSource = readFileSync(
-  resolve("apps/web/src/alt-table-3d/AltTableScene.tsx"),
+const altTableSource = readFileSync(
+  resolve("apps/web/src/altTable/AltTable3D.tsx"),
   "utf8"
 );
-const cards3dSource = readFileSync(
-  resolve("apps/web/src/alt-table-3d/AltTableCards3D.tsx"),
+const rackMathSource = readFileSync(
+  resolve("apps/web/src/altTable/v18CardRackMath.ts"),
+  "utf8"
+);
+const tableFitSource = readFileSync(
+  resolve("apps/web/src/altTable/tableFit.ts"),
   "utf8"
 );
 const runtimeSource = readFileSync(
@@ -57,35 +61,23 @@ describe("alternate table route guards", () => {
     expect(tableSource).not.toContain("/tv6");
   });
 
-  it("uses a dedicated R3F world-scene hidden-hand layer while preserving authored tv7 card anchors", () => {
-    expect(tableSource).toContain('import { AltTableScene }');
-    expect(tableSource).toContain("<AltTableScene");
-    expect(tableSource).not.toContain("resolveSouthHandLayout");
-    expect(sceneSource).toContain("@react-three/fiber");
-    expect(sceneSource).toContain("Canvas");
-    expect(sceneSource).toContain("camera.lookAt(0, 0, 0)");
-    expect(sceneSource).toContain("RackShell");
-    expect(sceneSource).toContain("TableBody");
-    expect(sceneSource).toContain("FrameRail");
-    expect(sceneSource).toContain("WOOD_GRAIN_SRC");
-    expect(sceneSource).toContain("DRAGON_MOTIF_SRC");
-    expect(sceneSource).toContain("ALT_HIDDEN_CARD_BACK_SRC");
-    expect(sceneSource).toContain("supportsWebGlCanvas");
-    expect(cards3dSource).toContain("CARD_WIDTH =");
-    expect(cards3dSource).toContain("CARD_HEIGHT =");
-    expect(cards3dSource).toContain("CARD_ASPECT = 2.5 / 3.5");
-    expect(cards3dSource).toContain("CARD_THICKNESS =");
-    expect(cards3dSource).toContain("<boxGeometry args={[size.width, size.height, CARD_THICKNESS]} />");
-    expect(cards3dSource).toContain("getHiddenCardWorldSize");
-    expect(cards3dSource).toContain("getHiddenCardAspectRatio");
-    expect(cards3dSource).toContain("resolveHiddenHandPlacement");
-    expect(stylesSource).toContain("alt-table-world-scene");
-    expect(tableSource).not.toContain("HAND_LAYOUT");
-    expect(tableSource).not.toContain("data-seat-hand");
-    expect(tableSource).toContain('data-layout-source": "prototype_layer"');
-    expect(sceneSource).toContain('data-render-mode="r3f-hidden-hand"');
-    expect(runtimeSource).toContain("prototype_layer");
-    expect(browserVerifySource).toContain("__tichuV7Snapshot");
+  it("routes the ALT board through the fixed 1536x1024 plane-plus-overlay R3F stack", () => {
+    expect(tableSource).toContain('from "../altTable/AltTable3D";');
+    expect(tableSource).toContain("<AltTable3D");
+    expect(altTableSource).toContain("@react-three/fiber");
+    expect(altTableSource).toContain("OrthographicCamera");
+    expect(altTableSource).toContain("single_image_plane");
+    expect(altTableSource).toContain("react-three-fiber");
+    expect(altTableSource).toContain("1536 / 1024");
+    expect(rackMathSource).toContain("north_rack_back_mostly_visible");
+    expect(rackMathSource).toContain("side_rack_readable_fan");
+    expect(rackMathSource).toContain("south_player_fan");
+    expect(rackMathSource).toContain("scaleX: 0.72");
+    expect(tableFitSource).toContain("DESIGN_W = 1536");
+    expect(tableFitSource).toContain("DESIGN_H = 1024");
+    expect(stylesSource).toContain("alt-table-board__canvas");
+    expect(stylesSource).toContain("aspect-ratio: 1536 / 1024");
+    expect(browserVerifySource).toContain("__tichuAltTableSnapshot");
     expect(browserVerifySource).toContain("apps/web/public/tv7/x/check.mjs");
   });
 });

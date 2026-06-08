@@ -30,6 +30,7 @@
 .alt-table-board {
   position: absolute;
   overflow: hidden;
+  aspect-ratio: 1536 / 1024;
 }
 
 .alt-table-board__chrome {
@@ -39,10 +40,10 @@
   pointer-events: none;
 }
 
-.alt-table-world-scene {
+.alt-table-board__canvas {
   position: absolute;
   inset: 0;
-  z-index: 1;
+  z-index: 2;
   overflow: hidden;
   pointer-events: none;
 }
@@ -50,6 +51,7 @@
 .alt-table-world-scene__meta {
   position: absolute;
   inset: 0;
+  z-index: 3;
   pointer-events: none;
 }
 
@@ -59,7 +61,7 @@
   opacity: 0;
 }
 
-.alt-table-world-scene__canvas {
+.alt-table-board__canvas canvas {
   position: absolute !important;
   inset: 0;
   width: 100% !important;
@@ -79,7 +81,6 @@
 
 .alt-table-board__plate {
   z-index: 0;
-  opacity: 0.001;
 }
 
 .alt-table-board__overlay {
@@ -228,13 +229,26 @@
   font-size: 0.92rem;
 }
 
-.alt-table-card,
+.alt-table-hand-hitbox,
 .alt-table-pass-card {
   position: absolute;
   padding: 0;
   border: none;
   background: transparent;
-  z-index: 2;
+  z-index: 5;
+}
+
+.alt-table-hand-hitbox {
+  cursor: pointer;
+  appearance: none;
+}
+
+.alt-table-hand-hitbox--selected {
+  filter: drop-shadow(0 0 0 rgba(0, 0, 0, 0));
+}
+
+.alt-table-pass-card {
+  z-index: 6;
 }
 
 .alt-table-card--interactive {
@@ -258,6 +272,7 @@
   position: absolute;
   display: grid;
   place-items: center;
+  z-index: 6;
   padding: 0;
   border: none;
   background: rgba(211, 170, 74, 0.08);
@@ -266,6 +281,77 @@
   transition:
     background-color 120ms ease,
     box-shadow 120ms ease;
+}
+
+.alt-table-preview__image {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 0.8rem;
+  border: 1px solid rgba(84, 180, 255, 0.28);
+  box-shadow: inset 0 0 0 1px rgba(84, 180, 255, 0.12);
+}
+
+.alt-table-trick-preview {
+  position: relative;
+  min-height: 11.4rem;
+  border-radius: 0.8rem;
+  border: 1px solid rgba(84, 180, 255, 0.28);
+  background:
+    radial-gradient(circle at top, rgba(35, 82, 122, 0.26), transparent 34%),
+    linear-gradient(180deg, rgba(4, 13, 20, 0.98), rgba(4, 13, 20, 0.9));
+  box-shadow: inset 0 0 0 1px rgba(84, 180, 255, 0.12);
+}
+
+.alt-table-trick-preview__slot {
+  position: absolute;
+  width: 2.8rem;
+  height: 3.75rem;
+  border: 1px solid rgba(84, 180, 255, 0.55);
+  border-radius: 0.42rem;
+  background: rgba(12, 36, 58, 0.55);
+  box-shadow:
+    0 0 0 1px rgba(33, 132, 214, 0.12),
+    inset 0 0 1rem rgba(68, 170, 255, 0.12);
+}
+
+.alt-table-trick-preview__slot::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: rgba(67, 180, 255, 0.9);
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0.9rem rgba(67, 180, 255, 0.35);
+}
+
+.alt-table-trick-preview__slot--north {
+  top: 1rem;
+  left: calc(50% - 1.4rem);
+}
+
+.alt-table-trick-preview__slot--west {
+  top: calc(50% - 1.875rem);
+  left: calc(50% - 5rem);
+}
+
+.alt-table-trick-preview__slot--center {
+  top: calc(50% - 1.875rem);
+  left: calc(50% - 1.4rem);
+}
+
+.alt-table-trick-preview__slot--east {
+  top: calc(50% - 1.875rem);
+  right: calc(50% - 5rem);
+}
+
+.alt-table-trick-preview__slot--south {
+  bottom: 1rem;
+  left: calc(50% - 1.4rem);
 }
 
 .alt-table-pass-target--hovered,

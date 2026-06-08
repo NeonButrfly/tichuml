@@ -1081,3 +1081,31 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 - Linked GitHub Issue: [#91](https://github.com/NeonButrfly/tichuml/issues/91)
 - Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
 - Status Source: GitHub issue state only.
+
+### 2026-06-07 - ALT table should use a fixed 1536x1024 image plane with readable rack-card overlays
+
+- Prompt Signal: The latest ALT-table correction supplied a full reference
+  layout and explicitly rejected the current faux-3D side-seat cards. The
+  prompt required the table to remain one static base image while north/east/
+  west/south cards become design-space overlays aligned by math, with east and
+  west card backs staying readable instead of flattening into warped strips.
+- Interpreted Requirement: Keep the normal table untouched and keep the ALT
+  route on the same gameplay/passing flow, but replace the old procedural
+  hidden-hand geometry with a fixed 1536x1024 orthographic overlay stack. The
+  shipped ALT route should use the committed `/tv7` plate and passing assets,
+  generate opponent/south card anchors from math in `apps/web/src/altTable`,
+  keep pass-lane directions locked to `/tv7/p/a.json`, and expose a truthful
+  ALT snapshot contract for browser verification.
+- Affected Systems: `apps/web/src/altTable/AltTable3D.tsx`,
+  `apps/web/src/altTable/tableFit.ts`,
+  `apps/web/src/altTable/v18CardRackMath.ts`,
+  `apps/web/src/altTable/V18OpponentRackCards.tsx`,
+  `apps/web/src/alt-table-3d/AltTichuTable3D.tsx`,
+  `apps/web/src/alt-table-3d/alt-table-3d.css`,
+  `scripts/browser-verify.ts`,
+  `tests/integration/alternate-table-route-guards.test.ts`,
+  `tests/integration/alternate-table-view.test.ts`,
+  `tests/integration/v18-card-rack-math.test.ts`.
+- Linked GitHub Issue: [#85](https://github.com/NeonButrfly/tichuml/issues/85)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.
