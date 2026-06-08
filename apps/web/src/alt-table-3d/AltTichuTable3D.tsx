@@ -30,7 +30,6 @@ import {
   TV7_PASSING_OVERLAY_SRC,
   TV7_TABLE_PLATE_SRC,
   bboxToPolygonPercent,
-  buildAutoDemoAssignments,
   buildDemoDeck,
   createDemoHands,
   getCardBackSrc,
@@ -44,9 +43,8 @@ import {
   type Tv7RuntimeAssets
 } from "./tv7-runtime";
 
-const READY_TO_DEAL_DELAY_MS = 180;
-const DEAL_TO_GT_DELAY_MS = 1_100;
-const GT_TO_PASSING_DELAY_MS = 1_000;
+const ALT_BOOT_PHASE: DemoPhase = "passing";
+const ALT_BOOT_GT_CHOICE: "call" | "skip" | null = "skip";
 
 type PassAssignments = Partial<Record<PassAnchorId, string>>;
 
@@ -349,8 +347,8 @@ function buildDealHistory(phase: DemoPhase, gtChoice: "call" | "skip" | null) {
 export function AltTichuTable3D() {
   const [assets, setAssets] = useState<Tv7RuntimeAssets | null>(null);
   const [loadError, setLoadError] = useState<Error | null>(null);
-  const [phase, setPhase] = useState<DemoPhase>("ready");
-  const [gtChoice, setGtChoice] = useState<"call" | "skip" | null>(null);
+  const [phase, setPhase] = useState<DemoPhase>(ALT_BOOT_PHASE);
+  const gtChoice = ALT_BOOT_GT_CHOICE;
   const [selectedSouthCardIds, setSelectedSouthCardIds] = useState<string[]>([]);
   const [passAssignments, setPassAssignments] = useState<PassAssignments>({});
   const [hoveredPassId, setHoveredPassId] = useState<PassAnchorId | null>(null);
@@ -400,48 +398,6 @@ export function AltTichuTable3D() {
       window.removeEventListener("resize", updateViewport);
     };
   }, []);
-
-  useEffect(() => {
-    if (!assets || phase !== "ready") {
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      setPhase("deal8");
-    }, READY_TO_DEAL_DELAY_MS);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [assets, phase]);
-
-  useEffect(() => {
-    if (!assets || phase !== "deal8") {
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      setPhase("grand_tichu");
-    }, DEAL_TO_GT_DELAY_MS);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [assets, phase]);
-
-  useEffect(() => {
-    if (phase !== "deal6") {
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      setPhase("passing");
-    }, GT_TO_PASSING_DELAY_MS);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [phase]);
 
   const deck = useMemo(
     () => (assets ? buildDemoDeck(assets.cardMap) : []),
@@ -651,15 +607,10 @@ export function AltTichuTable3D() {
       <section className="alt-table-3d-route alt-table-3d-route--loading">
         <div className="alt-table-loading">
           <strong>Loading alt table</strong>
-          <span>Validating /tv7 authored layers and card assets.</span>
+          <span>Validating /tv7 math assets over the clean /tv_ed plate.</span>
         </div>
       </section>
     );
-  }
-
-  function beginGrandTichu(choice: "call" | "skip") {
-    setGtChoice(choice);
-    setPhase("deal6");
   }
 
   function buildNextAssignments(
@@ -789,13 +740,6 @@ export function AltTichuTable3D() {
 
     replaceAssignment(passId, incomingCardId);
     setDraggedCardId(null);
-  }
-
-  function handleAutoDemoPass() {
-    setSelectedSouthCardIds(
-      hands.final.south.slice(0, PASS_COUNT).map((card) => card.id)
-    );
-    setPassAssignments(buildAutoDemoAssignments(hands.final));
   }
 
   function handleConfirmPass() {
@@ -937,7 +881,7 @@ export function AltTichuTable3D() {
             <aside className="alt-table-status">
               <div className="alt-table-status__header">
                 <strong>Passing Lanes (12)</strong>
-                <span data-alt-phase-label="true">{phase}</span>
+                <span data-alt-phase-label="true">PASSING</span>
               </div>
               <div className="alt-table-status__counts">
                 <span>North {handCounts.north}</span>
@@ -959,23 +903,10 @@ export function AltTichuTable3D() {
                 </div>
               </div>
               <div className="alt-table-status__flow">
-                <span>Deal 8: {phase === "ready" ? 0 : FIRST_DEAL_COUNT}</span>
-                <span>
-                  GT shown:{" "}
-                  {phase === "grand_tichu" ||
-                  phase === "deal6" ||
-                  phase === "passing" ||
-                  phase === "passed"
-                    ? "yes"
-                    : "no"}
-                </span>
-                <span>
-                  Deal 6:{" "}
-                  {phase === "deal6" || phase === "passing" || phase === "passed"
-                    ? SECOND_DEAL_COUNT
-                    : 0}
-                </span>
-                <span>GT choice: {gtChoice ?? "pending"}</span>
+                <span>Deal 8: {FIRST_DEAL_COUNT}</span>
+                <span>GT shown: yes</span>
+                <span>Deal 6: {SECOND_DEAL_COUNT}</span>
+                <span>GT choice: {gtChoice ?? "skip"}</span>
               </div>
               <div className="alt-table-status__section">
                 <div className="alt-table-status__section-title">Passing Directions</div>
@@ -1007,40 +938,15 @@ export function AltTichuTable3D() {
                   ))}
                 </div>
               </div>
-              {phase === "grand_tichu" ? (
-                <div className="alt-table-status__actions">
-                  <button
-                    type="button"
-                    data-alt-action="call-gt"
-                    onClick={() => beginGrandTichu("call")}
-                  >
-                    Call GT
-                  </button>
-                  <button
-                    type="button"
-                    data-alt-action="skip-gt"
-                    onClick={() => beginGrandTichu("skip")}
-                  >
-                    Skip GT
-                  </button>
-                </div>
-              ) : null}
               {phase === "passing" ? (
                 <div className="alt-table-status__actions">
-                  <button
-                    type="button"
-                    data-alt-action="auto-demo-pass"
-                    onClick={handleAutoDemoPass}
-                  >
-                    Auto demo pass
-                  </button>
                   <button
                     type="button"
                     data-alt-action="confirm-pass"
                     disabled={!confirmPassEnabled}
                     onClick={handleConfirmPass}
                   >
-                    Confirm pass
+                    PASS
                   </button>
                 </div>
               ) : null}
@@ -1058,7 +964,7 @@ export function AltTichuTable3D() {
                 <img
                   alt="Hand anchor preview"
                   className="alt-table-preview__image"
-                  src="/tv7/h/prev/ref.png"
+                  src="/tv_ed/h/prev/table.png"
                 />
               </section>
               <section className="alt-table-preview">
@@ -1066,7 +972,7 @@ export function AltTichuTable3D() {
                 <img
                   alt="Passing anchor preview"
                   className="alt-table-preview__image"
-                  src="/tv7/h/prev/all.png"
+                  src="/tv_ed/h/prev/all.png"
                 />
               </section>
               <section className="alt-table-preview">

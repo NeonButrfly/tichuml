@@ -464,7 +464,7 @@ async function verifyAtDesignViewport(
   timeoutMs: number,
   passAnchors: PassAnchor[]
 ) {
-  await expectPhase(page, "deal8", timeoutMs);
+  await expectPhase(page, "passing", timeoutMs);
 
   const tableImage = page.locator("img[data-table-layer='plate']");
   await tableImage.waitFor({ state: "visible", timeout: timeoutMs });
@@ -474,23 +474,13 @@ async function verifyAtDesignViewport(
     naturalHeight: image.naturalHeight
   }));
   assertCondition(
-    naturalSize.src?.endsWith("/tv7/t/plate.png"),
-    `Expected table plate /tv7/t/plate.png, got ${naturalSize.src ?? "null"}.`
+    naturalSize.src?.endsWith("/tv_ed/t/plate.png"),
+    `Expected table plate /tv_ed/t/plate.png, got ${naturalSize.src ?? "null"}.`
   );
   assertCondition(
     naturalSize.naturalWidth === 1536 && naturalSize.naturalHeight === 1024,
     `Expected table image 1536x1024, got ${naturalSize.naturalWidth}x${naturalSize.naturalHeight}.`
   );
-
-  for (const seat of ["north", "east", "south", "west"] as const) {
-    const count = await page.locator(`[data-zone='${seat}_hand']`).count();
-    assertCondition(count === 8, `Expected ${seat} to show 8 cards in deal8, got ${count}.`);
-  }
-
-  await expectPhase(page, "grand_tichu", timeoutMs);
-  await page.locator("button[data-alt-action='skip-gt']").click();
-  await expectPhase(page, "deal6", timeoutMs);
-  await expectPhase(page, "passing", timeoutMs);
 
   const overlay = page.locator("img[data-table-layer='passing-overlay']");
   await overlay.waitFor({ state: "visible", timeout: timeoutMs });
@@ -591,15 +581,13 @@ async function verifyAtDesignViewport(
     "Confirm pass should enable once the three south lanes are assigned."
   );
 
-  await page.locator("button[data-alt-action='auto-demo-pass']").click();
-  const totalAssignedCount = await page.locator(
-    "[data-pass-id] [data-pass-card-img='true']"
-  ).count();
-  assertCondition(totalAssignedCount === 12, "Auto demo pass should fill all 12 lanes.");
-
   const cardSources = await page
     .locator("[data-pass-card-img='true']")
     .evaluateAll((images) => images.map((image) => image.getAttribute("src") ?? ""));
+  assertCondition(
+    cardSources.length === 3,
+    "Exactly the three south pass cards should be assigned before confirm."
+  );
   assertCondition(
     cardSources.every((src) => src.startsWith("/tv7/c/")),
     "Every rendered card image must come from /tv7/c/."
@@ -608,7 +596,7 @@ async function verifyAtDesignViewport(
   const snapshot = await readSnapshot(page);
   assertCondition(snapshot.assetRoot === "/tv7", "Snapshot assetRoot mismatch.");
   assertCondition(snapshot.renderer === "react-three-fiber", "Snapshot renderer mismatch.");
-  assertCondition(snapshot.table.src === "/tv7/t/plate.png", "Snapshot table path mismatch.");
+  assertCondition(snapshot.table.src === "/tv_ed/t/plate.png", "Snapshot table path mismatch.");
   assertCondition(
     snapshot.table.mode === "single_image_plane",
     "Snapshot table mode mismatch."

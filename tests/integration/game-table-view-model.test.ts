@@ -77,10 +77,10 @@ describe("game-table view-model helpers", () => {
   it("drops the alternate preview flag when leaving the alternate table", () => {
     expect(
       updateSearchWithPlayerTableVariant("?table=alt&preview=pass-select", "normal")
-    ).toBe("");
+    ).toBe("?table=normal");
     expect(
       updateSearchWithPlayerTableVariant("?preview=pass-select", "alternate")
-    ).toBe("?preview=pass-select&table=alt");
+    ).toBe("?preview=pass-select");
   });
 
   it("matches hotkeys by context from the centralized registry", () => {

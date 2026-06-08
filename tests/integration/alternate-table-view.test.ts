@@ -131,7 +131,7 @@ class MockImage {
     this.#src = value;
     const pathname = new URL(value, "http://localhost").pathname;
 
-    if (pathname === "/tv7/t/plate.png" || pathname === "/tv7/p/o.png") {
+    if (pathname === "/tv_ed/t/plate.png" || pathname === "/tv7/p/o.png") {
       this.naturalWidth = 1536;
       this.naturalHeight = 1024;
       queueMicrotask(() => this.onload?.());
@@ -145,7 +145,7 @@ class MockImage {
       return;
     }
 
-    if (pathname.startsWith("/tv7/h/prev/")) {
+    if (pathname.startsWith("/tv_ed/h/prev/")) {
       this.naturalWidth = 1536;
       this.naturalHeight = 1024;
       queueMicrotask(() => this.onload?.());
@@ -180,13 +180,6 @@ async function flushUi() {
   await act(async () => {
     await Promise.resolve();
   });
-}
-
-async function advance(ms: number) {
-  await act(async () => {
-    await vi.advanceTimersByTimeAsync(ms);
-  });
-  await flushUi();
 }
 
 async function clickElement(element: HTMLButtonElement | null | undefined) {
@@ -267,12 +260,50 @@ afterEach(() => {
 });
 
 describe("AltTable3DRoute", () => {
+  it("boots directly into the authored passing layout instead of stopping in the GT demo flow", async () => {
+    const { AltTable3DRoute } = await import(
+      "../../apps/web/src/alt-table-3d/AltTable3DRoute"
+    );
+    const view = render(createElement(AltTable3DRoute, {}));
+
+    await flushUi();
+    await flushUi();
+
+    expect(queryByText(view.container, "PASSING")).toBeTruthy();
+    expect(view.container.querySelector("img[data-table-layer='passing-overlay']")).toBeTruthy();
+    expect(view.container.querySelectorAll("[data-zone='north_hand']")).toHaveLength(14);
+    expect(view.container.querySelectorAll("[data-zone='east_hand']")).toHaveLength(14);
+    expect(view.container.querySelectorAll("[data-zone='south_hand']")).toHaveLength(14);
+    expect(view.container.querySelectorAll("[data-zone='west_hand']")).toHaveLength(14);
+    expect(
+      view.container.querySelector("button[data-alt-action='call-gt']")
+    ).toBeNull();
+    expect(
+      view.container.querySelector("button[data-alt-action='skip-gt']")
+    ).toBeNull();
+
+    const snapshotFactory = (window as typeof window & {
+      __tichuAltTableSnapshot?: () => AltTableSnapshot;
+    }).__tichuAltTableSnapshot;
+    const snapshot = snapshotFactory?.();
+
+    expect(snapshot?.phase).toBe("passing");
+    expect(snapshot?.cards.bySeat.north).toBe(14);
+    expect(snapshot?.cards.bySeat.east).toBe(14);
+    expect(snapshot?.cards.bySeat.south).toBe(14);
+    expect(snapshot?.cards.bySeat.west).toBe(14);
+    expect(snapshot?.deal.counts.deckRemaining).toBe(0);
+
+    view.unmount();
+  });
+
   it("renders the v18 plane-overlay table flow with readable side racks and a truthful snapshot", async () => {
     const { AltTable3DRoute } = await import(
       "../../apps/web/src/alt-table-3d/AltTable3DRoute"
     );
     const view = render(createElement(AltTable3DRoute, {}));
 
+    await flushUi();
     await flushUi();
 
     expect(view.container.querySelector("[data-testid='alt-table-3d']")).toBeTruthy();
@@ -283,23 +314,18 @@ describe("AltTable3DRoute", () => {
     const tableImage = view.container.querySelector(
       "img[data-table-layer='plate']"
     ) as HTMLImageElement | null;
-    expect(tableImage?.getAttribute("src")).toBe("/tv7/t/plate.png");
+    expect(tableImage?.getAttribute("src")).toBe("/tv_ed/t/plate.png");
 
-    expect(queryByText(view.container, "ready")).toBeTruthy();
-    expect(view.container.querySelectorAll("[data-zone='south_hand']")).toHaveLength(0);
-    expect(view.container.querySelectorAll("[data-zone='north_hand']")).toHaveLength(0);
-
-    await advance(250);
-    expect(queryByText(view.container, "deal8")).toBeTruthy();
-    expect(view.container.querySelectorAll("[data-zone='north_hand']")).toHaveLength(8);
-    expect(view.container.querySelectorAll("[data-zone='east_hand']")).toHaveLength(8);
-    expect(view.container.querySelectorAll("[data-zone='south_hand']")).toHaveLength(8);
-    expect(view.container.querySelectorAll("[data-zone='west_hand']")).toHaveLength(8);
+    expect(queryByText(view.container, "PASSING")).toBeTruthy();
+    expect(view.container.querySelectorAll("[data-zone='north_hand']")).toHaveLength(14);
+    expect(view.container.querySelectorAll("[data-zone='east_hand']")).toHaveLength(14);
+    expect(view.container.querySelectorAll("[data-zone='south_hand']")).toHaveLength(14);
+    expect(view.container.querySelectorAll("[data-zone='west_hand']")).toHaveLength(14);
 
     const hiddenHands = Array.from(
       view.container.querySelectorAll("[data-render-mode='r3f-hidden-hand']")
     ) as HTMLElement[];
-    expect(hiddenHands).toHaveLength(24);
+    expect(hiddenHands).toHaveLength(42);
     expect(
       hiddenHands.every(
         (card) => card.getAttribute("data-uses-polygon-warping") === "false"
@@ -315,25 +341,7 @@ describe("AltTable3DRoute", () => {
         (card) => card.getAttribute("data-card-render-mode") === "side_rack_readable_fan"
       )
     ).toBe(true);
-
-    await advance(1200);
-    expect(queryByText(view.container, "grand_tichu")).toBeTruthy();
-
-    const skipGtButton = view.container.querySelector(
-      "button[data-alt-action='skip-gt']"
-    ) as HTMLButtonElement | null;
-    await clickElement(skipGtButton);
-
-    await flushUi();
-    expect(queryByText(view.container, "deal6")).toBeTruthy();
-
-    await advance(1200);
-    expect(queryByText(view.container, "passing")).toBeTruthy();
     expect(view.container.querySelector("img[data-table-layer='passing-overlay']")).toBeTruthy();
-    expect(view.container.querySelectorAll("[data-zone='north_hand']")).toHaveLength(14);
-    expect(view.container.querySelectorAll("[data-zone='east_hand']")).toHaveLength(14);
-    expect(view.container.querySelectorAll("[data-zone='south_hand']")).toHaveLength(14);
-    expect(view.container.querySelectorAll("[data-zone='west_hand']")).toHaveLength(14);
     expect(
       view.container.querySelectorAll("[data-zone='north_hand'][data-card-render-mode='north_rack_back_mostly_visible']")
     ).toHaveLength(14);
@@ -381,16 +389,6 @@ describe("AltTable3DRoute", () => {
       )
     ).toHaveLength(3);
 
-    const autoDemoButton = view.container.querySelector(
-      "button[data-alt-action='auto-demo-pass']"
-    ) as HTMLButtonElement | null;
-    await clickElement(autoDemoButton);
-    await flushUi();
-
-    expect(
-      view.container.querySelectorAll("[data-pass-id] [data-pass-card-img='true']")
-    ).toHaveLength(12);
-
     const snapshotFactory = (window as typeof window & {
       __tichuAltTableSnapshot?: () => AltTableSnapshot;
     }).__tichuAltTableSnapshot;
@@ -399,7 +397,7 @@ describe("AltTable3DRoute", () => {
     const snapshot = snapshotFactory?.();
     expect(snapshot?.assetRoot).toBe("/tv7");
     expect(snapshot?.renderer).toBe("react-three-fiber");
-    expect(snapshot?.table.src).toBe("/tv7/t/plate.png");
+    expect(snapshot?.table.src).toBe("/tv_ed/t/plate.png");
     expect(snapshot?.table.mode).toBe("single_image_plane");
     expect(snapshot?.cardLayout.src).toBe("v18CardRackMath");
     expect(snapshot?.cardLayout.layoutSource).toBe("v18_math");
@@ -435,7 +433,6 @@ describe("AltTable3DRoute", () => {
 
     await clickElement(confirmPassButton);
     await flushUi();
-    expect(queryByText(view.container, "passed")).toBeTruthy();
     expect(view.container.querySelector("img[data-table-layer='passing-overlay']")).toBeNull();
 
     view.unmount();

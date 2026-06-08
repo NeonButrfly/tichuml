@@ -43,11 +43,9 @@ describe("alternate table route guards", () => {
     expect(appSource).not.toContain("AlternateGameTableView");
   });
 
-  it("locks the production tv7 asset paths to the approved short public runtime root", () => {
+  it("locks the production alt-table math assets to tv7 while using the clean tv_ed plate", () => {
     expect(runtimeSource).toContain('export const TV7_ASSET_ROOT = "/tv7";');
-    expect(runtimeSource).toContain(
-      'export const TV7_TABLE_PLATE_SRC = `${TV7_ASSET_ROOT}/t/plate.png`;'
-    );
+    expect(runtimeSource).toContain('export const TV7_TABLE_PLATE_SRC = "/tv_ed/t/plate.png";');
     expect(runtimeSource).toContain(
       'export const TV7_PASSING_OVERLAY_SRC = `${TV7_ASSET_ROOT}/p/o.png`;'
     );

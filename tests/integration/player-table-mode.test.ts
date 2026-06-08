@@ -9,13 +9,14 @@ describe("player table mode helpers", () => {
     expect(getPlayerTableVariantFromSearch("?table=alt")).toBe("alternate");
     expect(getPlayerTableVariantFromSearch("?table=luxury")).toBe("alternate");
     expect(getPlayerTableVariantFromSearch("?table=normal")).toBe("normal");
-    expect(getPlayerTableVariantFromSearch("")).toBe("normal");
+    expect(getPlayerTableVariantFromSearch("?table=classic")).toBe("normal");
+    expect(getPlayerTableVariantFromSearch("")).toBe("alternate");
   });
 
   it("writes a stable query string for the chosen table mode", () => {
-    expect(updateSearchWithPlayerTableVariant("", "alternate")).toBe("?table=alt");
+    expect(updateSearchWithPlayerTableVariant("", "alternate")).toBe("");
     expect(updateSearchWithPlayerTableVariant("?table=alt&foo=1", "normal")).toBe(
-      "?foo=1"
+      "?table=normal&foo=1"
     );
   });
 });
