@@ -134,6 +134,17 @@ keep the gate threshold aligned with the smaller evaluation sample:
 npm run ml:bootstrap -- --run-id <run_id> --game-id-prefix <game_id_prefix> --output-dir training-runs/<run_id>/ml --provider server_heuristic --backend-url http://127.0.0.1:4310 --evaluate-games 3 --evaluate-min-games-for-gate 3
 ```
 
+Diagnose a completed observed-outcome training run:
+
+```powershell
+node node_modules/tsx/dist/cli.mjs scripts/run-python.ts scripts/outcome_reward_diagnostics.py --run-root training-runs/<run_id>
+```
+
+The diagnostic writes `diagnostics/outcome_reward_diagnostics.md` and
+`diagnostics/outcome_reward_diagnostics.json` under the run root. It also
+recomputes validation metrics from the saved model artifact so metric drift is
+visible when stored metadata is wrong.
+
 Build a live-gameplay rollout-training candidate without a new self-play batch:
 
 ```powershell
@@ -193,7 +204,9 @@ machine-parseable and deterministic under the same explicit DB/provider scope.
 - `artifacts/ml/training-report.json`
 - `artifacts/ml/training-report.md`
 - `artifacts/ml/feature-importance.csv`
-- training metadata including `feature_profile`, `phase`, and `feature_names`
+- training metadata including `feature_profile`, `phase`, `feature_names`,
+  target distribution, baseline RMSE/MAE, model-vs-baseline improvement, and
+  a Spearman interpretation band
 
 `ml:evaluate` writes:
 

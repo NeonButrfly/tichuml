@@ -70,6 +70,14 @@ Quick reference:
 - `npm run ml:train` supports `imitation_binary`,
   `observed_outcome_regression`, `rollout_regression`, and
   `rollout_ranker`.
+- `npm run ml:train` now prints target distribution, simple baseline RMSE/MAE,
+  model-vs-baseline improvement, and a Spearman interpretation band so
+  completed training runs can still be rejected when the learning signal is
+  weak. See issue `#79` for the current quality-tracking thread.
+- `scripts/outcome_reward_diagnostics.py --run-root training-runs/<run_id>`
+  inspects a completed observed-outcome run, writes markdown + JSON diagnostics,
+  and highlights recorded-vs-recomputed validation metric drift alongside
+  grouped target summaries and baseline comparisons.
 - `npm run ml:live-bootstrap` builds a rollout-labeled candidate model from
   live `gameplay` telemetry, including mixed `human_ui` and AI-provider rows
   when explicitly allowed, and can screen that candidate through the normal
