@@ -165,6 +165,7 @@ type RolloutQuality = {
   sample_runs_failed: number;
   skipped_invalid_forced_action: number;
   skipped_missing_state_raw: number;
+  skipped_non_concrete_state_raw: number;
   skipped_actor_mismatch: number;
   skipped_parse_failures: number;
   phase: string | null;
@@ -220,6 +221,33 @@ export function shouldUseFullStateRolloutContinuation(
   continuationProvider: ProviderMode
 ): boolean {
   return continuationProvider !== "local";
+}
+
+export function hasConcreteRolloutStateHands(
+  stateRaw: GameState | null
+): boolean {
+  if (!stateRaw || typeof stateRaw !== "object") {
+    return false;
+  }
+
+  for (const seat of SEAT_IDS) {
+    const hand = stateRaw.hands?.[seat];
+    if (!Array.isArray(hand)) {
+      return false;
+    }
+    for (const card of hand) {
+      if (
+        typeof card !== "object" ||
+        card === null ||
+        Array.isArray(card) ||
+        typeof (card as { id?: unknown }).id !== "string"
+      ) {
+        return false;
+      }
+    }
+  }
+
+  return true;
 }
 
 function parseArgs(argv: string[]): ParsedArgs {
@@ -568,12 +596,14 @@ function buildJobs(
   jobs: RolloutJob[];
   decisionsById: Map<number, DecisionRow>;
   skippedMissingStateRaw: number;
+  skippedNonConcreteStateRaw: number;
   skippedActorMismatch: number;
   skippedParseFailures: number;
 } {
   const jobs: RolloutJob[] = [];
   const decisionsById = new Map<number, DecisionRow>();
   let skippedMissingStateRaw = 0;
+  let skippedNonConcreteStateRaw = 0;
   let skippedActorMismatch = 0;
   let skippedParseFailures = 0;
 
@@ -587,6 +617,10 @@ function buildJobs(
     const stateRaw = decision.state_raw as unknown as GameState | null;
     if (!stateRaw) {
       skippedMissingStateRaw += 1;
+      continue;
+    }
+    if (!hasConcreteRolloutStateHands(stateRaw)) {
+      skippedNonConcreteStateRaw += 1;
       continue;
     }
     const actorSeat = decision.actor_seat as SeatId;
@@ -634,6 +668,7 @@ function buildJobs(
     jobs,
     decisionsById,
     skippedMissingStateRaw,
+    skippedNonConcreteStateRaw,
     skippedActorMismatch,
     skippedParseFailures
   };
@@ -661,6 +696,7 @@ function qualityMarkdown(payload: RolloutQuality): string {
     `- sample_runs_failed: ${payload.sample_runs_failed}`,
     `- skipped_invalid_forced_action: ${payload.skipped_invalid_forced_action}`,
     `- skipped_missing_state_raw: ${payload.skipped_missing_state_raw}`,
+    `- skipped_non_concrete_state_raw: ${payload.skipped_non_concrete_state_raw}`,
     `- skipped_actor_mismatch: ${payload.skipped_actor_mismatch}`,
     `- skipped_parse_failures: ${payload.skipped_parse_failures}`,
     `- continuation_provider: ${payload.continuation_provider}`,
@@ -883,6 +919,7 @@ async function main(): Promise<void> {
     sample_runs_failed: 0,
     skipped_invalid_forced_action: 0,
     skipped_missing_state_raw: 0,
+    skipped_non_concrete_state_raw: 0,
     skipped_actor_mismatch: 0,
     skipped_parse_failures: 0,
     phase: resolvePhaseFilter(args.phase) ?? null,
@@ -909,6 +946,7 @@ async function main(): Promise<void> {
     const decisions = await fetchDecisionRows(sql, args, exportSelection);
     const built = buildJobs(decisions, exportSelection);
     quality.skipped_missing_state_raw = built.skippedMissingStateRaw;
+    quality.skipped_non_concrete_state_raw = built.skippedNonConcreteStateRaw;
     quality.skipped_actor_mismatch = built.skippedActorMismatch;
     quality.skipped_parse_failures = built.skippedParseFailures;
     quality.jobs_discovered = built.jobs.length;
