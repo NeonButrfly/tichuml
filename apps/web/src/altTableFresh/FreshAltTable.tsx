@@ -7,9 +7,7 @@ import {
   resolveNormalSpriteCardFaceSrc
 } from "../normal-table-sprite-assets";
 import {
-  getReceivedPassCardsByTarget,
-  isExchangePhase,
-  type PassTarget
+  isExchangePhase
 } from "../table-model";
 import { FreshCardsLayer, type FreshRenderableCard } from "./FreshCardsLayer";
 import { FreshPassingLayer, type FreshPassLane } from "./FreshPassingLayer";
@@ -399,259 +397,142 @@ export function FreshAltTable(props: FreshAltTableProps) {
     (window as SnapshotWindow).__freshAltTableSnapshot = () => snapshot;
   }
 
-  const localSeat = props.seatViews.find((seat) => seat.isLocalSeat) ?? null;
-  const localSeatReceived = localSeat
-    ? getReceivedPassCardsByTarget(props.state, localSeat.seat)
-    : {};
-
   return (
     <main
       style={{
-        minHeight: "100vh",
+        minHeight: "100dvh",
         background:
           "radial-gradient(circle at top, rgba(66, 37, 18, 0.24), rgba(8, 6, 5, 0.96) 50%), #090706",
         color: "#f1e6c8",
-        display: "flex",
-        flexDirection: "column",
-        padding: "16px",
-        gap: "16px"
+        overflow: "hidden"
       }}
     >
       <div
+        ref={rootRef}
+        data-testid="fresh-alt-table"
+        data-alt-table-root="fresh"
         style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: "12px",
-          flexWrap: "wrap"
+          position: "relative",
+          width: "100vw",
+          height: "100dvh",
+          overflow: "hidden"
         }}
       >
         <div
           style={{
-            border: "1px solid rgba(196, 154, 92, 0.5)",
-            borderRadius: 999,
-            padding: "8px 14px",
-            background: "rgba(11, 20, 16, 0.72)",
-            fontSize: 13,
-            letterSpacing: "0.06em",
-            textTransform: "uppercase"
+            position: "absolute",
+            inset: 0
           }}
         >
-          Luxury table live view
-        </div>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "10px",
-            flexWrap: "wrap"
-          }}
-        >
-          <div
+          <img
+            data-testid="fresh-alt-table-base"
+            src={FRESH_ALT_TABLE_SRC}
+            alt=""
+            draggable={false}
             style={{
-              border: "1px solid rgba(196, 154, 92, 0.45)",
-              borderRadius: 999,
-              padding: "8px 14px",
-              background: "rgba(11, 20, 16, 0.72)",
-              fontSize: 13
+              position: "absolute",
+              left: fit.offsetX,
+              top: fit.offsetY,
+              width: fit.renderedW,
+              height: fit.renderedH,
+              userSelect: "none",
+              pointerEvents: "none"
             }}
-          >
-            Phase: {props.state.phase}
-          </div>
-          {props.resolvedWishRank !== null ? (
-            <div
-              style={{
-                border: "1px solid rgba(196, 154, 92, 0.45)",
-                borderRadius: 999,
-                padding: "8px 14px",
-                background: "rgba(11, 20, 16, 0.72)",
-                fontSize: 13
-              }}
-            >
-              Wish: {getWishLabel(props.resolvedWishRank)}
-            </div>
-          ) : null}
-          <button
-            type="button"
-            style={buildButtonStyle({ tone: "muted" })}
-            onClick={() =>
-              props.onPlayerTableVariantChange(
-                props.playerTableVariant === "alternate" ? "normal" : "alternate"
-              )
-            }
-          >
-            Classic table
-          </button>
-        </div>
-      </div>
+          />
 
-      <div
-        style={{
-          flex: 1,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          minHeight: 0
-        }}
-      >
-        <div
-          style={{
-            width: "min(100%, calc((100vh - 250px) * 1.5))",
-            maxWidth: "1536px",
-            maxHeight: "calc(100vh - 250px)"
-          }}
-        >
-          <div
-            ref={rootRef}
-            data-testid="fresh-alt-table"
-            data-alt-table-root="fresh"
-            style={{
-              width: "100%",
-              aspectRatio: `${DESIGN_W} / ${DESIGN_H}`,
-              position: "relative",
-              overflow: "hidden",
-              borderRadius: 24,
-              background: "#050403",
-              boxShadow:
-                "0 28px 64px rgba(0, 0, 0, 0.42), 0 0 0 1px rgba(198, 153, 90, 0.24)"
-            }}
-          >
-            <img
-              data-testid="fresh-alt-table-base"
-              src={FRESH_ALT_TABLE_SRC}
-              alt=""
-              draggable={false}
-              style={{
-                position: "absolute",
-                left: fit.offsetX,
-                top: fit.offsetY,
-                width: fit.renderedW,
-                height: fit.renderedH,
-                userSelect: "none",
-                pointerEvents: "none"
-              }}
-            />
+          <FreshTrickLayer cards={trickCards} fit={fit} />
 
-            <FreshTrickLayer cards={trickCards} fit={fit} />
+          <FreshCardsLayer
+            cards={cards}
+            fit={fit}
+            showDebug={props.showDebug ?? false}
+          />
 
-            <FreshCardsLayer
-              cards={cards}
+          {passingVisible ? (
+            <FreshPassingLayer
+              lanes={passLanes}
               fit={fit}
               showDebug={props.showDebug ?? false}
             />
+          ) : null}
 
-            {passingVisible ? (
-              <FreshPassingLayer
-                lanes={passLanes}
-                fit={fit}
-                showDebug={props.showDebug ?? false}
-              />
-            ) : null}
-
-            <div
-              style={{
-                position: "absolute",
-                inset: 0,
-                pointerEvents: "none",
-                zIndex: 300
-              }}
-            >
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              pointerEvents: "none",
+              zIndex: 300
+            }}
+          >
+            {props.controlHint ? (
               <div
                 style={{
                   position: "absolute",
                   left: "50%",
-                  top: 18,
+                  top: Math.max(fit.offsetY + 18, 16),
                   transform: "translateX(-50%)",
                   borderRadius: 999,
-                  background: "rgba(7, 12, 10, 0.84)",
-                  border: "1px solid rgba(201, 159, 92, 0.54)",
+                  background: "rgba(7, 12, 10, 0.78)",
+                  border: "1px solid rgba(201, 159, 92, 0.44)",
                   padding: "10px 16px",
-                  maxWidth: "70%",
+                  maxWidth: "min(70%, 560px)",
                   textAlign: "center",
                   fontSize: 14
                 }}
               >
                 {props.controlHint}
               </div>
+            ) : null}
 
+            {props.resolvedWishRank !== null ? (
               <div
                 style={{
                   position: "absolute",
-                  left: 22,
-                  bottom: 22,
-                  display: "flex",
-                  gap: "10px",
-                  alignItems: "center"
+                  left: Math.max(fit.offsetX + 24, 16),
+                  top: Math.max(fit.offsetY + 24, 16),
+                  borderRadius: 999,
+                  background: "rgba(7, 12, 10, 0.78)",
+                  border: "1px solid rgba(201, 159, 92, 0.44)",
+                  padding: "8px 14px",
+                  fontSize: 13
                 }}
               >
-                <div
-                  style={{
-                    borderRadius: 16,
-                    background: "rgba(7, 12, 10, 0.84)",
-                    border: "1px solid rgba(201, 159, 92, 0.54)",
-                    padding: "10px 14px",
-                    fontSize: 14
-                  }}
-                >
-                  NS {props.derived.matchScore["team-0"]} : EW {props.derived.matchScore["team-1"]}
-                </div>
-                {localSeat && Object.keys(localSeatReceived).length > 0 ? (
-                  <div
-                    style={{
-                      borderRadius: 16,
-                      background: "rgba(7, 12, 10, 0.84)",
-                      border: "1px solid rgba(201, 159, 92, 0.54)",
-                      padding: "10px 14px",
-                      fontSize: 13
-                    }}
-                  >
-                    Incoming:
-                    {" "}
-                    {(["left", "partner", "right"] as PassTarget[])
-                      .map((target) => localSeatReceived[target])
-                      .filter(Boolean)
-                      .length}
-                  </div>
-                ) : null}
+                Wish: {getWishLabel(props.resolvedWishRank)}
               </div>
+            ) : null}
 
-              {props.selectedCardIds.length > 0 ? (
-                <div
-                  style={{
-                    position: "absolute",
-                    right: 22,
-                    top: 22,
-                    borderRadius: 16,
-                    background: "rgba(7, 12, 10, 0.84)",
-                    border: "1px solid rgba(201, 159, 92, 0.54)",
-                    padding: "10px 14px",
-                    fontSize: 13
-                  }}
-                >
-                  Selected: {props.selectedCardIds.length}
-                </div>
-              ) : null}
-            </div>
+            <button
+              type="button"
+              style={{
+                position: "absolute",
+                right: Math.max(size.w - (fit.offsetX + fit.renderedW) + 16, 16),
+                top: Math.max(fit.offsetY + 16, 16),
+                pointerEvents: "auto",
+                ...buildButtonStyle({ tone: "muted" })
+              }}
+              onClick={() =>
+                props.onPlayerTableVariantChange(
+                  props.playerTableVariant === "alternate" ? "normal" : "alternate"
+                )
+              }
+            >
+              Classic table
+            </button>
           </div>
         </div>
-      </div>
 
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          gap: "14px",
-          flexWrap: "wrap",
-          alignItems: "flex-start"
-        }}
-      >
         <div
-          style={{
+        style={{
+            position: "absolute",
+            left: Math.max(fit.offsetX + 16, 16),
+            bottom: Math.max(size.h - (fit.offsetY + fit.renderedH) + 16, 16),
             display: "flex",
             flexWrap: "wrap",
-            gap: "10px"
-          }}
-        >
+            gap: "10px",
+            zIndex: 320,
+            pointerEvents: "auto"
+        }}
+      >
           {props.localDragonRecipients.length > 0
             ? props.localDragonRecipients.map((recipient) => (
                 <button
@@ -686,21 +567,6 @@ export function FreshAltTable(props: FreshAltTableProps) {
               Clear selection
             </button>
           ) : null}
-        </div>
-
-        <div
-          style={{
-            maxWidth: "540px",
-            display: "flex",
-            flexDirection: "column",
-            gap: "8px",
-            color: "#d8c8a8",
-            fontSize: 13
-          }}
-        >
-          <span>Table base: {checks.tableSrc}</span>
-          <span>Card back: {checks.cardBackSrc}</span>
-          <span>Passing lanes: {passingVisible ? "visible" : "hidden"}</span>
         </div>
       </div>
 

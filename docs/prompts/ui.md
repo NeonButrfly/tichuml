@@ -1140,3 +1140,30 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 - Linked GitHub Issue: [#85](https://github.com/NeonButrfly/tichuml/issues/85)
 - Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
 - Status Source: GitHub issue state only.
+
+### 2026-06-08 - Luxury table must fill the viewport cleanly and classic mode must return to the flattened 2D table
+
+- Prompt Signal: The next visual QA pass rejected the fresh luxury-table rollout
+  because the immutable board rendered too small inside extra shell chrome, and
+  the classic toggle no longer felt like the original 2D table. The user
+  explicitly called out the oversized margins, stray UI clutter, and the
+  classic-table regression caused by the wrong runtime table asset/default mode
+  behavior.
+- Interpreted Requirement: Keep the fresh luxury route on `/table/table.png`,
+  but remove the temporary shell/debug framing so the board fills the viewport
+  under the fixed 1536x1024 contain-fit transform. Restore classic/default
+  table semantics so missing `?table` resolves to the normal table again, and
+  pin the normal sprite runtime back to the flattened `/tv_ed/t/plate.png`
+  board instead of the split `/tv_ed/t/base.png` plus separate dragon layer.
+- Affected Systems: `apps/web/src/altTableFresh/FreshAltTable.tsx`,
+  `apps/web/src/game-table-view-model.ts`,
+  `apps/web/src/game-table-views.tsx`,
+  `apps/web/src/normal-table-sprite-assets.ts`,
+  `apps/web/src/styles.css`,
+  `tests/integration/player-table-mode.test.ts`,
+  `tests/integration/alternate-table-route-guards.test.ts`,
+  `tests/integration/alternate-table-view.test.ts`,
+  `tests/integration/normal-table-sprite-assets.test.ts`.
+- Linked GitHub Issue: [#94](https://github.com/NeonButrfly/tichuml/issues/94)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.

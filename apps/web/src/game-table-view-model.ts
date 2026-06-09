@@ -144,11 +144,9 @@ export function getPlayerTableVariantFromSearch(
 ): PlayerTableVariant {
   const params = new URLSearchParams(search);
   const table = params.get("table")?.trim().toLowerCase();
-  if (table === "normal" || table === "classic") {
-    return "normal";
-  }
-
-  return "alternate";
+  return table === "alt" || table === "alternate" || table === "luxury"
+    ? "alternate"
+    : "normal";
 }
 
 export function getAlternateTablePreviewModeFromSearch(
@@ -165,9 +163,9 @@ export function updateSearchWithPlayerTableVariant(
 ): string {
   const params = new URLSearchParams(search);
   if (variant === "alternate") {
-    params.delete("table");
+    params.set("table", "alt");
   } else {
-    params.set("table", "normal");
+    params.delete("table");
     params.delete("preview");
   }
 

@@ -147,11 +147,7 @@ import {
 import {
   CARD_BACK_BLUE_SRC,
   DEBUG_PASSING_OVERLAY_SOURCE_PATH,
-  DESIGN_H,
-  DESIGN_W,
   PRODUCTION_PASSING_OVERLAY_SRC,
-  TABLE_PLATE_SRC,
-  createDesignFitTransform,
   getPassingAnchorById,
   getPassingAnchorCardOrientation,
   resolvePassingAnchorId,
@@ -1974,17 +1970,19 @@ function NormalSpritePlayArea(
           height: `${scaleNormalSpriteValue(1024, transform)}px`
         }}
       />
-      <img
-        className="normal-sprite-table__layer normal-sprite-table__layer--dragon"
-        src={NORMAL_TABLE_SPRITE_DRAGON_SRC}
-        alt=""
-        style={{
-          left: `${transform.offsetX}px`,
-          top: `${transform.offsetY}px`,
-          width: `${scaleNormalSpriteValue(1536, transform)}px`,
-          height: `${scaleNormalSpriteValue(1024, transform)}px`
-        }}
-      />
+      {NORMAL_TABLE_SPRITE_DRAGON_SRC ? (
+        <img
+          className="normal-sprite-table__layer normal-sprite-table__layer--dragon"
+          src={NORMAL_TABLE_SPRITE_DRAGON_SRC}
+          alt=""
+          style={{
+            left: `${transform.offsetX}px`,
+            top: `${transform.offsetY}px`,
+            width: `${scaleNormalSpriteValue(1536, transform)}px`,
+            height: `${scaleNormalSpriteValue(1024, transform)}px`
+          }}
+        />
+      ) : null}
 
       {props.seatViews.flatMap((seatView) => {
         const spriteSeat = getSpriteSeatName(seatView.position);
@@ -5521,13 +5519,9 @@ export function NormalGameTableView(props: GameTableViewProps) {
   const seatByPosition = Object.fromEntries(
     props.seatViews.map((seatView) => [seatView.position, seatView])
   ) as Record<SeatVisualPosition, SeatView>;
-  const boardTransform = createDesignFitTransform(
-    Math.max(viewportSize.width, 1),
-    Math.max(viewportSize.height, 1)
-  );
   const layoutMetrics = computeNormalViewportLayoutMetrics({
-    viewportWidth: DESIGN_W,
-    viewportHeight: DESIGN_H,
+    viewportWidth: Math.max(viewportSize.width, 1),
+    viewportHeight: Math.max(viewportSize.height, 1),
     topCount: seatByPosition.top.cards.length,
     bottomCount: props.sortedLocalHand.length,
     leftCount: seatByPosition.left.cards.length,
@@ -5591,12 +5585,6 @@ export function NormalGameTableView(props: GameTableViewProps) {
     "--normal-bottom-card-step": `${layoutMetrics.bottomCardStep}px`,
     "--normal-side-card-step": `${layoutMetrics.sideCardStep}px`
   } as CSSProperties;
-  const boardFrameStyle = {
-    width: `${DESIGN_W}px`,
-    height: `${DESIGN_H}px`,
-    transform: `translate(${boardTransform.offsetX}px, ${boardTransform.offsetY}px) scale(${boardTransform.scale})`,
-    transformOrigin: "top left"
-  } as CSSProperties;
   const showPassOverlay = isExchangePhase(props.state.phase);
   const showPassDebugOverlay = import.meta.env.DEV && props.layoutEditorActive;
   const passDebugOverlaySrc = showPassDebugOverlay
@@ -5624,12 +5612,7 @@ export function NormalGameTableView(props: GameTableViewProps) {
         style={layoutStyle}
         data-layout-container="normal-viewport"
       >
-        <div className="normal-viewport__board-frame" style={boardFrameStyle}>
-          <div
-            className="normal-viewport__board"
-            data-layout-container="board"
-            style={{ backgroundImage: `url(${TABLE_PLATE_SRC})` }}
-          >
+        <div className="normal-viewport__board" data-layout-container="board">
           <GameChromeMenu
             variant="normal"
             isOpen={props.mainMenuOpen}
@@ -5890,7 +5873,6 @@ export function NormalGameTableView(props: GameTableViewProps) {
               onWishCancel={props.onWishCancel}
             />
           ) : null}
-          </div>
         </div>
       </section>
     </main>

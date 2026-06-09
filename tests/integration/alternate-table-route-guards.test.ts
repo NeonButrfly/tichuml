@@ -11,6 +11,10 @@ const freshTableSource = readFileSync(
   resolve("apps/web/src/altTableFresh/FreshAltTable.tsx"),
   "utf8"
 );
+const normalTableSource = readFileSync(
+  resolve("apps/web/src/game-table-views.tsx"),
+  "utf8"
+);
 const freshMathSource = readFileSync(
   resolve("apps/web/src/altTableFresh/freshTableMath.ts"),
   "utf8"
@@ -35,6 +39,13 @@ describe("alternate table route guards", () => {
     expect(routeSource).toContain("<FreshAltTable");
   });
 
+  it("keeps the classic table on the original normal surface contract instead of the v5 baked plate", () => {
+    expect(appSource).toContain("<NormalGameTableView {...viewProps} />");
+    expect(normalTableSource).not.toContain("table_plate_no_red_sample_guides_1536x1024.png");
+    expect(normalTableSource).not.toContain("TABLE_PLATE_SRC");
+    expect(normalTableSource).not.toContain("normal-viewport__board-frame");
+  });
+
   it("locks the fresh alt table to /table/table.png and tv_ed card art", () => {
     expect(checksSource).toContain('export const FRESH_ALT_TABLE_SRC = "/table/table.png";');
     expect(checksSource).toContain('export const FRESH_ALT_CARD_BACK_SRC = "/tv_ed/c/back/green.png";');
@@ -53,6 +64,11 @@ describe("alternate table route guards", () => {
     expect(freshTableSource).toContain('data-testid="fresh-alt-table"');
     expect(freshTableSource).toContain('data-alt-table-root="fresh"');
     expect(freshTableSource).toContain("__freshAltTableSnapshot");
+    expect(freshTableSource).not.toContain("100vh - 250px");
+    expect(freshTableSource).not.toContain("Luxury table live view");
+    expect(freshTableSource).not.toContain("Table base:");
+    expect(freshTableSource).not.toContain("Card back:");
+    expect(freshTableSource).not.toContain("Passing lanes:");
   });
 
   it("uses the fresh readable rack math instead of the retired projected side-card variants", () => {

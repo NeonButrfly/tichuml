@@ -9,8 +9,8 @@ import type { PassLaneDirection, SeatVisualPosition } from "./table-layout";
 export const NORMAL_TABLE_SPRITE_ROOT = "/tv_ed";
 export const NORMAL_TABLE_SPRITE_DESIGN_WIDTH = 1536;
 export const NORMAL_TABLE_SPRITE_DESIGN_HEIGHT = 1024;
-export const NORMAL_TABLE_SPRITE_BASE_SRC = `${NORMAL_TABLE_SPRITE_ROOT}/t/base.png`;
-export const NORMAL_TABLE_SPRITE_DRAGON_SRC = `${NORMAL_TABLE_SPRITE_ROOT}/t/dragon.png`;
+export const NORMAL_TABLE_SPRITE_BASE_SRC = `${NORMAL_TABLE_SPRITE_ROOT}/t/plate.png`;
+export const NORMAL_TABLE_SPRITE_DRAGON_SRC: string | null = null;
 export const NORMAL_TABLE_SPRITE_PASS_OVERLAY_SRC = `${NORMAL_TABLE_SPRITE_ROOT}/p/o.png`;
 export const NORMAL_TABLE_SPRITE_CARD_BACK_SRC = `${NORMAL_TABLE_SPRITE_ROOT}/c/back/green.png`;
 

@@ -549,6 +549,11 @@ describe("AltTable3DRoute", () => {
     expect(view.container.textContent).not.toContain("Passing Lanes (12)");
     expect(view.container.textContent).not.toContain("Anchor Rules");
     expect(view.container.textContent).not.toContain("Trick Anchor Preview");
+    expect(view.container.textContent).not.toContain("Luxury table live view");
+    expect(view.container.textContent).not.toContain("Table base:");
+    expect(view.container.textContent).not.toContain("Card back:");
+    expect(view.container.textContent).not.toContain("Passing lanes:");
+    expect(view.container.textContent).not.toContain("Incoming:");
 
     const snapshot = (window as SnapshotWindow).__freshAltTableSnapshot?.();
     expect(snapshot?.tableSrc).toBe("/table/table.png");
