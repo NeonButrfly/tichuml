@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import net from "node:net";
 import path from "node:path";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -321,14 +322,73 @@ function runCommand(
   });
 }
 
-function readGatePassed(reportPath: string): boolean {
+export function assertCandidateArtifactsExist(config: {
+  modelPath: string;
+  modelMetaPath: string;
+}): void {
+  const missingPaths = [config.modelPath, config.modelMetaPath].filter(
+    (candidatePath) => !fs.existsSync(candidatePath)
+  );
+  if (missingPaths.length > 0) {
+    throw new Error(
+      `Candidate model artifacts were not written: ${missingPaths.join(", ")}`
+    );
+  }
+}
+
+export function readEvaluationSummary(reportPath: string): {
+  gatePassed: boolean;
+  modelFile: string | null;
+} {
   if (!fs.existsSync(reportPath)) {
     throw new Error(`Evaluation report was not written to ${reportPath}.`);
   }
   const parsed = JSON.parse(fs.readFileSync(reportPath, "utf8")) as {
     gate?: { passed?: unknown };
+    model_file?: unknown;
   };
-  return parsed.gate?.passed === true;
+  return {
+    gatePassed: parsed.gate?.passed === true,
+    modelFile:
+      typeof parsed.model_file === "string" && parsed.model_file.trim().length > 0
+        ? parsed.model_file
+        : null,
+  };
+}
+
+export async function assertCandidateBackendPortAvailable(
+  port: number,
+  host = "127.0.0.1"
+): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const server = net.createServer();
+    server.unref();
+    server.once("error", (error) => {
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        error.code === "EADDRINUSE"
+      ) {
+        reject(
+          new Error(
+            `Candidate backend port ${port} on ${host} is already in use.`
+          )
+        );
+        return;
+      }
+      reject(error);
+    });
+    server.listen(port, host, () => {
+      server.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    });
+  });
 }
 
 async function waitForHealth(url: string, timeoutMs = 30_000): Promise<void> {
@@ -431,10 +491,15 @@ async function main(): Promise<void> {
         if (!backendUrl) {
           throw new Error("Candidate backend URL was not configured for evaluation.");
         }
+        assertCandidateArtifactsExist({
+          modelPath: plan.modelPath,
+          modelMetaPath: plan.modelMetaPath,
+        });
         const candidateBackendPort = Number.parseInt(
           backendUrl.split(":").at(-1) ?? "",
           10
         );
+        await assertCandidateBackendPortAvailable(candidateBackendPort);
         candidateBackend = startCandidateBackend({
           repoRoot,
           backendPort: candidateBackendPort,
@@ -443,7 +508,16 @@ async function main(): Promise<void> {
         });
         await waitForHealth(`${backendUrl}/health`);
         await runCommand(step.command, step.args);
-        if (!readGatePassed(plan.evaluationReportPath)) {
+        const evaluationSummary = readEvaluationSummary(plan.evaluationReportPath);
+        if (
+          evaluationSummary.modelFile === null ||
+          path.resolve(evaluationSummary.modelFile) !== path.resolve(plan.modelPath)
+        ) {
+          throw new Error(
+            `Evaluation report used ${evaluationSummary.modelFile ?? "no model_file"} instead of candidate model ${path.resolve(plan.modelPath)}.`
+          );
+        }
+        if (!evaluationSummary.gatePassed) {
           throw new Error("Live gameplay bootstrap evaluation gate did not pass.");
         }
         await stopChildProcess(candidateBackend);

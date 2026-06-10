@@ -160,6 +160,12 @@ normal mirrored `ml:evaluate` improvement gate against it. The command still
 does not auto-promote or repoint the live backend model for you; it only tells
 you whether the newly trained live-data candidate cleared the gate.
 
+The bootstrap launcher now also treats candidate evaluation integrity as part
+of the gate: it fails fast if the run-local model artifacts are missing, if the
+temporary candidate backend port is already occupied, or if the evaluation
+report says a different model file was evaluated. That prevents a stale backend
+or missing candidate bundle from being mistaken for a successful new run.
+
 ## Data products
 
 `ml:export` writes:

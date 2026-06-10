@@ -1,5 +1,14 @@
+import { createServer } from "node:net";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
-import { buildLiveMlBootstrapPlan } from "../../scripts/ml-live-bootstrap.js";
+import {
+  assertCandidateArtifactsExist,
+  assertCandidateBackendPortAvailable,
+  buildLiveMlBootstrapPlan,
+  readEvaluationSummary,
+} from "../../scripts/ml-live-bootstrap.js";
 
 describe("live ml bootstrap orchestration", () => {
   it("builds a gameplay export, rollout, and training plan for mixed live data", () => {
@@ -172,5 +181,117 @@ describe("live ml bootstrap orchestration", () => {
         skipEvaluate: false,
       })
     ).toThrow(/output-dir/i);
+  });
+
+  it("fails fast when the candidate model artifacts are missing", () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "ml-live-bootstrap-missing-"));
+
+    try {
+      expect(() =>
+        assertCandidateArtifactsExist({
+          modelPath: join(tempDir, "lightgbm_action_model.txt"),
+          modelMetaPath: join(tempDir, "lightgbm_action_model.meta.json"),
+        })
+      ).toThrow(/candidate model artifacts/i);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("reads the evaluation summary and preserves the evaluated model path", () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "ml-live-bootstrap-report-"));
+    const reportPath = join(tempDir, "evaluation-report.json");
+
+    try {
+      writeFileSync(
+        reportPath,
+        JSON.stringify(
+          {
+            gate: { passed: true },
+            model_file: "/tmp/candidate/lightgbm_action_model.txt",
+          },
+          null,
+          2
+        ),
+        "utf8"
+      );
+
+      expect(readEvaluationSummary(reportPath)).toEqual({
+        gatePassed: true,
+        modelFile: "/tmp/candidate/lightgbm_action_model.txt",
+      });
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects an occupied candidate backend port", async () => {
+    const server = createServer();
+    await new Promise<void>((resolvePromise, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", () => resolvePromise());
+    });
+
+    const address = server.address();
+    const port =
+      address && typeof address === "object" ? address.port : null;
+
+    try {
+      expect(port).not.toBeNull();
+      await expect(
+        assertCandidateBackendPortAvailable(port ?? 0)
+      ).rejects.toThrow(/already in use/i);
+    } finally {
+      await new Promise<void>((resolvePromise, reject) => {
+        server.close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolvePromise();
+        });
+      });
+    }
+  });
+
+  it("accepts a free candidate backend port", async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "ml-live-bootstrap-free-"));
+    const modelDir = join(tempDir, "ml");
+    mkdirSync(modelDir, { recursive: true });
+    const modelPath = join(modelDir, "lightgbm_action_model.txt");
+    const metaPath = join(modelDir, "lightgbm_action_model.meta.json");
+
+    try {
+      writeFileSync(modelPath, "model", "utf8");
+      writeFileSync(metaPath, "{}", "utf8");
+
+      assertCandidateArtifactsExist({ modelPath, modelMetaPath: metaPath });
+
+      const server = createServer();
+      const freePort = await new Promise<number>((resolvePromise, reject) => {
+        server.once("error", reject);
+        server.listen(0, "127.0.0.1", () => {
+          const address = server.address();
+          if (!address || typeof address !== "object") {
+            reject(new Error("failed to allocate test port"));
+            return;
+          }
+          const selectedPort = address.port;
+          server.close((error) => {
+            if (error) {
+              reject(error);
+              return;
+            }
+            resolvePromise(selectedPort);
+          });
+        });
+      });
+
+      await expect(
+        assertCandidateBackendPortAvailable(freePort)
+      ).resolves.toBeUndefined();
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 });
