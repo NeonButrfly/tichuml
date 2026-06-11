@@ -1167,3 +1167,24 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 - Linked GitHub Issue: [#94](https://github.com/NeonButrfly/tichuml/issues/94)
 - Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
 - Status Source: GitHub issue state only.
+
+### 2026-06-10 - Classic mode must restore the original flat green normal table instead of any authored tray image
+
+- Prompt Signal: The next review clarified that the previous "classic" fix was
+  still wrong. The user explicitly rejected the decorative `tv_ed` tray board,
+  asked for the flat green non-decorative table from before the recent table
+  work, and required history-based verification plus screenshots before
+  locking the fix.
+- Interpreted Requirement: Issue
+  [#94](https://github.com/NeonButrfly/tichuml/issues/94) remains the
+  canonical tracker. The normal route must stop rendering through the authored
+  sprite-table branch and instead use the original flat green normal-table
+  surface contract from the pre-v5 revision, while the alternate luxury route
+  continues to use the immutable `/table/table.png` renderer.
+- Affected Systems: `apps/web/src/game-table-views.tsx`,
+  `tests/integration/alternate-table-route-guards.test.ts`,
+  screenshot-based local and Linux-host normal-table verification against the
+  pre-v5 `5aae2f3` baseline.
+- Linked GitHub Issue: [#94](https://github.com/NeonButrfly/tichuml/issues/94)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.

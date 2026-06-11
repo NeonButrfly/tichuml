@@ -44,6 +44,7 @@ describe("alternate table route guards", () => {
     expect(normalTableSource).not.toContain("table_plate_no_red_sample_guides_1536x1024.png");
     expect(normalTableSource).not.toContain("TABLE_PLATE_SRC");
     expect(normalTableSource).not.toContain("normal-viewport__board-frame");
+    expect(normalTableSource).not.toContain("<NormalSpritePlayArea");
   });
 
   it("locks the fresh alt table to /table/table.png and tv_ed card art", () => {

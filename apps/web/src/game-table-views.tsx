@@ -151,30 +151,8 @@ import {
   getPassingAnchorById,
   getPassingAnchorCardOrientation,
   resolvePassingAnchorId,
-  resolveSpecialCardSrc,
-  resolveStandardCardSrc,
   toAssetHref
 } from "./tichu-table-assets";
-import {
-  computeNormalSpriteTransform,
-  getNormalSpriteHandScale,
-  getNormalSpriteHiddenPassCount,
-  getNormalSpriteRemoteCardBackSrc,
-  getNormalSpriteSelectedHandAnchors,
-  getNormalSpriteSeatwardOffset,
-  getNormalSpritePassDirection,
-  NORMAL_TABLE_SPRITE_BASE_SRC,
-  NORMAL_TABLE_SPRITE_DRAGON_SRC,
-  NORMAL_TABLE_SPRITE_PASS_OVERLAY_SRC,
-  projectNormalSpritePoint,
-  projectNormalSpritePolygon,
-  resolveNormalSpriteCardFaceSrc,
-  resolveNormalSpritePassAnchor,
-  resolveNormalSpriteRack,
-  resolveNormalSpriteTrickAnchor,
-  scaleNormalSpriteValue,
-  shouldRenderNormalSpritePassCard
-} from "./normal-table-sprite-assets";
 
 export type SeatView = {
   seat: SeatId;
@@ -370,6 +348,20 @@ const SPECIAL_CARD_NAMES: Record<SpecialCardName, string> = {
   phoenix: "Phoenix",
   dog: "Dog",
   mahjong: "Mahjong"
+};
+
+const SPECIAL_CARD_CORNER_LABELS: Record<SpecialCardName, string> = {
+  dragon: "DRG",
+  phoenix: "PHX",
+  dog: "DOG",
+  mahjong: "1"
+};
+
+const SPECIAL_CARD_SUBTITLES: Record<SpecialCardName, string> = {
+  dragon: "Imperial",
+  phoenix: "Luminous",
+  dog: "Guardian",
+  mahjong: "Ancient Tile"
 };
 
 export function formatSeatShort(seat: SeatId): string {
@@ -810,42 +802,322 @@ export const NORMAL_STAGE_ANCHORS: Record<
   }
 };
 
-function resolveSuitAssetName(suit: StandardSuit) {
+function SuitGlyph({
+  suit,
+  className = ""
+}: {
+  suit: StandardSuit;
+  className?: string;
+}) {
+  const classes = ["playing-card__glyph", className].filter(Boolean).join(" ");
+
   switch (suit) {
-    case "sword":
-      return "swords";
-    case "pagoda":
-      return "pagodas";
     case "jade":
-      return "jades";
+      return (
+        <svg viewBox="0 0 64 64" className={classes} aria-hidden="true">
+          <path d="M26 8h12l3 7H23z" fill="currentColor" opacity="0.86" />
+          <circle
+            cx="32"
+            cy="33"
+            r="18"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="5"
+          />
+          <circle
+            cx="32"
+            cy="33"
+            r="7"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3"
+            opacity="0.8"
+          />
+          <path
+            d="M32 51v7"
+            stroke="currentColor"
+            strokeWidth="3"
+            strokeLinecap="round"
+          />
+        </svg>
+      );
+    case "sword":
+      return (
+        <svg viewBox="0 0 64 64" className={classes} aria-hidden="true">
+          <path d="M31 10h2l5 7-1 2-6 24-4 0-1-2 5-24z" fill="currentColor" />
+          <path
+            d="M21 26h22"
+            stroke="currentColor"
+            strokeWidth="4"
+            strokeLinecap="round"
+          />
+          <path d="M28 31h8v8h-8z" fill="currentColor" opacity="0.9" />
+          <path d="M30 39h4v12h-4z" fill="currentColor" />
+          <path
+            d="M27 52h10"
+            stroke="currentColor"
+            strokeWidth="4"
+            strokeLinecap="round"
+          />
+        </svg>
+      );
+    case "pagoda":
+      return (
+        <svg viewBox="0 0 64 64" className={classes} aria-hidden="true">
+          <path d="M32 9l4 5h-8z" fill="currentColor" />
+          <path d="M18 20h28l-4-6H22z" fill="currentColor" opacity="0.9" />
+          <path d="M22 30h20l-3-5H25z" fill="currentColor" opacity="0.82" />
+          <path d="M25 39h14l-2.5-4H27.5z" fill="currentColor" opacity="0.74" />
+          <path d="M29 19h6v24h-6z" fill="currentColor" opacity="0.88" />
+          <path d="M24 45h16v4H24z" fill="currentColor" />
+        </svg>
+      );
     case "star":
-      return "stars";
+      return (
+        <svg viewBox="0 0 64 64" className={classes} aria-hidden="true">
+          <path
+            d="M32 8l5 13 13-5-5 13 11 3-11 3 5 13-13-5-5 13-5-13-13 5 5-13-11-3 11-3-5-13 13 5z"
+            fill="currentColor"
+          />
+          <circle cx="32" cy="32" r="7" fill="rgba(255,255,255,0.32)" />
+        </svg>
+      );
   }
 }
 
-function resolveCardArtSrc(card: Card): string {
-  return card.kind === "standard"
-    ? resolveStandardCardSrc(
-        resolveSuitAssetName(card.suit),
-        formatRank(card.rank) as Parameters<typeof resolveStandardCardSrc>[1]
-      )
-    : resolveSpecialCardSrc(card.special);
+function SpecialGlyph({
+  special,
+  className = ""
+}: {
+  special: SpecialCardName;
+  className?: string;
+}) {
+  const classes = ["playing-card__glyph", className].filter(Boolean).join(" ");
+
+  switch (special) {
+    case "dragon":
+      return (
+        <svg viewBox="0 0 64 64" className={classes} aria-hidden="true">
+          <path
+            d="M45 14c-6 0-11 3-14 8-2 4-1 8 2 10 3 2 8 1 11-3-2 7-7 11-14 11-6 0-10-3-12-8 0 8 6 14 15 14 12 0 22-11 22-24 0-4-4-8-10-8z"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M42 14l7 2-4 4"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="4"
+            strokeLinecap="round"
+          />
+          <path
+            d="M21 42l-5 8 10-3"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3.5"
+            strokeLinecap="round"
+          />
+          <circle cx="35" cy="24" r="2.5" fill="currentColor" />
+        </svg>
+      );
+    case "phoenix":
+      return (
+        <svg viewBox="0 0 64 64" className={classes} aria-hidden="true">
+          <path
+            d="M18 40c8-2 14-9 16-20 3 8 9 14 16 16-8 1-14 5-18 12-2-5-7-8-14-8z"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M28 20l4-8 4 8"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3.5"
+            strokeLinecap="round"
+          />
+          <path
+            d="M31 35l-7 13M35 35l9 11M31 35l-2 15"
+            stroke="currentColor"
+            strokeWidth="3"
+            strokeLinecap="round"
+          />
+        </svg>
+      );
+    case "dog":
+      return (
+        <svg viewBox="0 0 64 64" className={classes} aria-hidden="true">
+          <path
+            d="M24 20l-7 8v16c0 6 6 10 15 10s15-4 15-10V28l-7-8-8 4z"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="4"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M25 36h0M39 36h0"
+            stroke="currentColor"
+            strokeWidth="5"
+            strokeLinecap="round"
+          />
+          <path
+            d="M28 45c2 2 6 2 8 0"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3.5"
+            strokeLinecap="round"
+          />
+        </svg>
+      );
+    case "mahjong":
+      return (
+        <svg viewBox="0 0 64 64" className={classes} aria-hidden="true">
+          <rect
+            x="15"
+            y="10"
+            width="34"
+            height="44"
+            rx="6"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="4"
+          />
+          <circle
+            cx="32"
+            cy="24"
+            r="7"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3.5"
+          />
+          <path
+            d="M24 41c4-1 8-5 9-11 1 4 4 7 8 9-4 1-7 3-10 7-1-2-3-4-7-5z"
+            fill="currentColor"
+            opacity="0.88"
+          />
+          <path
+            d="M23 16l4 3M41 16l-4 3"
+            stroke="currentColor"
+            strokeWidth="3"
+            strokeLinecap="round"
+          />
+        </svg>
+      );
+  }
 }
 
-function describeCardArt(card: Card): string {
-  return card.kind === "standard"
-    ? `${formatRank(card.rank)} of ${formatSuitName(card)}`
-    : SPECIAL_CARD_NAMES[card.special];
+function CardCorner({
+  label,
+  symbol,
+  mirrored = false,
+  special = false
+}: {
+  label: string;
+  symbol: ReactNode;
+  mirrored?: boolean;
+  special?: boolean;
+}) {
+  return (
+    <div
+      className={[
+        "playing-card__corner",
+        mirrored ? "playing-card__corner--bottom" : "playing-card__corner--top",
+        special ? "playing-card__corner--special" : ""
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      <span
+        className={
+          special
+            ? "playing-card__rank playing-card__rank--special"
+            : "playing-card__rank"
+        }
+      >
+        {label}
+      </span>
+      <span className="playing-card__corner-symbol">{symbol}</span>
+    </div>
+  );
+}
+
+function StandardCardArt({
+  card
+}: {
+  card: Extract<Card, { kind: "standard" }>;
+}) {
+  const rank = formatRank(card.rank);
+
+  return (
+    <div className="playing-card__face">
+      <CardCorner label={rank} symbol={<SuitGlyph suit={card.suit} />} />
+
+      <div className="playing-card__center">
+        <div className="playing-card__seal">
+          <SuitGlyph suit={card.suit} className="playing-card__center-glyph" />
+        </div>
+        <span className="playing-card__title">{formatSuitName(card)}</span>
+      </div>
+
+      <CardCorner
+        label={rank}
+        symbol={<SuitGlyph suit={card.suit} />}
+        mirrored
+      />
+    </div>
+  );
+}
+
+function SpecialCardArt({
+  card
+}: {
+  card: Extract<Card, { kind: "special" }>;
+}) {
+  const label = SPECIAL_CARD_CORNER_LABELS[card.special];
+
+  return (
+    <div className="playing-card__face playing-card__face--special">
+      <CardCorner
+        label={label}
+        symbol={<SpecialGlyph special={card.special} />}
+        special
+      />
+
+      <div className="playing-card__center playing-card__center--special">
+        <div className="playing-card__seal playing-card__seal--special">
+          <SpecialGlyph
+            special={card.special}
+            className="playing-card__center-glyph playing-card__center-glyph--special"
+          />
+        </div>
+        <span className="playing-card__title">
+          {SPECIAL_CARD_NAMES[card.special]}
+        </span>
+        <span className="playing-card__subtitle">
+          {SPECIAL_CARD_SUBTITLES[card.special]}
+        </span>
+      </div>
+
+      <CardCorner
+        label={label}
+        symbol={<SpecialGlyph special={card.special} />}
+        mirrored
+        special
+      />
+    </div>
+  );
 }
 
 function cardContent(card: Card) {
-  return (
-    <img
-      className="playing-card__art"
-      src={resolveCardArtSrc(card)}
-      alt={describeCardArt(card)}
-      draggable={false}
-    />
+  return card.kind === "standard" ? (
+    <StandardCardArt card={card} />
+  ) : (
+    <SpecialCardArt card={card} />
   );
 }
 
@@ -1530,7 +1802,6 @@ export function CardFace({
   const [isDragging, setIsDragging] = useState(false);
   const classes = [
     "playing-card",
-    "playing-card--image",
     getCardClassName(card),
     tone === "legal" ? "playing-card--legal" : "",
     tone === "muted" ? "playing-card--muted" : "",
@@ -1759,588 +2030,6 @@ export function getNormalCenterZoneClassName(layoutEditorActive: boolean): strin
 
 export function shouldRenderNormalCenterZoneFelt(layoutEditorActive: boolean): boolean {
   return layoutEditorActive;
-}
-
-function getSpriteSeatName(position: SeatVisualPosition) {
-  switch (position) {
-    case "top":
-      return "north";
-    case "right":
-      return "east";
-    case "bottom":
-      return "south";
-    case "left":
-      return "west";
-  }
-}
-
-function getSpriteTrickSeat(position: SeatVisualPosition) {
-  switch (position) {
-    case "top":
-      return "north";
-    case "right":
-      return "east";
-    case "bottom":
-      return "south";
-    case "left":
-      return "west";
-  }
-}
-
-function buildSpriteClipPath(
-  points: Array<{ x: number; y: number }>,
-  bounds: { x: number; y: number; w: number; h: number }
-) {
-  return `polygon(${points
-    .map((point) => {
-      const xPercent = ((point.x - bounds.x) / bounds.w) * 100;
-      const yPercent = ((point.y - bounds.y) / bounds.h) * 100;
-      return `${xPercent}% ${yPercent}%`;
-    })
-    .join(", ")})`;
-}
-
-function NormalSpriteCard({
-  src,
-  left,
-  top,
-  width,
-  height,
-  rotation,
-  zIndex,
-  className,
-  clipRect,
-  interactive = false,
-  draggable = false,
-  ariaLabel,
-  onClick,
-  onDragStart,
-  onDragEnd
-}: {
-  src: string;
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-  rotation: number;
-  zIndex: number;
-  className?: string;
-  clipRect?: { left: number; top: number; width: number; height: number } | null;
-  interactive?: boolean;
-  draggable?: boolean;
-  ariaLabel?: string;
-  onClick?: () => void;
-  onDragStart?: (event: ReactDragEvent<HTMLButtonElement>) => void;
-  onDragEnd?: () => void;
-}) {
-  const classes = [
-    "normal-sprite-card",
-    interactive ? "normal-sprite-card--interactive" : "",
-    className ?? ""
-  ]
-    .filter(Boolean)
-    .join(" ");
-  const style = {
-    left: `${left}px`,
-    top: `${top}px`,
-    width: `${width}px`,
-    height: `${height}px`,
-    transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
-    zIndex
-  } satisfies CSSProperties;
-  const clippedStyle = clipRect
-    ? ({
-        ...style,
-        left: `${left - clipRect.left}px`,
-        top: `${top - clipRect.top}px`
-      } satisfies CSSProperties)
-    : style;
-  const clipWrapperStyle = clipRect
-    ? ({
-        left: `${clipRect.left}px`,
-        top: `${clipRect.top}px`,
-        width: `${clipRect.width}px`,
-        height: `${clipRect.height}px`,
-        zIndex
-      } satisfies CSSProperties)
-    : null;
-  const imageNode = <img className="normal-sprite-card__img" src={src} alt="" />;
-
-  if (interactive) {
-    const buttonNode = (
-      <button
-        type="button"
-        className={classes}
-        style={clipRect ? clippedStyle : style}
-        aria-label={ariaLabel}
-        draggable={draggable}
-        onClick={onClick}
-        onDragStart={onDragStart}
-        onDragEnd={onDragEnd}
-      >
-        {imageNode}
-      </button>
-    );
-
-    return clipRect ? (
-      <div
-        className={
-          interactive
-            ? "normal-sprite-card-clip normal-sprite-card-clip--interactive"
-            : "normal-sprite-card-clip"
-        }
-        style={clipWrapperStyle}
-      >
-        {buttonNode}
-      </div>
-    ) : (
-      buttonNode
-    );
-  }
-
-  const cardNode = (
-    <div
-      className={classes}
-      style={clipRect ? clippedStyle : style}
-      aria-hidden={ariaLabel ? undefined : true}
-    >
-      {imageNode}
-    </div>
-  );
-
-  return clipRect ? (
-    <div className="normal-sprite-card-clip" style={clipWrapperStyle}>
-      {cardNode}
-    </div>
-  ) : (
-    cardNode
-  );
-}
-
-function NormalSpritePlayArea(
-  props: Pick<
-    GameTableViewProps,
-    | "state"
-    | "seatViews"
-    | "sortedLocalHand"
-    | "localCanInteract"
-    | "localPassInteractionEnabled"
-    | "localLegalCardIds"
-    | "selectedCardIds"
-    | "passRouteViews"
-    | "selectedPassTarget"
-    | "displayedTrick"
-    | "seatRelativePlays"
-    | "pickupStageViews"
-    | "cardLookup"
-    | "onLocalCardClick"
-    | "onPassTargetSelect"
-    | "onPassLaneDrop"
-    | "onPassLaneCardClick"
-    | "onPassLaneCardDragStart"
-    | "onPassLaneCardDragEnd"
-  > & {
-    layoutMetrics: NormalViewportLayoutMetrics;
-  }
-) {
-  const boardBounds = getBoardBounds(props.layoutMetrics);
-  const fittedTransform = computeNormalSpriteTransform({
-    viewportWidth: boardBounds.width,
-    viewportHeight: boardBounds.height
-  });
-  const transform = {
-    ...fittedTransform,
-    offsetX: boardBounds.left + fittedTransform.offsetX,
-    offsetY: boardBounds.top + fittedTransform.offsetY
-  };
-  const remoteBackSrc = getNormalSpriteRemoteCardBackSrc();
-  const exchangePhaseActive = isExchangePhase(props.state.phase);
-  const selectionLift = Math.max(18, Math.round(scaleNormalSpriteValue(22, transform)));
-
-  return (
-    <div className="normal-sprite-table" data-layout-container="sprite-table">
-      <img
-        className="normal-sprite-table__layer normal-sprite-table__layer--base"
-        src={NORMAL_TABLE_SPRITE_BASE_SRC}
-        alt=""
-        style={{
-          left: `${transform.offsetX}px`,
-          top: `${transform.offsetY}px`,
-          width: `${scaleNormalSpriteValue(1536, transform)}px`,
-          height: `${scaleNormalSpriteValue(1024, transform)}px`
-        }}
-      />
-      {NORMAL_TABLE_SPRITE_DRAGON_SRC ? (
-        <img
-          className="normal-sprite-table__layer normal-sprite-table__layer--dragon"
-          src={NORMAL_TABLE_SPRITE_DRAGON_SRC}
-          alt=""
-          style={{
-            left: `${transform.offsetX}px`,
-            top: `${transform.offsetY}px`,
-            width: `${scaleNormalSpriteValue(1536, transform)}px`,
-            height: `${scaleNormalSpriteValue(1024, transform)}px`
-          }}
-        />
-      ) : null}
-
-      {props.seatViews.flatMap((seatView) => {
-        const spriteSeat = getSpriteSeatName(seatView.position);
-        const hiddenPassCount =
-          !seatView.isLocalSeat && exchangePhaseActive
-            ? getNormalSpriteHiddenPassCount({
-                seat: seatView.seat,
-                passRouteViews: props.passRouteViews
-              })
-            : 0;
-        const remoteVisibleCards =
-          seatView.position === "right"
-            ? [...seatView.cards].reverse()
-            : seatView.cards;
-        const remoteRenderCards = Array.from({
-          length: remoteVisibleCards.length + hiddenPassCount
-        }).map((_, index) => remoteVisibleCards[index] ?? null);
-        const handCards = seatView.isLocalSeat
-          ? props.sortedLocalHand
-          : remoteRenderCards;
-        const anchors = getNormalSpriteSelectedHandAnchors({
-          seat: spriteSeat,
-          count: handCards.length
-        });
-        const rack = resolveNormalSpriteRack(spriteSeat);
-        const clipSource =
-          seatView.position === "bottom"
-            ? null
-            : rack?.card_channel_px ?? rack?.bbox_px ?? null;
-        const clipRect = clipSource
-          ? {
-              left: transform.offsetX + clipSource.x * transform.scale,
-              top: transform.offsetY + clipSource.y * transform.scale,
-              width: scaleNormalSpriteValue(clipSource.w, transform),
-              height: scaleNormalSpriteValue(clipSource.h, transform)
-            }
-          : null;
-
-        return handCards.map((card, index) => {
-          const anchor = anchors[index];
-          if (!anchor) {
-            return null;
-          }
-
-          const center = projectNormalSpritePoint(anchor.center_px, transform);
-          const cardScale = getNormalSpriteHandScale(seatView.position);
-          const width = scaleNormalSpriteValue(anchor.w_px, transform) * cardScale;
-          const height = scaleNormalSpriteValue(anchor.h_px, transform) * cardScale;
-          const seatwardOffset = getNormalSpriteSeatwardOffset({
-            position: seatView.position,
-            width,
-            height
-          });
-          const selected =
-            seatView.isLocalSeat &&
-            card !== null &&
-            props.selectedCardIds.includes(card.id);
-          const toneClass = seatView.isLocalSeat
-            ? card !== null && props.localLegalCardIds.has(card.id)
-              ? "normal-sprite-card--legal"
-              : "normal-sprite-card--muted"
-            : "";
-          const src = seatView.isLocalSeat
-            ? resolveNormalSpriteCardFaceSrc(card as Card)
-            : remoteBackSrc;
-
-          return (
-            <NormalSpriteCard
-              key={`${seatView.seat}-${card?.id ?? `back-${index}`}-${index}`}
-              src={src}
-              left={center.x + seatwardOffset.x}
-              top={center.y + seatwardOffset.y - (selected ? selectionLift : 0)}
-              width={width}
-              height={height}
-              rotation={anchor.rotation_deg}
-              zIndex={anchor.z_index + (selected ? 30 : 0)}
-              clipRect={clipRect}
-              className={[
-                `normal-sprite-card--${seatView.position}`,
-                seatView.isLocalSeat ? "normal-sprite-card--local" : "normal-sprite-card--remote",
-                selected ? "normal-sprite-card--selected" : "",
-                toneClass
-              ]
-                .filter(Boolean)
-                .join(" ")}
-              interactive={seatView.isLocalSeat && props.localCanInteract}
-              draggable={seatView.isLocalSeat && props.localPassInteractionEnabled}
-              ariaLabel={
-                seatView.isLocalSeat
-                  ? `${seatView.title} ${(card as Card).id}`
-                  : `${seatView.title} facedown card`
-              }
-              onClick={
-                seatView.isLocalSeat
-                  ? () => props.onLocalCardClick((card as Card).id)
-                  : undefined
-              }
-              onDragStart={
-                seatView.isLocalSeat && props.localPassInteractionEnabled
-                  ? (event) => {
-                      event.dataTransfer.effectAllowed = "move";
-                      event.dataTransfer.setData(
-                        "application/x-tichu-pass-card",
-                        (card as Card).id
-                      );
-                    }
-                  : undefined
-              }
-            />
-          );
-        });
-      })}
-
-      {props.displayedTrick &&
-        props.seatRelativePlays.flatMap(({ seat, position, plays }) => {
-          const anchor = resolveNormalSpriteTrickAnchor(getSpriteTrickSeat(position));
-          if (!anchor || plays.length === 0) {
-            return [];
-          }
-
-          const origin = projectNormalSpritePoint(anchor.center_px, transform);
-          const cardWidth = scaleNormalSpriteValue(anchor.w_px, transform);
-          const cardHeight = scaleNormalSpriteValue(anchor.h_px, transform);
-          const playOffsetStep = Math.max(18, Math.round(cardWidth * 0.22));
-          const comboOffsetStep = Math.max(16, Math.round(cardWidth * 0.32));
-
-          return plays.flatMap((entry, playIndex) => {
-            const playOffset =
-              (plays.length - 1 - playIndex) * playOffsetStep;
-            return entry.combination.cardIds.map((cardId, cardIndex) => {
-              const comboOffset =
-                (cardIndex - (entry.combination.cardIds.length - 1) / 2) *
-                comboOffsetStep;
-              const left =
-                position === "left" || position === "right"
-                  ? origin.x
-                  : origin.x + comboOffset;
-              const top =
-                position === "left" || position === "right"
-                  ? origin.y + comboOffset
-                  : origin.y;
-              const groupLeft =
-                position === "left"
-                  ? left + playOffset
-                  : position === "right"
-                    ? left - playOffset
-                    : left;
-              const groupTop =
-                position === "top"
-                  ? top + playOffset
-                  : position === "bottom"
-                    ? top - playOffset
-                    : top;
-
-              return (
-                <NormalSpriteCard
-                  key={`${seat}-${entry.combination.key}-${cardId}-${playIndex}-${cardIndex}`}
-                  src={resolveNormalSpriteCardFaceSrc(
-                    resolveCard(cardId, props.cardLookup)
-                  )}
-                  left={groupLeft}
-                  top={groupTop}
-                  width={cardWidth}
-                  height={cardHeight}
-                  rotation={anchor.rotation_deg}
-                  zIndex={anchor.z_index + playIndex * 8 + cardIndex}
-                  className="normal-sprite-card--trick"
-                />
-              );
-            });
-          });
-        })}
-
-      {props.pickupStageViews.flatMap((group) => {
-        const anchor = resolveNormalSpriteTrickAnchor(getSpriteTrickSeat(group.position));
-        if (!anchor) {
-          return [];
-        }
-
-        const origin = projectNormalSpritePoint(anchor.center_px, transform);
-        const cardWidth = scaleNormalSpriteValue(anchor.w_px, transform);
-        const cardHeight = scaleNormalSpriteValue(anchor.h_px, transform);
-        const comboOffsetStep = Math.max(16, Math.round(cardWidth * 0.28));
-
-        return group.cardIds.map((cardId, cardIndex) => {
-          const comboOffset =
-            (cardIndex - (group.cardIds.length - 1) / 2) * comboOffsetStep;
-
-          return (
-            <NormalSpriteCard
-              key={`pickup-${group.seat}-${cardId}-${cardIndex}`}
-              src={resolveNormalSpriteCardFaceSrc(resolveCard(cardId, props.cardLookup))}
-              left={group.position === "left" || group.position === "right" ? origin.x : origin.x + comboOffset}
-              top={group.position === "left" || group.position === "right" ? origin.y + comboOffset : origin.y}
-              width={cardWidth}
-              height={cardHeight}
-              rotation={anchor.rotation_deg}
-              zIndex={anchor.z_index + cardIndex}
-              className="normal-sprite-card--pickup"
-            />
-          );
-        });
-      })}
-
-      {exchangePhaseActive && (
-        <img
-          className="normal-sprite-table__layer normal-sprite-table__layer--pass"
-          src={NORMAL_TABLE_SPRITE_PASS_OVERLAY_SRC}
-          alt=""
-          style={{
-            left: `${transform.offsetX}px`,
-            top: `${transform.offsetY}px`,
-            width: `${scaleNormalSpriteValue(1536, transform)}px`,
-            height: `${scaleNormalSpriteValue(1024, transform)}px`
-          }}
-        />
-      )}
-
-      {props.passRouteViews.map((route) => {
-        const targetPosition = getSeatVisualPosition(route.targetSeat);
-        const anchor = resolveNormalSpritePassAnchor({
-          sourcePosition: route.sourcePosition,
-          targetPosition
-        });
-        if (!anchor) {
-          return null;
-        }
-
-        const projectedBounds = {
-          x: transform.offsetX + anchor.bbox_px.x * transform.scale,
-          y: transform.offsetY + anchor.bbox_px.y * transform.scale,
-          w: scaleNormalSpriteValue(anchor.bbox_px.w, transform),
-          h: scaleNormalSpriteValue(anchor.bbox_px.h, transform)
-        };
-        const projectedPolygon = projectNormalSpritePolygon(
-          anchor.polygon_px,
-          transform
-        );
-        const cardCenter = projectNormalSpritePoint(anchor.center_px, transform);
-        const cardWidth = scaleNormalSpriteValue(anchor.w_px, transform);
-        const cardHeight = scaleNormalSpriteValue(anchor.h_px, transform);
-        const renderPassCard = shouldRenderNormalSpritePassCard({
-          sourceSeat: route.sourceSeat,
-          occupied: route.occupied,
-          visibleCardId: route.visibleCardId
-        });
-        const cardSrc = !renderPassCard
-          ? null
-          : route.visibleCardId
-            ? resolveNormalSpriteCardFaceSrc(
-                resolveCard(route.visibleCardId, props.cardLookup)
-              )
-            : remoteBackSrc;
-        const selected = route.interactive && route.target === props.selectedPassTarget;
-        const slotStyle = {
-          left: `${projectedBounds.x}px`,
-          top: `${projectedBounds.y}px`,
-          width: `${projectedBounds.w}px`,
-          height: `${projectedBounds.h}px`,
-          clipPath: buildSpriteClipPath(projectedPolygon, projectedBounds)
-        } satisfies CSSProperties;
-        const laneDirection = getNormalSpritePassDirection(anchor);
-        const slotClassName = [
-          "normal-sprite-pass-slot",
-          `normal-sprite-pass-slot--${laneDirection}`,
-          route.faceDown ? "normal-sprite-pass-slot--back" : "",
-          route.occupied ? "normal-sprite-pass-slot--occupied" : "",
-          selected ? "normal-sprite-pass-slot--selected" : "",
-          route.interactive ? "normal-sprite-pass-slot--interactive" : ""
-        ]
-          .filter(Boolean)
-          .join(" ");
-
-        return (
-          <div key={route.key} className="normal-sprite-pass-lane">
-            {route.interactive ? (
-              <button
-                type="button"
-                className={slotClassName}
-                style={slotStyle}
-                aria-label={`${formatPassDirectionLabel(laneDirection)} pass to ${formatSeatShort(route.targetSeat)}`}
-                onClick={() => props.onPassTargetSelect(route.target)}
-                onDragOver={(event) => {
-                  event.preventDefault();
-                  event.dataTransfer.dropEffect = "move";
-                }}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  const cardId = event.dataTransfer.getData(
-                    "application/x-tichu-pass-card"
-                  );
-                  if (cardId) {
-                    props.onPassLaneDrop(route.target, cardId);
-                  }
-                }}
-              />
-            ) : (
-              <div
-                className={slotClassName}
-                style={slotStyle}
-                aria-label={`${formatSeatShort(route.sourceSeat)} ${formatPassTarget(route.target)} staged card`}
-              />
-            )}
-
-            {cardSrc && (
-              <NormalSpriteCard
-                src={cardSrc}
-                left={cardCenter.x}
-                top={cardCenter.y}
-                width={cardWidth}
-                height={cardHeight}
-                rotation={anchor.card_rotation_deg}
-                zIndex={anchor.z_index + 10}
-                className={[
-                  "normal-sprite-card--pass",
-                  route.visibleCardId ? "" : "normal-sprite-card--back"
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
-                interactive={route.interactive && Boolean(route.visibleCardId)}
-                draggable={route.interactive && Boolean(route.visibleCardId)}
-                ariaLabel={`${formatPassDirectionLabel(laneDirection)} pass card`}
-                onClick={
-                  route.interactive && route.visibleCardId
-                    ? () => props.onPassLaneCardClick(route.target)
-                    : undefined
-                }
-                onDragStart={
-                  route.interactive && route.visibleCardId
-                    ? (event) => {
-                        event.dataTransfer.effectAllowed = "move";
-                        event.dataTransfer.setData(
-                          "application/x-tichu-pass-card",
-                          route.visibleCardId!
-                        );
-                        props.onPassLaneCardDragStart(
-                          route.target,
-                          route.visibleCardId!
-                        );
-                      }
-                    : undefined
-                }
-                onDragEnd={
-                  route.interactive && route.visibleCardId
-                    ? () =>
-                        props.onPassLaneCardDragEnd(
-                          route.target,
-                          route.visibleCardId!
-                        )
-                    : undefined
-                }
-              />
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
 }
 
 export function TableSurface(
@@ -5646,31 +5335,7 @@ export function NormalGameTableView(props: GameTableViewProps) {
               }
             />
           </div>
-          {!props.layoutEditorActive ? (
-            <NormalSpritePlayArea
-              layoutMetrics={layoutMetrics}
-              state={props.state}
-              seatViews={props.seatViews}
-              sortedLocalHand={props.sortedLocalHand}
-              localCanInteract={props.localCanInteract}
-              localPassInteractionEnabled={props.localPassInteractionEnabled}
-              localLegalCardIds={props.localLegalCardIds}
-              selectedCardIds={props.selectedCardIds}
-              passRouteViews={props.passRouteViews}
-              selectedPassTarget={props.selectedPassTarget}
-              displayedTrick={props.displayedTrick}
-              seatRelativePlays={props.seatRelativePlays}
-              pickupStageViews={props.pickupStageViews}
-              cardLookup={props.cardLookup}
-              onLocalCardClick={props.onLocalCardClick}
-              onPassTargetSelect={props.onPassTargetSelect}
-              onPassLaneDrop={props.onPassLaneDrop}
-              onPassLaneCardClick={props.onPassLaneCardClick}
-              onPassLaneCardDragStart={props.onPassLaneCardDragStart}
-              onPassLaneCardDragEnd={props.onPassLaneCardDragEnd}
-            />
-          ) : (
-            <div className="normal-grid" data-layout-container="table-grid">
+          <div className="normal-grid" data-layout-container="table-grid">
               <section
                 className={getNormalCenterZoneClassName(props.layoutEditorActive)}
                 data-layout-container="center-zone"
@@ -5740,8 +5405,7 @@ export function NormalGameTableView(props: GameTableViewProps) {
                 selectedCardIds={props.selectedCardIds}
                 onLocalCardClick={props.onLocalCardClick}
               />
-            </div>
-          )}
+          </div>
 
           <section
             className="normal-bottom-controls"
