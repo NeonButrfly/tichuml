@@ -5477,30 +5477,28 @@ export function NormalGameTableView(props: GameTableViewProps) {
             showSeatLabels={props.layoutEditorActive}
           />
 
-          {props.layoutEditorActive && (
-            <>
-              <NormalPassStagingRegions
-                passRouteViews={props.passRouteViews}
-                selectedPassTarget={props.selectedPassTarget}
-                cardLookup={props.cardLookup}
-                onPassTargetSelect={props.onPassTargetSelect}
-                onPassLaneDrop={props.onPassLaneDrop}
-                onPassLaneCardClick={props.onPassLaneCardClick}
-                onPassLaneCardDragStart={props.onPassLaneCardDragStart}
-                onPassLaneCardDragEnd={props.onPassLaneCardDragEnd}
-              />
+          <>
+            <NormalPassStagingRegions
+              passRouteViews={props.passRouteViews}
+              selectedPassTarget={props.selectedPassTarget}
+              cardLookup={props.cardLookup}
+              onPassTargetSelect={props.onPassTargetSelect}
+              onPassLaneDrop={props.onPassLaneDrop}
+              onPassLaneCardClick={props.onPassLaneCardClick}
+              onPassLaneCardDragStart={props.onPassLaneCardDragStart}
+              onPassLaneCardDragEnd={props.onPassLaneCardDragEnd}
+            />
 
-              <NormalTrickStagingRegions
-                normalTableLayout={props.normalTableLayout}
-                layoutMetrics={layoutMetrics}
-                displayedTrick={props.displayedTrick}
-                seatRelativePlays={props.seatRelativePlays}
-                pickupStageViews={props.pickupStageViews}
-                dogLeadAnimation={props.dogLeadAnimation}
-                cardLookup={props.cardLookup}
-              />
-            </>
-          )}
+            <NormalTrickStagingRegions
+              normalTableLayout={props.normalTableLayout}
+              layoutMetrics={layoutMetrics}
+              displayedTrick={props.displayedTrick}
+              seatRelativePlays={props.seatRelativePlays}
+              pickupStageViews={props.pickupStageViews}
+              dogLeadAnimation={props.dogLeadAnimation}
+              cardLookup={props.cardLookup}
+            />
+          </>
 
           {props.layoutEditorActive && (
             <NormalLayoutEditor

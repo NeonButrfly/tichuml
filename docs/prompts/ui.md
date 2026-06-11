@@ -1188,3 +1188,23 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 - Linked GitHub Issue: [#94](https://github.com/NeonButrfly/tichuml/issues/94)
 - Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
 - Status Source: GitHub issue state only.
+
+### 2026-06-11 - Normal passing lanes must remain visible during the live pass phase after the classic-table restore
+
+- Prompt Signal: After the classic flat-table restore, the next QA pass
+  reported that the normal table no longer showed passing lanes during the
+  passing phase. The user explicitly called out the live normal table path, not
+  the layout editor or alternate route.
+- Interpreted Requirement: Issue
+  [#28](https://github.com/NeonButrfly/tichuml/issues/28) remains the
+  canonical tracker. The normal route must keep directional pass-lane staging
+  visible during `pass_select` even when `layoutEditorActive` is `false`.
+  Restoring the flat classic board must not gate `NormalPassStagingRegions` or
+  `NormalTrickStagingRegions` behind editor-only conditions.
+- Affected Systems: `apps/web/src/game-table-views.tsx`,
+  `tests/integration/normal-table-pass-select.test.ts`,
+  `tests/integration/normal-pass-anchor-render.test.ts`,
+  `tests/integration/trick-ui-cleanup.test.ts`.
+- Linked GitHub Issue: [#28](https://github.com/NeonButrfly/tichuml/issues/28)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.
