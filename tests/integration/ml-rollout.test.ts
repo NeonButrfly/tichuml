@@ -15,6 +15,8 @@ import {
 import {
   buildRolloutContinuationMetadata,
   hasConcreteRolloutStateHands,
+  isResultCompleteForResume,
+  isTransientRolloutFailureReason,
   limitDecisionRowsRoundRobinByGame,
   resolveForcedActionFromCandidate as resolveForcedActionForRollout,
   shouldUseFullStateRolloutContinuation,
@@ -214,6 +216,74 @@ describe("ml rollout helpers", () => {
         "rollout_sample"
       )
     ).rejects.toThrow("rollout_sample_timeout_10ms");
+  });
+
+  it("treats sample timeouts as transient rollout failures", () => {
+    expect(isTransientRolloutFailureReason("rollout_sample_timeout_3000ms")).toBe(
+      true
+    );
+    expect(
+      isTransientRolloutFailureReason("rollout_decision_limit_reached")
+    ).toBe(false);
+    expect(isTransientRolloutFailureReason("invalid_forced_action")).toBe(
+      false
+    );
+  });
+
+  it("keeps transient timeout rows replayable on resume", () => {
+    expect(
+      isResultCompleteForResume(
+        {
+          decision_id: 126345,
+          candidate_action_key: "candidate-a",
+          rollout_available: false,
+          rollout_samples: 0,
+          rollout_failures: 1,
+          rollout_mean_actor_team_delta: null,
+          rollout_median_actor_team_delta: null,
+          rollout_std_actor_team_delta: null,
+          rollout_win_rate: null,
+          rollout_hand_win_rate: null,
+          rollout_tichu_success_rate: null,
+          rollout_grand_tichu_success_rate: null,
+          rollout_mean_finish_rank_actor: null,
+          rollout_mean_finish_rank_partner: null,
+          rollout_continuation_provider: "server_heuristic",
+          rollout_seed: "seed",
+          rollout_engine_version: "milestone-1",
+          rollout_failure_reason: "rollout_sample_timeout_3000ms"
+        },
+        5
+      )
+    ).toBe(false);
+  });
+
+  it("treats permanent rollout failures as complete on resume", () => {
+    expect(
+      isResultCompleteForResume(
+        {
+          decision_id: 126345,
+          candidate_action_key: "candidate-a",
+          rollout_available: false,
+          rollout_samples: 0,
+          rollout_failures: 5,
+          rollout_mean_actor_team_delta: null,
+          rollout_median_actor_team_delta: null,
+          rollout_std_actor_team_delta: null,
+          rollout_win_rate: null,
+          rollout_hand_win_rate: null,
+          rollout_tichu_success_rate: null,
+          rollout_grand_tichu_success_rate: null,
+          rollout_mean_finish_rank_actor: null,
+          rollout_mean_finish_rank_partner: null,
+          rollout_continuation_provider: "server_heuristic",
+          rollout_seed: "seed",
+          rollout_engine_version: "milestone-1",
+          rollout_failure_reason: "invalid_forced_action"
+        },
+        5
+      )
+    ).toBe(true);
   });
 
   it("rejects rollout states with hidden placeholder hands", () => {

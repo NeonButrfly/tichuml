@@ -82,6 +82,13 @@ Generate rollout labels:
 npm run ml:rollouts -- --database-url "$env:DATABASE_URL" --phase trick_play --provider local_heuristic --continuation-provider local --rollouts-per-action 4 --max-decisions 100
 ```
 
+Issue [#95](https://github.com/NeonButrfly/tichuml/issues/95) tightened
+timeout handling for `ml:rollouts`. Transient
+`rollout_sample_timeout_<n>ms` failures are now retried with
+`--sample-timeout-retries <count>` before the worker gives up on that sample,
+and exhausted timeout rows are written to a replayable sidecar instead of being
+accepted as final rollout labels.
+
 Train the default runtime-safe model:
 
 ```powershell
@@ -200,6 +207,7 @@ machine-parseable and deterministic under the same explicit DB/provider scope.
 
 - rollout result JSONL
 - `artifacts/ml/rollout-jobs.jsonl`
+- `artifacts/ml/rollout-retryable-failures.jsonl`
 - `artifacts/ml/rollout-quality.json`
 - `artifacts/ml/rollout-quality.md`
 
@@ -286,6 +294,9 @@ not claim the model is ready. Treat the evaluation report as authoritative.
 - Offline rollout validation was smoke-tested on small bounded samples; large
   batches should still be treated as operational work and monitored through the
   rollout quality report.
+- Timeout-driven rows in `artifacts/ml/rollout-retryable-failures.jsonl` are
+  intentionally incomplete and should be replayed on resume instead of being
+  treated as final dataset rows.
 - `ml:rollouts --input-export` currently expects JSONL when it is used as a
   subset filter.
 - Full offline rollout reconstruction still depends on decisions that captured
