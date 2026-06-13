@@ -443,6 +443,21 @@ export function FreshAltTable(props: FreshAltTableProps) {
             }}
           />
 
+          <div
+            style={{
+              position: "absolute",
+              left: fit.offsetX + 600 * fit.scale,
+              top: fit.offsetY + 900 * fit.scale,
+              width: 336 * fit.scale,
+              height: 80 * fit.scale,
+              background: "linear-gradient(180deg, #1a3d2e 0%, #0f2a1f 100%)",
+              borderRadius: 8 * fit.scale,
+              zIndex: 5,
+              pointerEvents: "none"
+            }}
+            aria-hidden="true"
+          />
+
           <FreshTrickLayer cards={trickCards} fit={fit} />
 
           <FreshCardsLayer
@@ -527,11 +542,13 @@ export function FreshAltTable(props: FreshAltTableProps) {
         <div
         style={{
             position: "absolute",
-            left: Math.max(fit.offsetX + 16, 16),
+            left: "50%",
             bottom: Math.max(size.h - (fit.offsetY + fit.renderedH) + 16, 16),
+            transform: "translateX(-50%)",
             display: "flex",
             flexWrap: "wrap",
             gap: "10px",
+            justifyContent: "center",
             zIndex: 320,
             pointerEvents: "auto"
         }}

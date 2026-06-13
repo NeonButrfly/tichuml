@@ -50,12 +50,12 @@ function pad2(n: number) {
 export function makeNorthHandAnchors(): CardAnchor[] {
   const count = 14;
 
-  const x0 = 482;
-  const x1 = 1054;
+  const x0 = 472;
+  const x1 = 1064;
   const y = 72;
 
-  const cardW = 43;
-  const cardH = 76;
+  const cardW = 45;
+  const cardH = 78;
 
   return Array.from({ length: count }, (_, i) => {
     const t = i / (count - 1);
@@ -75,7 +75,7 @@ export function makeNorthHandAnchors(): CardAnchor[] {
       rotationDeg: 0,
       scaleX: 1,
       scaleY: 1,
-      hiddenBottomPx: 8,
+      hiddenBottomPx: 10,
       zIndex: 40 + i
     };
   });
@@ -85,15 +85,15 @@ export function makeSideHandAnchors(seat: "west" | "east"): CardAnchor[] {
   const count = 14;
   const west = seat === "west";
 
-  const top = west ? { x: 96, y: 242 } : { x: 1440, y: 242 };
+  const top = west ? { x: 96, y: 240 } : { x: 1440, y: 240 };
 
-  const bottom = west ? { x: 74, y: 646 } : { x: 1462, y: 646 };
+  const bottom = west ? { x: 74, y: 672 } : { x: 1462, y: 672 };
 
   const cardW = 62;
   const cardH = 108;
 
   const baseRot = west ? -10 : 10;
-  const fanSpread = west ? -7 : 7;
+  const fanSpread = west ? -8 : 8;
 
   return Array.from({ length: count }, (_, i) => {
     const t = i / (count - 1);
@@ -121,9 +121,9 @@ export function makeSideHandAnchors(seat: "west" | "east"): CardAnchor[] {
 export function makeSouthHandAnchors(): CardAnchor[] {
   const count = 14;
 
-  const x0 = 250;
-  const x1 = 1286;
-  const yBase = 846;
+  const x0 = 220;
+  const x1 = 1316;
+  const yBase = 850;
 
   const rotations = [-13, -10, -8, -6, -4, -2, 0, 1, 3, 5, 7, 9, 11, 13];
 
@@ -141,8 +141,8 @@ export function makeSouthHandAnchors(): CardAnchor[] {
         x: lerp(x0, x1, t),
         y: yBase - arc
       },
-      wPx: 104,
-      hPx: 168,
+      wPx: 96,
+      hPx: 156,
       rotationDeg: rotations[i] ?? 0,
       scaleX: 1,
       scaleY: 1,
