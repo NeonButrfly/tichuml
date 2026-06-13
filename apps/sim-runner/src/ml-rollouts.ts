@@ -212,6 +212,16 @@ export async function withTimeout<T>(
   }
 }
 
+function emitRolloutTrace(event: string, payload: Record<string, unknown>): void {
+  process.stdout.write(
+    `${JSON.stringify({
+      ts: new Date().toISOString(),
+      event,
+      ...payload
+    })}\n`
+  );
+}
+
 export function resolveForcedActionFromCandidate(
   stateRaw: GameState | null,
   actorSeat: SeatId,
@@ -568,7 +578,7 @@ async function loadExistingResults(outputPath: string): Promise<Set<string>> {
 async function fetchDecisionRows(
   sql: postgres.Sql,
   args: ParsedArgs,
-  exportSelection: ExportSelection
+  decisionIdsFilter: number[]
 ): Promise<DecisionRow[]> {
   const clauses: string[] = [];
   const params: unknown[] = [];
@@ -594,9 +604,9 @@ async function fetchDecisionRows(
     clauses.push(`hand_id = $${params.length + 1}`);
     params.push(args.handId);
   }
-  if (exportSelection.size > 0 && args.decisionId === undefined) {
+  if (decisionIdsFilter.length > 0 && args.decisionId === undefined) {
     clauses.push(`id = ANY($${params.length + 1})`);
-    params.push([...exportSelection.keys()]);
+    params.push(decisionIdsFilter);
   }
 
   const whereClause = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
@@ -622,6 +632,26 @@ async function fetchDecisionRows(
 
   const rows = await sql.unsafe<DecisionRow[]>(query, params as never[]);
   return limitDecisionRowsRoundRobinByGame(rows, args.maxDecisions);
+}
+
+export function resolvePendingDecisionIds(
+  exportSelection: ExportSelection,
+  existingResults: Set<string>
+): number[] {
+  if (exportSelection.size === 0) {
+    return [];
+  }
+
+  const pending: number[] = [];
+  for (const [decisionId, candidateKeys] of exportSelection.entries()) {
+    for (const candidateKey of candidateKeys) {
+      if (!existingResults.has(`${decisionId}:${candidateKey}`)) {
+        pending.push(decisionId);
+        break;
+      }
+    }
+  }
+  return pending;
 }
 
 function buildJobs(
@@ -849,6 +879,7 @@ async function runSingleRolloutJob(
     try {
       const metrics = await withTimeout(
         (async () => {
+          const sampleStartedAt = Date.now();
           let result = applyEngineAction(
             stateRaw,
             coerceEngineAction(JSON.parse(JSON.stringify(forcedAction)) as JsonObject)
@@ -857,6 +888,13 @@ async function runSingleRolloutJob(
           let safetyCounter = 0;
 
           while (result.nextState.phase !== "finished") {
+            if (
+              Number.isFinite(args.sampleTimeoutMs) &&
+              args.sampleTimeoutMs > 0 &&
+              Date.now() - sampleStartedAt >= args.sampleTimeoutMs
+            ) {
+              throw new Error(`rollout_sample_timeout_${args.sampleTimeoutMs}ms`);
+            }
             if (safetyCounter >= 5_000) {
               throw new Error("rollout_decision_limit_reached");
             }
@@ -950,6 +988,20 @@ async function main(): Promise<void> {
   const existingResults = args.resume
     ? await loadExistingResults(outputPath)
     : new Set<string>();
+  const pendingDecisionIds = resolvePendingDecisionIds(
+    exportSelection,
+    existingResults
+  );
+  emitRolloutTrace("ml_rollouts_start", {
+    output: outputPath,
+    resume: args.resume,
+    existing_results: existingResults.size,
+    export_selection_decisions: exportSelection.size,
+    pending_decision_ids: pendingDecisionIds.length,
+    concurrency: args.concurrency,
+    rollouts_per_action: args.rolloutsPerAction,
+    sample_timeout_ms: args.sampleTimeoutMs
+  });
   const quality: RolloutQuality = {
     created_at: new Date().toISOString(),
     jobs_discovered: 0,
@@ -985,13 +1037,27 @@ async function main(): Promise<void> {
 
   const sql = postgres(args.databaseUrl, { max: 1, idle_timeout: 5 });
   try {
-    const decisions = await fetchDecisionRows(sql, args, exportSelection);
+    const decisionIdsFilter =
+      args.decisionId === undefined &&
+      args.inputExport &&
+      exportSelection.size > 0
+        ? pendingDecisionIds
+        : [];
+    const decisions = await fetchDecisionRows(sql, args, decisionIdsFilter);
     const built = buildJobs(decisions, exportSelection);
     quality.skipped_missing_state_raw = built.skippedMissingStateRaw;
     quality.skipped_non_concrete_state_raw = built.skippedNonConcreteStateRaw;
     quality.skipped_actor_mismatch = built.skippedActorMismatch;
     quality.skipped_parse_failures = built.skippedParseFailures;
     quality.jobs_discovered = built.jobs.length;
+    emitRolloutTrace("ml_rollouts_jobs_built", {
+      decisions: decisions.length,
+      jobs_discovered: built.jobs.length,
+      skipped_missing_state_raw: built.skippedMissingStateRaw,
+      skipped_non_concrete_state_raw: built.skippedNonConcreteStateRaw,
+      skipped_actor_mismatch: built.skippedActorMismatch,
+      skipped_parse_failures: built.skippedParseFailures
+    });
 
     const pendingJobs = built.jobs.filter((job) => {
       const key = `${job.decisionId}:${job.candidateActionKey}`;
@@ -1000,6 +1066,11 @@ async function main(): Promise<void> {
         return false;
       }
       return true;
+    });
+    emitRolloutTrace("ml_rollouts_pending_jobs", {
+      jobs_discovered: quality.jobs_discovered,
+      jobs_skipped_existing: quality.jobs_skipped_existing,
+      pending_jobs: pendingJobs.length
     });
 
     for (const job of pendingJobs) {
@@ -1011,6 +1082,10 @@ async function main(): Promise<void> {
       if (!decision) {
         return;
       }
+      emitRolloutTrace("ml_rollouts_job_start", {
+        decision_id: job.decisionId,
+        candidate_action_key: job.candidateActionKey
+      });
       const row = await runSingleRolloutJob(job, args, decision);
       quality.jobs_executed += 1;
       quality.sample_runs_succeeded += row.rollout_samples;
@@ -1028,6 +1103,16 @@ async function main(): Promise<void> {
         }
       }
       await appendJsonlLine(outputPath, row);
+      emitRolloutTrace("ml_rollouts_job_finish", {
+        decision_id: row.decision_id,
+        candidate_action_key: row.candidate_action_key,
+        rollout_available: row.rollout_available,
+        rollout_samples: row.rollout_samples,
+        rollout_failures: row.rollout_failures,
+        rollout_failure_reason: row.rollout_failure_reason,
+        jobs_executed: quality.jobs_executed,
+        pending_jobs_remaining: Math.max(0, pendingJobs.length - quality.jobs_executed)
+      });
     });
   } finally {
     await sql.end({ timeout: 5 });
@@ -1040,6 +1125,14 @@ async function main(): Promise<void> {
     "utf8"
   );
   await fs.promises.writeFile(qualityMdPath, qualityMarkdown(quality), "utf8");
+  emitRolloutTrace("ml_rollouts_complete", {
+    jobs_executed: quality.jobs_executed,
+    jobs_succeeded: quality.jobs_succeeded,
+    jobs_failed: quality.jobs_failed,
+    sample_runs_succeeded: quality.sample_runs_succeeded,
+    sample_runs_failed: quality.sample_runs_failed,
+    failure_reason_counts: quality.failure_reason_counts
+  });
 
   process.stdout.write(
     `${JSON.stringify({
@@ -1055,6 +1148,9 @@ async function main(): Promise<void> {
 }
 
 void main().catch((error) => {
+  emitRolloutTrace("ml_rollouts_fatal", {
+    message: error instanceof Error ? error.message : String(error)
+  });
   process.stderr.write(
     `${JSON.stringify({
       accepted: false,
