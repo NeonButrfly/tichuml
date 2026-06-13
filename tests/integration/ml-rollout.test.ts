@@ -204,7 +204,7 @@ describe("ml rollout helpers", () => {
 
   it("keeps full-state backend continuation enabled for server-backed rollouts", () => {
     expect(shouldUseFullStateRolloutContinuation("local")).toBe(false);
-    expect(shouldUseFullStateRolloutContinuation("server_heuristic")).toBe(true);
+    expect(shouldUseFullStateRolloutContinuation("server_heuristic")).toBe(false);
     expect(shouldUseFullStateRolloutContinuation("lightgbm_model")).toBe(true);
   });
 

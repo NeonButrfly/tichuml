@@ -274,7 +274,7 @@ export function resolveForcedActionFromCandidate(
 export function shouldUseFullStateRolloutContinuation(
   continuationProvider: ProviderMode
 ): boolean {
-  return continuationProvider !== "local";
+  return continuationProvider === "lightgbm_model";
 }
 
 export function isTransientRolloutFailureReason(
