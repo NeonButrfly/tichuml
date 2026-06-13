@@ -71,6 +71,16 @@ import {
   AsyncTelemetryManager,
   createDefaultTelemetryStorageRoot
 } from "./telemetry/async-telemetry.js";
+import {
+  Agent as HttpAgent,
+  request as httpRequest,
+  type RequestOptions as HttpRequestOptions
+} from "node:http";
+import {
+  Agent as HttpsAgent,
+  request as httpsRequest,
+  type RequestOptions as HttpsRequestOptions
+} from "node:https";
 
 export type SeatProviderOverrides = Partial<Record<SeatId, DecisionMode>>;
 export type TelemetryMode = "minimal" | "full";
@@ -396,6 +406,28 @@ type BackendRequestResult = {
   response_ms: number;
   parse_ms: number;
 };
+
+const SHARED_BACKEND_HTTP_AGENT = new HttpAgent({
+  keepAlive: true,
+  maxSockets: 32,
+  maxFreeSockets: 8
+});
+
+const SHARED_BACKEND_HTTPS_AGENT = new HttpsAgent({
+  keepAlive: true,
+  maxSockets: 32,
+  maxFreeSockets: 8
+});
+
+export function getSharedBackendAgent(protocol: string): HttpAgent | HttpsAgent {
+  if (protocol === "http:") {
+    return SHARED_BACKEND_HTTP_AGENT;
+  }
+  if (protocol === "https:") {
+    return SHARED_BACKEND_HTTPS_AGENT;
+  }
+  throw new Error(`Unsupported backend protocol: ${protocol}`);
+}
 
 type DecisionFailureKind =
   | "payload_validation"
@@ -1736,16 +1768,53 @@ async function requestJson(
     timeoutMs !== undefined
       ? setTimeout(() => abortController.abort(), timeoutMs)
       : undefined;
-  const init: RequestInit = { method, signal: abortController.signal };
-  if (requestBody) {
-    init.headers = {
-      "content-type": "application/json"
-    };
-    init.body = requestBody;
-  }
-  let response: Response;
+  const requestUrl = new URL(url);
+  const agent = getSharedBackendAgent(requestUrl.protocol);
+  const requestOptions: HttpRequestOptions | HttpsRequestOptions = {
+    protocol: requestUrl.protocol,
+    hostname: requestUrl.hostname,
+    port:
+      requestUrl.port.length > 0
+        ? Number(requestUrl.port)
+        : requestUrl.protocol === "https:"
+          ? 443
+          : 80,
+    path: `${requestUrl.pathname}${requestUrl.search}`,
+    method,
+    agent,
+    signal: abortController.signal,
+    headers: requestBody
+      ? {
+          "content-type": "application/json",
+          "content-length": Buffer.byteLength(requestBody, "utf8")
+        }
+      : undefined
+  };
+  let responseStatus = 0;
+  let responseText = "";
   try {
-    response = await fetch(url, init);
+    responseText = await new Promise<string>((resolve, reject) => {
+      const requestImpl =
+        requestUrl.protocol === "https:" ? httpsRequest : httpRequest;
+      const req = requestImpl(requestOptions, (res) => {
+        responseStatus = res.statusCode ?? 0;
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk: Buffer | string) => {
+          chunks.push(
+            typeof chunk === "string" ? Buffer.from(chunk) : chunk
+          );
+        });
+        res.on("end", () => {
+          resolve(Buffer.concat(chunks).toString("utf8"));
+        });
+        res.on("error", reject);
+      });
+      req.on("error", reject);
+      if (requestBody) {
+        req.write(requestBody);
+      }
+      req.end();
+    });
   } catch (error) {
     const latencyMs = Date.now() - startedAt;
     if (timeoutHandle) {
@@ -1780,33 +1849,7 @@ async function requestJson(
     clearTimeout(timeoutHandle);
   }
 
-  let responseText: string;
   const responseReadStartedAt = Date.now();
-  try {
-    responseText = await response.text();
-  } catch (error) {
-    const latencyMs = Date.now() - startedAt;
-    const message = error instanceof Error ? error.message : String(error);
-    traceBackendRequest(requestContext, "backend_request_failure", {
-      failure_kind: "unexpected_failure",
-      latency_ms: latencyMs,
-      status: response.status,
-      payload_bytes: payloadBytes,
-      message
-    });
-    throw new BackendRequestFailure(
-      "unexpected_failure",
-      `Request to ${url} failed while reading the response body: ${message}`,
-      {
-        method,
-        url,
-        request_kind: requestContext.request_kind,
-        status: response.status,
-        latency_ms: latencyMs,
-        cause: message
-      }
-    );
-  }
   const responseMs = Date.now() - responseReadStartedAt;
 
   let payload: JsonObject = {};
@@ -1822,27 +1865,27 @@ async function requestJson(
   }
   const parseMs = Date.now() - parseStartedAt;
   const latencyMs = Date.now() - startedAt;
-  if (!response.ok) {
+  if (responseStatus < 200 || responseStatus >= 300) {
     traceBackendRequest(requestContext, "backend_request_failure", {
       failure_kind: "backend_rejection",
       latency_ms: latencyMs,
       response_ms: responseMs,
       parse_ms: parseMs,
-      status: response.status,
+      status: responseStatus,
       payload_bytes: payloadBytes,
       ...(Object.keys(payload).length > 0 ? { body: payload } : {}),
       ...(rawBody ? { raw_body: rawBody } : {})
     });
     throw new BackendRequestFailure(
       "backend_rejection",
-      `Request to ${url} failed (${response.status}): ${
+      `Request to ${url} failed (${responseStatus}): ${
         rawBody ?? JSON.stringify(payload)
       }`,
       {
         method,
         url,
         request_kind: requestContext.request_kind,
-        status: response.status,
+        status: responseStatus,
         latency_ms: latencyMs,
         response_ms: responseMs,
         parse_ms: parseMs,
@@ -1855,11 +1898,11 @@ async function requestJson(
     latency_ms: latencyMs,
     response_ms: responseMs,
     parse_ms: parseMs,
-    status: response.status,
+    status: responseStatus,
     payload_bytes: payloadBytes
   });
   return {
-    status: response.status,
+    status: responseStatus,
     payload,
     ...(rawBody ? { raw_body: rawBody } : {}),
     latency_ms: latencyMs,
