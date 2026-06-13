@@ -125,6 +125,9 @@ export function FreshAltTable(props: FreshAltTableProps) {
     }
 
     const observer = new ResizeObserver(([entry]) => {
+      if (!entry) {
+        return;
+      }
       const rect = entry.contentRect;
       setSize({ w: rect.width, h: rect.height });
     });
@@ -212,9 +215,9 @@ export function FreshAltTable(props: FreshAltTableProps) {
                   );
                 }
               : undefined
-        } satisfies FreshRenderableCard;
+        } as FreshRenderableCard;
       });
-    }).filter((card): card is FreshRenderableCard => Boolean(card));
+    }).filter((card): card is FreshRenderableCard => card !== null);
   }, [
     exchangePhaseActive,
     handAnchors,
@@ -295,7 +298,7 @@ export function FreshAltTable(props: FreshAltTableProps) {
                     : undefined
               }
             : null
-      };
+      } as FreshPassLane;
     });
   }, [
     passingAnchors,

@@ -58,7 +58,7 @@ export function makeNorthHandAnchors(): CardAnchor[] {
   const cardH = 76;
 
   return Array.from({ length: count }, (_, i) => {
-    const t = count === 1 ? 0.5 : i / (count - 1);
+    const t = i / (count - 1);
 
     return {
       id: `n${pad2(i + 1)}`,
@@ -96,7 +96,7 @@ export function makeSideHandAnchors(seat: "west" | "east"): CardAnchor[] {
   const fanSpread = west ? -7 : 7;
 
   return Array.from({ length: count }, (_, i) => {
-    const t = count === 1 ? 0.5 : i / (count - 1);
+    const t = i / (count - 1);
 
     return {
       id: `${west ? "w" : "e"}${pad2(i + 1)}`,
@@ -128,7 +128,7 @@ export function makeSouthHandAnchors(): CardAnchor[] {
   const rotations = [-13, -10, -8, -6, -4, -2, 0, 1, 3, 5, 7, 9, 11, 13];
 
   return Array.from({ length: count }, (_, i) => {
-    const t = count === 1 ? 0.5 : i / (count - 1);
+    const t = i / (count - 1);
     const arc = Math.sin(Math.PI * t) * 52;
 
     return {
