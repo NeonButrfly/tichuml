@@ -45,6 +45,7 @@ type ParsedArgs = {
   concurrency: number;
   resume: boolean;
   backendUrl: string;
+  sampleTimeoutMs: number;
   continuationExplorationProfile?: "off" | "conservative" | "training_diversity";
   continuationExplorationRate?: number;
   continuationExplorationTopN?: number;
@@ -184,6 +185,32 @@ const DEFAULT_OUTPUT = "ml/data/rollout_rows.jsonl";
 const DEFAULT_JOBS_OUTPUT = "artifacts/ml/rollout-jobs.jsonl";
 const DEFAULT_QUALITY_JSON = "artifacts/ml/rollout-quality.json";
 const DEFAULT_QUALITY_MD = "artifacts/ml/rollout-quality.md";
+const DEFAULT_SAMPLE_TIMEOUT_MS = 15_000;
+
+export async function withTimeout<T>(
+  operation: Promise<T>,
+  timeoutMs: number,
+  label: string
+): Promise<T> {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    return operation;
+  }
+
+  let timeoutHandle: NodeJS.Timeout | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutHandle = setTimeout(() => {
+      reject(new Error(`${label}_timeout_${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([operation, timeoutPromise]);
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
+  }
+}
 
 export function resolveForcedActionFromCandidate(
   stateRaw: GameState | null,
@@ -269,6 +296,7 @@ function parseArgs(argv: string[]): ParsedArgs {
         "  --concurrency <count>",
         "  --resume",
         "  --backend-url <url>",
+        "  --sample-timeout-ms <ms>",
         "  --continuation-exploration-profile <off|conservative|training_diversity>",
         "  --continuation-exploration-rate <rate>",
         "  --continuation-exploration-top-n <count>",
@@ -290,7 +318,8 @@ function parseArgs(argv: string[]): ParsedArgs {
     seed: "rollout",
     concurrency: 1,
     resume: false,
-    backendUrl: "http://127.0.0.1:4310"
+    backendUrl: "http://127.0.0.1:4310",
+    sampleTimeoutMs: DEFAULT_SAMPLE_TIMEOUT_MS
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -369,6 +398,12 @@ function parseArgs(argv: string[]): ParsedArgs {
       case "--backend-url":
         if (next) {
           parsed.backendUrl = next;
+          index += 1;
+        }
+        break;
+      case "--sample-timeout-ms":
+        if (next) {
+          parsed.sampleTimeoutMs = Math.max(1, Number(next));
           index += 1;
         }
         break;
@@ -812,50 +847,57 @@ async function runSingleRolloutJob(
     );
     void sampleSeed;
     try {
-      let result = applyEngineAction(
-        stateRaw,
-        coerceEngineAction(JSON.parse(JSON.stringify(forcedAction)) as JsonObject)
+      const metrics = await withTimeout(
+        (async () => {
+          let result = applyEngineAction(
+            stateRaw,
+            coerceEngineAction(JSON.parse(JSON.stringify(forcedAction)) as JsonObject)
+          );
+          let continuationDecisionIndex = decision.decision_index + 1;
+          let safetyCounter = 0;
+
+          while (result.nextState.phase !== "finished") {
+            if (safetyCounter >= 5_000) {
+              throw new Error("rollout_decision_limit_reached");
+            }
+            safetyCounter += 1;
+            const actor = resolveNextActor(result.legalActions, result.nextState);
+            const continuationMetadata = buildRolloutContinuationMetadata({
+              args,
+              job,
+              decisionIndex: continuationDecisionIndex,
+              sampleSeed,
+              sampleIndex
+            });
+            const resolved = await resolveDecision({
+              backendBaseUrl: args.backendUrl,
+              telemetryEnabled: false,
+              gameId: job.gameId,
+              handId: job.handId,
+              actor,
+              decisionIndex: continuationDecisionIndex,
+              stateRaw: result.nextState as unknown as JsonObject,
+              stateNorm: result.derivedView as unknown as JsonObject,
+              legalActions: result.legalActions,
+              phase: result.nextState.phase,
+              defaultProvider: args.continuationProvider,
+              quiet: true,
+              serverFallbackEnabled: true,
+              ...(continuationMetadata ? { metadata: continuationMetadata } : {}),
+              fullStateDecisionRequests: shouldUseFullStateRolloutContinuation(
+                args.continuationProvider
+              )
+            });
+            result = applyEngineAction(result.nextState, resolved.chosenAction);
+            continuationDecisionIndex += 1;
+          }
+
+          return extractRolloutSampleMetrics(result.nextState, job.actorSeat);
+        })(),
+        args.sampleTimeoutMs,
+        "rollout_sample"
       );
-      let continuationDecisionIndex = decision.decision_index + 1;
-      let safetyCounter = 0;
-
-      while (result.nextState.phase !== "finished") {
-        if (safetyCounter >= 5_000) {
-          throw new Error("rollout_decision_limit_reached");
-        }
-        safetyCounter += 1;
-        const actor = resolveNextActor(result.legalActions, result.nextState);
-        const continuationMetadata = buildRolloutContinuationMetadata({
-          args,
-          job,
-          decisionIndex: continuationDecisionIndex,
-          sampleSeed,
-          sampleIndex
-        });
-        const resolved = await resolveDecision({
-          backendBaseUrl: args.backendUrl,
-          telemetryEnabled: false,
-          gameId: job.gameId,
-          handId: job.handId,
-          actor,
-          decisionIndex: continuationDecisionIndex,
-          stateRaw: result.nextState as unknown as JsonObject,
-          stateNorm: result.derivedView as unknown as JsonObject,
-          legalActions: result.legalActions,
-          phase: result.nextState.phase,
-          defaultProvider: args.continuationProvider,
-          quiet: true,
-          serverFallbackEnabled: true,
-          ...(continuationMetadata ? { metadata: continuationMetadata } : {}),
-          fullStateDecisionRequests: shouldUseFullStateRolloutContinuation(
-            args.continuationProvider
-          )
-        });
-        result = applyEngineAction(result.nextState, resolved.chosenAction);
-        continuationDecisionIndex += 1;
-      }
-
-      samples.push(extractRolloutSampleMetrics(result.nextState, job.actorSeat));
+      samples.push(metrics);
     } catch (error) {
       rolloutFailures += 1;
       lastFailureReason =

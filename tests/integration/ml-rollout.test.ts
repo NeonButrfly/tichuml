@@ -17,7 +17,8 @@ import {
   hasConcreteRolloutStateHands,
   limitDecisionRowsRoundRobinByGame,
   resolveForcedActionFromCandidate as resolveForcedActionForRollout,
-  shouldUseFullStateRolloutContinuation
+  shouldUseFullStateRolloutContinuation,
+  withTimeout
 } from "../../apps/sim-runner/src/ml-rollouts";
 import { buildHeuristicDecisionOptions } from "../../apps/sim-runner/src/self-play-batch";
 
@@ -203,6 +204,16 @@ describe("ml rollout helpers", () => {
     expect(shouldUseFullStateRolloutContinuation("local")).toBe(false);
     expect(shouldUseFullStateRolloutContinuation("server_heuristic")).toBe(true);
     expect(shouldUseFullStateRolloutContinuation("lightgbm_model")).toBe(true);
+  });
+
+  it("fails a rollout sample when it exceeds the timeout", async () => {
+    await expect(
+      withTimeout(
+        new Promise<void>((resolve) => setTimeout(resolve, 50)),
+        10,
+        "rollout_sample"
+      )
+    ).rejects.toThrow("rollout_sample_timeout_10ms");
   });
 
   it("rejects rollout states with hidden placeholder hands", () => {
