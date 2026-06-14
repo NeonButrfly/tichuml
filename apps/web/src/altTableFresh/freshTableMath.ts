@@ -7,8 +7,8 @@ export type CardAnchor = {
   zone: `${Seat}_hand`;
   index: number;
   renderMode:
-    | "north_rack_back_mostly_visible"
-    | "side_rack_readable_fan"
+    | "north_rack"
+    | "side_rack_portrait_fan"
     | "south_player_fan";
   centerPx: { x: number; y: number };
   wPx: number;
@@ -47,15 +47,19 @@ function pad2(n: number) {
   return String(n).padStart(2, "0");
 }
 
+function mirrorX(x: number) {
+  return 1536 - x;
+}
+
 export function makeNorthHandAnchors(): CardAnchor[] {
   const count = 14;
 
-  const x0 = 460;
-  const x1 = 1076;
-  const y = 67;
+  const x0 = 470;
+  const x1 = 1066;
+  const y = 70;
 
-  const cardW = 46;
-  const cardH = 80;
+  const cardW = 54;
+  const cardH = 92;
 
   return Array.from({ length: count }, (_, i) => {
     const t = i / (count - 1);
@@ -65,7 +69,7 @@ export function makeNorthHandAnchors(): CardAnchor[] {
       seat: "north",
       zone: "north_hand",
       index: i + 1,
-      renderMode: "north_rack_back_mostly_visible",
+      renderMode: "north_rack",
       centerPx: {
         x: lerp(x0, x1, t),
         y
@@ -75,7 +79,7 @@ export function makeNorthHandAnchors(): CardAnchor[] {
       rotationDeg: 0,
       scaleX: 1,
       scaleY: 1,
-      hiddenBottomPx: 16,
+      hiddenBottomPx: 20,
       zIndex: 40 + i
     };
   });
@@ -85,15 +89,15 @@ export function makeSideHandAnchors(seat: "west" | "east"): CardAnchor[] {
   const count = 14;
   const west = seat === "west";
 
-  const top = west ? { x: 100, y: 244 } : { x: 1436, y: 244 };
+  const top = west ? { x: 104, y: 244 } : { x: mirrorX(104), y: 244 };
 
-  const bottom = west ? { x: 78, y: 699 } : { x: 1458, y: 699 };
+  const bottom = west ? { x: 76, y: 699 } : { x: mirrorX(76), y: 699 };
 
-  const cardW = 62;
-  const cardH = 108;
+  const cardW = 64;
+  const cardH = 88;
 
-  const baseRot = west ? -10 : 10;
-  const fanSpread = west ? -8 : 8;
+  const baseRot = west ? 14 : -14;
+  const fanSpread = west ? 6 : -6;
 
   return Array.from({ length: count }, (_, i) => {
     const t = i / (count - 1);
@@ -103,7 +107,7 @@ export function makeSideHandAnchors(seat: "west" | "east"): CardAnchor[] {
       seat,
       zone: `${seat}_hand`,
       index: i + 1,
-      renderMode: "side_rack_readable_fan",
+      renderMode: "side_rack_portrait_fan",
       centerPx: {
         x: lerp(top.x, bottom.x, t),
         y: lerp(top.y, bottom.y, t)
@@ -111,7 +115,7 @@ export function makeSideHandAnchors(seat: "west" | "east"): CardAnchor[] {
       wPx: cardW,
       hPx: cardH,
       rotationDeg: baseRot + (t - 0.5) * fanSpread,
-      scaleX: 0.72,
+      scaleX: 1,
       scaleY: 1,
       zIndex: 40 + i
     };
@@ -160,15 +164,41 @@ export function makeAllHandAnchors(): CardAnchor[] {
   ];
 }
 
+function centerFromTopEdge(topEdge: number, height: number): number {
+  return topEdge + height / 2;
+}
+
+function centerFromBottomEdge(bottomEdge: number, height: number): number {
+  return bottomEdge - height / 2;
+}
+
+function centerFromLeftEdge(leftEdge: number, width: number): number {
+  return leftEdge + width / 2;
+}
+
+function centerFromRightEdge(rightEdge: number, width: number): number {
+  return rightEdge - width / 2;
+}
+
+const LANDSCAPE_PASS_W = 128;
+const LANDSCAPE_PASS_H = 72;
+const PORTRAIT_PASS_W = 72;
+const PORTRAIT_PASS_H = 128;
+
+const NORTH_TOP_EDGE = 162;
+const SOUTH_BOTTOM_EDGE = 708;
+const WEST_LEFT_EDGE = 256;
+const EAST_RIGHT_EDGE = 1280;
+
 export function makePassingAnchors(): PassAnchor[] {
   return [
     {
       id: "north_pass_left",
       seat: "north",
       target: "left",
-      centerPx: { x: 612, y: 168 },
-      wPx: 128,
-      hPx: 72,
+      centerPx: { x: 612, y: centerFromTopEdge(NORTH_TOP_EDGE, LANDSCAPE_PASS_H) },
+      wPx: LANDSCAPE_PASS_W,
+      hPx: LANDSCAPE_PASS_H,
       orientation: "landscape",
       arrowDirection: "left",
       assignedCardRotationDeg: 0,
@@ -178,9 +208,9 @@ export function makePassingAnchors(): PassAnchor[] {
       id: "north_pass_across",
       seat: "north",
       target: "across",
-      centerPx: { x: 768, y: 182 },
-      wPx: 72,
-      hPx: 128,
+      centerPx: { x: 768, y: centerFromTopEdge(NORTH_TOP_EDGE, PORTRAIT_PASS_H) },
+      wPx: PORTRAIT_PASS_W,
+      hPx: PORTRAIT_PASS_H,
       orientation: "portrait",
       arrowDirection: "south",
       assignedCardRotationDeg: 0,
@@ -190,9 +220,9 @@ export function makePassingAnchors(): PassAnchor[] {
       id: "north_pass_right",
       seat: "north",
       target: "right",
-      centerPx: { x: 924, y: 168 },
-      wPx: 128,
-      hPx: 72,
+      centerPx: { x: 924, y: centerFromTopEdge(NORTH_TOP_EDGE, LANDSCAPE_PASS_H) },
+      wPx: LANDSCAPE_PASS_W,
+      hPx: LANDSCAPE_PASS_H,
       orientation: "landscape",
       arrowDirection: "right",
       assignedCardRotationDeg: 0,
@@ -202,9 +232,9 @@ export function makePassingAnchors(): PassAnchor[] {
       id: "south_pass_left",
       seat: "south",
       target: "left",
-      centerPx: { x: 612, y: 720 },
-      wPx: 128,
-      hPx: 72,
+      centerPx: { x: 612, y: centerFromBottomEdge(SOUTH_BOTTOM_EDGE, LANDSCAPE_PASS_H) },
+      wPx: LANDSCAPE_PASS_W,
+      hPx: LANDSCAPE_PASS_H,
       orientation: "landscape",
       arrowDirection: "left",
       assignedCardRotationDeg: 0,
@@ -214,9 +244,9 @@ export function makePassingAnchors(): PassAnchor[] {
       id: "south_pass_across",
       seat: "south",
       target: "across",
-      centerPx: { x: 768, y: 700 },
-      wPx: 72,
-      hPx: 128,
+      centerPx: { x: 768, y: centerFromBottomEdge(SOUTH_BOTTOM_EDGE, PORTRAIT_PASS_H) },
+      wPx: PORTRAIT_PASS_W,
+      hPx: PORTRAIT_PASS_H,
       orientation: "portrait",
       arrowDirection: "north",
       assignedCardRotationDeg: 0,
@@ -226,9 +256,9 @@ export function makePassingAnchors(): PassAnchor[] {
       id: "south_pass_right",
       seat: "south",
       target: "right",
-      centerPx: { x: 924, y: 720 },
-      wPx: 128,
-      hPx: 72,
+      centerPx: { x: 924, y: centerFromBottomEdge(SOUTH_BOTTOM_EDGE, LANDSCAPE_PASS_H) },
+      wPx: LANDSCAPE_PASS_W,
+      hPx: LANDSCAPE_PASS_H,
       orientation: "landscape",
       arrowDirection: "right",
       assignedCardRotationDeg: 0,
@@ -238,9 +268,9 @@ export function makePassingAnchors(): PassAnchor[] {
       id: "west_pass_north",
       seat: "west",
       target: "north",
-      centerPx: { x: 238, y: 292 },
-      wPx: 72,
-      hPx: 128,
+      centerPx: { x: centerFromLeftEdge(WEST_LEFT_EDGE, PORTRAIT_PASS_W), y: 292 },
+      wPx: PORTRAIT_PASS_W,
+      hPx: PORTRAIT_PASS_H,
       orientation: "portrait",
       arrowDirection: "north",
       assignedCardRotationDeg: -90,
@@ -250,21 +280,21 @@ export function makePassingAnchors(): PassAnchor[] {
       id: "west_pass_across",
       seat: "west",
       target: "across",
-      centerPx: { x: 252, y: 430 },
-      wPx: 128,
-      hPx: 72,
+      centerPx: { x: centerFromLeftEdge(WEST_LEFT_EDGE, LANDSCAPE_PASS_W), y: 430 },
+      wPx: LANDSCAPE_PASS_W,
+      hPx: LANDSCAPE_PASS_H,
       orientation: "landscape",
       arrowDirection: "east",
-      assignedCardRotationDeg: 90,
+      assignedCardRotationDeg: 0,
       zIndex: 220
     },
     {
       id: "west_pass_south",
       seat: "west",
       target: "south",
-      centerPx: { x: 238, y: 568 },
-      wPx: 72,
-      hPx: 128,
+      centerPx: { x: centerFromLeftEdge(WEST_LEFT_EDGE, PORTRAIT_PASS_W), y: 568 },
+      wPx: PORTRAIT_PASS_W,
+      hPx: PORTRAIT_PASS_H,
       orientation: "portrait",
       arrowDirection: "south",
       assignedCardRotationDeg: 90,
@@ -274,36 +304,36 @@ export function makePassingAnchors(): PassAnchor[] {
       id: "east_pass_north",
       seat: "east",
       target: "north",
-      centerPx: { x: 1298, y: 292 },
-      wPx: 72,
-      hPx: 128,
+      centerPx: { x: centerFromRightEdge(EAST_RIGHT_EDGE, PORTRAIT_PASS_W), y: 292 },
+      wPx: PORTRAIT_PASS_W,
+      hPx: PORTRAIT_PASS_H,
       orientation: "portrait",
       arrowDirection: "north",
-      assignedCardRotationDeg: -90,
+      assignedCardRotationDeg: 90,
       zIndex: 220
     },
     {
       id: "east_pass_across",
       seat: "east",
       target: "across",
-      centerPx: { x: 1284, y: 430 },
-      wPx: 128,
-      hPx: 72,
+      centerPx: { x: centerFromRightEdge(EAST_RIGHT_EDGE, LANDSCAPE_PASS_W), y: 430 },
+      wPx: LANDSCAPE_PASS_W,
+      hPx: LANDSCAPE_PASS_H,
       orientation: "landscape",
       arrowDirection: "west",
-      assignedCardRotationDeg: 90,
+      assignedCardRotationDeg: 0,
       zIndex: 220
     },
     {
       id: "east_pass_south",
       seat: "east",
       target: "south",
-      centerPx: { x: 1298, y: 568 },
-      wPx: 72,
-      hPx: 128,
+      centerPx: { x: centerFromRightEdge(EAST_RIGHT_EDGE, PORTRAIT_PASS_W), y: 568 },
+      wPx: PORTRAIT_PASS_W,
+      hPx: PORTRAIT_PASS_H,
       orientation: "portrait",
       arrowDirection: "south",
-      assignedCardRotationDeg: 90,
+      assignedCardRotationDeg: -90,
       zIndex: 220
     }
   ];

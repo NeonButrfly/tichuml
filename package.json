@@ -8,7 +8,7 @@
     "packages/*"
   ],
   "scripts": {
-    "clean": "rimraf apps/web/dist apps/server/dist apps/sim-runner/dist packages/shared/dist packages/engine/dist packages/telemetry/dist packages/ai-heuristics/dist packages/ui-kit/dist coverage",
+    "clean": "rimraf apps/web/dist apps/server/dist apps/sim-runner/dist apps/table-editor/dist packages/shared/dist packages/engine/dist packages/telemetry/dist packages/ai-heuristics/dist packages/ui-kit/dist packages/table-layout-schema/dist coverage",
     "lint": "eslint .",
     "test": "vitest run",
     "dev:web": "npm run dev -w @tichuml/web",
@@ -52,7 +52,10 @@
     "ml:train": "tsx scripts/run-python.ts ml/train_lightgbm.py",
     "ml:bootstrap": "tsx scripts/ml-bootstrap.ts",
     "ml:live-bootstrap": "tsx scripts/ml-live-bootstrap.ts",
-    "ml:evaluate": "tsx apps/sim-runner/src/evaluate.ts"
+    "ml:evaluate": "tsx apps/sim-runner/src/evaluate.ts",
+    "editor:table": "npm --prefix apps/table-editor run dev",
+    "editor:table:build": "npm --prefix apps/table-editor run build",
+    "build:table-layout-schema": "npm run build -w @tichuml/table-layout-schema"
   },
   "devDependencies": {
     "@eslint/js": "^9.24.0",

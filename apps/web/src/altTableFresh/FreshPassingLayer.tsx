@@ -127,8 +127,21 @@ export function FreshPassingLayer({
           </>
         );
 
-        const assignedCardWidth = 78 * fit.scale;
-        const assignedCardHeight = 126 * fit.scale;
+        const cardPadding = 8 * fit.scale;
+        const cardWidth = width - cardPadding * 2;
+        const cardHeight = height - cardPadding * 2;
+
+        const arrowRotation = (() => {
+          switch (lane.anchor.arrowDirection) {
+            case "north": return 0;
+            case "south": return 180;
+            case "east": return 90;
+            case "west": return -90;
+            case "left": return -90;
+            case "right": return 90;
+            default: return 0;
+          }
+        })();
 
         return (
           <div key={lane.anchor.id}>
@@ -180,9 +193,9 @@ export function FreshPassingLayer({
                         position: "absolute",
                         left: point.x,
                         top: point.y,
-                        width: assignedCardWidth,
-                        height: assignedCardHeight,
-                        transform: `translate(-50%, -50%) rotate(${lane.card.rotationDeg}deg)`,
+                        width: cardWidth,
+                        height: cardHeight,
+                        transform: `translate(-50%, -50%) rotate(${arrowRotation}deg)`,
                         transformOrigin: "center center",
                         border: "none",
                         background: "none",
@@ -216,9 +229,9 @@ export function FreshPassingLayer({
                         position: "absolute",
                         left: point.x,
                         top: point.y,
-                        width: assignedCardWidth,
-                        height: assignedCardHeight,
-                        transform: `translate(-50%, -50%) rotate(${lane.card.rotationDeg}deg)`,
+                        width: cardWidth,
+                        height: cardHeight,
+                        transform: `translate(-50%, -50%) rotate(${arrowRotation}deg)`,
                         transformOrigin: "center center",
                         zIndex: lane.anchor.zIndex + 10
                       }}

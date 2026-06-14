@@ -40,22 +40,22 @@ export function runFreshAltTableChecks() {
     cardAssetsUseTvEd: FRESH_ALT_CARD_BACK_SRC.startsWith("/tv_ed/"),
     passingAnchorCount: passing.length,
     northRenderModeValid: north.every(
-      (anchor) => anchor.renderMode === "north_rack_back_mostly_visible"
+      (anchor) => anchor.renderMode === "north_rack"
     ),
     northHiddenBottomValid: north.every(
-      (anchor) => (anchor.hiddenBottomPx ?? 0) <= 16
+      (anchor) => (anchor.hiddenBottomPx ?? 0) <= 24
     ),
     eastRenderModeValid: east.every(
-      (anchor) => anchor.renderMode === "side_rack_readable_fan"
+      (anchor) => anchor.renderMode === "side_rack_portrait_fan"
     ),
     westRenderModeValid: west.every(
-      (anchor) => anchor.renderMode === "side_rack_readable_fan"
+      (anchor) => anchor.renderMode === "side_rack_portrait_fan"
     ),
     eastRotationValid: east.every(
-      (anchor) => Math.abs(anchor.rotationDeg) < 30
+      (anchor) => anchor.rotationDeg <= -10 && anchor.rotationDeg >= -18
     ),
     westRotationValid: west.every(
-      (anchor) => Math.abs(anchor.rotationDeg) < 30
+      (anchor) => anchor.rotationDeg >= 10 && anchor.rotationDeg <= 18
     ),
     passingDirections: passing.reduce<Record<string, string>>((acc, anchor) => {
       acc[anchor.id] = anchor.arrowDirection;
@@ -90,10 +90,10 @@ export function assertFreshAltTableChecks() {
     failures.push("North rack cards must stay mostly visible with a shallow hidden-bottom crop.");
   }
   if (!result.eastRenderModeValid || !result.westRenderModeValid) {
-    failures.push("East and west rack cards must use side_rack_readable_fan.");
+    failures.push("East and west rack cards must use side_rack_portrait_fan.");
   }
   if (!result.eastRotationValid || !result.westRotationValid) {
-    failures.push("East and west rack cards must keep readable rotations under 30 degrees.");
+    failures.push("East/west rack cards must use a small portrait lean around +/-14 degrees, not +/-72 or +/-90.");
   }
 
   if (failures.length > 0) {

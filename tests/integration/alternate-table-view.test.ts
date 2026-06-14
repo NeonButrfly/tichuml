@@ -529,17 +529,17 @@ describe("AltTable3DRoute", () => {
 
     expect(
       view.container.querySelectorAll(
-        "[data-seat='east'][data-render-mode='side_rack_readable_fan']"
+        "[data-seat='east'][data-render-mode='side_rack_portrait_fan']"
       )
     ).toHaveLength(14);
     expect(
       view.container.querySelectorAll(
-        "[data-seat='west'][data-render-mode='side_rack_readable_fan']"
+        "[data-seat='west'][data-render-mode='side_rack_portrait_fan']"
       )
     ).toHaveLength(14);
     expect(
       view.container.querySelectorAll(
-        "[data-seat='north'][data-render-mode='north_rack_back_mostly_visible']"
+        "[data-seat='north'][data-render-mode='north_rack']"
       )
     ).toHaveLength(14);
     expect(
@@ -565,12 +565,13 @@ describe("AltTable3DRoute", () => {
     expect(
       snapshot?.cards.east.every(
         (anchor) =>
-          anchor.renderMode === "side_rack_readable_fan" &&
-          Math.abs(anchor.rotationDeg) < 30
+          anchor.renderMode === "side_rack_portrait_fan" &&
+          anchor.rotationDeg <= -10 &&
+          anchor.rotationDeg >= -18
       )
     ).toBe(true);
     expect(
-      snapshot?.cards.north.every((anchor) => (anchor.hiddenBottomPx ?? 0) <= 16)
+      snapshot?.cards.north.every((anchor) => (anchor.hiddenBottomPx ?? 0) <= 24)
     ).toBe(true);
 
     view.unmount();

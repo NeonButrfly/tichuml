@@ -222,31 +222,6 @@ function mergeProfileInto(
   }
 }
 
-function toMatchLifecycleSummary(fields: MatchLifecycleFields): MatchLifecycleSummary {
-  return {
-    gameId: fields.gameId,
-    lastHandId: fields.handId,
-    provider: fields.provider,
-    requestedProvider: fields.requestedProvider,
-    telemetryMode: fields.telemetryMode,
-    strictTelemetry: fields.strictTelemetry,
-    simVersion: fields.simVersion,
-    engineVersion: fields.engineVersion,
-    startedAt: fields.observedAt,
-    completedAt: fields.completedAt,
-    status: fields.failureReason
-      ? "failed"
-      : fields.completedAt
-        ? "completed"
-        : "running",
-    finalTeam0Score: fields.finalTeam0Score,
-    finalTeam1Score: fields.finalTeam1Score,
-    winnerTeam: fields.winnerTeam,
-    handsPlayed: fields.handsPlayed,
-    failureReason: fields.failureReason
-  };
-}
-
 function mergeProviderValue(
   current: string | null,
   incoming: string | null

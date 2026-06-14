@@ -4,7 +4,6 @@ import {
   heuristicsV1Policy,
   chooseServerFastPathDecision,
   generateFastTrickPlayCandidates,
-  SERVER_HEURISTIC_FAST_PATH_LIMITS,
   type ChosenDecision,
   type HeuristicDecisionOptions
 } from "@tichuml/ai-heuristics";
@@ -29,7 +28,6 @@ import {
 } from "@tichuml/shared";
 import {
   applyEngineAction,
-  createNextDealCarryState,
   createInitialGameState,
   getActorScopedLegalActions,
   getCardById,
@@ -61,9 +59,6 @@ import {
   emitTelemetryFailureDiagnostic,
   mergeTelemetryFailureStats,
   recordTelemetryFailure,
-  TELEMETRY_SCHEMA_VERSION,
-  TELEMETRY_ENGINE_VERSION,
-  TELEMETRY_SIM_VERSION,
   type TelemetryFailureStats,
   type TelemetryWriteResult
 } from "@tichuml/telemetry";
@@ -735,7 +730,7 @@ function findMatchingLegalAction(
               sortCardIds(chosenAction.cardIds) &&
             candidate.phoenixAsRank === chosenAction.phoenixAsRank
           );
-        case "select_pass":
+        case "select_pass": {
           if (
             chosenAction.type !== "select_pass" ||
             candidate.seat !== chosenAction.seat
@@ -770,6 +765,7 @@ function findMatchingLegalAction(
           }
           const allowedCardIds = new Set(candidate.availableCardIds);
           return chosenCardIds.every((cardId) => allowedCardIds.has(cardId));
+        }
         case "assign_dragon_trick":
           return (
             chosenAction.type === "assign_dragon_trick" &&
@@ -1014,10 +1010,6 @@ function buildHandSeed(
     return `${baseSeed}-${index}`;
   }
   return `${baseSeed}-${index}-hand-${handNumber}`;
-}
-
-function getCurrentHandNumber(state: Pick<GameState, "matchHistory">): number {
-  return state.matchHistory.length + 1;
 }
 
 function buildDecisionTelemetryMetadata(config: {
@@ -1327,32 +1319,6 @@ function getActorLegalActions(
   return Array.isArray(actorActions) ? actorActions : [];
 }
 
-function hasActorLegalActions(
-  legalActions: LegalActionMap,
-  actor: SeatId | typeof SYSTEM_ACTOR
-): boolean {
-  return getActorLegalActions(legalActions, actor).length > 0;
-}
-
-function actorHasLegalActionTypes(
-  legalActions: LegalActionMap,
-  actor: SeatId,
-  actionTypes: LegalAction["type"][]
-): boolean {
-  return (legalActions[actor] ?? []).some((action) =>
-    actionTypes.includes(action.type)
-  );
-}
-
-function listSeatActorsWithLegalActionTypes(
-  legalActions: LegalActionMap,
-  actionTypes: LegalAction["type"][]
-): SeatId[] {
-  return SEAT_IDS.filter((seat) =>
-    actorHasLegalActionTypes(legalActions, seat, actionTypes)
-  );
-}
-
 function summarizeLegalActors(legalActions: LegalActionMap): JsonObject {
   const actors = Object.fromEntries(
     [
@@ -1387,28 +1353,6 @@ export function resolveAutomatedContinuationActor(config: {
   state: GameState;
 }): ContinuationActorResolution {
   return resolveContinuationActor(config) as ContinuationActorResolution;
-}
-
-function resolveNextActor(
-  legalActions: LegalActionMap,
-  state: GameState
-): SeatId | typeof SYSTEM_ACTOR {
-  const resolution = resolveAutomatedContinuationActor({
-    legalActions,
-    state
-  });
-  if (resolution.ok) {
-    return resolution.actor;
-  }
-
-  throw new Error(
-    [
-      "No legal actor was available for the next self-play decision.",
-      `stop_reason=${resolution.stopReason}`,
-      `phase=${state.phase}`,
-      `activeSeat=${String(state.activeSeat ?? "null")}`
-    ].join(" ")
-  );
 }
 
 function resolveDecisionScoringPath(config?: {

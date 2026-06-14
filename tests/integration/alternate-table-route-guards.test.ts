@@ -73,13 +73,11 @@ describe("alternate table route guards", () => {
   });
 
   it("uses the fresh readable rack math instead of the retired projected side-card variants", () => {
-    expect(freshMathSource).toContain("north_rack_back_mostly_visible");
-    expect(freshMathSource).toContain("side_rack_readable_fan");
+    expect(freshMathSource).toContain("north_rack");
+    expect(freshMathSource).toContain("side_rack_portrait_fan");
     expect(freshMathSource).toContain("south_player_fan");
-    expect(freshMathSource).toContain("scaleX: 0.72");
     expect(freshMathSource).not.toContain("polygon_px");
     expect(freshMathSource).not.toContain("projected_quad");
     expect(freshMathSource).not.toContain("quad_projected");
-    expect(freshMathSource).not.toContain("side_rack_readable_fan_v2");
   });
 });

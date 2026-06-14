@@ -1,7 +1,7 @@
 import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { Card, SeatId } from "@tichuml/engine";
 import type { GameTableViewProps, WishSelectionValue } from "../game-table-views";
-import { formatRank, formatSeatShort } from "../game-table-views";
+import { formatRank, formatSeatShort, GameChromeMenu } from "../game-table-views";
 import {
   getNormalSpriteHiddenPassCount,
   resolveNormalSpriteCardFaceSrc
@@ -443,20 +443,7 @@ export function FreshAltTable(props: FreshAltTableProps) {
             }}
           />
 
-          <div
-            style={{
-              position: "absolute",
-              left: fit.offsetX + 600 * fit.scale,
-              top: fit.offsetY + 900 * fit.scale,
-              width: 336 * fit.scale,
-              height: 80 * fit.scale,
-              background: "linear-gradient(180deg, #1a3d2e 0%, #0f2a1f 100%)",
-              borderRadius: 8 * fit.scale,
-              zIndex: 5,
-              pointerEvents: "none"
-            }}
-            aria-hidden="true"
-          />
+
 
           <FreshTrickLayer cards={trickCards} fit={fit} />
 
@@ -519,23 +506,131 @@ export function FreshAltTable(props: FreshAltTableProps) {
               </div>
             ) : null}
 
-            <button
-              type="button"
+            <GameChromeMenu
+              variant="alternate"
+              isOpen={props.mainMenuOpen}
+              uiMode={props.uiMode}
+              layoutEditorActive={props.layoutEditorActive}
+              playerTableVariant={props.playerTableVariant}
+              onMainMenuOpenChange={props.onMainMenuOpenChange}
+              onUiCommand={props.onUiCommand}
+              onPlayerTableVariantChange={props.onPlayerTableVariantChange}
+            />
+
+            <div
               style={{
                 position: "absolute",
-                right: Math.max(size.w - (fit.offsetX + fit.renderedW) + 16, 16),
-                top: Math.max(fit.offsetY + 16, 16),
-                pointerEvents: "auto",
-                ...buildButtonStyle({ tone: "muted" })
+                left: Math.max(fit.offsetX + 24, 16),
+                top: Math.max(fit.offsetY + 80, 80),
+                pointerEvents: "none",
+                fontFamily: "'Georgia', serif",
+                zIndex: 310
               }}
-              onClick={() =>
-                props.onPlayerTableVariantChange(
-                  props.playerTableVariant === "alternate" ? "normal" : "alternate"
-                )
-              }
             >
-              Classic table
-            </button>
+              <div
+                style={{
+                  background: "linear-gradient(135deg, rgba(15, 36, 26, 0.92), rgba(10, 24, 18, 0.95))",
+                  border: "1px solid rgba(198, 166, 93, 0.55)",
+                  borderRadius: 12,
+                  padding: "10px 16px",
+                  boxShadow: "0 8px 24px rgba(0, 0, 0, 0.4)"
+                }}
+              >
+                <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: 11, color: "#c6a65d", letterSpacing: 2, fontWeight: 700 }}>NS</div>
+                    <div style={{ fontSize: 22, color: "#f0ddb1", fontWeight: 700 }}>{props.derived.matchScore["team-0"]}</div>
+                  </div>
+                  <div style={{ width: 1, height: 28, background: "rgba(198, 166, 93, 0.4)" }} />
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: 11, color: "#c6a65d", letterSpacing: 2, fontWeight: 700 }}>EW</div>
+                    <div style={{ fontSize: 22, color: "#f0ddb1", fontWeight: 700 }}>{props.derived.matchScore["team-1"]}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div
+              style={{
+                position: "absolute",
+                left: fit.offsetX + 600 * fit.scale,
+                top: fit.offsetY + 100 * fit.scale,
+                pointerEvents: "none",
+                fontFamily: "'Georgia', serif",
+                fontSize: 14 * fit.scale,
+                color: "#c6a65d",
+                fontWeight: 700,
+                zIndex: 6
+              }}
+            >
+              {props.state.calls?.["seat-2"]?.grandTichu ? "GT" : props.state.calls?.["seat-2"]?.smallTichu ? "T" : ""}
+            </div>
+
+            <div
+              style={{
+                position: "absolute",
+                left: fit.offsetX + 768 * fit.scale,
+                top: fit.offsetY + 40 * fit.scale,
+                transform: "translateX(-50%)",
+                pointerEvents: "none",
+                fontFamily: "'Georgia', serif",
+                fontSize: 14 * fit.scale,
+                color: "#c6a65d",
+                fontWeight: 700,
+                zIndex: 6
+              }}
+            >
+              {props.state.calls?.["seat-2"]?.grandTichu ? "GT" : props.state.calls?.["seat-2"]?.smallTichu ? "T" : ""}
+            </div>
+
+            <div
+              style={{
+                position: "absolute",
+                left: fit.offsetX + 1400 * fit.scale,
+                top: fit.offsetY + 400 * fit.scale,
+                pointerEvents: "none",
+                fontFamily: "'Georgia', serif",
+                fontSize: 14 * fit.scale,
+                color: "#c6a65d",
+                fontWeight: 700,
+                zIndex: 6
+              }}
+            >
+              {props.state.calls?.["seat-1"]?.grandTichu ? "GT" : props.state.calls?.["seat-1"]?.smallTichu ? "T" : ""}
+            </div>
+
+            <div
+              style={{
+                position: "absolute",
+                left: fit.offsetX + 136 * fit.scale,
+                top: fit.offsetY + 400 * fit.scale,
+                pointerEvents: "none",
+                fontFamily: "'Georgia', serif",
+                fontSize: 14 * fit.scale,
+                color: "#c6a65d",
+                fontWeight: 700,
+                zIndex: 6
+              }}
+            >
+              {props.state.calls?.["seat-3"]?.grandTichu ? "GT" : props.state.calls?.["seat-3"]?.smallTichu ? "T" : ""}
+            </div>
+
+            <div
+              style={{
+                position: "absolute",
+                left: fit.offsetX + 768 * fit.scale,
+                top: fit.offsetY + 780 * fit.scale,
+                transform: "translateX(-50%)",
+                pointerEvents: "none",
+                fontFamily: "'Georgia', serif",
+                fontSize: 14 * fit.scale,
+                color: "#c6a65d",
+                fontWeight: 700,
+                zIndex: 6
+              }}
+            >
+              {props.state.calls?.["seat-0"]?.grandTichu ? "GT" : props.state.calls?.["seat-0"]?.smallTichu ? "T" : ""}
+            </div>
           </div>
         </div>
 

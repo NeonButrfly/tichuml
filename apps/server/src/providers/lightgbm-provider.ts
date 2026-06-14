@@ -240,16 +240,6 @@ function parsePositiveIntegerWithFallback(
     : fallback;
 }
 
-function partnerSeatFor(actorSeat: SeatId): SeatId {
-  return actorSeat === "seat-0"
-    ? "seat-2"
-    : actorSeat === "seat-2"
-      ? "seat-0"
-      : actorSeat === "seat-1"
-        ? "seat-3"
-        : "seat-1";
-}
-
 function teamForSeat(seat: SeatId): "team-0" | "team-1" {
   return seat === "seat-0" || seat === "seat-2" ? "team-0" : "team-1";
 }

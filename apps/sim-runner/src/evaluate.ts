@@ -75,16 +75,6 @@ type EvaluationLegSummary = {
   errors: number;
 };
 
-type ProviderAggregate = {
-  match_wins: number;
-  hand_wins: number;
-  total_score: number;
-  double_victories: number;
-  games_as_team_0: number;
-  games_as_team_1: number;
-  average_latency_ms: number | null;
-};
-
 type ProviderComparisonSummary = {
   provider_a: ProviderMode;
   provider_b: ProviderMode;
@@ -464,21 +454,6 @@ function cloneSeatProviders(
   seatProviders: SeatProviderOverrides
 ): SeatProviderOverrides {
   return { ...seatProviders };
-}
-
-function createTeamCounts(): Record<TeamId | "tie", number> {
-  return {
-    "team-0": 0,
-    "team-1": 0,
-    tie: 0
-  };
-}
-
-function createTeamScores(): Record<TeamId, number> {
-  return {
-    "team-0": 0,
-    "team-1": 0
-  };
 }
 
 function roundRate(value: number): number {

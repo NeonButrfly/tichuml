@@ -29,12 +29,12 @@ function renderCardShell(config: {
   const fullHeight = card.anchor.hPx * fit.scale;
   const hiddenBottom = (card.anchor.hiddenBottomPx ?? 0) * fit.scale;
   const visibleHeight =
-    card.anchor.renderMode === "north_rack_back_mostly_visible"
+    card.anchor.renderMode === "north_rack"
       ? fullHeight - hiddenBottom
       : fullHeight;
   const left = point.x;
   const top =
-    (card.anchor.renderMode === "north_rack_back_mostly_visible"
+    (card.anchor.renderMode === "north_rack"
       ? point.y - hiddenBottom / 2
       : point.y) - (card.selected ? (card.liftPx ?? 24) * fit.scale : 0);
 

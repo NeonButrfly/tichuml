@@ -1,0 +1,302 @@
+{
+  "schemaVersion": 1,
+  "coordinateSystem": {
+    "origin": "table-center",
+    "positiveX": "right",
+    "positiveY": "up",
+    "positiveZ": "toward-camera",
+    "rotationOrder": "XYZ",
+    "units": "world-units",
+    "rotationsStoredAs": "radians"
+  },
+  "table": {
+    "designWidth": 1536,
+    "designHeight": 1024,
+    "worldWidth": 11.4,
+    "worldHeight": 7.6
+  },
+  "hands": {
+    "north": {
+      "id": "north",
+      "master": {
+        "position": { "x": 0, "y": 0.1, "z": -3.2 },
+        "rotation": { "x": 0, "y": 0, "z": 0 },
+        "scale": { "x": 1, "y": 1, "z": 1 },
+        "pivot": { "x": 0, "y": 0, "z": 0 }
+      },
+      "fan": {
+        "cardCount": 14,
+        "cardWidth": 0.46,
+        "cardHeight": 0.644,
+        "overlap": 0.08,
+        "spread": 0.114,
+        "arc": 0.15,
+        "depthStep": 0.02,
+        "localRotationStep": 0.009,
+        "startOffset": 0,
+        "fanDirection": 1,
+        "reverseOrder": false
+      }
+    },
+    "east": {
+      "id": "east",
+      "master": {
+        "position": { "x": 4.5, "y": 0.1, "z": 0 },
+        "rotation": { "x": 0, "y": -0.44, "z": 0 },
+        "scale": { "x": 1, "y": 1, "z": 1 },
+        "pivot": { "x": 0, "y": 0, "z": 0 }
+      },
+      "fan": {
+        "cardCount": 14,
+        "cardWidth": 0.46,
+        "cardHeight": 0.644,
+        "overlap": 0.08,
+        "spread": 0.114,
+        "arc": 0.15,
+        "depthStep": 0.02,
+        "localRotationStep": 0.009,
+        "startOffset": 0,
+        "fanDirection": 1,
+        "reverseOrder": false
+      }
+    },
+    "west": {
+      "id": "west",
+      "master": {
+        "position": { "x": -4.5, "y": 0.1, "z": 0 },
+        "rotation": { "x": 0, "y": 0.44, "z": 0 },
+        "scale": { "x": 1, "y": 1, "z": 1 },
+        "pivot": { "x": 0, "y": 0, "z": 0 }
+      },
+      "fan": {
+        "cardCount": 14,
+        "cardWidth": 0.46,
+        "cardHeight": 0.644,
+        "overlap": 0.08,
+        "spread": 0.114,
+        "arc": 0.15,
+        "depthStep": 0.02,
+        "localRotationStep": 0.009,
+        "startOffset": 0,
+        "fanDirection": -1,
+        "reverseOrder": true
+      }
+    },
+    "south": {
+      "id": "south",
+      "master": {
+        "position": { "x": 0, "y": 0.1, "z": 3.2 },
+        "rotation": { "x": 0, "y": 3.14159, "z": 0 },
+        "scale": { "x": 1, "y": 1, "z": 1 },
+        "pivot": { "x": 0, "y": 0, "z": 0 }
+      },
+      "fan": {
+        "cardCount": 14,
+        "cardWidth": 0.46,
+        "cardHeight": 0.644,
+        "overlap": 0.08,
+        "spread": 0.114,
+        "arc": 0.15,
+        "depthStep": 0.02,
+        "localRotationStep": 0.009,
+        "startOffset": 0,
+        "fanDirection": 1,
+        "reverseOrder": false
+      }
+    }
+  },
+  "passingLanes": {
+    "north-left": {
+      "id": "north-left",
+      "position": { "x": -1.2, "y": 0.05, "z": -2.8 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "scale": { "x": 1, "y": 1, "z": 1 },
+      "width": 1.0,
+      "height": 0.56,
+      "arrowRotation": 1.5708,
+      "arrowOffset": { "x": 0, "y": 0, "z": 0 },
+      "arrowScale": 1.0,
+      "visible": true,
+      "locked": false,
+      "borderThickness": 0.02,
+      "borderOpacity": 0.8,
+      "fillOpacity": 0.15
+    },
+    "north-across": {
+      "id": "north-across",
+      "position": { "x": 0, "y": 0.05, "z": -2.8 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "scale": { "x": 1, "y": 1, "z": 1 },
+      "width": 0.56,
+      "height": 0.9,
+      "arrowRotation": 3.1416,
+      "arrowOffset": { "x": 0, "y": 0, "z": 0 },
+      "arrowScale": 1.0,
+      "visible": true,
+      "locked": false,
+      "borderThickness": 0.02,
+      "borderOpacity": 0.8,
+      "fillOpacity": 0.15
+    },
+    "north-right": {
+      "id": "north-right",
+      "position": { "x": 1.2, "y": 0.05, "z": -2.8 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "scale": { "x": 1, "y": 1, "z": 1 },
+      "width": 1.0,
+      "height": 0.56,
+      "arrowRotation": -1.5708,
+      "arrowOffset": { "x": 0, "y": 0, "z": 0 },
+      "arrowScale": 1.0,
+      "visible": true,
+      "locked": false,
+      "borderThickness": 0.02,
+      "borderOpacity": 0.8,
+      "fillOpacity": 0.15
+    },
+    "east-north": {
+      "id": "east-north",
+      "position": { "x": 4.2, "y": 0.05, "z": -1.8 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "scale": { "x": 1, "y": 1, "z": 1 },
+      "width": 0.56,
+      "height": 0.9,
+      "arrowRotation": 1.5708,
+      "arrowOffset": { "x": 0, "y": 0, "z": 0 },
+      "arrowScale": 1.0,
+      "visible": true,
+      "locked": false,
+      "borderThickness": 0.02,
+      "borderOpacity": 0.8,
+      "fillOpacity": 0.15
+    },
+    "east-across": {
+      "id": "east-across",
+      "position": { "x": 4.2, "y": 0.05, "z": 0 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "scale": { "x": 1, "y": 1, "z": 1 },
+      "width": 1.0,
+      "height": 0.56,
+      "arrowRotation": 3.1416,
+      "arrowOffset": { "x": 0, "y": 0, "z": 0 },
+      "arrowScale": 1.0,
+      "visible": true,
+      "locked": false,
+      "borderThickness": 0.02,
+      "borderOpacity": 0.8,
+      "fillOpacity": 0.15
+    },
+    "east-south": {
+      "id": "east-south",
+      "position": { "x": 4.2, "y": 0.05, "z": 1.8 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "scale": { "x": 1, "y": 1, "z": 1 },
+      "width": 0.56,
+      "height": 0.9,
+      "arrowRotation": -1.5708,
+      "arrowOffset": { "x": 0, "y": 0, "z": 0 },
+      "arrowScale": 1.0,
+      "visible": true,
+      "locked": false,
+      "borderThickness": 0.02,
+      "borderOpacity": 0.8,
+      "fillOpacity": 0.15
+    },
+    "south-left": {
+      "id": "south-left",
+      "position": { "x": -1.2, "y": 0.05, "z": 2.8 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "scale": { "x": 1, "y": 1, "z": 1 },
+      "width": 1.0,
+      "height": 0.56,
+      "arrowRotation": 1.5708,
+      "arrowOffset": { "x": 0, "y": 0, "z": 0 },
+      "arrowScale": 1.0,
+      "visible": true,
+      "locked": false,
+      "borderThickness": 0.02,
+      "borderOpacity": 0.8,
+      "fillOpacity": 0.15
+    },
+    "south-across": {
+      "id": "south-across",
+      "position": { "x": 0, "y": 0.05, "z": 2.8 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "scale": { "x": 1, "y": 1, "z": 1 },
+      "width": 0.56,
+      "height": 0.9,
+      "arrowRotation": 0,
+      "arrowOffset": { "x": 0, "y": 0, "z": 0 },
+      "arrowScale": 1.0,
+      "visible": true,
+      "locked": false,
+      "borderThickness": 0.02,
+      "borderOpacity": 0.8,
+      "fillOpacity": 0.15
+    },
+    "south-right": {
+      "id": "south-right",
+      "position": { "x": 1.2, "y": 0.05, "z": 2.8 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "scale": { "x": 1, "y": 1, "z": 1 },
+      "width": 1.0,
+      "height": 0.56,
+      "arrowRotation": -1.5708,
+      "arrowOffset": { "x": 0, "y": 0, "z": 0 },
+      "arrowScale": 1.0,
+      "visible": true,
+      "locked": false,
+      "borderThickness": 0.02,
+      "borderOpacity": 0.8,
+      "fillOpacity": 0.15
+    },
+    "west-north": {
+      "id": "west-north",
+      "position": { "x": -4.2, "y": 0.05, "z": -1.8 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "scale": { "x": 1, "y": 1, "z": 1 },
+      "width": 0.56,
+      "height": 0.9,
+      "arrowRotation": -1.5708,
+      "arrowOffset": { "x": 0, "y": 0, "z": 0 },
+      "arrowScale": 1.0,
+      "visible": true,
+      "locked": false,
+      "borderThickness": 0.02,
+      "borderOpacity": 0.8,
+      "fillOpacity": 0.15
+    },
+    "west-across": {
+      "id": "west-across",
+      "position": { "x": -4.2, "y": 0.05, "z": 0 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "scale": { "x": 1, "y": 1, "z": 1 },
+      "width": 1.0,
+      "height": 0.56,
+      "arrowRotation": 0,
+      "arrowOffset": { "x": 0, "y": 0, "z": 0 },
+      "arrowScale": 1.0,
+      "visible": true,
+      "locked": false,
+      "borderThickness": 0.02,
+      "borderOpacity": 0.8,
+      "fillOpacity": 0.15
+    },
+    "west-south": {
+      "id": "west-south",
+      "position": { "x": -4.2, "y": 0.05, "z": 1.8 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "scale": { "x": 1, "y": 1, "z": 1 },
+      "width": 0.56,
+      "height": 0.9,
+      "arrowRotation": 1.5708,
+      "arrowOffset": { "x": 0, "y": 0, "z": 0 },
+      "arrowScale": 1.0,
+      "visible": true,
+      "locked": false,
+      "borderThickness": 0.02,
+      "borderOpacity": 0.8,
+      "fillOpacity": 0.15
+    }
+  }
+}
