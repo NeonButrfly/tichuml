@@ -3409,9 +3409,7 @@ export async function runSelfPlayBatchDetailed(
   const usesBackendProvider = [...requestedProviders].some(
     (provider) => provider !== "local"
   );
-  const telemetryRequiresBackend =
-    options.telemetryEnabled && options.strictTelemetry === true;
-  if (telemetryRequiresBackend || usesBackendProvider) {
+  if (usesBackendProvider) {
     try {
       await verifyBackend(backendBaseUrl, {
         ...(options.traceBackend ? { traceBackend: true } : {}),
@@ -3422,7 +3420,7 @@ export async function runSelfPlayBatchDetailed(
     } catch (error) {
       const providerRequiresBackend =
         usesBackendProvider && options.serverFallbackEnabled === false;
-      if (telemetryRequiresBackend || providerRequiresBackend) {
+      if (providerRequiresBackend) {
         throw error;
       }
       emitDecisionDiagnostic(options, "backend_health_check_failure", {

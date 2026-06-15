@@ -162,14 +162,24 @@ export function updateSearchWithPlayerTableVariant(
   variant: PlayerTableVariant
 ): string {
   const params = new URLSearchParams(search);
+  const hadAlternatePreview =
+    getPlayerTableVariantFromSearch(search) === "alternate" &&
+    getAlternateTablePreviewModeFromSearch(search) !== "none";
   if (variant === "alternate") {
-    params.set("table", "alt");
+    if (getAlternateTablePreviewModeFromSearch(search) === "none") {
+      params.set("table", "alt");
+    } else {
+      params.delete("table");
+    }
   } else {
     params.delete("table");
     params.delete("preview");
   }
 
   const serialized = params.toString();
+  if (serialized.length === 0 && variant === "normal" && hadAlternatePreview) {
+    return "?table=normal";
+  }
   return serialized.length > 0 ? `?${serialized}` : "";
 }
 
