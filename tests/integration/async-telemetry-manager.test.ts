@@ -36,6 +36,31 @@ async function createTempDir(): Promise<string> {
   return root;
 }
 
+function buildCliEnv(): NodeJS.ProcessEnv {
+  const passthroughKeys = [
+    "PATH",
+    "HOME",
+    "TMPDIR",
+    "TMP",
+    "TEMP",
+    "SYSTEMROOT",
+    "COMSPEC",
+    "PATHEXT",
+    "TERM"
+  ] as const;
+  const env: NodeJS.ProcessEnv = {
+    FORCE_COLOR: "0",
+    NODE_OPTIONS: ""
+  };
+  for (const key of passthroughKeys) {
+    const value = process.env[key];
+    if (typeof value === "string" && value.length > 0) {
+      env[key] = value;
+    }
+  }
+  return env;
+}
+
 function runReplayCli(
   args: string[],
   timeoutMs: number
@@ -58,10 +83,7 @@ function runReplayCli(
       {
         cwd: process.cwd(),
         stdio: ["ignore", "pipe", "pipe"],
-        env: {
-          ...process.env,
-          FORCE_COLOR: "0"
-        }
+        env: buildCliEnv()
       }
     );
 
