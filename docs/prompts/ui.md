@@ -14,6 +14,35 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 
 ## Entries
 
+### 2026-06-14 - Fresh ALT table needs a truly standalone editor that mirrors the real luxury surface
+
+- Prompt Signal: The latest ALT-table follow-up asked to check the recent
+  editor builds and clarified that the editor should be independent of all
+  other code in its own repo directory. The user then tightened the
+  requirement: it must be an exact copy of the ALT luxury table with the
+  ability to edit selected aspects, specifically reuse `FreshAltTable` as the
+  source of truth, include `north` hand editing in addition to `east` and
+  `west`, keep `south` locked, and keep export manual for now so editor values
+  can be used to fix the production table.
+- Interpreted Requirement: Issue
+  [#100](https://github.com/NeonButrfly/tichuml/issues/100) is the canonical
+  tracker for this authoring-tool follow-up. `apps/table-editor` must remain a
+  standalone Vite app on port `5178`, but its preview should stop being a
+  generic approximation and instead mirror the same Fresh ALT luxury-table
+  surface used by production. The editor should allow manual authoring of
+  `north`, `east`, and `west` hand transforms and fan settings plus every
+  individual passing-lane overlay and arrow, while rendering `south` as a
+  locked reference-only hand. Export remains manual so tuned values can be
+  copied into the production Fresh ALT defaults deliberately.
+- Affected Systems: `apps/table-editor/`,
+  `packages/table-layout-schema/`,
+  `apps/web/src/altTableFresh/`,
+  `docs/superpowers/specs/2026-06-14-fresh-alt-table-editor-design.md`,
+  editor import/export workflow, and production Fresh ALT layout defaults.
+- Linked GitHub Issue: [#100](https://github.com/NeonButrfly/tichuml/issues/100)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.
+
 ### 2026-05-28 - ALT hidden opponent hands must sit in the authored rails as real 3D cards
 
 - Prompt Signal: The latest ALT-table follow-up rejected the current hidden-hand
