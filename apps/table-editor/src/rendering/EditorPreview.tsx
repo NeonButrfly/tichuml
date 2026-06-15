@@ -80,16 +80,12 @@ export function EditorPreview(props: EditorPreviewProps) {
 function TableSurfaceWithImage({ layout }: { layout: AltTableLayout }) {
   const { worldWidth, worldHeight } = layout.table;
 
-  const texture = useLoader(
-    THREE.TextureLoader,
-    "/table/table.png",
-    (xhr) => {
-      console.log(`Table image ${(xhr.loaded / xhr.total * 100).toFixed(0)}% loaded`);
-    },
-    (error) => {
-      console.warn("Failed to load table image, using fallback color", error);
-    }
-  );
+  let texture: THREE.Texture | null = null;
+  try {
+    texture = useLoader(THREE.TextureLoader, "/table/table.png");
+  } catch (error) {
+    console.warn("Failed to load table image, using fallback color", error);
+  }
 
   if (texture) {
     texture.colorSpace = THREE.SRGBColorSpace;

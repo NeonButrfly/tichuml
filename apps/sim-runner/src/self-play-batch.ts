@@ -1439,16 +1439,6 @@ function shouldUseRichServerHeuristicScoring(config: {
   return config.state.phase === "grand_tichu_window";
 }
 
-function buildFastDecisionStatePayload(
-  stateRaw: JsonObject,
-  actorSeat: SeatId
-): JsonObject {
-  return buildServerFastPathState(
-    stateRaw as unknown as GameState,
-    actorSeat
-  ) as unknown as JsonObject;
-}
-
 export function validateServerHeuristicDecisionRequestContract(
   request: DecisionRequestPayload
 ): void {
