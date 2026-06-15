@@ -277,7 +277,7 @@ function recordEndpointFailure(
   return backoff;
 }
 
-function clearEndpointBackoff(endpoint: string): void {
+export function clearTelemetryEndpointBackoff(endpoint: string): void {
   endpointBackoffs.delete(endpoint);
 }
 
@@ -514,7 +514,7 @@ async function postPayload(config: {
     typeof parsed.payload === "object" && parsed.payload !== null
       ? (parsed.payload as TelemetryResponse)
       : { accepted: true };
-  clearEndpointBackoff(endpoint);
+  clearTelemetryEndpointBackoff(endpoint);
   const result: TelemetryWriteResult = {
     ok: true,
     endpoint,
