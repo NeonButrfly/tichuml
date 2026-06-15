@@ -10,7 +10,6 @@ import {
 } from "three";
 import {
   AltTableCards3D,
-  designToWorld,
   getHiddenCardWorldSize,
   getTableWorldSize,
   resolveHiddenHandPlacement,
@@ -228,7 +227,6 @@ const RACK_PEDESTAL_WIDTH = 0.88;
 const RACK_PEDESTAL_DEPTH = 0.34;
 const FRONT_RAIL_HEIGHT = 0.3;
 const FRONT_RAIL_DEPTH = 0.44;
-const FRONT_RAIL_INSET = 0.18;
 const FRONT_BLOCK_WIDTH = 1.26;
 const FRONT_BLOCK_HEIGHT = 0.56;
 const FRONT_BLOCK_DEPTH = 0.5;

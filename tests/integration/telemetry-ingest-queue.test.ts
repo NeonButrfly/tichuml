@@ -38,7 +38,7 @@ class QueueTestRepository implements TelemetryRepository {
     return id;
   }
 
-  async insertEvent(_payload: TelemetryEventPayload): Promise<number> {
+  async insertEvent(): Promise<number> {
     if (this.failWrites) {
       throw this.thrownValue;
     }
@@ -64,11 +64,11 @@ class QueueTestRepository implements TelemetryRepository {
     }
   }
 
-  async listDecisions(_gameId: string): Promise<StoredTelemetryDecisionRecord[]> {
+  async listDecisions(): Promise<StoredTelemetryDecisionRecord[]> {
     return this.decisions;
   }
 
-  async listEvents(_gameId: string): Promise<StoredTelemetryEventRecord[]> {
+  async listEvents(): Promise<StoredTelemetryEventRecord[]> {
     return [];
   }
 

@@ -291,7 +291,7 @@ function extractShellCommandTokens(content) {
     if (definitionPattern.test(line)) {
       return;
     }
-    if (/^\s*[A-Za-z_][A-Za-z0-9_-]*\s*[\+\-]?=\(/u.test(line)) {
+    if (/^\s*[A-Za-z_][A-Za-z0-9_-]*\s*[+-]?=\(/u.test(line)) {
       return;
     }
     if (/^\s*[A-Za-z0-9_|-]+\)\s*(?:;;)?\s*$/u.test(trimmed)) {
@@ -348,7 +348,7 @@ function extractShellCommandTokens(content) {
       if (!candidate) {
         continue;
       }
-      if (/^[A-Za-z_][A-Za-z0-9_-]*\s*[\+\-]?=/u.test(candidate)) {
+      if (/^[A-Za-z_][A-Za-z0-9_-]*\s*[+-]?=/u.test(candidate)) {
         continue;
       }
       const match = candidate.match(/^!?([A-Za-z_][A-Za-z0-9_-]*)\b/u);

@@ -4,7 +4,6 @@ import {
   designToWorld,
   getHiddenHandPresenceConfig,
   getHiddenHandSeatLayoutConfig,
-  getHiddenCardWorldSize,
   resolveHiddenHandPlacement,
   type HiddenHandCard
 } from "../../apps/web/src/alt-table-3d/AltTableCards3D";

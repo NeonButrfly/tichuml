@@ -75,10 +75,6 @@ function countStandardRank(cards: readonly Card[], rank: number): number {
   return cards.filter((card) => card.kind === "standard" && card.rank === rank).length;
 }
 
-function countRanksAtLeast(cards: readonly Card[], rank: number): number {
-  return cards.filter((card) => card.kind === "standard" && card.rank >= rank).length;
-}
-
 function scoreContextModifier(state: GameState, seat: SeatId): number {
   const team = getTeamForSeat(seat);
   const opponentTeam = team === "team-0" ? "team-1" : "team-0";

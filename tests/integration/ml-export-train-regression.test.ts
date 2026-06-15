@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 
-const REPO_ROOT = "C:\\tichu\\tichuml";
+const REPO_ROOT = process.cwd();
 
 function runPythonSnippet(snippet: string, args: string[] = []) {
   return spawnSync(

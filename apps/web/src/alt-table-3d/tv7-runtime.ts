@@ -1,5 +1,5 @@
 export const TV7_ASSET_ROOT = "/tv7";
-export const TV7_TABLE_PLATE_SRC = "/tv_ed/t/plate.png";
+export const TV7_TABLE_PLATE_SRC = `${TV7_ASSET_ROOT}/t/plate.png`;
 export const TV7_TABLE_REFERENCE_SRC = `${TV7_ASSET_ROOT}/t/ref.png`;
 export const TV7_PASSING_OVERLAY_SRC = `${TV7_ASSET_ROOT}/p/o.png`;
 export const TV7_PASSING_ANCHOR_JSON_SRC = `${TV7_ASSET_ROOT}/p/a.json`;

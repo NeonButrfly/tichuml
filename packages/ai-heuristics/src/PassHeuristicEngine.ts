@@ -14,7 +14,7 @@ import { appendUniqueTags, cardStrength, isPointCard } from "./utils.js";
 
 type PreparedPassSelection = {
   analysis: HandEvaluation;
-  cardsById: Map<string, ReturnType<typeof buildHandEvaluation>["cardMetrics"] extends Map<string, infer _T> ? CardPassMetrics["card"] : never>;
+  cardsById: Map<string, CardPassMetrics["card"]>;
   context: PassScoringContext;
   leftRightOpponentSymmetric: boolean;
   singleSelfPreservationByCard: Map<string, number>;

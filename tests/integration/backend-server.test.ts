@@ -8,7 +8,6 @@ import {
   cardsFromIds,
   createInitialGameState,
   createScenarioState,
-  getCanonicalActiveSeatFromState,
   getLegalActions,
   listCombinationInterpretations,
   SYSTEM_ACTOR,

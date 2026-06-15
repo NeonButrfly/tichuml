@@ -23,8 +23,6 @@ import {
   createInitialGameState,
   createNextDealCarryState as createEngineNextDealCarryState,
   getCurrentHandNumber,
-  getCanonicalActiveSeatFromState,
-  getLegalActionOwner,
   getPartnerSeat,
   SYSTEM_ACTOR,
   type ActorId,
@@ -94,7 +92,6 @@ import { createAlternatePassSelectPreviewSession } from "./alternate-table/previ
 import { generateSeedWithEntropy } from "./seed/orchestrator";
 import {
   type BackendRuntimeSettings,
-  type DecisionScoringPath,
   type DecisionRequestPayload,
   type JsonObject,
   type RequestedDecisionProvider,
@@ -113,11 +110,6 @@ import { emitDecisionTelemetry, emitEventTelemetry } from "./backend/telemetry";
 import { postDecisionRequest, testBackendHealth } from "./backend/client";
 import { isBackendRequestError } from "./backend/client";
 import { SimControlDashboard } from "./SimControlDashboard";
-import {
-  TELEMETRY_ENGINE_VERSION,
-  TELEMETRY_SCHEMA_VERSION,
-  TELEMETRY_SIM_VERSION
-} from "@tichuml/telemetry";
 import {
   buildCollectionReadiness,
   buildHandMetricDelta,
@@ -688,14 +680,19 @@ function AppLoadingScreen({
 }
 
 export function App() {
-  if (
+  const shouldRenderSimControlDashboard =
     typeof window !== "undefined" &&
     (window.location.pathname === "/admin/sim" ||
-      window.location.pathname === "/sim/control")
-  ) {
+      window.location.pathname === "/sim/control");
+
+  if (shouldRenderSimControlDashboard) {
     return <SimControlDashboard />;
   }
 
+  return <GameApp />;
+}
+
+function GameApp() {
   const [initialSession, setInitialSession] = useState<RoundSession | null>(
     null
   );

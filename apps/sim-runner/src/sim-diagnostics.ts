@@ -258,8 +258,6 @@ export type DiagnosticsAccumulator = {
   };
 };
 
-type DiagnosticsEventPayload = Record<string, unknown>;
-
 function roundNumber(value: number, digits = 4): number {
   if (!Number.isFinite(value)) {
     return 0;

@@ -11,8 +11,6 @@ import type {
 } from "@tichuml/table-layout-schema";
 import { degreesToRadians, radiansToDegrees, mirrorHandLayout, copyHandLayout, mirrorPassingLane, getMirrorLaneId, createDefaultPassingLane } from "@tichuml/table-layout-schema";
 import {
-  updateHandMaster,
-  updateHandFan,
   updatePassingLane,
   type EditorSelection
 } from "../state/editorState";

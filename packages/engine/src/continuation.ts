@@ -8,8 +8,7 @@ import {
   type LegalAction,
   type LegalActionMap,
   type MatchHandHistoryEntry,
-  type SeatId,
-  type TeamId
+  type SeatId
 } from "./types.js";
 import { getCanonicalActiveSeatFromState } from "./seat-identity.js";
 

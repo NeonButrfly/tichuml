@@ -73,17 +73,6 @@ function readExplanationMetadata(
     : null;
 }
 
-function serializeLegalActionMap(
-  legalActions: EngineResult["legalActions"]
-): JsonObject {
-  return Object.fromEntries(
-    Object.entries(legalActions).map(([actor, actions]) => [
-      actor,
-      (actions ?? []).map((action) => serializeLegalAction(action))
-    ])
-  ) as JsonObject;
-}
-
 function serializeActorLegalActions(
   legalActions: EngineResult["legalActions"] | LegalActionMap,
   actorSeat: string

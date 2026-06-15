@@ -11,8 +11,8 @@
     }
   },
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch"
+    "build": "tsc -b tsconfig.json --force",
+    "dev": "tsc -b tsconfig.json --watch"
   },
   "devDependencies": {
     "typescript": "^5.4.0"

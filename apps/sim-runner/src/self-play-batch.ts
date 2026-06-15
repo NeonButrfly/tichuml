@@ -1311,14 +1311,6 @@ function resolveRequestedProvider(
   return overrides?.[seat] ?? defaultProvider;
 }
 
-function getActorLegalActions(
-  legalActions: LegalActionMap,
-  actor: SeatId | typeof SYSTEM_ACTOR
-): unknown[] {
-  const actorActions = legalActions[actor] ?? [];
-  return Array.isArray(actorActions) ? actorActions : [];
-}
-
 function summarizeLegalActors(legalActions: LegalActionMap): JsonObject {
   const actors = Object.fromEntries(
     [
