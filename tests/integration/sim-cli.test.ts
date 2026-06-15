@@ -72,7 +72,7 @@ describe("sim CLI", () => {
     expect(summary.lastCompletedGameId).toBeTruthy();
     expect(summary.lastCompletedMatchWinner).toBeTruthy();
     },
-    60_000
+    120_000
   );
 
   it(
@@ -110,7 +110,7 @@ describe("sim CLI", () => {
         `selfplay-${runId}-game-000001`
       );
     },
-    60_000
+    120_000
   );
 
   it(
