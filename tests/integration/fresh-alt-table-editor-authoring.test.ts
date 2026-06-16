@@ -43,8 +43,14 @@ describe("fresh alt table editor authoring contract", () => {
     expect(authoringPreviewSource).toMatch(
       /const\s+\w*LOCKED\w*SOUTH\w*HAND\w*\s*=/
     );
-    expect(authoringPreviewSource).toMatch(/["']north["']/);
-    expect(authoringPreviewSource).toMatch(/["']east["']/);
-    expect(authoringPreviewSource).toMatch(/["']west["']/);
+    expect(authoringPreviewSource).toMatch(
+      /onSelectHand[\s\S]{0,200}["']north["']|["']north["'][\s\S]{0,200}onSelectHand/
+    );
+    expect(authoringPreviewSource).toMatch(
+      /onSelectHand[\s\S]{0,200}["']east["']|["']east["'][\s\S]{0,200}onSelectHand/
+    );
+    expect(authoringPreviewSource).toMatch(
+      /onSelectHand[\s\S]{0,200}["']west["']|["']west["'][\s\S]{0,200}onSelectHand/
+    );
   });
 });
