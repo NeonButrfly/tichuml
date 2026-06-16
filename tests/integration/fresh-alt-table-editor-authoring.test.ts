@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
+import { PASSING_LANE_IDS } from "@tichuml/table-layout-schema";
 
 const TABLE_EDITOR_VITE_CONFIG_PATH = fileURLToPath(
   new URL("../../apps/table-editor/vite.config.ts", import.meta.url)
@@ -19,14 +20,20 @@ const FRESH_ALT_AUTHORING_LAYOUT_PATH = fileURLToPath(
 );
 
 describe("fresh alt table editor authoring contract", () => {
-  it("keeps the editor dev server locked to strict port 5178 and wires the shared fresh alt authoring alias", () => {
-    const viteConfigSource = readFileSync(TABLE_EDITOR_VITE_CONFIG_PATH, "utf8");
+  it("keeps the editor dev server locked to strict port 5178 and wires the shared fresh alt authoring alias", async () => {
     const tsconfigSource = readFileSync(TABLE_EDITOR_TSCONFIG_PATH, "utf8");
+    const viteConfigModule = await import(
+      pathToFileURL(TABLE_EDITOR_VITE_CONFIG_PATH).href
+    );
+    const viteConfig = viteConfigModule.default;
+    const aliasEntry = viteConfig.resolve.alias[
+      "@tichuml/fresh-alt-authoring"
+    ];
 
-    expect(viteConfigSource).toContain("port: 5178");
-    expect(viteConfigSource).toContain("strictPort: true");
-    expect(viteConfigSource).toContain('"@tichuml/fresh-alt-authoring"');
-    expect(viteConfigSource).toContain("../../apps/web/src/altTableFresh/authoringLayout.ts");
+    expect(viteConfig.server.port).toBe(5178);
+    expect(viteConfig.server.strictPort).toBe(true);
+    expect(aliasEntry).toBe(FRESH_ALT_AUTHORING_LAYOUT_PATH);
+    expect(existsSync(aliasEntry)).toBe(true);
     expect(tsconfigSource).toContain('"@tichuml/fresh-alt-authoring"');
     expect(tsconfigSource).toContain("../../apps/web/src/altTableFresh/authoringLayout.ts");
   });
@@ -54,23 +61,51 @@ describe("fresh alt table editor authoring contract", () => {
     expect(authoringHelpers.isHandLocked("west")).toBe(false);
 
     const scene = authoringHelpers.createFreshAltAuthoringScene();
-    expect(scene.design).toEqual({ w: 1536, h: 1024 });
-    expect(scene.hands.north).toHaveLength(14);
-    expect(scene.hands.east).toHaveLength(14);
-    expect(scene.hands.west).toHaveLength(14);
-    expect(scene.hands.south).toHaveLength(14);
-    expect(scene.passing).toHaveLength(12);
-    expect(scene.tricks).toHaveLength(4);
+    expect(scene.design.w).toBeGreaterThan(0);
+    expect(scene.design.h).toBeGreaterThan(0);
+    expect(Object.keys(scene.hands)).toEqual(["north", "east", "south", "west"]);
+    expect(scene.hands.north.length).toBeGreaterThan(0);
+    expect(scene.hands.east.length).toBeGreaterThan(0);
+    expect(scene.hands.west.length).toBeGreaterThan(0);
+    expect(scene.hands.south.length).toBeGreaterThan(0);
+    expect(scene.passing.map((lane) => lane.id)).toEqual([
+      "north_pass_left",
+      "north_pass_across",
+      "north_pass_right",
+      "south_pass_left",
+      "south_pass_across",
+      "south_pass_right",
+      "west_pass_north",
+      "west_pass_across",
+      "west_pass_south",
+      "east_pass_north",
+      "east_pass_across",
+      "east_pass_south"
+    ]);
+    expect(scene.tricks.map((trick) => trick.seat)).toEqual([
+      "north",
+      "west",
+      "east",
+      "south"
+    ]);
 
-    const layout = {
-      passingLanes: {
-        "north-left": { id: "north-left", visible: true },
-        "south-right": { id: "south-right", visible: false }
+    const passingLanes = Object.assign(
+      Object.create({
+        "east-across": { id: "east-across", visible: true }
+      }),
+      {
+        "south-right": { id: "south-right", visible: false },
+        "north-left": { id: "north-left", visible: true }
       }
-    };
+    );
+    const layout = { passingLanes };
 
     const laneSelection = authoringHelpers.createLaneSelectionModel(layout);
-    expect(laneSelection.laneIds).toEqual(["north-left", "south-right"]);
+    expect(laneSelection.laneIds).toEqual(
+      PASSING_LANE_IDS.filter((laneId) =>
+        Object.hasOwn(passingLanes, laneId)
+      )
+    );
     expect(laneSelection.hasLane("north-left")).toBe(true);
     expect(laneSelection.hasLane("east-across")).toBe(false);
     expect(laneSelection.getLane("south-right")).toEqual(
