@@ -149,6 +149,15 @@
   color: #f0ddb1;
 }
 
+.editor-hierarchy__item--locked {
+  opacity: 0.65;
+  cursor: default;
+}
+
+.editor-hierarchy__item--locked:hover {
+  background: transparent;
+}
+
 .editor-hierarchy__icon {
   width: 16px;
   height: 16px;
@@ -174,6 +183,131 @@
 .editor-preview__canvas {
   width: 100%;
   height: 100%;
+}
+
+.editor-preview__authoring {
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background:
+    radial-gradient(circle at top, rgba(255, 209, 102, 0.18), transparent 30%),
+    linear-gradient(180deg, #101820 0%, #0a1017 100%);
+}
+
+.editor-preview__board {
+  position: relative;
+  width: min(100%, 1100px);
+  max-height: 100%;
+  border: 1px solid rgba(240, 221, 177, 0.16);
+  border-radius: 28px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at center, rgba(34, 74, 59, 0.95), rgba(12, 32, 26, 0.98)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0));
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.03),
+    0 20px 48px rgba(0, 0, 0, 0.35);
+}
+
+.editor-preview__hand,
+.editor-preview__lane,
+.editor-preview__trick {
+  position: absolute;
+  transform: translate(-50%, -50%);
+}
+
+.editor-preview__hand {
+  display: grid;
+  gap: 4px;
+  min-width: 150px;
+  padding: 10px 12px;
+  border: 1px solid rgba(240, 221, 177, 0.18);
+  border-radius: 14px;
+  background: rgba(8, 18, 14, 0.8);
+  color: #f5edd7;
+  text-align: left;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+}
+
+button.editor-preview__hand {
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+}
+
+button.editor-preview__hand:hover {
+  transform: translate(-50%, -50%) translateY(-1px);
+  border-color: rgba(240, 221, 177, 0.32);
+  background: rgba(15, 32, 25, 0.9);
+}
+
+.editor-preview__hand--selected {
+  border-color: rgba(245, 190, 40, 0.75);
+  box-shadow: 0 0 0 1px rgba(245, 190, 40, 0.35), 0 12px 24px rgba(0, 0, 0, 0.24);
+}
+
+.editor-preview__hand--locked {
+  cursor: default;
+  background: rgba(28, 21, 21, 0.82);
+  border-style: dashed;
+  border-color: rgba(240, 160, 160, 0.22);
+  color: rgba(255, 226, 226, 0.88);
+}
+
+.editor-preview__hand-label {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.editor-preview__hand-count {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.editor-preview__lane {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.editor-preview__lane-hit,
+.editor-preview__lane-arrow {
+  border: 1px solid rgba(245, 190, 40, 0.22);
+  border-radius: 999px;
+  background: rgba(12, 22, 18, 0.9);
+  color: #f4d993;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+}
+
+.editor-preview__lane-hit {
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.editor-preview__lane-arrow {
+  padding: 5px 8px;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.editor-preview__lane--selected .editor-preview__lane-hit,
+.editor-preview__lane-arrow--selected {
+  border-color: rgba(245, 190, 40, 0.75);
+  background: rgba(58, 45, 12, 0.92);
+  color: #fff4cc;
+}
+
+.editor-preview__trick {
+  min-width: 54px;
+  padding: 6px 0;
+  border-radius: 999px;
+  background: rgba(8, 14, 16, 0.68);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 10px;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 .editor-properties {

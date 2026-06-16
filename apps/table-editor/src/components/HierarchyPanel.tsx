@@ -1,5 +1,6 @@
 import type { AltTableLayout, SideHandId, PassingLaneId } from "@tichuml/table-layout-schema";
 import { PASSING_LANE_IDS, SIDE_HAND_IDS } from "@tichuml/table-layout-schema";
+import { isHandLocked } from "@tichuml/fresh-alt-authoring";
 import type { EditorSelection } from "../state/editorState";
 
 interface HierarchyPanelProps {
@@ -33,11 +34,17 @@ export function HierarchyPanel(props: HierarchyPanelProps) {
         {SIDE_HAND_IDS.map((side) => (
           <div
             key={side}
-            className={`editor-hierarchy__item ${isSelected("hand", side) ? "editor-hierarchy__item--selected" : ""}`}
-            onClick={() => onSelectHand(side)}
+            className={`editor-hierarchy__item ${
+              isSelected("hand", side) ? "editor-hierarchy__item--selected" : ""
+            } ${isHandLocked(side) ? "editor-hierarchy__item--locked" : ""}`}
+            onClick={isHandLocked(side) ? undefined : () => onSelectHand(side)}
           >
             <div className="editor-hierarchy__icon">H</div>
-            <span>{side.charAt(0).toUpperCase() + side.slice(1)} Hand Master</span>
+            <span>
+              {isHandLocked(side)
+                ? `${side.charAt(0).toUpperCase() + side.slice(1)} Hand (Locked)`
+                : `${side.charAt(0).toUpperCase() + side.slice(1)} Hand Master`}
+            </span>
           </div>
         ))}
       </div>
