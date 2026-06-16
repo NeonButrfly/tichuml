@@ -263,6 +263,19 @@ describe("validateAltTableLayout", () => {
     expect(result.errors).toHaveLength(0);
   });
 
+  it("preserves south north east and west hands in the default alt layout", () => {
+    const layout = createDefaultAltTableLayout();
+
+    expect(layout.hands.south.id).toBe("south");
+    expect(layout.hands.north.id).toBe("north");
+    expect(layout.hands.east.id).toBe("east");
+    expect(layout.hands.west.id).toBe("west");
+    expect(layout.hands.south.master.position.z).toBeGreaterThan(0);
+    expect(layout.hands.north.master.position.z).toBeLessThan(0);
+    expect(layout.hands.east.master.position.x).toBeGreaterThan(0);
+    expect(layout.hands.west.master.position.x).toBeLessThan(0);
+  });
+
   it("rejects non-object input", () => {
     const result = validateAltTableLayout("not an object");
     expect(result.valid).toBe(false);
@@ -306,6 +319,27 @@ describe("safeParseLayout", () => {
     const result = safeParseLayout(JSON.stringify({ schemaVersion: 1 }));
     expect(result.layout).toBeNull();
     expect(result.errors.length).toBeGreaterThan(0);
+  });
+
+  it("round-trips a valid alt layout without dropping side hands or passing lanes", () => {
+    const layout = createDefaultAltTableLayout();
+    layout.hands.east.master.position.x = 4.75;
+    layout.hands.west.master.position.x = -4.75;
+    layout.passingLanes["east-across"].width = 1.25;
+    layout.passingLanes["west-across"].arrowRotation = Math.PI / 3;
+
+    const result = safeParseLayout(JSON.stringify(layout));
+
+    expect(result.errors).toHaveLength(0);
+    expect(result.layout).not.toBeNull();
+    expect(result.layout?.hands.south.id).toBe("south");
+    expect(result.layout?.hands.north.id).toBe("north");
+    expect(result.layout?.hands.east.master.position.x).toBe(4.75);
+    expect(result.layout?.hands.west.master.position.x).toBe(-4.75);
+    expect(result.layout?.passingLanes["east-across"].width).toBe(1.25);
+    expect(result.layout?.passingLanes["west-across"].arrowRotation).toBe(
+      Math.PI / 3
+    );
   });
 });
 
