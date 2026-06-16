@@ -11,6 +11,9 @@ import type {
 } from "@tichuml/table-layout-schema";
 import { degreesToRadians, radiansToDegrees, mirrorHandLayout, copyHandLayout, mirrorPassingLane, getMirrorLaneId, createDefaultPassingLane } from "@tichuml/table-layout-schema";
 import {
+  isEditableHandId,
+  updateHandFan,
+  updateHandMaster,
   updatePassingLane,
   type EditorSelection
 } from "../state/editorState";
@@ -69,34 +72,27 @@ function HandProperties({
   const hand = layout.hands[side];
   const otherSides: SideHandId[] = (["north", "east", "west", "south"] as SideHandId[]).filter(s => s !== side);
 
+  if (!isEditableHandId(side)) {
+    return (
+      <div className="editor-properties">
+        <div className="editor-properties__title">South Hand (Locked)</div>
+        <div className="editor-properties__subtitle">
+          Reference only. South stays visible in the preview but is not editable here.
+        </div>
+      </div>
+    );
+  }
+
   const updateMaster = useCallback(
     (updater: (m: HandMasterTransform) => HandMasterTransform, desc = "Edit hand") => {
-      onLayoutChange({
-        ...layout,
-        hands: {
-          ...layout.hands,
-          [side]: {
-            ...layout.hands[side],
-            master: updater(layout.hands[side].master)
-          }
-        }
-      }, desc);
+      onLayoutChange(updateHandMaster(layout, side, updater), desc);
     },
     [layout, side, onLayoutChange]
   );
 
   const updateFan = useCallback(
     (updater: (f: CardFanSettings) => CardFanSettings, desc = "Edit fan") => {
-      onLayoutChange({
-        ...layout,
-        hands: {
-          ...layout.hands,
-          [side]: {
-            ...layout.hands[side],
-            fan: updater(layout.hands[side].fan)
-          }
-        }
-      }, desc);
+      onLayoutChange(updateHandFan(layout, side, updater), desc);
     },
     [layout, side, onLayoutChange]
   );

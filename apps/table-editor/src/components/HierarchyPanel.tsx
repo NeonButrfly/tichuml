@@ -32,12 +32,14 @@ export function HierarchyPanel(props: HierarchyPanelProps) {
       <div className="editor-hierarchy__group">
         <div className="editor-hierarchy__group-label">Hands</div>
         {SIDE_HAND_IDS.map((side) => (
-          <div
+          <button
+            type="button"
             key={side}
             className={`editor-hierarchy__item ${
               isSelected("hand", side) ? "editor-hierarchy__item--selected" : ""
             } ${isHandLocked(side) ? "editor-hierarchy__item--locked" : ""}`}
-            onClick={isHandLocked(side) ? undefined : () => onSelectHand(side)}
+            disabled={isHandLocked(side)}
+            onClick={() => onSelectHand(side)}
           >
             <div className="editor-hierarchy__icon">H</div>
             <span>
@@ -45,7 +47,7 @@ export function HierarchyPanel(props: HierarchyPanelProps) {
                 ? `${side.charAt(0).toUpperCase() + side.slice(1)} Hand (Locked)`
                 : `${side.charAt(0).toUpperCase() + side.slice(1)} Hand Master`}
             </span>
-          </div>
+          </button>
         ))}
       </div>
 

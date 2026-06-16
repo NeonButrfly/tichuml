@@ -346,6 +346,15 @@ describe("safeParseLayout", () => {
       );
     }
   });
+
+  it("round-trips exported alt layout json without drift", () => {
+    const layout = createDefaultAltTableLayout();
+    const json = JSON.stringify(layout, null, 2);
+    const result = safeParseLayout(json);
+
+    expect(result.errors).toEqual([]);
+    expect(JSON.stringify(result.layout, null, 2)).toBe(json);
+  });
 });
 
 describe("editing one lane does not affect others", () => {

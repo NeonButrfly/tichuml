@@ -106,6 +106,23 @@ export function App() {
     setJsonModalOpen(true);
   }, []);
 
+  const handleCopySection = useCallback(() => {
+    if (!selection) {
+      return;
+    }
+
+    const payload =
+      selection.type === "hand"
+        ? { hands: { [selection.id]: layout.hands[selection.id as SideHandId] } }
+        : {
+            passingLanes: {
+              [selection.id]: layout.passingLanes[selection.id as PassingLaneId]
+            }
+          };
+
+    void navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+  }, [layout, selection]);
+
   const handleLoadDefault = useCallback(() => {
     resetToDefault(defaultLayout);
     setSelection(null);
@@ -132,6 +149,8 @@ export function App() {
         onRedo={redo}
         onExport={handleExportJson}
         onImport={handleImportJson}
+        onCopySection={handleCopySection}
+        copySectionDisabled={!selection}
         onLoadDefault={handleLoadDefault}
         onClearLocal={handleClearLocal}
       />

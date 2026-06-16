@@ -3,6 +3,8 @@ interface ToolbarProps {
   onRedo: () => void;
   onExport: () => void;
   onImport: () => void;
+  onCopySection: () => void;
+  copySectionDisabled: boolean;
   onLoadDefault: () => void;
   onClearLocal: () => void;
 }
@@ -14,6 +16,14 @@ export function Toolbar(props: ToolbarProps) {
         <span className="editor-toolbar__label">File</span>
         <button className="editor-btn editor-btn--primary" onClick={props.onExport} title="Export layout JSON">
           Export JSON
+        </button>
+        <button
+          className="editor-btn"
+          disabled={props.copySectionDisabled}
+          onClick={props.onCopySection}
+          title="Copy selected hand or lane JSON for manual production patching"
+        >
+          Copy Section
         </button>
         <button className="editor-btn" onClick={props.onImport} title="Import layout JSON">
           Import JSON

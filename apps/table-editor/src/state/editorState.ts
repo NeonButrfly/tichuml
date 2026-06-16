@@ -89,6 +89,10 @@ export function selectArrow(laneId: PassingLaneId): EditorSelection {
   return { type: "arrow", id: laneId };
 }
 
+export function isEditableHandId(side: SideHandId): boolean {
+  return side !== "south";
+}
+
 export function getSelectedHand(layout: AltTableLayout, selection: EditorSelection | null): SideHandLayout | null {
   if (!selection || selection.type !== "hand") return null;
   return layout.hands[selection.id as SideHandId] ?? null;
@@ -104,6 +108,10 @@ export function updateHandMaster(
   side: SideHandId,
   updater: (master: HandMasterTransform) => HandMasterTransform
 ): AltTableLayout {
+  if (!isEditableHandId(side)) {
+    return layout;
+  }
+
   return {
     ...layout,
     hands: {
@@ -121,6 +129,10 @@ export function updateHandFan(
   side: SideHandId,
   updater: (fan: CardFanSettings) => CardFanSettings
 ): AltTableLayout {
+  if (!isEditableHandId(side)) {
+    return layout;
+  }
+
   return {
     ...layout,
     hands: {

@@ -16,7 +16,6 @@ export function EditorPreview(props: EditorPreviewProps) {
   const {
     layout,
     selection,
-    onLayoutChange,
     onSelectHand,
     onSelectLane,
     onSelectArrow,
@@ -27,8 +26,7 @@ export function EditorPreview(props: EditorPreviewProps) {
     <FreshAltAuthoringPreview
       layout={layout}
       selection={selection}
-      onLayoutChange={onLayoutChange}
-      onSelectEditableHand={onSelectHand}
+      onSelectHand={onSelectHand}
       onSelectLane={onSelectLane}
       onSelectArrow={onSelectArrow}
       onClearSelection={onClearSelection}

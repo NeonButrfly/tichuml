@@ -18,6 +18,15 @@ const FRESH_ALT_AUTHORING_PREVIEW_PATH = fileURLToPath(
 const FRESH_ALT_AUTHORING_LAYOUT_PATH = fileURLToPath(
   new URL("../../apps/web/src/altTableFresh/authoringLayout.ts", import.meta.url)
 );
+const PROPERTIES_PANEL_PATH = fileURLToPath(
+  new URL("../../apps/table-editor/src/components/PropertiesPanel.tsx", import.meta.url)
+);
+const TOOLBAR_PATH = fileURLToPath(
+  new URL("../../apps/table-editor/src/components/Toolbar.tsx", import.meta.url)
+);
+const JSON_MODAL_PATH = fileURLToPath(
+  new URL("../../apps/table-editor/src/components/JsonModal.tsx", import.meta.url)
+);
 
 describe("fresh alt table editor authoring contract", () => {
   it("keeps the editor dev server locked to strict port 5178 and wires the shared fresh alt authoring alias", async () => {
@@ -134,6 +143,8 @@ describe("fresh alt table editor authoring contract", () => {
       "utf8"
     );
 
+    expect(authoringPreviewSource).toContain("FRESH_ALT_TABLE_SRC");
+    expect(authoringPreviewSource).not.toContain('"_pass_"');
     expect(authoringPreviewSource).toMatch(
       /south[\s\S]{0,200}(locked|readOnly|disabled)|(?:locked|readOnly|disabled)[\s\S]{0,200}south/
     );
@@ -146,8 +157,19 @@ describe("fresh alt table editor authoring contract", () => {
     expect(authoringPreviewSource).toMatch(
       /onSelectHand[\s\S]{0,200}["']west["']|["']west["'][\s\S]{0,200}onSelectHand/
     );
-    expect(authoringPreviewSource).not.toMatch(
-      /onSelectHand[\s\S]{0,200}["']south["']|["']south["'][\s\S]{0,200}onSelectHand/
-    );
+    expect(authoringPreviewSource).not.toContain('onSelectHand("south")');
+    expect(authoringPreviewSource).not.toContain("onSelectHand('south')");
+  });
+
+  it("prevents editing south from the property panel and adds partial export helpers", () => {
+    const propertiesSource = readFileSync(PROPERTIES_PANEL_PATH, "utf8");
+    const toolbarSource = readFileSync(TOOLBAR_PATH, "utf8");
+    const jsonModalSource = readFileSync(JSON_MODAL_PATH, "utf8");
+
+    expect(propertiesSource).toContain('if (!isEditableHandId(side))');
+    expect(propertiesSource).toContain("Reference only");
+    expect(toolbarSource).toContain("Copy Section");
+    expect(jsonModalSource).toContain("alt-table-layout.json");
+    expect(jsonModalSource).toContain("navigator.clipboard.writeText");
   });
 });

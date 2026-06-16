@@ -19,6 +19,14 @@ export type FreshPassLane = {
   occupied: boolean;
   selected: boolean;
   ariaLabel: string;
+  visible?: boolean;
+  locked?: boolean;
+  rotationDeg?: number;
+  borderOpacity?: number;
+  fillOpacity?: number;
+  arrowRotationDeg?: number;
+  arrowOffsetPx?: { x: number; y: number };
+  arrowScale?: number;
   onClick?: () => void;
   onDropCard?: (cardId: string) => void;
   card?: FreshPassLaneCard | null;
@@ -55,6 +63,10 @@ export function FreshPassingLayer({
   return (
     <>
       {lanes.map((lane) => {
+        if (lane.visible === false) {
+          return null;
+        }
+
         const point = designToScreen(
           lane.anchor.centerPx.x,
           lane.anchor.centerPx.y,
@@ -63,6 +75,9 @@ export function FreshPassingLayer({
         const width = lane.anchor.wPx * fit.scale;
         const height = lane.anchor.hPx * fit.scale;
         const borderWidth = Math.max(1, 2 * fit.scale);
+        const fillOpacity = lane.fillOpacity ?? (lane.occupied ? 0.62 : 0.5);
+        const borderOpacity = lane.borderOpacity ?? 0.95;
+        const rotationDeg = lane.rotationDeg ?? 0;
 
         const laneStyle = {
           position: "absolute",
@@ -70,18 +85,19 @@ export function FreshPassingLayer({
           top: point.y,
           width,
           height,
-          transform: "translate(-50%, -50%)",
-          border: `${borderWidth}px solid rgba(245, 190, 40, 0.95)`,
+          transform: `translate(-50%, -50%) rotate(${rotationDeg}deg)`,
+          border: `${borderWidth}px solid rgba(245, 190, 40, ${borderOpacity})`,
           borderRadius: 8 * fit.scale,
           background: lane.occupied
-            ? "rgba(22, 36, 25, 0.62)"
-            : "rgba(8, 18, 14, 0.5)",
+            ? `rgba(22, 36, 25, ${Math.max(fillOpacity, 0.25)})`
+            : `rgba(8, 18, 14, ${fillOpacity})`,
           boxShadow: lane.selected
             ? `0 0 ${12 * fit.scale}px rgba(245, 190, 40, 0.55)`
             : `0 0 ${8 * fit.scale}px rgba(245, 190, 40, 0.35)`,
           zIndex: lane.anchor.zIndex,
           padding: 0,
-          cursor: lane.interactive ? "pointer" : "default"
+          cursor: lane.locked ? "not-allowed" : lane.interactive ? "pointer" : "default",
+          opacity: lane.locked ? 0.7 : 1
         } as const;
 
         const chrome = (
@@ -104,7 +120,8 @@ export function FreshPassingLayer({
                 color: "rgba(245, 190, 40, 0.95)",
                 fontSize: 36 * fit.scale,
                 fontWeight: 800,
-                lineHeight: 1
+                lineHeight: 1,
+                transform: `translate(${(lane.arrowOffsetPx?.x ?? 0) * fit.scale}px, ${(lane.arrowOffsetPx?.y ?? 0) * fit.scale}px) rotate(${(lane.arrowRotationDeg ?? 0)}deg) scale(${lane.arrowScale ?? 1})`
               }}
             >
               {arrowGlyph(lane.anchor.arrowDirection)}
@@ -132,6 +149,10 @@ export function FreshPassingLayer({
         const cardHeight = height - cardPadding * 2;
 
         const arrowRotation = (() => {
+          if (lane.arrowRotationDeg !== undefined) {
+            return lane.arrowRotationDeg;
+          }
+
           switch (lane.anchor.arrowDirection) {
             case "north": return 0;
             case "south": return 180;
