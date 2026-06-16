@@ -10,7 +10,8 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      "@tichuml/table-layout-schema": resolve(__dirname, "../../packages/table-layout-schema/src/index.ts")
+      "@tichuml/table-layout-schema": resolve(__dirname, "../../packages/table-layout-schema/src/index.ts"),
+      "@tichuml/fresh-alt-authoring": resolve(__dirname, "../../apps/web/src/altTableFresh/authoringLayout.ts")
     }
   },
   build: {
