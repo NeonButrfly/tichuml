@@ -10,6 +10,7 @@ import {
   createDefaultSideHandLayout,
   createDefaultPassingLane,
   createDefaultAltTableLayout,
+  PASSING_LANE_IDS,
   validateAltTableLayout,
   safeParseLayout,
   type CardFanSettings
@@ -336,10 +337,14 @@ describe("safeParseLayout", () => {
     expect(result.layout?.hands.north.id).toBe("north");
     expect(result.layout?.hands.east.master.position.x).toBe(4.75);
     expect(result.layout?.hands.west.master.position.x).toBe(-4.75);
-    expect(result.layout?.passingLanes["east-across"].width).toBe(1.25);
-    expect(result.layout?.passingLanes["west-across"].arrowRotation).toBe(
-      Math.PI / 3
+    expect(Object.keys(result.layout?.passingLanes ?? {}).sort()).toEqual(
+      [...PASSING_LANE_IDS].sort()
     );
+    for (const laneId of PASSING_LANE_IDS) {
+      expect(result.layout?.passingLanes[laneId]).toEqual(
+        layout.passingLanes[laneId]
+      );
+    }
   });
 });
 

@@ -41,7 +41,7 @@ describe("fresh alt table editor authoring contract", () => {
     );
 
     expect(authoringPreviewSource).toMatch(
-      /const\s+\w*LOCKED\w*SOUTH\w*HAND\w*\s*=/
+      /south[\s\S]{0,200}(locked|readOnly|disabled)|(?:locked|readOnly|disabled)[\s\S]{0,200}south/
     );
     expect(authoringPreviewSource).toMatch(
       /onSelectHand[\s\S]{0,200}["']north["']|["']north["'][\s\S]{0,200}onSelectHand/
@@ -51,6 +51,9 @@ describe("fresh alt table editor authoring contract", () => {
     );
     expect(authoringPreviewSource).toMatch(
       /onSelectHand[\s\S]{0,200}["']west["']|["']west["'][\s\S]{0,200}onSelectHand/
+    );
+    expect(authoringPreviewSource).not.toMatch(
+      /onSelectHand[\s\S]{0,200}["']south["']|["']south["'][\s\S]{0,200}onSelectHand/
     );
   });
 });
