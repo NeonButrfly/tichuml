@@ -14,9 +14,13 @@ import {
 } from "../../apps/sim-runner/src/ml-rollout-utils";
 import {
   buildRolloutContinuationMetadata,
+  hasConcreteRolloutStateHands,
+  isResultCompleteForResume,
+  isTransientRolloutFailureReason,
   limitDecisionRowsRoundRobinByGame,
   resolveForcedActionFromCandidate as resolveForcedActionForRollout,
-  shouldUseFullStateRolloutContinuation
+  shouldUseFullStateRolloutContinuation,
+  withTimeout
 } from "../../apps/sim-runner/src/ml-rollouts";
 import { buildHeuristicDecisionOptions } from "../../apps/sim-runner/src/self-play-batch";
 
@@ -200,8 +204,108 @@ describe("ml rollout helpers", () => {
 
   it("keeps full-state backend continuation enabled for server-backed rollouts", () => {
     expect(shouldUseFullStateRolloutContinuation("local")).toBe(false);
-    expect(shouldUseFullStateRolloutContinuation("server_heuristic")).toBe(true);
+    expect(shouldUseFullStateRolloutContinuation("server_heuristic")).toBe(false);
     expect(shouldUseFullStateRolloutContinuation("lightgbm_model")).toBe(true);
+  });
+
+  it("fails a rollout sample when it exceeds the timeout", async () => {
+    await expect(
+      withTimeout(
+        new Promise<void>((resolve) => setTimeout(resolve, 50)),
+        10,
+        "rollout_sample"
+      )
+    ).rejects.toThrow("rollout_sample_timeout_10ms");
+  });
+
+  it("treats sample timeouts as transient rollout failures", () => {
+    expect(isTransientRolloutFailureReason("rollout_sample_timeout_3000ms")).toBe(
+      true
+    );
+    expect(
+      isTransientRolloutFailureReason("rollout_decision_limit_reached")
+    ).toBe(false);
+    expect(isTransientRolloutFailureReason("invalid_forced_action")).toBe(
+      false
+    );
+  });
+
+  it("keeps transient timeout rows replayable on resume", () => {
+    expect(
+      isResultCompleteForResume(
+        {
+          decision_id: 126345,
+          candidate_action_key: "candidate-a",
+          rollout_available: false,
+          rollout_samples: 0,
+          rollout_failures: 1,
+          rollout_mean_actor_team_delta: null,
+          rollout_median_actor_team_delta: null,
+          rollout_std_actor_team_delta: null,
+          rollout_win_rate: null,
+          rollout_hand_win_rate: null,
+          rollout_tichu_success_rate: null,
+          rollout_grand_tichu_success_rate: null,
+          rollout_mean_finish_rank_actor: null,
+          rollout_mean_finish_rank_partner: null,
+          rollout_continuation_provider: "server_heuristic",
+          rollout_seed: "seed",
+          rollout_engine_version: "milestone-1",
+          rollout_failure_reason: "rollout_sample_timeout_3000ms"
+        },
+        5
+      )
+    ).toBe(false);
+  });
+
+  it("treats permanent rollout failures as complete on resume", () => {
+    expect(
+      isResultCompleteForResume(
+        {
+          decision_id: 126345,
+          candidate_action_key: "candidate-a",
+          rollout_available: false,
+          rollout_samples: 0,
+          rollout_failures: 5,
+          rollout_mean_actor_team_delta: null,
+          rollout_median_actor_team_delta: null,
+          rollout_std_actor_team_delta: null,
+          rollout_win_rate: null,
+          rollout_hand_win_rate: null,
+          rollout_tichu_success_rate: null,
+          rollout_grand_tichu_success_rate: null,
+          rollout_mean_finish_rank_actor: null,
+          rollout_mean_finish_rank_partner: null,
+          rollout_continuation_provider: "server_heuristic",
+          rollout_seed: "seed",
+          rollout_engine_version: "milestone-1",
+          rollout_failure_reason: "invalid_forced_action"
+        },
+        5
+      )
+    ).toBe(true);
+  });
+
+  it("rejects rollout states with hidden placeholder hands", () => {
+    const state = createScenarioState({
+      phase: "trick_play",
+      activeSeat: "seat-3"
+    }) as unknown as {
+      hands: Record<string, unknown[]>;
+    };
+
+    state.hands["seat-0"] = ["unknown-seat-0-1"];
+
+    expect(hasConcreteRolloutStateHands(state as never)).toBe(false);
+  });
+
+  it("accepts rollout states when every seat has concrete cards", () => {
+    const state = createScenarioState({
+      phase: "trick_play",
+      activeSeat: "seat-0"
+    });
+
+    expect(hasConcreteRolloutStateHands(state)).toBe(true);
   });
 
   it("spreads capped rollout decision selection across games", () => {

@@ -7,85 +7,77 @@ const routeSource = readFileSync(
   resolve("apps/web/src/alt-table-3d/AltTable3DRoute.tsx"),
   "utf8"
 );
-const tableSource = readFileSync(
-  resolve("apps/web/src/alt-table-3d/AltTichuTable3D.tsx"),
+const freshTableSource = readFileSync(
+  resolve("apps/web/src/altTableFresh/FreshAltTable.tsx"),
   "utf8"
 );
-const sceneSource = readFileSync(
-  resolve("apps/web/src/alt-table-3d/AltTableScene.tsx"),
+const normalTableSource = readFileSync(
+  resolve("apps/web/src/game-table-views.tsx"),
   "utf8"
 );
-const cards3dSource = readFileSync(
-  resolve("apps/web/src/alt-table-3d/AltTableCards3D.tsx"),
+const freshMathSource = readFileSync(
+  resolve("apps/web/src/altTableFresh/freshTableMath.ts"),
   "utf8"
 );
-const runtimeSource = readFileSync(
-  resolve("apps/web/src/alt-table-3d/tv7-runtime.ts"),
+const tableFitSource = readFileSync(
+  resolve("apps/web/src/altTableFresh/tableFit.ts"),
   "utf8"
 );
-const stylesSource = readFileSync(
-  resolve("apps/web/src/alt-table-3d/alt-table-3d.css"),
+const checksSource = readFileSync(
+  resolve("apps/web/src/altTableFresh/freshAltTableChecks.ts"),
   "utf8"
 );
-const browserVerifySource = readFileSync(resolve("scripts/browser-verify.ts"), "utf8");
 
 describe("alternate table route guards", () => {
-  it("routes the ALT table through the dedicated route while keeping the normal table intact", () => {
+  it("routes the luxury table through the fresh alternate renderer while keeping the default table intact", () => {
     expect(appSource).toContain(
       'import { AltTable3DRoute } from "./alt-table-3d/AltTable3DRoute";'
     );
     expect(appSource).toContain("<AltTable3DRoute {...viewProps} />");
     expect(appSource).toContain("<NormalGameTableView {...viewProps} />");
-    expect(appSource).not.toContain("AlternateGameTableView");
+    expect(routeSource).toContain('import { FreshAltTable } from "../altTableFresh/FreshAltTable";');
+    expect(routeSource).toContain("<FreshAltTable");
   });
 
-  it("locks the production tv7 asset paths to the approved short public runtime root", () => {
-    expect(runtimeSource).toContain('export const TV7_ASSET_ROOT = "/tv7";');
-    expect(runtimeSource).toContain(
-      'export const TV7_TABLE_PLATE_SRC = `${TV7_ASSET_ROOT}/t/plate.png`;'
-    );
-    expect(runtimeSource).toContain(
-      'export const TV7_PASSING_OVERLAY_SRC = `${TV7_ASSET_ROOT}/p/o.png`;'
-    );
-    expect(runtimeSource).toContain(
-      'export const TV7_PASSING_ANCHOR_JSON_SRC = `${TV7_ASSET_ROOT}/p/a.json`;'
-    );
-    expect(runtimeSource).toContain(
-      'export const TV7_CARD_ANCHOR_JSON_SRC = `${TV7_ASSET_ROOT}/h/a.json`;'
-    );
-    expect(routeSource).not.toContain("/tv6");
-    expect(tableSource).not.toContain("/tv6");
+  it("keeps the classic table on the original normal surface contract instead of the v5 baked plate", () => {
+    expect(appSource).toContain("<NormalGameTableView {...viewProps} />");
+    expect(normalTableSource).not.toContain("table_plate_no_red_sample_guides_1536x1024.png");
+    expect(normalTableSource).not.toContain("TABLE_PLATE_SRC");
+    expect(normalTableSource).not.toContain("normal-viewport__board-frame");
+    expect(normalTableSource).not.toContain("<NormalSpritePlayArea");
   });
 
-  it("uses a dedicated R3F world-scene hidden-hand layer while preserving authored tv7 card anchors", () => {
-    expect(tableSource).toContain('import { AltTableScene }');
-    expect(tableSource).toContain("<AltTableScene");
-    expect(tableSource).not.toContain("resolveSouthHandLayout");
-    expect(sceneSource).toContain("@react-three/fiber");
-    expect(sceneSource).toContain("Canvas");
-    expect(sceneSource).toContain("camera.lookAt(0, 0, 0)");
-    expect(sceneSource).toContain("RackShell");
-    expect(sceneSource).toContain("TableBody");
-    expect(sceneSource).toContain("FrameRail");
-    expect(sceneSource).toContain("WOOD_GRAIN_SRC");
-    expect(sceneSource).toContain("DRAGON_MOTIF_SRC");
-    expect(sceneSource).toContain("ALT_HIDDEN_CARD_BACK_SRC");
-    expect(sceneSource).toContain("supportsWebGlCanvas");
-    expect(cards3dSource).toContain("CARD_WIDTH =");
-    expect(cards3dSource).toContain("CARD_HEIGHT =");
-    expect(cards3dSource).toContain("CARD_ASPECT = 2.5 / 3.5");
-    expect(cards3dSource).toContain("CARD_THICKNESS =");
-    expect(cards3dSource).toContain("<boxGeometry args={[size.width, size.height, CARD_THICKNESS]} />");
-    expect(cards3dSource).toContain("getHiddenCardWorldSize");
-    expect(cards3dSource).toContain("getHiddenCardAspectRatio");
-    expect(cards3dSource).toContain("resolveHiddenHandPlacement");
-    expect(stylesSource).toContain("alt-table-world-scene");
-    expect(tableSource).not.toContain("HAND_LAYOUT");
-    expect(tableSource).not.toContain("data-seat-hand");
-    expect(tableSource).toContain('data-layout-source": "prototype_layer"');
-    expect(sceneSource).toContain('data-render-mode="r3f-hidden-hand"');
-    expect(runtimeSource).toContain("prototype_layer");
-    expect(browserVerifySource).toContain("__tichuV7Snapshot");
-    expect(browserVerifySource).toContain("apps/web/public/tv7/x/check.mjs");
+  it("locks the fresh alt table to /table/table.png and tv_ed card art", () => {
+    expect(checksSource).toContain('export const FRESH_ALT_TABLE_SRC = "/table/table.png";');
+    expect(checksSource).toContain('export const FRESH_ALT_CARD_BACK_SRC = "/tv_ed/c/back/green.png";');
+    expect(checksSource).not.toContain("/tv14");
+    expect(checksSource).not.toContain("/tv15");
+    expect(checksSource).not.toContain("/tv16");
+    expect(checksSource).not.toContain("/tv17");
+    expect(checksSource).not.toContain("/tv18");
+    expect(checksSource).not.toContain("plate.png");
+  });
+
+  it("keeps the fresh alt table in the fixed 1536x1024 contain-fit coordinate system", () => {
+    expect(tableFitSource).toContain("export const DESIGN_W = 1536;");
+    expect(tableFitSource).toContain("export const DESIGN_H = 1024;");
+    expect(tableFitSource).toContain("Math.min(viewW / DESIGN_W, viewH / DESIGN_H)");
+    expect(freshTableSource).toContain('data-testid="fresh-alt-table"');
+    expect(freshTableSource).toContain('data-alt-table-root="fresh"');
+    expect(freshTableSource).toContain("__freshAltTableSnapshot");
+    expect(freshTableSource).not.toContain("100vh - 250px");
+    expect(freshTableSource).not.toContain("Luxury table live view");
+    expect(freshTableSource).not.toContain("Table base:");
+    expect(freshTableSource).not.toContain("Card back:");
+    expect(freshTableSource).not.toContain("Passing lanes:");
+  });
+
+  it("uses the fresh readable rack math instead of the retired projected side-card variants", () => {
+    expect(freshMathSource).toContain("north_rack");
+    expect(freshMathSource).toContain("side_rack_portrait_fan");
+    expect(freshMathSource).toContain("south_player_fan");
+    expect(freshMathSource).not.toContain("polygon_px");
+    expect(freshMathSource).not.toContain("projected_quad");
+    expect(freshMathSource).not.toContain("quad_projected");
   });
 });

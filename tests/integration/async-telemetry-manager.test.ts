@@ -3,7 +3,6 @@ import fsp from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
-import { spawn } from "node:child_process";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { JsonObject } from "@tichuml/shared";
 import {
@@ -14,9 +13,11 @@ import {
   AsyncTelemetryManager,
   replayPersistedTelemetry
 } from "../../apps/sim-runner/src/telemetry/async-telemetry";
+import { runReplayCli } from "../../apps/sim-runner/src/telemetry/replay";
 import { runSelfPlayBatch } from "../../apps/sim-runner/src/self-play-batch";
 
 const tempRoots: string[] = [];
+const nativeFetch = globalThis.fetch;
 
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -36,63 +37,18 @@ async function createTempDir(): Promise<string> {
   return root;
 }
 
-function runReplayCli(
-  args: string[],
-  timeoutMs: number
-): Promise<{ exitCode: number | null; stdout: string; stderr: string }> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(
-      process.execPath,
-      [
-        path.join(process.cwd(), "node_modules", "tsx", "dist", "cli.mjs"),
-        path.join(
-          process.cwd(),
-          "apps",
-          "sim-runner",
-          "src",
-          "telemetry",
-          "replay.ts"
-        ),
-        ...args
-      ],
-      {
-        cwd: process.cwd(),
-        stdio: ["ignore", "pipe", "pipe"],
-        env: {
-          ...process.env,
-          FORCE_COLOR: "0"
-        }
-      }
-    );
-
-    let stdout = "";
-    let stderr = "";
-    const timeout = setTimeout(() => {
-      child.kill("SIGKILL");
-      reject(
-        new Error(
-          `replay CLI timed out after ${timeoutMs}ms.\nstdout=${stdout}\nstderr=${stderr}`
-        )
-      );
-    }, timeoutMs);
-
-    child.stdout.setEncoding("utf8");
-    child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (chunk) => {
-      stdout += chunk;
-    });
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk;
-    });
-    child.on("error", (error) => {
-      clearTimeout(timeout);
-      reject(error);
-    });
-    child.on("close", (exitCode) => {
-      clearTimeout(timeout);
-      resolve({ exitCode, stdout, stderr });
-    });
+async function invokeReplayCli(args: string[]) {
+  let stdout = "";
+  let stderr = "";
+  const exitCode = await runReplayCli(args, {
+    log: (message?: unknown) => {
+      stdout += `${String(message ?? "")}\n`;
+    },
+    error: (message?: unknown) => {
+      stderr += `${String(message ?? "")}\n`;
+    }
   });
+  return { exitCode, stdout, stderr };
 }
 
 function buildDecisionPayloads() {
@@ -562,9 +518,9 @@ describe("async telemetry pipeline resilience", () => {
         strictTelemetry: false
       });
       await manager.flush(500);
-      vi.unstubAllGlobals();
+      globalThis.fetch = nativeFetch;
 
-      const result = await runReplayCli(["--dir", root], 30_000);
+      const result = await invokeReplayCli(["--dir", root]);
       await new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve()))
       );

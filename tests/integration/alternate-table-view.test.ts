@@ -1,141 +1,478 @@
 // @vitest-environment jsdom
 
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Card } from "@tichuml/engine";
+import type { GameTableViewProps, SeatPlayView, SeatView } from "../../apps/web/src/game-table-views";
+import {
+  DEFAULT_NORMAL_TABLE_LAYOUT,
+  DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS
+} from "../../apps/web/src/game-table-views";
+
+type SnapshotWindow = Window & {
+  __freshAltTableSnapshot?: () => {
+    tableSrc: string;
+    design: { w: number; h: number };
+    oldMathRemoved: boolean;
+    cards: {
+      north: Array<{ renderMode: string; hiddenBottomPx?: number }>;
+      east: Array<{ renderMode: string; rotationDeg: number }>;
+      west: Array<{ renderMode: string; rotationDeg: number }>;
+      south: Array<{ renderMode: string }>;
+    };
+    passing: Array<{ id: string; arrowDirection: string }>;
+    passingVisible: boolean;
+    phase: string;
+  };
+};
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
 
-type FetchJsonResponse = {
-  ok: boolean;
-  status: number;
-  json: () => Promise<unknown>;
-};
+class MockResizeObserver {
+  #callback: ResizeObserverCallback;
 
-type Tv7Snapshot = {
-  assetRoot: string;
-  phase: string;
-  table: {
-    src: string;
-    rendered: {
-      x: number;
-      y: number;
-      width: number;
-      height: number;
-      scale: number;
-    };
-  };
-  cardLayout: {
-    src: string;
-    layoutSource: string;
-    anchors: Array<{
-      id: string;
-      zone: string;
-      screen_bbox: { x: number; y: number; width: number; height: number };
-    }>;
-  };
-  passing: {
-    overlaySrc: string;
-    anchors: Array<{
-      id: string;
-      arrow_direction: string;
-      orientation: string;
-      rotation: number;
-      screen_bbox: { x: number; y: number; width: number; height: number };
-    }>;
-  };
-  cards: {
-    usingImageAssets: boolean;
-    placeholders: boolean;
-    layoutSource: string;
-    bySeat: Record<string, number>;
-    sampleSrcs: string[];
-  };
-  deal: {
-    phase: string;
-    counts: Record<string, number>;
-    history: string[];
-  };
-};
-
-const passPayload = JSON.parse(
-  readFileSync(resolve("apps/web/public/tv7/p/a.json"), "utf8")
-) as {
-  anchors: Array<{
-    id: string;
-    arrow_direction: string;
-    slot_orientation: string;
-    slot_rotation_deg: number;
-    bbox_px: { x: number; y: number; w: number; h: number };
-  }>;
-};
-
-const handPayload = JSON.parse(
-  readFileSync(resolve("apps/web/public/tv7/h/a.json"), "utf8")
-) as {
-  anchors: Array<{
-    id: string;
-    zone: string;
-    slot: number;
-    center_px: { x: number; y: number };
-    bbox_px: { x: number; y: number; w: number; h: number };
-    rotation_deg: number;
-  }>;
-};
-
-const cardMapPayload = JSON.parse(
-  readFileSync(resolve("apps/web/public/tv7/c/map.json"), "utf8")
-) as Record<string, unknown>;
-
-const expectedPassMap = {
-  north_pass_left: { dir: "left", orientation: "landscape", rot: 0 },
-  north_pass_across: { dir: "south", orientation: "portrait", rot: 0 },
-  north_pass_right: { dir: "right", orientation: "landscape", rot: 0 },
-  south_pass_left: { dir: "left", orientation: "landscape", rot: 0 },
-  south_pass_across: { dir: "north", orientation: "portrait", rot: 0 },
-  south_pass_right: { dir: "right", orientation: "landscape", rot: 0 },
-  east_pass_north: { dir: "north", orientation: "portrait", rot: -90 },
-  east_pass_across: { dir: "west", orientation: "landscape", rot: 90 },
-  east_pass_south: { dir: "south", orientation: "portrait", rot: 90 },
-  west_pass_north: { dir: "north", orientation: "portrait", rot: -90 },
-  west_pass_across: { dir: "east", orientation: "landscape", rot: 90 },
-  west_pass_south: { dir: "south", orientation: "portrait", rot: 90 }
-} as const;
-
-class MockImage {
-  onload: null | (() => void) = null;
-  onerror: null | (() => void) = null;
-  naturalWidth = 0;
-  naturalHeight = 0;
-  #src = "";
-
-  get src() {
-    return this.#src;
+  constructor(callback: ResizeObserverCallback) {
+    this.#callback = callback;
   }
 
-  set src(value: string) {
-    this.#src = value;
-    const pathname = new URL(value, "http://localhost").pathname;
-
-    if (pathname === "/tv7/t/plate.png" || pathname === "/tv7/p/o.png") {
-      this.naturalWidth = 1536;
-      this.naturalHeight = 1024;
-      queueMicrotask(() => this.onload?.());
-      return;
-    }
-
-    if (pathname.startsWith("/tv7/c/")) {
-      this.naturalWidth = 240;
-      this.naturalHeight = 390;
-      queueMicrotask(() => this.onload?.());
-      return;
-    }
-
-    queueMicrotask(() => this.onerror?.());
+  observe() {
+    this.#callback(
+      [
+        {
+          contentRect: {
+            width: 1536,
+            height: 1024,
+            top: 0,
+            left: 0,
+            right: 1536,
+            bottom: 1024,
+            x: 0,
+            y: 0,
+            toJSON: () => ({})
+          }
+        } as ResizeObserverEntry
+      ],
+      this as unknown as ResizeObserver
+    );
   }
+
+  disconnect() {}
+
+  unobserve() {}
+}
+
+function standard(id: string, suit: "jade" | "sword" | "pagoda" | "star", rank: number): Card {
+  return {
+    id,
+    kind: "standard",
+    suit,
+    rank: rank as Extract<Card, { kind: "standard" }>["rank"]
+  };
+}
+
+const localHand: Card[] = [
+  standard("star-3", "star", 3),
+  standard("star-5", "star", 5),
+  standard("star-8", "star", 8),
+  standard("sword-J", "sword", 11),
+  standard("sword-Q", "sword", 12),
+  standard("sword-K", "sword", 13),
+  standard("jade-A", "jade", 14),
+  standard("jade-2", "jade", 2),
+  standard("jade-10", "jade", 10),
+  standard("pagoda-K", "pagoda", 13),
+  standard("pagoda-A", "pagoda", 14),
+  { id: "phoenix", kind: "special", special: "phoenix" },
+  { id: "dragon", kind: "special", special: "dragon" },
+  { id: "mahjong", kind: "special", special: "mahjong" }
+];
+
+function makeRemoteHand(prefix: string): Card[] {
+  return Array.from({ length: 14 }, (_, index) =>
+    standard(`${prefix}-${index + 2}`, "jade", ((index % 13) + 2) as number)
+  );
+}
+
+function makeSeatViews(): SeatView[] {
+  return [
+    {
+      seat: "seat-0",
+      position: "bottom",
+      title: "South",
+      relation: "You",
+      handCount: localHand.length,
+      cards: localHand,
+      callState: {
+        grandTichu: false,
+        smallTichu: false,
+        hasPlayedFirstCard: false
+      },
+      passReady: false,
+      finishIndex: -1,
+      isLocalSeat: true,
+      isPrimarySeat: true,
+      isThinkingSeat: false
+    },
+    {
+      seat: "seat-1",
+      position: "right",
+      title: "East",
+      relation: "Opponent",
+      handCount: 14,
+      cards: makeRemoteHand("east"),
+      callState: {
+        grandTichu: false,
+        smallTichu: false,
+        hasPlayedFirstCard: false
+      },
+      passReady: false,
+      finishIndex: -1,
+      isLocalSeat: false,
+      isPrimarySeat: false,
+      isThinkingSeat: false
+    },
+    {
+      seat: "seat-2",
+      position: "top",
+      title: "North",
+      relation: "Partner",
+      handCount: 14,
+      cards: makeRemoteHand("north"),
+      callState: {
+        grandTichu: false,
+        smallTichu: false,
+        hasPlayedFirstCard: false
+      },
+      passReady: false,
+      finishIndex: -1,
+      isLocalSeat: false,
+      isPrimarySeat: false,
+      isThinkingSeat: false
+    },
+    {
+      seat: "seat-3",
+      position: "left",
+      title: "West",
+      relation: "Opponent",
+      handCount: 14,
+      cards: makeRemoteHand("west"),
+      callState: {
+        grandTichu: false,
+        smallTichu: false,
+        hasPlayedFirstCard: false
+      },
+      passReady: false,
+      finishIndex: -1,
+      isLocalSeat: false,
+      isPrimarySeat: false,
+      isThinkingSeat: false
+    }
+  ];
+}
+
+function makePassRoutes(phase: "pass_select" | "trick_play"): GameTableViewProps["passRouteViews"] {
+  const localIds = [localHand[0]!.id, localHand[1]!.id, localHand[2]!.id];
+
+  return [
+    {
+      key: "north-left",
+      sourceSeat: "seat-2",
+      sourcePosition: "top",
+      target: "left",
+      targetSeat: "seat-3",
+      displayMode: "passing",
+      occupied: phase === "pass_select",
+      visibleCardId: null,
+      faceDown: true,
+      interactive: false
+    },
+    {
+      key: "north-partner",
+      sourceSeat: "seat-2",
+      sourcePosition: "top",
+      target: "partner",
+      targetSeat: "seat-0",
+      displayMode: "passing",
+      occupied: phase === "pass_select",
+      visibleCardId: null,
+      faceDown: true,
+      interactive: false
+    },
+    {
+      key: "north-right",
+      sourceSeat: "seat-2",
+      sourcePosition: "top",
+      target: "right",
+      targetSeat: "seat-1",
+      displayMode: "passing",
+      occupied: phase === "pass_select",
+      visibleCardId: null,
+      faceDown: true,
+      interactive: false
+    },
+    {
+      key: "east-left",
+      sourceSeat: "seat-1",
+      sourcePosition: "right",
+      target: "left",
+      targetSeat: "seat-2",
+      displayMode: "passing",
+      occupied: phase === "pass_select",
+      visibleCardId: null,
+      faceDown: true,
+      interactive: false
+    },
+    {
+      key: "east-partner",
+      sourceSeat: "seat-1",
+      sourcePosition: "right",
+      target: "partner",
+      targetSeat: "seat-3",
+      displayMode: "passing",
+      occupied: phase === "pass_select",
+      visibleCardId: null,
+      faceDown: true,
+      interactive: false
+    },
+    {
+      key: "east-right",
+      sourceSeat: "seat-1",
+      sourcePosition: "right",
+      target: "right",
+      targetSeat: "seat-0",
+      displayMode: "passing",
+      occupied: phase === "pass_select",
+      visibleCardId: null,
+      faceDown: true,
+      interactive: false
+    },
+    {
+      key: "south-left",
+      sourceSeat: "seat-0",
+      sourcePosition: "bottom",
+      target: "left",
+      targetSeat: "seat-1",
+      displayMode: "passing",
+      occupied: phase === "pass_select",
+      visibleCardId: phase === "pass_select" ? localIds[0]! : null,
+      faceDown: false,
+      interactive: phase === "pass_select"
+    },
+    {
+      key: "south-partner",
+      sourceSeat: "seat-0",
+      sourcePosition: "bottom",
+      target: "partner",
+      targetSeat: "seat-2",
+      displayMode: "passing",
+      occupied: phase === "pass_select",
+      visibleCardId: phase === "pass_select" ? localIds[1]! : null,
+      faceDown: false,
+      interactive: phase === "pass_select"
+    },
+    {
+      key: "south-right",
+      sourceSeat: "seat-0",
+      sourcePosition: "bottom",
+      target: "right",
+      targetSeat: "seat-3",
+      displayMode: "passing",
+      occupied: phase === "pass_select",
+      visibleCardId: phase === "pass_select" ? localIds[2]! : null,
+      faceDown: false,
+      interactive: phase === "pass_select"
+    },
+    {
+      key: "west-left",
+      sourceSeat: "seat-3",
+      sourcePosition: "left",
+      target: "left",
+      targetSeat: "seat-0",
+      displayMode: "passing",
+      occupied: phase === "pass_select",
+      visibleCardId: null,
+      faceDown: true,
+      interactive: false
+    },
+    {
+      key: "west-partner",
+      sourceSeat: "seat-3",
+      sourcePosition: "left",
+      target: "partner",
+      targetSeat: "seat-1",
+      displayMode: "passing",
+      occupied: phase === "pass_select",
+      visibleCardId: null,
+      faceDown: true,
+      interactive: false
+    },
+    {
+      key: "west-right",
+      sourceSeat: "seat-3",
+      sourcePosition: "left",
+      target: "right",
+      targetSeat: "seat-2",
+      displayMode: "passing",
+      occupied: phase === "pass_select",
+      visibleCardId: null,
+      faceDown: true,
+      interactive: false
+    }
+  ];
+}
+
+function makeSeatRelativePlays(): SeatPlayView[] {
+  return [
+    {
+      seat: "seat-0",
+      position: "bottom",
+      label: "South",
+      plays: []
+    },
+    {
+      seat: "seat-1",
+      position: "right",
+      label: "East",
+      plays: []
+    },
+    {
+      seat: "seat-2",
+      position: "top",
+      label: "North",
+      plays: [
+        {
+          type: "play",
+          seat: "seat-2",
+          combination: {
+            kind: "single",
+            key: "north-single",
+            cardIds: ["jade-9"],
+            cardCount: 1,
+            isBomb: false
+          }
+        }
+      ]
+    },
+    {
+      seat: "seat-3",
+      position: "left",
+      label: "West",
+      plays: []
+    }
+  ];
+}
+
+function makeViewProps(phase: "pass_select" | "trick_play"): GameTableViewProps {
+  const cardLookup = new Map<string, Card>();
+  [...localHand, ...makeRemoteHand("east"), ...makeRemoteHand("north"), ...makeRemoteHand("west"), standard("jade-9", "jade", 9)].forEach(
+    (card) => cardLookup.set(card.id, card)
+  );
+
+  return {
+    roundSeed: "fresh-alt-test",
+    decisionCount: 0,
+    state: {
+      phase,
+      matchHistory: [],
+      passSelections: {
+        "seat-0": {
+          left: localHand[0]!.id,
+          partner: localHand[1]!.id,
+          right: localHand[2]!.id
+        }
+      },
+      revealedPasses: {}
+    } as unknown as GameTableViewProps["state"],
+    derived: {
+      matchScore: {
+        "team-0": 0,
+        "team-1": 0
+      }
+    } as unknown as GameTableViewProps["derived"],
+    controlHint: phase === "pass_select" ? "Choose three pass lanes." : "North leads the trick.",
+    seatViews: makeSeatViews(),
+    seatRelativePlays: phase === "trick_play" ? makeSeatRelativePlays() : makeSeatRelativePlays().map((entry) => ({ ...entry, plays: [] })),
+    displayedTrick: phase === "trick_play" ? ({ currentWinner: "seat-2" } as GameTableViewProps["displayedTrick"]) : null,
+    trickIsResolving: false,
+    pickupStageViews: [],
+    dogLeadAnimation: null,
+    tablePassGroups: [],
+    passRouteViews: makePassRoutes(phase),
+    passLaneViews: [],
+    sortedLocalHand: localHand,
+    localCanInteract: true,
+    localPassInteractionEnabled: true,
+    localLegalCardIds: new Set(localHand.map((card) => card.id)),
+    selectedCardIds: [],
+    selectedPassTarget: "left",
+    passSelectionReady: false,
+    matchingPlayActions: [],
+    activePlayVariant: null,
+    resolvedWishRank: null,
+    wishDialogOpen: false,
+    wishSelectionOptions: [],
+    wishConfirmDisabled: true,
+    wishSubmissionPending: false,
+    normalActionRail: [
+      {
+        id: phase === "pass_select" ? "exchange" : "play",
+        label: phase === "pass_select" ? "Exchange" : "Play",
+        enabled: true,
+        tone: "primary"
+      }
+    ],
+    sortMode: "rank",
+    autoplayLocal: false,
+    lastAiDecision: null,
+    recentEvents: [],
+    localActionSummary: [],
+    localSummaryText: "",
+    canContinueAi: false,
+    localDragonRecipients: [],
+    uiMode: "normal",
+    normalTableLayout: DEFAULT_NORMAL_TABLE_LAYOUT,
+    normalTableLayoutTokens: DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS,
+    layoutEditorActive: false,
+    mainMenuOpen: false,
+    activeDialog: null,
+    latestEntropyDebug: null,
+    backendSettings: {} as GameTableViewProps["backendSettings"],
+    backendStatus: {} as GameTableViewProps["backendStatus"],
+    masterControlSnapshot: {} as GameTableViewProps["masterControlSnapshot"],
+    hotkeyDefinitions: [],
+    cardLookup,
+    playerTableVariant: "alternate",
+    onAutoplayChange: vi.fn(),
+    onContinueAi: vi.fn(),
+    onSortModeChange: vi.fn(),
+    onLocalCardClick: vi.fn(),
+    onPassTargetSelect: vi.fn(),
+    onPassLaneDrop: vi.fn(),
+    onPassLaneCardClick: vi.fn(),
+    onPassLaneCardDragStart: vi.fn(),
+    onPassLaneCardDragEnd: vi.fn(),
+    onVariantSelect: vi.fn(),
+    onWishRankSelect: vi.fn(),
+    onWishConfirm: vi.fn(),
+    onWishCancel: vi.fn(),
+    onDragonRecipientSelect: vi.fn(),
+    onNormalAction: vi.fn(),
+    onClearLocalSelection: vi.fn(),
+    onPlayerTableVariantChange: vi.fn(),
+    onNormalTableLayoutChange: vi.fn(),
+    onNormalTableLayoutImport: vi.fn(),
+    onExportNormalTableLayout: vi.fn(),
+    onBackendSettingsChange: vi.fn(),
+    onTestBackend: vi.fn(),
+    onTestMl: vi.fn(),
+    onToggleDashboardVerboseMode: vi.fn(),
+    onToggleDashboardRawJson: vi.fn(),
+    onToggleFrozenSnapshot: vi.fn(),
+    onUiCommand: vi.fn(),
+    onMainMenuOpenChange: vi.fn()
+  };
 }
 
 function render(element: ReactElement) {
@@ -158,341 +495,103 @@ function render(element: ReactElement) {
   };
 }
 
-async function flushUi() {
-  await act(async () => {
-    await Promise.resolve();
-  });
-}
-
-async function advance(ms: number) {
-  await act(async () => {
-    await vi.advanceTimersByTimeAsync(ms);
-  });
-  await flushUi();
-}
-
-async function clickElement(element: HTMLButtonElement | null | undefined) {
-  await act(async () => {
-    element?.click();
-  });
-}
-
-function queryByText(container: ParentNode, text: string) {
-  return Array.from(container.querySelectorAll("*")).find(
-    (node) => node.textContent?.trim() === text
-  );
-}
-
 beforeEach(() => {
-  vi.useFakeTimers();
-  Object.defineProperty(window, "innerWidth", {
-    configurable: true,
-    value: 1536
-  });
-  Object.defineProperty(window, "innerHeight", {
-    configurable: true,
-    value: 1024
-  });
-  Object.defineProperty(window, "__tichuV7Snapshot", {
+  vi.stubGlobal("ResizeObserver", MockResizeObserver);
+  Object.defineProperty(window, "__freshAltTableSnapshot", {
     configurable: true,
     writable: true,
     value: null
   });
-  vi.stubGlobal("Image", MockImage);
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (input: string | URL): Promise<FetchJsonResponse> => {
-      const pathname = new URL(String(input), "http://localhost").pathname;
-      if (pathname === "/tv7/p/a.json") {
-        return {
-          ok: true,
-          status: 200,
-          json: async () => passPayload
-        };
-      }
-
-      if (pathname === "/tv7/h/a.json") {
-        return {
-          ok: true,
-          status: 200,
-          json: async () => handPayload
-        };
-      }
-
-      if (pathname === "/tv7/c/map.json") {
-        return {
-          ok: true,
-          status: 200,
-          json: async () => cardMapPayload
-        };
-      }
-
-      return {
-        ok: false,
-        status: 404,
-        json: async () => ({})
-      };
-    })
-  );
 });
 
 afterEach(() => {
-  vi.useRealTimers();
   vi.unstubAllGlobals();
-  vi.resetModules();
   document.body.innerHTML = "";
 });
 
 describe("AltTable3DRoute", () => {
-  it("renders the tv7 table flow with authored card anchors, dynamic pass targets, and a runtime snapshot", async () => {
+  it("renders the fresh passing layout against /table/table.png with readable rack fans", async () => {
     const { AltTable3DRoute } = await import(
       "../../apps/web/src/alt-table-3d/AltTable3DRoute"
     );
-    const view = render(createElement(AltTable3DRoute, {}));
+    const view = render(createElement(AltTable3DRoute, makeViewProps("pass_select")));
 
-    await flushUi();
-
-    const tableImage = view.container.querySelector(
-      "img[data-table-layer='plate']"
+    const base = view.container.querySelector(
+      "img[data-testid='fresh-alt-table-base']"
     ) as HTMLImageElement | null;
-    expect(tableImage).not.toBeNull();
-    expect(tableImage?.getAttribute("src")).toBe("/tv7/t/plate.png");
+    expect(base?.getAttribute("src")).toBe("/table/table.png");
 
-    expect(queryByText(view.container, "ready")).toBeTruthy();
-    expect(view.container.querySelectorAll("[data-zone='south_hand']")).toHaveLength(0);
-    expect(view.container.querySelectorAll("[data-zone='north_hand']")).toHaveLength(0);
-
-    await advance(250);
-    expect(queryByText(view.container, "deal8")).toBeTruthy();
-    expect(view.container.querySelectorAll("[data-zone='north_hand']")).toHaveLength(8);
-    expect(view.container.querySelectorAll("[data-zone='east_hand']")).toHaveLength(8);
-    expect(view.container.querySelectorAll("[data-zone='south_hand']")).toHaveLength(8);
-    expect(view.container.querySelectorAll("[data-zone='west_hand']")).toHaveLength(8);
-    expect(
-      view.container.querySelectorAll("[data-render-mode='r3f-hidden-hand']")
-    ).toHaveLength(24);
-
-    const southDeal8Cards = Array.from(
-      view.container.querySelectorAll("[data-zone='south_hand'][data-card-id]")
-    ) as HTMLElement[];
-    expect(
-      southDeal8Cards.every(
-        (card) => card.getAttribute("data-layout-source") === "prototype_layer"
-      )
-    ).toBe(true);
-    expect(view.container.querySelector("[data-seat-hand='south']")).toBeNull();
-
-    await advance(1200);
-    expect(queryByText(view.container, "grand_tichu")).toBeTruthy();
-
-    const skipGtButton = view.container.querySelector(
-      "button[data-alt-action='skip-gt']"
-    ) as HTMLButtonElement | null;
-    expect(skipGtButton).not.toBeNull();
-    await clickElement(skipGtButton);
-
-    await flushUi();
-    expect(queryByText(view.container, "deal6")).toBeTruthy();
-
-    await advance(1200);
-    expect(queryByText(view.container, "passing")).toBeTruthy();
-    expect(view.container.querySelector("img[data-table-layer='passing-overlay']")).not.toBeNull();
-    expect(view.container.querySelectorAll("[data-zone='north_hand']")).toHaveLength(14);
-    expect(view.container.querySelectorAll("[data-zone='east_hand']")).toHaveLength(14);
-    expect(view.container.querySelectorAll("[data-zone='south_hand']")).toHaveLength(14);
-    expect(view.container.querySelectorAll("[data-zone='west_hand']")).toHaveLength(14);
-    const southAnchors = handPayload.anchors
-      .filter((anchor) => anchor.zone === "south_hand")
-      .sort((left, right) => left.slot - right.slot);
-    const southCards = Array.from(
-      view.container.querySelectorAll("[data-zone='south_hand'][data-card-id]")
-    ) as HTMLElement[];
-    expect(southCards).toHaveLength(14);
-    expect(southCards[0]?.style.left).toBe(`${southAnchors[0]?.center_px.x}px`);
-    expect(southCards[0]?.style.top).toBe(`${southAnchors[0]?.center_px.y}px`);
-    expect(Number.parseFloat(southCards[0]?.style.width ?? "0")).toBeLessThan(
-      southAnchors[0]?.w_px ?? 0
+    const allSources = Array.from(view.container.querySelectorAll("img")).map((img) =>
+      img.getAttribute("src")
     );
-    expect(Number.parseFloat(southCards[0]?.style.height ?? "0")).toBeLessThan(
-      southAnchors[0]?.h_px ?? 0
-    );
-    expect(southCards[0]?.style.transform).toContain(
-      `rotate(${southAnchors[0]?.rotation_deg}deg)`
-    );
-    expect(southCards.at(-1)?.style.left).toBe(
-      `${southAnchors[southAnchors.length - 1]?.center_px.x}px`
-    );
-    expect(southCards.at(-1)?.style.top).toBe(
-      `${southAnchors[southAnchors.length - 1]?.center_px.y}px`
-    );
-    expect(southCards.at(-1)?.style.transform).toContain(
-      `rotate(${southAnchors[southAnchors.length - 1]?.rotation_deg}deg)`
-    );
-    expect(
-      view.container.querySelectorAll("[data-render-mode='r3f-hidden-hand']")
-    ).toHaveLength(42);
-    expect(
-      view.container.querySelectorAll("[data-zone='north_hand'][data-render-mode='r3f-hidden-hand']")
-    ).toHaveLength(14);
-    expect(
-      view.container.querySelectorAll("[data-zone='east_hand'][data-render-mode='r3f-hidden-hand']")
-    ).toHaveLength(14);
-    expect(
-      view.container.querySelectorAll("[data-zone='west_hand'][data-render-mode='r3f-hidden-hand']")
-    ).toHaveLength(14);
-    expect(
-      view.container.querySelectorAll("[data-zone='north_hand'] img")
-    ).toHaveLength(0);
-    expect(
-      view.container.querySelectorAll("[data-zone='east_hand'] img")
-    ).toHaveLength(0);
-    expect(
-      view.container.querySelectorAll("[data-zone='west_hand'] img")
-    ).toHaveLength(0);
-    expect(
-      view.container.querySelector(
-        "[data-zone='east_hand'][data-render-mode='r3f-hidden-hand'][data-facing-seat='east']"
-      )
-    ).toBeTruthy();
-    expect(
-      view.container.querySelector(
-        "[data-zone='west_hand'][data-render-mode='r3f-hidden-hand'][data-facing-seat='west']"
-      )
-    ).toBeTruthy();
-    expect(
-      view.container.querySelector(
-        "[data-zone='north_hand'][data-render-mode='r3f-hidden-hand'][data-facing-seat='north']"
-      )
-    ).toBeTruthy();
+    expect(allSources).not.toContain("/tv_ed/t/plate.png");
+    expect(allSources.every((src) => !/(tv14|tv15|tv16|tv17|tv18|plate\.png)/.test(src ?? ""))).toBe(true);
 
-    const allCardImages = Array.from(
-      view.container.querySelectorAll("[data-card-id] img")
-    ) as HTMLImageElement[];
-    expect(allCardImages.length).toBeGreaterThan(0);
-    expect(
-      allCardImages.every((image) => image.getAttribute("src")?.startsWith("/tv7/c/"))
-    ).toBe(true);
-
-    const passTargets = Array.from(
-      view.container.querySelectorAll("[data-pass-id][data-arrow-direction]")
-    ) as HTMLElement[];
-    expect(passTargets).toHaveLength(12);
-
-    for (const target of passTargets) {
-      const passId = target.dataset.passId as keyof typeof expectedPassMap;
-      const expected = expectedPassMap[passId];
-      expect(expected).toBeTruthy();
-      expect(target.dataset.arrowDirection).toBe(expected.dir);
-      expect(target.dataset.orientation).toBe(expected.orientation);
-      expect(Number(target.dataset.rotation)).toBe(expected.rot);
-    }
-
-    const eastAcross = view.container.querySelector(
-      "[data-pass-id='east_pass_across'][data-arrow-direction]"
-    ) as HTMLElement | null;
-    const eastNorth = view.container.querySelector(
-      "[data-pass-id='east_pass_north'][data-arrow-direction]"
-    ) as HTMLElement | null;
-    const westAcross = view.container.querySelector(
-      "[data-pass-id='west_pass_across'][data-arrow-direction]"
-    ) as HTMLElement | null;
-    const westSouth = view.container.querySelector(
-      "[data-pass-id='west_pass_south'][data-arrow-direction]"
-    ) as HTMLElement | null;
-    expect(Number(eastAcross?.dataset.rotation)).toBe(90);
-    expect(Number(westAcross?.dataset.rotation)).toBe(90);
-    expect(Number(eastNorth?.dataset.rotation)).toBe(-90);
-    expect(Number(westSouth?.dataset.rotation)).toBe(90);
-
-    const confirmPassButton = view.container.querySelector(
-      "button[data-alt-action='confirm-pass']"
-    ) as HTMLButtonElement | null;
-    expect(confirmPassButton?.disabled).toBe(true);
-
-    const southHandButtons = Array.from(
-      view.container.querySelectorAll("[data-zone='south_hand'][data-card-id]")
-    ) as HTMLButtonElement[];
-    await clickElement(southHandButtons[0]);
-    await clickElement(southHandButtons[1]);
-    await clickElement(southHandButtons[2]);
-    await flushUi();
-
-    const southTargets = [
-      view.container.querySelector("[data-pass-id='south_pass_left'][data-arrow-direction]"),
-      view.container.querySelector("[data-pass-id='south_pass_across'][data-arrow-direction]"),
-      view.container.querySelector("[data-pass-id='south_pass_right'][data-arrow-direction]")
-    ] as HTMLButtonElement[];
-    await clickElement(southTargets[0]);
-    await clickElement(southTargets[1]);
-    await clickElement(southTargets[2]);
-    await flushUi();
-
-    expect(confirmPassButton?.disabled).toBe(false);
     expect(
       view.container.querySelectorAll(
-        "[data-pass-id^='south_pass_'] [data-pass-card-img='true']"
+        "[data-seat='east'][data-render-mode='side_rack_portrait_fan']"
       )
-    ).toHaveLength(3);
-
-    const autoDemoButton = view.container.querySelector(
-      "button[data-alt-action='auto-demo-pass']"
-    ) as HTMLButtonElement | null;
-    expect(autoDemoButton).not.toBeNull();
-    await clickElement(autoDemoButton);
-    await flushUi();
-
+    ).toHaveLength(14);
     expect(
-      view.container.querySelectorAll("[data-pass-id] [data-pass-card-img='true']")
+      view.container.querySelectorAll(
+        "[data-seat='west'][data-render-mode='side_rack_portrait_fan']"
+      )
+    ).toHaveLength(14);
+    expect(
+      view.container.querySelectorAll(
+        "[data-seat='north'][data-render-mode='north_rack']"
+      )
+    ).toHaveLength(14);
+    expect(
+      view.container.querySelectorAll("[data-pass-id][data-arrow-direction]")
     ).toHaveLength(12);
 
-    const snapshotFactory = (window as typeof window & {
-      __tichuV7Snapshot?: () => Tv7Snapshot;
-    }).__tichuV7Snapshot;
-    expect(typeof snapshotFactory).toBe("function");
+    expect(view.container.textContent).not.toContain("Passing Lanes (12)");
+    expect(view.container.textContent).not.toContain("Anchor Rules");
+    expect(view.container.textContent).not.toContain("Trick Anchor Preview");
+    expect(view.container.textContent).not.toContain("Luxury table live view");
+    expect(view.container.textContent).not.toContain("Table base:");
+    expect(view.container.textContent).not.toContain("Card back:");
+    expect(view.container.textContent).not.toContain("Passing lanes:");
+    expect(view.container.textContent).not.toContain("Incoming:");
 
-    const snapshot = snapshotFactory?.();
-    expect(snapshot?.assetRoot).toBe("/tv7");
-    expect(snapshot?.table.src).toBe("/tv7/t/plate.png");
-    expect(snapshot?.cardLayout.src).toBe("/tv7/h/a.json");
-    expect(snapshot?.cardLayout.layoutSource).toBe("prototype_layer");
-    expect(snapshot?.passing.overlaySrc).toBe("/tv7/p/o.png");
-    expect(snapshot?.phase).toBe("passing");
-    expect(snapshot?.cards.usingImageAssets).toBe(true);
-    expect(snapshot?.cards.placeholders).toBe(false);
-    expect(snapshot?.deal.counts.north).toBe(14);
-    expect(snapshot?.deal.counts.east).toBe(14);
-    expect(snapshot?.deal.counts.south).toBe(14);
-    expect(snapshot?.deal.counts.west).toBe(14);
-    expect(snapshot?.deal.counts.deckRemaining).toBe(0);
-    expect(snapshot?.passing.anchors).toHaveLength(12);
-    expect(snapshot?.cardLayout.anchors).toHaveLength(58);
-    expect(snapshot?.cards.sampleSrcs.every((src) => src.startsWith("/tv7/c/"))).toBe(
-      true
-    );
+    const snapshot = (window as SnapshotWindow).__freshAltTableSnapshot?.();
+    expect(snapshot?.tableSrc).toBe("/table/table.png");
+    expect(snapshot?.design).toEqual({ w: 1536, h: 1024 });
+    expect(snapshot?.oldMathRemoved).toBe(true);
+    expect(snapshot?.passingVisible).toBe(true);
+    expect(snapshot?.phase).toBe("pass_select");
+    expect(snapshot?.passing).toHaveLength(12);
+    expect(
+      snapshot?.cards.east.every(
+        (anchor) =>
+          anchor.renderMode === "side_rack_portrait_fan" &&
+          anchor.rotationDeg <= -10 &&
+          anchor.rotationDeg >= -18
+      )
+    ).toBe(true);
+    expect(
+      snapshot?.cards.north.every((anchor) => (anchor.hiddenBottomPx ?? 0) <= 24)
+    ).toBe(true);
 
-    const snapshotPass = snapshot?.passing.anchors.find(
-      (anchor) => anchor.id === "east_pass_across"
-    );
-    expect(snapshotPass?.arrow_direction).toBe("west");
-    expect(snapshotPass?.orientation).toBe("landscape");
-    expect(snapshotPass?.rotation).toBe(90);
-    expect(snapshotPass?.screen_bbox.x).toBeCloseTo(
-      passPayload.anchors.find((anchor) => anchor.id === "east_pass_across")?.bbox_px.x ?? 0,
-      0
-    );
+    view.unmount();
+  });
 
-    const snapshotCard = snapshot?.cardLayout.anchors.find(
-      (anchor) => anchor.id === "south_01"
+  it("hides the passing overlay outside the exchange phases while keeping the fresh table active", async () => {
+    const { AltTable3DRoute } = await import(
+      "../../apps/web/src/alt-table-3d/AltTable3DRoute"
     );
-    expect(snapshotCard?.screen_bbox.width).toBeCloseTo(
-      handPayload.anchors.find((anchor) => anchor.id === "south_01")?.bbox_px.w ?? 0,
-      0
-    );
+    const view = render(createElement(AltTable3DRoute, makeViewProps("trick_play")));
 
-    await clickElement(confirmPassButton);
-    await flushUi();
-    expect(queryByText(view.container, "passed")).toBeTruthy();
-    expect(view.container.querySelector("img[data-table-layer='passing-overlay']")).toBeNull();
+    expect(
+      view.container.querySelectorAll("[data-pass-id][data-arrow-direction]")
+    ).toHaveLength(0);
+    expect(view.container.querySelectorAll("img[src='/table/table.png']")).toHaveLength(1);
+    expect(view.container.querySelectorAll("img[src='/tv_ed/c/std/jd_9.png']")).toHaveLength(1);
+
+    const snapshot = (window as SnapshotWindow).__freshAltTableSnapshot?.();
+    expect(snapshot?.passingVisible).toBe(false);
+    expect(snapshot?.phase).toBe("trick_play");
 
     view.unmount();
   });

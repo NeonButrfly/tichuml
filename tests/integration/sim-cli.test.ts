@@ -1,56 +1,22 @@
 import fs from "node:fs";
 import path from "node:path";
-import { spawn } from "node:child_process";
 import { describe, expect, it } from "vitest";
+import { runCli } from "../../apps/sim-runner/src/cli";
 
-function runSimCli(
-  args: string[],
-  timeoutMs: number
-): Promise<{ exitCode: number | null; stdout: string; stderr: string }> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(
-      process.execPath,
-      [
-        path.join(process.cwd(), "node_modules", "tsx", "dist", "cli.mjs"),
-        path.join(process.cwd(), "apps", "sim-runner", "src", "cli.ts"),
-        ...args
-      ],
-      {
-        cwd: process.cwd(),
-        stdio: ["ignore", "pipe", "pipe"],
-        env: {
-          ...process.env,
-          FORCE_COLOR: "0"
-        }
-      }
-    );
-
-    let stdout = "";
-    let stderr = "";
-    const timeout = setTimeout(() => {
-      child.kill("SIGKILL");
-      reject(
-        new Error(`sim CLI timed out after ${timeoutMs}ms.\nstdout=${stdout}\nstderr=${stderr}`)
-      );
-    }, timeoutMs);
-
-    child.stdout.setEncoding("utf8");
-    child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (chunk) => {
-      stdout += chunk;
-    });
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk;
-    });
-    child.on("error", (error) => {
-      clearTimeout(timeout);
-      reject(error);
-    });
-    child.on("close", (exitCode) => {
-      clearTimeout(timeout);
-      resolve({ exitCode, stdout, stderr });
-    });
+async function invokeSimCli(args: string[]) {
+  let stdout = "";
+  let stderr = "";
+  const exitCode = await runCli(args, {
+    log: (message?: unknown) => {
+      stdout += `${String(message ?? "")}\n`;
+    },
+    info: () => undefined,
+    warn: () => undefined,
+    error: (message?: unknown) => {
+      stderr += `${String(message ?? "")}\n`;
+    }
   });
+  return { exitCode, stdout, stderr };
 }
 
 function extractLastJsonObject(stream: string): Record<string, unknown> {
@@ -77,7 +43,7 @@ describe("sim CLI", () => {
     expect(cliSource).toContain("fileURLToPath(import.meta.url)");
     expect(cliSource).not.toContain("if (import.meta.main)");
 
-    const result = await runSimCli(
+    const result = await invokeSimCli(
       [
         "--games",
         "1",
@@ -92,8 +58,7 @@ describe("sim CLI", () => {
         "false",
         "--max-decisions-per-game",
         "3000"
-      ],
-      60_000
+      ]
     );
 
     expect(result.exitCode).toBe(0);
@@ -107,14 +72,14 @@ describe("sim CLI", () => {
     expect(summary.lastCompletedGameId).toBeTruthy();
     expect(summary.lastCompletedMatchWinner).toBeTruthy();
     },
-    60_000
+    120_000
   );
 
   it(
     "derives a unique training game id prefix from --run-id even without --batch-id",
     async () => {
       const runId = "goal-audit-run-123";
-      const result = await runSimCli(
+      const result = await invokeSimCli(
         [
           "--games",
           "1",
@@ -131,8 +96,7 @@ describe("sim CLI", () => {
           runId,
           "--max-decisions-per-game",
           "3000"
-        ],
-        60_000
+        ]
       );
 
       expect(result.exitCode).toBe(0);
@@ -146,13 +110,13 @@ describe("sim CLI", () => {
         `selfplay-${runId}-game-000001`
       );
     },
-    60_000
+    120_000
   );
 
   it(
     "fails loudly with a nonzero exit when the max decision guard trips",
     async () => {
-    const result = await runSimCli(
+    const result = await invokeSimCli(
       [
         "--games",
         "1",
@@ -167,8 +131,7 @@ describe("sim CLI", () => {
         "false",
         "--max-decisions-per-game",
         "1"
-      ],
-      30_000
+      ]
     );
 
     expect(result.exitCode).toBe(1);

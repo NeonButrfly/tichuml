@@ -364,14 +364,6 @@ async function commandText(
   return result.ok ? result.stdout : null;
 }
 
-function readJsonFile<T>(filePath: string): T | null {
-  try {
-    return JSON.parse(fs.readFileSync(filePath, "utf8")) as T;
-  } catch {
-    return null;
-  }
-}
-
 function tailFile(filePath: string, limit: number): string[] {
   if (!fs.existsSync(filePath)) {
     return [];

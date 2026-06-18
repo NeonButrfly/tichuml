@@ -258,8 +258,6 @@ export type DiagnosticsAccumulator = {
   };
 };
 
-type DiagnosticsEventPayload = Record<string, unknown>;
-
 function roundNumber(value: number, digits = 4): number {
   if (!Number.isFinite(value)) {
     return 0;
@@ -392,6 +390,7 @@ function createEmptyBatchSummary(): SelfPlayBatchSummary {
     telemetryFailureByKind: {},
     telemetryBackoffUntil: null,
     telemetryRuntime: null,
+    lightgbmDiagnostics: null,
     averageLatencyByProvider: {}
   };
 }
@@ -432,6 +431,37 @@ function mergeBatchSummary(
   mergeCounts(target.decisionsByPhase, source.decisionsByPhase);
   mergeCounts(target.eventsByPhase, source.eventsByPhase);
   mergeCounts(target.providerUsage, source.providerUsage);
+  if (source.lightgbmDiagnostics !== null) {
+    target.lightgbmDiagnostics ??= {
+      requestedDecisions: 0,
+      completedByLightgbm: 0,
+      delegatedToServerHeuristic: 0,
+      localFallbackDecisions: 0,
+      delegatedByReason: {},
+      rerankSkippedByReason: {},
+      smallBranchLegalActionCount: {}
+    };
+    target.lightgbmDiagnostics.requestedDecisions +=
+      source.lightgbmDiagnostics.requestedDecisions;
+    target.lightgbmDiagnostics.completedByLightgbm +=
+      source.lightgbmDiagnostics.completedByLightgbm;
+    target.lightgbmDiagnostics.delegatedToServerHeuristic +=
+      source.lightgbmDiagnostics.delegatedToServerHeuristic;
+    target.lightgbmDiagnostics.localFallbackDecisions +=
+      source.lightgbmDiagnostics.localFallbackDecisions;
+    mergeCounts(
+      target.lightgbmDiagnostics.delegatedByReason,
+      source.lightgbmDiagnostics.delegatedByReason
+    );
+    mergeCounts(
+      target.lightgbmDiagnostics.rerankSkippedByReason,
+      source.lightgbmDiagnostics.rerankSkippedByReason
+    );
+    mergeCounts(
+      target.lightgbmDiagnostics.smallBranchLegalActionCount,
+      source.lightgbmDiagnostics.smallBranchLegalActionCount
+    );
+  }
   mergeCounts(target.winCountsByTeam, source.winCountsByTeam);
   mergeCounts(target.totalScoreByTeam, source.totalScoreByTeam);
   mergeCounts(

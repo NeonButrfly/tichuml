@@ -13,6 +13,7 @@ import {
   type SeatId
 } from "@tichuml/engine";
 import {
+  getSharedBackendAgent,
   resolveAutomatedContinuationActor,
 } from "../../apps/sim-runner/src/self-play-batch";
 
@@ -200,6 +201,14 @@ describe("self-play continuation", () => {
       state: afterPass.nextState
     });
     expect(continuation.ok).toBe(true);
+  });
+
+  it("reuses a shared keep-alive agent for backend requests", () => {
+    const first = getSharedBackendAgent("http:");
+    const second = getSharedBackendAgent("http:");
+
+    expect(second).toBe(first);
+    expect(first.options.keepAlive).toBe(true);
   });
 
   it("auto-resolves dragon gift for AI continuation", () => {

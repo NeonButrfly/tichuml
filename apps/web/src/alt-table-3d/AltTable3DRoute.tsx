@@ -1,10 +1,6 @@
-import "./alt-table-3d.css";
-import { AltTichuTable3D } from "./AltTichuTable3D";
+import type { GameTableViewProps } from "../game-table-views";
+import { FreshAltTable } from "../altTableFresh/FreshAltTable";
 
-export function AltTable3DRoute() {
-  return (
-    <main className="alt-table-3d-route">
-      <AltTichuTable3D />
-    </main>
-  );
+export function AltTable3DRoute(props: GameTableViewProps) {
+  return <FreshAltTable {...props} showDebug={props.uiMode === "debug"} />;
 }

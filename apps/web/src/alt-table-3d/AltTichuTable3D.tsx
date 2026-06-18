@@ -5,57 +5,148 @@ import {
   type CSSProperties,
   type DragEvent
 } from "react";
+
 import "./alt-table-3d.css";
+import AltTable3D, {
+  ALT_TABLE_MODE,
+  ALT_TABLE_RENDERER,
+  type AltTablePlaneCard
+} from "../altTable/AltTable3D";
 import {
   DESIGN_H,
   DESIGN_W,
-  FINAL_HAND_COUNT,
+  makeNorthRackAnchors,
+  makeSideRackAnchors,
+  makeSouthCards,
+  type CardRackAnchor
+} from "../altTable/v18CardRackMath";
+import { getFit } from "../altTable/tableFit";
+import {
   FIRST_DEAL_COUNT,
   PASS_COUNT,
   SECOND_DEAL_COUNT,
   SOUTH_PASS_IDS,
+  TV7_ASSET_ROOT,
+  TV7_PASSING_OVERLAY_SRC,
+  TV7_TABLE_PLATE_SRC,
   bboxToPolygonPercent,
-  buildAutoDemoAssignments,
   buildDemoDeck,
-  buildTv7Snapshot,
   createDemoHands,
   getCardBackSrc,
-  getSeatZone,
-  getTableTransform,
   loadTv7RuntimeAssets,
   type DemoCard,
   type DemoHands,
   type DemoPhase,
   type DemoSeat,
   type PassAnchorId,
-  type Tv7CardAnchor,
   type Tv7PassAnchor,
-  type Tv7RuntimeAssets,
-  type Tv7Snapshot
+  type Tv7RuntimeAssets
 } from "./tv7-runtime";
-import { AltTableScene } from "./AltTableScene";
-import type { HiddenHandCard } from "./AltTableCards3D";
 
-const READY_TO_DEAL_DELAY_MS = 180;
-const DEAL_TO_GT_DELAY_MS = 1_100;
-const GT_TO_PASSING_DELAY_MS = 1_000;
+const ALT_BOOT_PHASE: DemoPhase = "passing";
+const ALT_BOOT_GT_CHOICE: "call" | "skip" | null = "skip";
 
 type PassAssignments = Partial<Record<PassAnchorId, string>>;
 
-type AltTableWindow = Window & {
-  __tichuV7Snapshot?: () => Tv7Snapshot;
+type AltTableSnapshot = {
+  assetRoot: string;
+  phase: DemoPhase;
+  renderer: string;
+  design: {
+    width: number;
+    height: number;
+    w: number;
+    h: number;
+    scale: number;
+    offsetX: number;
+    offsetY: number;
+  };
+  table: {
+    src: string;
+    mode: string;
+    designW: number;
+    designH: number;
+    rendered: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      scale: number;
+    };
+  };
+  cardLayout: {
+    src: string;
+    layoutSource: string;
+    anchors: Array<{
+      id: string;
+      zone: string;
+      seat: string;
+      renderMode: string;
+      bbox_px: { x: number; y: number; w: number; h: number };
+      screen_bbox: { x: number; y: number; width: number; height: number };
+      rotation_deg: number;
+      w_px: number;
+      h_px: number;
+    }>;
+  };
+  passing: {
+    overlaySrc: string;
+    anchors: Array<{
+      id: PassAnchorId;
+      arrow_direction: string;
+      orientation: string;
+      rotation: number;
+      bbox_px: { x: number; y: number; w: number; h: number };
+      screen_bbox: { x: number; y: number; width: number; height: number };
+    }>;
+  };
+  cards: {
+    usingImageAssets: true;
+    placeholders: false;
+    layoutSource: string;
+    bySeat: Record<DemoSeat, number>;
+    sampleSrcs: string[];
+    north: {
+      renderMode: "north_rack_back_mostly_visible";
+      hiddenBottomPx: number;
+      mostlyVisible: true;
+    };
+    east: {
+      renderMode: "side_rack_readable_fan";
+      usesPolygonWarping: false;
+      usesNormalImageSprites: true;
+      cardBackRecognizableRequired: true;
+    };
+    west: {
+      renderMode: "side_rack_readable_fan";
+      usesPolygonWarping: false;
+      usesNormalImageSprites: true;
+      cardBackRecognizableRequired: true;
+    };
+    south: {
+      renderMode: "south_player_fan";
+    };
+  };
+  deal: {
+    phase: DemoPhase;
+    counts: Record<DemoSeat | "deckRemaining", number>;
+    history: string[];
+  };
 };
 
-type RenderedCard = {
-  anchor: Tv7CardAnchor;
+type AltTableWindow = Window & {
+  __tichuAltTableSnapshot?: () => AltTableSnapshot;
+  __tichuV7Snapshot?: () => AltTableSnapshot;
+};
+
+type InteractiveCard = {
+  anchor: CardRackAnchor;
   card: DemoCard;
   handCount: number;
-  src: string;
-  seat: DemoSeat | null;
-  slotIndex: number;
-  zone: string;
   isSelected: boolean;
   isInteractive: boolean;
+  slotIndex: number;
+  zone: string;
 };
 
 const ALT_PASSING_DIRECTIONS = [
@@ -86,17 +177,178 @@ const ALT_LAYER_ORDER = [
 
 export function getAltTablePlateBlendConfig() {
   return {
-    opacity: 0.2,
-    brightness: 0.86,
-    saturate: 0.84
+    opacity: 1,
+    brightness: 1,
+    saturate: 1
   } as const;
+}
+
+function projectBbox(
+  bbox: { x: number; y: number; w: number; h: number },
+  viewportW: number,
+  viewportH: number
+) {
+  const fit = getFit(viewportW, viewportH);
+  return {
+    x: fit.offsetX + bbox.x * fit.scale,
+    y: fit.offsetY + bbox.y * fit.scale,
+    width: bbox.w * fit.scale,
+    height: bbox.h * fit.scale
+  };
+}
+
+function anchorToBbox(anchor: CardRackAnchor) {
+  const width = anchor.wPx * anchor.scaleX;
+  const hiddenBottom =
+    anchor.renderMode === "north_rack_back_mostly_visible"
+      ? anchor.hiddenBottomPx ?? 10
+      : 0;
+  const height = anchor.hPx * anchor.scaleY - hiddenBottom;
+  return {
+    x: anchor.centerPx.x - width / 2,
+    y: anchor.centerPx.y - height / 2 - hiddenBottom / 2,
+    w: width,
+    h: height
+  };
+}
+
+function buildSnapshot(config: {
+  assets: Tv7RuntimeAssets;
+  phase: DemoPhase;
+  gtChoice: "call" | "skip" | null;
+  viewportW: number;
+  viewportH: number;
+  handCounts: Record<DemoSeat, number>;
+  deckRemaining: number;
+  cardAnchors: CardRackAnchor[];
+}) {
+  const fit = getFit(config.viewportW, config.viewportH);
+  const renderedWidth = DESIGN_W * fit.scale;
+  const renderedHeight = DESIGN_H * fit.scale;
+
+  return {
+    assetRoot: TV7_ASSET_ROOT,
+    phase: config.phase,
+    renderer: ALT_TABLE_RENDERER,
+    design: {
+      width: DESIGN_W,
+      height: DESIGN_H,
+      w: DESIGN_W,
+      h: DESIGN_H,
+      scale: fit.scale,
+      offsetX: fit.offsetX,
+      offsetY: fit.offsetY
+    },
+    table: {
+      src: TV7_TABLE_PLATE_SRC,
+      mode: ALT_TABLE_MODE,
+      designW: DESIGN_W,
+      designH: DESIGN_H,
+      rendered: {
+        x: fit.offsetX,
+        y: fit.offsetY,
+        width: renderedWidth,
+        height: renderedHeight,
+        scale: fit.scale
+      }
+    },
+    cardLayout: {
+      src: "v18CardRackMath",
+      layoutSource: "v18_math",
+      anchors: config.cardAnchors.map((anchor) => ({
+        id: anchor.id,
+        zone: anchor.zone,
+        seat: anchor.seat,
+        renderMode: anchor.renderMode,
+        bbox_px: anchorToBbox(anchor),
+        screen_bbox: projectBbox(anchorToBbox(anchor), config.viewportW, config.viewportH),
+        rotation_deg: anchor.rotationDeg,
+        w_px: anchor.wPx,
+        h_px: anchor.hPx
+      }))
+    },
+    passing: {
+      overlaySrc: TV7_PASSING_OVERLAY_SRC,
+      anchors: config.assets.passAnchors.map((anchor) => ({
+        id: anchor.id,
+        arrow_direction: anchor.arrow_direction,
+        orientation: anchor.slot_orientation,
+        rotation: anchor.slot_rotation_deg,
+        bbox_px: anchor.bbox_px,
+        screen_bbox: projectBbox(anchor.bbox_px, config.viewportW, config.viewportH)
+      }))
+    },
+    cards: {
+      usingImageAssets: true,
+      placeholders: false,
+      layoutSource: "v18_math",
+      bySeat: config.handCounts,
+      sampleSrcs: config.assets.sampleCardSrcs,
+      north: {
+        renderMode: "north_rack_back_mostly_visible",
+        hiddenBottomPx: 10,
+        mostlyVisible: true
+      },
+      east: {
+        renderMode: "side_rack_readable_fan",
+        usesPolygonWarping: false,
+        usesNormalImageSprites: true,
+        cardBackRecognizableRequired: true
+      },
+      west: {
+        renderMode: "side_rack_readable_fan",
+        usesPolygonWarping: false,
+        usesNormalImageSprites: true,
+        cardBackRecognizableRequired: true
+      },
+      south: {
+        renderMode: "south_player_fan"
+      }
+    },
+    deal: {
+      phase: config.phase,
+      counts: {
+        ...config.handCounts,
+        deckRemaining: config.deckRemaining
+      },
+      history: buildDealHistory(config.phase, config.gtChoice)
+    }
+  } satisfies AltTableSnapshot;
+}
+
+function buildDealHistory(phase: DemoPhase, gtChoice: "call" | "skip" | null) {
+  const history = ["ready"];
+  if (phase !== "ready") {
+    history.push("deal8");
+  }
+  if (
+    phase === "grand_tichu" ||
+    phase === "deal6" ||
+    phase === "passing" ||
+    phase === "passed"
+  ) {
+    history.push("grand_tichu");
+  }
+  if (gtChoice) {
+    history.push(`gt:${gtChoice}`);
+  }
+  if (phase === "deal6" || phase === "passing" || phase === "passed") {
+    history.push("deal6");
+  }
+  if (phase === "passing" || phase === "passed") {
+    history.push("passing");
+  }
+  if (phase === "passed") {
+    history.push("passed");
+  }
+  return history;
 }
 
 export function AltTichuTable3D() {
   const [assets, setAssets] = useState<Tv7RuntimeAssets | null>(null);
   const [loadError, setLoadError] = useState<Error | null>(null);
-  const [phase, setPhase] = useState<DemoPhase>("ready");
-  const [gtChoice, setGtChoice] = useState<"call" | "skip" | null>(null);
+  const [phase, setPhase] = useState<DemoPhase>(ALT_BOOT_PHASE);
+  const gtChoice = ALT_BOOT_GT_CHOICE;
   const [selectedSouthCardIds, setSelectedSouthCardIds] = useState<string[]>([]);
   const [passAssignments, setPassAssignments] = useState<PassAssignments>({});
   const [hoveredPassId, setHoveredPassId] = useState<PassAnchorId | null>(null);
@@ -146,48 +398,6 @@ export function AltTichuTable3D() {
       window.removeEventListener("resize", updateViewport);
     };
   }, []);
-
-  useEffect(() => {
-    if (!assets || phase !== "ready") {
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      setPhase("deal8");
-    }, READY_TO_DEAL_DELAY_MS);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [assets, phase]);
-
-  useEffect(() => {
-    if (!assets || phase !== "deal8") {
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      setPhase("grand_tichu");
-    }, DEAL_TO_GT_DELAY_MS);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [assets, phase]);
-
-  useEffect(() => {
-    if (phase !== "deal6") {
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      setPhase("passing");
-    }, GT_TO_PASSING_DELAY_MS);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [phase]);
 
   const deck = useMemo(
     () => (assets ? buildDemoDeck(assets.cardMap) : []),
@@ -240,18 +450,18 @@ export function AltTichuTable3D() {
   const dealtCardCount =
     handCounts.north + handCounts.east + handCounts.south + handCounts.west;
   const deckRemaining = Math.max(deck.length - dealtCardCount, 0);
-  const transform = getTableTransform(viewportSize.width, viewportSize.height);
+  const fit = getFit(viewportSize.width, viewportSize.height);
 
   const boardStyle = useMemo<CSSProperties>(
     () => ({
-      left: `${transform.offsetX}px`,
-      top: `${transform.offsetY}px`,
+      left: `${fit.offsetX}px`,
+      top: `${fit.offsetY}px`,
       width: `${DESIGN_W}px`,
       height: `${DESIGN_H}px`,
-      transform: `scale(${transform.scale})`,
+      transform: `scale(${fit.scale})`,
       transformOrigin: "top left"
     }),
-    [transform]
+    [fit]
   );
   const plateBlendConfig = useMemo(() => getAltTablePlateBlendConfig(), []);
   const plateStyle = useMemo<CSSProperties>(
@@ -263,80 +473,91 @@ export function AltTichuTable3D() {
   );
 
   const passAnchors = useMemo(() => assets?.passAnchors ?? [], [assets]);
-  const cardAnchors = useMemo(() => assets?.cardAnchors ?? [], [assets]);
   const backSrc = useMemo(
     () => (assets ? getCardBackSrc(assets.cardMap, "blue") : ""),
     [assets]
   );
 
-  const renderedCards = useMemo<RenderedCard[]>(() => {
-    if (!assets || !visibleHands) {
-      return [];
-    }
+  const northAnchors = useMemo(
+    () => makeNorthRackAnchors(handCounts.north),
+    [handCounts.north]
+  );
+  const eastAnchors = useMemo(
+    () => makeSideRackAnchors("east", handCounts.east),
+    [handCounts.east]
+  );
+  const westAnchors = useMemo(
+    () => makeSideRackAnchors("west", handCounts.west),
+    [handCounts.west]
+  );
+  const southAnchors = useMemo(
+    () => makeSouthCards(handCounts.south),
+    [handCounts.south]
+  );
 
-    const cards: RenderedCard[] = [];
-    for (const seat of ["north", "east", "south", "west"] as const) {
-      const zone = getSeatZone(seat);
-      const anchors = cardAnchors
-        .filter((anchor) => anchor.zone === zone)
-        .sort((left, right) => left.slot - right.slot);
-      const hand = visibleHands[seat];
-
-      for (const [index, card] of hand.entries()) {
-        const anchor = anchors[index];
-        if (!anchor) {
-          continue;
-        }
-
-        cards.push({
-          anchor,
-          card,
-          handCount: hand.length,
-          src: anchor.face_policy === "back" ? backSrc : card.src,
-          seat,
-          slotIndex: index,
-          zone,
-          isSelected: selectedSouthCardIds.includes(card.id),
-          isInteractive: seat === "south" && phase === "passing"
-        });
-      }
-    }
-
-    return cards;
-  }, [assets, backSrc, cardAnchors, phase, selectedSouthCardIds, visibleHands]);
-
-  const hiddenHandCards = useMemo<HiddenHandCard[]>(
+  const southCards = useMemo<InteractiveCard[]>(
     () =>
-      renderedCards.flatMap((card) => {
-        if (card.seat === null || card.seat === "south") {
-          return [];
-        }
-
-        return [
-          {
-            anchor: card.anchor,
-            card: card.card,
-            handCount: card.handCount,
-            seat: card.seat,
-            slotIndex: card.slotIndex,
-            zone: card.zone
-          }
-        ];
-      }),
-    [renderedCards]
+      (visibleHands?.south ?? []).map((card, index) => ({
+        anchor: southAnchors[index]!,
+        card,
+        handCount: handCounts.south,
+        isSelected: selectedSouthCardIds.includes(card.id),
+        isInteractive: phase === "passing",
+        slotIndex: index,
+        zone: "south_hand"
+      })),
+    [handCounts.south, phase, selectedSouthCardIds, southAnchors, visibleHands]
   );
 
-  const surfaceCards = useMemo(
-    () => renderedCards.filter((card) => card.seat === "south"),
-    [renderedCards]
+  const opponentCards = useMemo(
+    () => [
+      ...(visibleHands?.north ?? []).map((card, index) => ({
+        anchor: northAnchors[index]!,
+        card,
+        seat: "north" as const,
+        zone: "north_hand"
+      })),
+      ...(visibleHands?.east ?? []).map((card, index) => ({
+        anchor: eastAnchors[index]!,
+        card,
+        seat: "east" as const,
+        zone: "east_hand"
+      })),
+      ...(visibleHands?.west ?? []).map((card, index) => ({
+        anchor: westAnchors[index]!,
+        card,
+        seat: "west" as const,
+        zone: "west_hand"
+      }))
+    ],
+    [eastAnchors, northAnchors, visibleHands, westAnchors]
   );
 
-  const deckAnchor = cardAnchors.find((anchor) => anchor.zone === "deck") ?? null;
-  const discardAnchor =
-    cardAnchors.find((anchor) => anchor.zone === "discard") ?? null;
-  const deckPreviewCard = deckRemaining > 0 ? deck[dealtCardCount] ?? null : null;
-  const discardPreviewCard =
-    phase === "passed" && hands ? hands.final.south[FINAL_HAND_COUNT - 1] ?? null : null;
+  const allCardAnchors = useMemo(
+    () => [...northAnchors, ...eastAnchors, ...westAnchors, ...southAnchors],
+    [eastAnchors, northAnchors, southAnchors, westAnchors]
+  );
+
+  const planeCards = useMemo<AltTablePlaneCard[]>(
+    () => [
+      ...opponentCards.map(({ anchor, seat }) => ({
+        id: `${seat}-${anchor.index}`,
+        seat,
+        zone: anchor.zone,
+        src: backSrc,
+        anchor
+      })),
+      ...southCards.map(({ anchor, card, isSelected }) => ({
+        id: card.id,
+        seat: "south" as const,
+        zone: anchor.zone,
+        src: card.src,
+        anchor,
+        selectedLiftPx: isSelected ? 18 : 0
+      }))
+    ],
+    [backSrc, opponentCards, southCards]
+  );
 
   const assignedSouthCount = SOUTH_PASS_IDS.filter(
     (anchorId) => Boolean(passAssignments[anchorId])
@@ -348,22 +569,34 @@ export function AltTichuTable3D() {
       return;
     }
 
-    const buildSnapshot = () =>
-      buildTv7Snapshot({
+    const build = () =>
+      buildSnapshot({
         assets,
         phase,
         gtChoice,
         viewportW: viewportSize.width,
         viewportH: viewportSize.height,
         handCounts,
-        deckRemaining
+        deckRemaining,
+        cardAnchors: allCardAnchors
       });
 
-    (window as AltTableWindow).__tichuV7Snapshot = buildSnapshot;
+    (window as AltTableWindow).__tichuAltTableSnapshot = build;
+    (window as AltTableWindow).__tichuV7Snapshot = build;
     return () => {
+      delete (window as AltTableWindow).__tichuAltTableSnapshot;
       delete (window as AltTableWindow).__tichuV7Snapshot;
     };
-  }, [assets, deckRemaining, gtChoice, handCounts, phase, viewportSize.height, viewportSize.width]);
+  }, [
+    allCardAnchors,
+    assets,
+    deckRemaining,
+    gtChoice,
+    handCounts,
+    phase,
+    viewportSize.height,
+    viewportSize.width
+  ]);
 
   if (loadError) {
     throw loadError;
@@ -374,15 +607,10 @@ export function AltTichuTable3D() {
       <section className="alt-table-3d-route alt-table-3d-route--loading">
         <div className="alt-table-loading">
           <strong>Loading alt table</strong>
-          <span>Validating /tv7 authored layers and card assets.</span>
+          <span>Validating /tv7 math assets over the clean /tv_ed plate.</span>
         </div>
       </section>
     );
-  }
-
-  function beginGrandTichu(choice: "call" | "skip") {
-    setGtChoice(choice);
-    setPhase("deal6");
   }
 
   function buildNextAssignments(
@@ -514,13 +742,6 @@ export function AltTichuTable3D() {
     setDraggedCardId(null);
   }
 
-  function handleAutoDemoPass() {
-    setSelectedSouthCardIds(
-      hands.final.south.slice(0, PASS_COUNT).map((card) => card.id)
-    );
-    setPassAssignments(buildAutoDemoAssignments(hands.final));
-  }
-
   function handleConfirmPass() {
     if (!confirmPassEnabled) {
       return;
@@ -541,58 +762,58 @@ export function AltTichuTable3D() {
             style={plateStyle}
           />
 
-          <AltTableScene backSrc={backSrc} cards={hiddenHandCards} />
+          <AltTable3D cards={planeCards} />
 
-          {surfaceCards.map((renderedCard) => (
-            <CardSprite
+          <div className="alt-table-world-scene__meta">
+            {opponentCards.map(({ anchor, seat, zone, card }) => (
+              <span
+                key={`${zone}-${card.id}`}
+                data-card-id={card.id}
+                data-card-render-mode={anchor.renderMode}
+                data-facing-seat={seat}
+                data-layout-source="v18_math"
+                data-render-mode="r3f-hidden-hand"
+                data-seat={seat}
+                data-seat-hand={zone}
+                data-uses-polygon-warping="false"
+                data-zone={zone}
+              />
+            ))}
+          </div>
+
+          {southCards.map((renderedCard) => (
+            <button
               key={`${renderedCard.zone}-${renderedCard.card.id}`}
-              anchor={renderedCard.anchor}
-              card={renderedCard.card}
-              handCount={renderedCard.handCount}
-              isInteractive={renderedCard.isInteractive}
-              isSelected={renderedCard.isSelected}
-              passId={null}
-              slotIndex={renderedCard.slotIndex}
-              src={renderedCard.src}
-              zone={renderedCard.zone}
+              aria-label={renderedCard.card.label}
+              className={[
+                "alt-table-hand-hitbox",
+                renderedCard.isSelected ? "alt-table-hand-hitbox--selected" : ""
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              data-card-id={renderedCard.card.id}
+              data-card-render-mode={renderedCard.anchor.renderMode}
+              data-layout-source="v18_math"
+              data-seat="south"
+              data-zone={renderedCard.zone}
+              draggable={renderedCard.isInteractive}
               onClick={
                 renderedCard.isInteractive
                   ? () => toggleSouthCard(renderedCard.card.id)
                   : undefined
               }
-              onDragStart={
-                renderedCard.isInteractive
-                  ? () => handleCardDragStart(renderedCard.card.id)
-                  : undefined
-              }
+              onDragStart={(event) => {
+                if (!renderedCard.isInteractive) {
+                  return;
+                }
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", renderedCard.card.id);
+                handleCardDragStart(renderedCard.card.id);
+              }}
+              style={buildCardHitboxStyle(renderedCard.anchor)}
+              type="button"
             />
           ))}
-
-          {deckAnchor && deckPreviewCard ? (
-            <CardSprite
-              anchor={deckAnchor}
-              card={deckPreviewCard}
-              isInteractive={false}
-              isSelected={false}
-              key="deck-preview"
-              passId={null}
-              src={backSrc}
-              zone="deck"
-            />
-          ) : null}
-
-          {discardAnchor && discardPreviewCard ? (
-            <CardSprite
-              anchor={discardAnchor}
-              card={discardPreviewCard}
-              isInteractive={false}
-              isSelected={false}
-              key="discard-preview"
-              passId={null}
-              src={discardPreviewCard.src}
-              zone="discard"
-            />
-          ) : null}
 
           {phase === "passing" ? (
             <img
@@ -625,9 +846,9 @@ export function AltTichuTable3D() {
                     ]
                       .filter(Boolean)
                       .join(" ")}
-                    data-pass-id={anchor.id}
                     data-arrow-direction={anchor.arrow_direction}
                     data-orientation={anchor.slot_orientation}
+                    data-pass-id={anchor.id}
                     data-rotation={String(anchor.slot_rotation_deg)}
                     onClick={() => handlePassTargetClick(anchor.id)}
                     onDragEnter={() => setHoveredPassId(anchor.id)}
@@ -660,7 +881,7 @@ export function AltTichuTable3D() {
             <aside className="alt-table-status">
               <div className="alt-table-status__header">
                 <strong>Passing Lanes (12)</strong>
-                <span data-alt-phase-label="true">{phase}</span>
+                <span data-alt-phase-label="true">PASSING</span>
               </div>
               <div className="alt-table-status__counts">
                 <span>North {handCounts.north}</span>
@@ -670,8 +891,9 @@ export function AltTichuTable3D() {
                 <span>Deck {deckRemaining}</span>
               </div>
               <p className="alt-table-status__body">
-                Hidden hands use real 3D card planes in the seat racks. Passing targets stay
-                unrotated and directional over the shared tv7 authored layout.
+                Opponent hands now sit in fixed design-space rack fans over the
+                shared table image, using readable card-back sprites instead of
+                warped table-plane strips.
               </p>
               <div className="alt-table-status__section">
                 <div className="alt-table-status__legend">[] = Passing Target</div>
@@ -681,23 +903,10 @@ export function AltTichuTable3D() {
                 </div>
               </div>
               <div className="alt-table-status__flow">
-                <span>Deal 8: {phase === "ready" ? 0 : FIRST_DEAL_COUNT}</span>
-                <span>
-                  GT shown:{" "}
-                  {phase === "grand_tichu" ||
-                  phase === "deal6" ||
-                  phase === "passing" ||
-                  phase === "passed"
-                    ? "yes"
-                    : "no"}
-                </span>
-                <span>
-                  Deal 6:{" "}
-                  {phase === "deal6" || phase === "passing" || phase === "passed"
-                    ? SECOND_DEAL_COUNT
-                    : 0}
-                </span>
-                <span>GT choice: {gtChoice ?? "pending"}</span>
+                <span>Deal 8: {FIRST_DEAL_COUNT}</span>
+                <span>GT shown: yes</span>
+                <span>Deal 6: {SECOND_DEAL_COUNT}</span>
+                <span>GT choice: {gtChoice ?? "skip"}</span>
               </div>
               <div className="alt-table-status__section">
                 <div className="alt-table-status__section-title">Passing Directions</div>
@@ -729,40 +938,15 @@ export function AltTichuTable3D() {
                   ))}
                 </div>
               </div>
-              {phase === "grand_tichu" ? (
-                <div className="alt-table-status__actions">
-                  <button
-                    type="button"
-                    data-alt-action="call-gt"
-                    onClick={() => beginGrandTichu("call")}
-                  >
-                    Call GT
-                  </button>
-                  <button
-                    type="button"
-                    data-alt-action="skip-gt"
-                    onClick={() => beginGrandTichu("skip")}
-                  >
-                    Skip GT
-                  </button>
-                </div>
-              ) : null}
               {phase === "passing" ? (
                 <div className="alt-table-status__actions">
-                  <button
-                    type="button"
-                    data-alt-action="auto-demo-pass"
-                    onClick={handleAutoDemoPass}
-                  >
-                    Auto demo pass
-                  </button>
                   <button
                     type="button"
                     data-alt-action="confirm-pass"
                     disabled={!confirmPassEnabled}
                     onClick={handleConfirmPass}
                   >
-                    Confirm pass
+                    PASS
                   </button>
                 </div>
               ) : null}
@@ -777,24 +961,29 @@ export function AltTichuTable3D() {
             <div className="alt-table-footer">
               <section className="alt-table-preview">
                 <div className="alt-table-preview__title">Hand Anchor Preview</div>
-                <p>
-                  South fan is intentionally calmer than the old prototype spread while the hidden
-                  seat cards stay rack-seated and upright.
-                </p>
+                <img
+                  alt="Hand anchor preview"
+                  className="alt-table-preview__image"
+                  src="/tv_ed/h/prev/table.png"
+                />
               </section>
               <section className="alt-table-preview">
                 <div className="alt-table-preview__title">Passing Anchor Preview</div>
-                <p>
-                  Twelve authored pass targets remain direction-locked and share the same fixed
-                  design-space transform as the table art.
-                </p>
+                <img
+                  alt="Passing anchor preview"
+                  className="alt-table-preview__image"
+                  src="/tv_ed/h/prev/all.png"
+                />
               </section>
               <section className="alt-table-preview">
                 <div className="alt-table-preview__title">Trick Anchor Preview (Virtual)</div>
-                <p>
-                  This ALT cleanup keeps the table readable first while the fuller photorealistic
-                  rack-and-table rebuild continues.
-                </p>
+                <div className="alt-table-trick-preview" aria-hidden="true">
+                  <div className="alt-table-trick-preview__slot alt-table-trick-preview__slot--north" />
+                  <div className="alt-table-trick-preview__slot alt-table-trick-preview__slot--west" />
+                  <div className="alt-table-trick-preview__slot alt-table-trick-preview__slot--center" />
+                  <div className="alt-table-trick-preview__slot alt-table-trick-preview__slot--east" />
+                  <div className="alt-table-trick-preview__slot alt-table-trick-preview__slot--south" />
+                </div>
               </section>
             </div>
           </div>
@@ -817,20 +1006,6 @@ function buildPassTargetStyle(anchor: Tv7PassAnchor): CSSProperties {
   };
 }
 
-function resolveVisibleCardLayout(anchor: Tv7CardAnchor) {
-  return {
-    centerX: anchor.center_px.x,
-    centerY: anchor.center_px.y,
-    width: anchor.w_px,
-    height: anchor.h_px,
-    rotationDeg: anchor.rotation_deg
-  };
-}
-
-function resolveVisibleCardLayoutForSprite(anchor: Tv7CardAnchor) {
-  return resolveVisibleCardLayout(anchor);
-}
-
 function buildPassCardStyle(anchor: Tv7PassAnchor): CSSProperties {
   const rotation = anchor.card_rotation_hint_deg ?? anchor.slot_rotation_deg;
   return {
@@ -843,90 +1018,19 @@ function buildPassCardStyle(anchor: Tv7PassAnchor): CSSProperties {
   };
 }
 
-function CardSprite(props: {
-  anchor: Tv7CardAnchor;
-  card: DemoCard;
-  src: string;
-  zone: string;
-  handCount?: number;
-  isSelected: boolean;
-  isInteractive: boolean;
-  passId: string | null;
-  slotIndex?: number;
-  onClick?: () => void;
-  onDragStart?: () => void;
-}) {
-  const className = [
-    "alt-table-card",
-    props.isSelected ? "alt-table-card--selected" : "",
-    props.isInteractive ? "alt-table-card--interactive" : ""
-  ]
-    .filter(Boolean)
-    .join(" ");
-
-  const commonProps = {
-    className,
-    "data-card-id": props.card.id,
-    "data-zone": props.zone,
-    "data-layout-source": "prototype_layer",
-    "data-seat": props.anchor.seat ?? "",
-    ...(props.passId ? { "data-pass-id": props.passId } : {})
-  };
-
-  if (props.isInteractive) {
-    return (
-      <button
-        {...commonProps}
-        type="button"
-        draggable
-        onClick={props.onClick}
-        onDragStart={(event) => {
-          event.dataTransfer.effectAllowed = "move";
-          event.dataTransfer.setData("text/plain", props.card.id);
-          props.onDragStart?.();
-        }}
-        style={buildCardStyleFromProps(props)}
-      >
-        <img alt={props.card.label} className="alt-table-card__image" src={props.src} />
-      </button>
-    );
-  }
-
-  return (
-    <div {...commonProps} style={buildCardStyleFromProps(props)}>
-      <img alt={props.card.label} className="alt-table-card__image" src={props.src} />
-    </div>
-  );
-}
-
-function buildCardStyleFromProps(props: {
-  anchor: Tv7CardAnchor;
-  handCount?: number;
-  isSelected: boolean;
-  slotIndex?: number;
-  zone: string;
-}) {
-  const layout = resolveVisibleCardLayoutForSprite(props.anchor);
-  const visual = resolveCardSpriteVisualTuning(
-    props.anchor,
-    props.zone,
-    props.slotIndex,
-    props.handCount
-  );
-  const translateX = visual.translateX;
-  const translateY = visual.translateY + (props.isSelected ? -18 : 0);
+function buildCardHitboxStyle(anchor: CardRackAnchor) {
   return {
-    left: `${layout.centerX}px`,
-    top: `${layout.centerY}px`,
-    width: `${visual.width}px`,
-    height: `${visual.height}px`,
-    transform: `translate(calc(-50% + ${translateX}px), calc(-50% + ${translateY}px)) rotate(${layout.rotationDeg}deg)`,
-    transformOrigin: visual.transformOrigin
+    left: `${anchor.centerPx.x}px`,
+    top: `${anchor.centerPx.y}px`,
+    width: `${anchor.wPx * anchor.scaleX}px`,
+    height: `${anchor.hPx * anchor.scaleY}px`,
+    transform: `translate(-50%, -50%) rotate(${anchor.rotationDeg}deg)`,
+    transformOrigin: "center center"
   } satisfies CSSProperties;
 }
 
 export function resolveCardSpriteVisualTuning(
-  anchor: Tv7CardAnchor,
+  anchor: { w_px: number; h_px: number },
   zone: string,
   slotIndex = 0,
   handCount = 1

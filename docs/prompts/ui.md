@@ -14,6 +14,35 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 
 ## Entries
 
+### 2026-06-14 - Fresh ALT table needs a truly standalone editor that mirrors the real luxury surface
+
+- Prompt Signal: The latest ALT-table follow-up asked to check the recent
+  editor builds and clarified that the editor should be independent of all
+  other code in its own repo directory. The user then tightened the
+  requirement: it must be an exact copy of the ALT luxury table with the
+  ability to edit selected aspects, specifically reuse `FreshAltTable` as the
+  source of truth, include `north` hand editing in addition to `east` and
+  `west`, keep `south` locked, and keep export manual for now so editor values
+  can be used to fix the production table.
+- Interpreted Requirement: Issue
+  [#100](https://github.com/NeonButrfly/tichuml/issues/100) is the canonical
+  tracker for this authoring-tool follow-up. `apps/table-editor` must remain a
+  standalone Vite app on port `5178`, but its preview should stop being a
+  generic approximation and instead mirror the same Fresh ALT luxury-table
+  surface used by production. The editor should allow manual authoring of
+  `north`, `east`, and `west` hand transforms and fan settings plus every
+  individual passing-lane overlay and arrow, while rendering `south` as a
+  locked reference-only hand. Export remains manual so tuned values can be
+  copied into the production Fresh ALT defaults deliberately.
+- Affected Systems: `apps/table-editor/`,
+  `packages/table-layout-schema/`,
+  `apps/web/src/altTableFresh/`,
+  `docs/superpowers/specs/2026-06-14-fresh-alt-table-editor-design.md`,
+  editor import/export workflow, and production Fresh ALT layout defaults.
+- Linked GitHub Issue: [#100](https://github.com/NeonButrfly/tichuml/issues/100)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.
+
 ### 2026-05-28 - ALT hidden opponent hands must sit in the authored rails as real 3D cards
 
 - Prompt Signal: The latest ALT-table follow-up rejected the current hidden-hand
@@ -1079,5 +1108,132 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
   `apps/web/src/App.tsx`,
   `tests/integration/web-table-model.test.ts`.
 - Linked GitHub Issue: [#91](https://github.com/NeonButrfly/tichuml/issues/91)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.
+
+### 2026-06-07 - ALT table should use a fixed 1536x1024 image plane with readable rack-card overlays
+
+- Prompt Signal: The latest ALT-table correction supplied a full reference
+  layout and explicitly rejected the current faux-3D side-seat cards. The
+  prompt required the table to remain one static base image while north/east/
+  west/south cards become design-space overlays aligned by math, with east and
+  west card backs staying readable instead of flattening into warped strips.
+- Interpreted Requirement: Keep the normal table untouched and keep the ALT
+  route on the same gameplay/passing flow, but replace the old procedural
+  hidden-hand geometry with a fixed 1536x1024 orthographic overlay stack. The
+  shipped ALT route should use the committed `/tv7` plate and passing assets,
+  generate opponent/south card anchors from math in `apps/web/src/altTable`,
+  keep pass-lane directions locked to `/tv7/p/a.json`, and expose a truthful
+  ALT snapshot contract for browser verification.
+- Affected Systems: `apps/web/src/altTable/AltTable3D.tsx`,
+  `apps/web/src/altTable/tableFit.ts`,
+  `apps/web/src/altTable/v18CardRackMath.ts`,
+  `apps/web/src/altTable/V18OpponentRackCards.tsx`,
+  `apps/web/src/alt-table-3d/AltTichuTable3D.tsx`,
+  `apps/web/src/alt-table-3d/alt-table-3d.css`,
+  `scripts/browser-verify.ts`,
+  `tests/integration/alternate-table-route-guards.test.ts`,
+  `tests/integration/alternate-table-view.test.ts`,
+  `tests/integration/v18-card-rack-math.test.ts`.
+- Linked GitHub Issue: [#85](https://github.com/NeonButrfly/tichuml/issues/85)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.
+
+### 2026-06-08 - ALT table should restart from the immutable table.png base and drop the old tv7 overlay stack
+
+- Prompt Signal: The follow-up ALT-table prompt rejected another incremental
+  patch on the previous luxury-table path and supplied a new immutable base
+  image at `apps/web/public/table/table.png`. The prompt explicitly required a
+  fresh rebuild under a new namespace, readable east and west rack-card fans,
+  dynamic pass lanes only during the exchange phases, and continued reuse of
+  the existing `tv_ed` card art without touching the default table.
+- Interpreted Requirement: Keep the normal table and shared gameplay logic
+  untouched, but replace the live alternate route with a fresh 1536x1024
+  contain-fit renderer rooted at `/table/table.png`. The old alternate route’s
+  tv7-driven plate math, preview chrome, side instruction panel, and footer
+  debug previews should no longer drive the luxury table. The live ALT route
+  should instead render from `apps/web/src/altTableFresh/`, use
+  `/tv_ed/c/back/green.png` plus the existing `tv_ed` face assets, expose
+  `window.__freshAltTableSnapshot`, and keep passing lanes dynamic and
+  phase-bound.
+- Affected Systems: `apps/web/src/altTableFresh/FreshAltTable.tsx`,
+  `apps/web/src/altTableFresh/FreshCardsLayer.tsx`,
+  `apps/web/src/altTableFresh/FreshPassingLayer.tsx`,
+  `apps/web/src/altTableFresh/FreshTrickLayer.tsx`,
+  `apps/web/src/altTableFresh/freshAltTableChecks.ts`,
+  `apps/web/src/altTableFresh/freshTableMath.ts`,
+  `apps/web/src/altTableFresh/tableFit.ts`,
+  `apps/web/src/alt-table-3d/AltTable3DRoute.tsx`,
+  `tests/integration/alternate-table-route-guards.test.ts`,
+  `tests/integration/alternate-table-view.test.ts`.
+- Linked GitHub Issue: [#85](https://github.com/NeonButrfly/tichuml/issues/85)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.
+
+### 2026-06-08 - Luxury table must fill the viewport cleanly and classic mode must return to the flattened 2D table
+
+- Prompt Signal: The next visual QA pass rejected the fresh luxury-table rollout
+  because the immutable board rendered too small inside extra shell chrome, and
+  the classic toggle no longer felt like the original 2D table. The user
+  explicitly called out the oversized margins, stray UI clutter, and the
+  classic-table regression caused by the wrong runtime table asset/default mode
+  behavior.
+- Interpreted Requirement: Keep the fresh luxury route on `/table/table.png`,
+  but remove the temporary shell/debug framing so the board fills the viewport
+  under the fixed 1536x1024 contain-fit transform. Restore classic/default
+  table semantics so missing `?table` resolves to the normal table again, and
+  pin the normal sprite runtime back to the flattened `/tv_ed/t/plate.png`
+  board instead of the split `/tv_ed/t/base.png` plus separate dragon layer.
+- Affected Systems: `apps/web/src/altTableFresh/FreshAltTable.tsx`,
+  `apps/web/src/game-table-view-model.ts`,
+  `apps/web/src/game-table-views.tsx`,
+  `apps/web/src/normal-table-sprite-assets.ts`,
+  `apps/web/src/styles.css`,
+  `tests/integration/player-table-mode.test.ts`,
+  `tests/integration/alternate-table-route-guards.test.ts`,
+  `tests/integration/alternate-table-view.test.ts`,
+  `tests/integration/normal-table-sprite-assets.test.ts`.
+- Linked GitHub Issue: [#94](https://github.com/NeonButrfly/tichuml/issues/94)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.
+
+### 2026-06-10 - Classic mode must restore the original flat green normal table instead of any authored tray image
+
+- Prompt Signal: The next review clarified that the previous "classic" fix was
+  still wrong. The user explicitly rejected the decorative `tv_ed` tray board,
+  asked for the flat green non-decorative table from before the recent table
+  work, and required history-based verification plus screenshots before
+  locking the fix.
+- Interpreted Requirement: Issue
+  [#94](https://github.com/NeonButrfly/tichuml/issues/94) remains the
+  canonical tracker. The normal route must stop rendering through the authored
+  sprite-table branch and instead use the original flat green normal-table
+  surface contract from the pre-v5 revision, while the alternate luxury route
+  continues to use the immutable `/table/table.png` renderer.
+- Affected Systems: `apps/web/src/game-table-views.tsx`,
+  `tests/integration/alternate-table-route-guards.test.ts`,
+  screenshot-based local and Linux-host normal-table verification against the
+  pre-v5 `5aae2f3` baseline.
+- Linked GitHub Issue: [#94](https://github.com/NeonButrfly/tichuml/issues/94)
+- Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
+- Status Source: GitHub issue state only.
+
+### 2026-06-11 - Normal passing lanes must remain visible during the live pass phase after the classic-table restore
+
+- Prompt Signal: After the classic flat-table restore, the next QA pass
+  reported that the normal table no longer showed passing lanes during the
+  passing phase. The user explicitly called out the live normal table path, not
+  the layout editor or alternate route.
+- Interpreted Requirement: Issue
+  [#28](https://github.com/NeonButrfly/tichuml/issues/28) remains the
+  canonical tracker. The normal route must keep directional pass-lane staging
+  visible during `pass_select` even when `layoutEditorActive` is `false`.
+  Restoring the flat classic board must not gate `NormalPassStagingRegions` or
+  `NormalTrickStagingRegions` behind editor-only conditions.
+- Affected Systems: `apps/web/src/game-table-views.tsx`,
+  `tests/integration/normal-table-pass-select.test.ts`,
+  `tests/integration/normal-pass-anchor-render.test.ts`,
+  `tests/integration/trick-ui-cleanup.test.ts`.
+- Linked GitHub Issue: [#28](https://github.com/NeonButrfly/tichuml/issues/28)
 - Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
 - Status Source: GitHub issue state only.

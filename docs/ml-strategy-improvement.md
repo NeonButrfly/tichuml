@@ -82,6 +82,13 @@ Generate rollout labels:
 npm run ml:rollouts -- --database-url "$env:DATABASE_URL" --phase trick_play --provider local_heuristic --continuation-provider local --rollouts-per-action 4 --max-decisions 100
 ```
 
+Issue [#95](https://github.com/NeonButrfly/tichuml/issues/95) tightened
+timeout handling for `ml:rollouts`. Transient
+`rollout_sample_timeout_<n>ms` failures are now retried with
+`--sample-timeout-retries <count>` before the worker gives up on that sample,
+and exhausted timeout rows are written to a replayable sidecar instead of being
+accepted as final rollout labels.
+
 Train the default runtime-safe model:
 
 ```powershell
@@ -134,6 +141,17 @@ keep the gate threshold aligned with the smaller evaluation sample:
 npm run ml:bootstrap -- --run-id <run_id> --game-id-prefix <game_id_prefix> --output-dir training-runs/<run_id>/ml --provider server_heuristic --backend-url http://127.0.0.1:4310 --evaluate-games 3 --evaluate-min-games-for-gate 3
 ```
 
+Diagnose a completed observed-outcome training run:
+
+```powershell
+node node_modules/tsx/dist/cli.mjs scripts/run-python.ts scripts/outcome_reward_diagnostics.py --run-root training-runs/<run_id>
+```
+
+The diagnostic writes `diagnostics/outcome_reward_diagnostics.md` and
+`diagnostics/outcome_reward_diagnostics.json` under the run root. It also
+recomputes validation metrics from the saved model artifact so metric drift is
+visible when stored metadata is wrong.
+
 Build a live-gameplay rollout-training candidate without a new self-play batch:
 
 ```powershell
@@ -148,6 +166,12 @@ then starts a temporary backend pinned to that candidate model and runs the
 normal mirrored `ml:evaluate` improvement gate against it. The command still
 does not auto-promote or repoint the live backend model for you; it only tells
 you whether the newly trained live-data candidate cleared the gate.
+
+The bootstrap launcher now also treats candidate evaluation integrity as part
+of the gate: it fails fast if the run-local model artifacts are missing, if the
+temporary candidate backend port is already occupied, or if the evaluation
+report says a different model file was evaluated. That prevents a stale backend
+or missing candidate bundle from being mistaken for a successful new run.
 
 ## Data products
 
@@ -183,6 +207,7 @@ machine-parseable and deterministic under the same explicit DB/provider scope.
 
 - rollout result JSONL
 - `artifacts/ml/rollout-jobs.jsonl`
+- `artifacts/ml/rollout-retryable-failures.jsonl`
 - `artifacts/ml/rollout-quality.json`
 - `artifacts/ml/rollout-quality.md`
 
@@ -193,7 +218,9 @@ machine-parseable and deterministic under the same explicit DB/provider scope.
 - `artifacts/ml/training-report.json`
 - `artifacts/ml/training-report.md`
 - `artifacts/ml/feature-importance.csv`
-- training metadata including `feature_profile`, `phase`, and `feature_names`
+- training metadata including `feature_profile`, `phase`, `feature_names`,
+  target distribution, baseline RMSE/MAE, model-vs-baseline improvement, and
+  a Spearman interpretation band
 
 `ml:evaluate` writes:
 
@@ -267,6 +294,9 @@ not claim the model is ready. Treat the evaluation report as authoritative.
 - Offline rollout validation was smoke-tested on small bounded samples; large
   batches should still be treated as operational work and monitored through the
   rollout quality report.
+- Timeout-driven rows in `artifacts/ml/rollout-retryable-failures.jsonl` are
+  intentionally incomplete and should be replayed on resume instead of being
+  treated as final dataset rows.
 - `ml:rollouts --input-export` currently expects JSONL when it is used as a
   subset filter.
 - Full offline rollout reconstruction still depends on decisions that captured

@@ -4,7 +4,6 @@ import {
   heuristicsV1Policy,
   chooseServerFastPathDecision,
   generateFastTrickPlayCandidates,
-  SERVER_HEURISTIC_FAST_PATH_LIMITS,
   type ChosenDecision,
   type HeuristicDecisionOptions
 } from "@tichuml/ai-heuristics";
@@ -29,7 +28,6 @@ import {
 } from "@tichuml/shared";
 import {
   applyEngineAction,
-  createNextDealCarryState,
   createInitialGameState,
   getActorScopedLegalActions,
   getCardById,
@@ -61,9 +59,6 @@ import {
   emitTelemetryFailureDiagnostic,
   mergeTelemetryFailureStats,
   recordTelemetryFailure,
-  TELEMETRY_SCHEMA_VERSION,
-  TELEMETRY_ENGINE_VERSION,
-  TELEMETRY_SIM_VERSION,
   type TelemetryFailureStats,
   type TelemetryWriteResult
 } from "@tichuml/telemetry";
@@ -71,6 +66,16 @@ import {
   AsyncTelemetryManager,
   createDefaultTelemetryStorageRoot
 } from "./telemetry/async-telemetry.js";
+import {
+  Agent as HttpAgent,
+  request as httpRequest,
+  type RequestOptions as HttpRequestOptions
+} from "node:http";
+import {
+  Agent as HttpsAgent,
+  request as httpsRequest,
+  type RequestOptions as HttpsRequestOptions
+} from "node:https";
 
 export type SeatProviderOverrides = Partial<Record<SeatId, DecisionMode>>;
 export type TelemetryMode = "minimal" | "full";
@@ -154,6 +159,7 @@ export type SelfPlayGameResult = {
   telemetryFailureByKind: Record<string, number>;
   telemetryBackoffUntil: string | null;
   telemetryRuntime: TelemetryRuntimeState | null;
+  lightgbmDiagnostics: LightgbmDecisionDiagnostics | null;
   decisionProviderFailures: number;
   decisionTimeoutCount: number;
   stopReason: SelfPlayStopReason;
@@ -215,7 +221,18 @@ export type SelfPlayBatchSummary = {
   telemetryFailureByKind: Record<string, number>;
   telemetryBackoffUntil: string | null;
   telemetryRuntime: TelemetryRuntimeState | null;
+  lightgbmDiagnostics: LightgbmDecisionDiagnostics | null;
   averageLatencyByProvider: Record<string, number>;
+};
+
+export type LightgbmDecisionDiagnostics = {
+  requestedDecisions: number;
+  completedByLightgbm: number;
+  delegatedToServerHeuristic: number;
+  localFallbackDecisions: number;
+  delegatedByReason: Record<string, number>;
+  rerankSkippedByReason: Record<string, number>;
+  smallBranchLegalActionCount: Record<string, number>;
 };
 
 class MaxDecisionLimitError extends Error {
@@ -252,6 +269,7 @@ type SimulatedDecision = {
   providerFailureKind: DecisionFailureKind | null;
   providerFailureTimedOut: boolean;
   latencyMs: number;
+  providerMetadata?: JsonObject;
   telemetryFailureStats: TelemetryFailureStats;
   telemetryFailure?: TelemetryWriteResult;
 };
@@ -384,6 +402,28 @@ type BackendRequestResult = {
   parse_ms: number;
 };
 
+const SHARED_BACKEND_HTTP_AGENT = new HttpAgent({
+  keepAlive: true,
+  maxSockets: 32,
+  maxFreeSockets: 8
+});
+
+const SHARED_BACKEND_HTTPS_AGENT = new HttpsAgent({
+  keepAlive: true,
+  maxSockets: 32,
+  maxFreeSockets: 8
+});
+
+export function getSharedBackendAgent(protocol: string): HttpAgent | HttpsAgent {
+  if (protocol === "http:") {
+    return SHARED_BACKEND_HTTP_AGENT;
+  }
+  if (protocol === "https:") {
+    return SHARED_BACKEND_HTTPS_AGENT;
+  }
+  throw new Error(`Unsupported backend protocol: ${protocol}`);
+}
+
 type DecisionFailureKind =
   | "payload_validation"
   | "network_failure"
@@ -461,6 +501,119 @@ function createWinCountBucket(): Record<TeamId | "tie", number> {
     "team-1": 0,
     tie: 0
   };
+}
+
+export function createLightgbmDecisionDiagnostics(): LightgbmDecisionDiagnostics {
+  return {
+    requestedDecisions: 0,
+    completedByLightgbm: 0,
+    delegatedToServerHeuristic: 0,
+    localFallbackDecisions: 0,
+    delegatedByReason: {},
+    rerankSkippedByReason: {},
+    smallBranchLegalActionCount: {}
+  };
+}
+
+function cloneLightgbmDecisionDiagnostics(
+  source: LightgbmDecisionDiagnostics
+): LightgbmDecisionDiagnostics {
+  return {
+    requestedDecisions: source.requestedDecisions,
+    completedByLightgbm: source.completedByLightgbm,
+    delegatedToServerHeuristic: source.delegatedToServerHeuristic,
+    localFallbackDecisions: source.localFallbackDecisions,
+    delegatedByReason: { ...source.delegatedByReason },
+    rerankSkippedByReason: { ...source.rerankSkippedByReason },
+    smallBranchLegalActionCount: { ...source.smallBranchLegalActionCount }
+  };
+}
+
+function inferLightgbmDelegationReason(metadata: JsonObject | undefined): string {
+  if (metadata?.lightgbm_phase_delegated === true) {
+    return "phase_delegated";
+  }
+  if (metadata?.lightgbm_tichu_call_delegated === true) {
+    return "tichu_call_delegated";
+  }
+  if (metadata?.lightgbm_small_branch_delegated === true) {
+    return "small_branch_delegated";
+  }
+  if (metadata?.lightgbm_confidence_delegated === true) {
+    return "confidence_delegated";
+  }
+  return "other";
+}
+
+export function recordLightgbmDecisionDiagnostics(
+  diagnostics: LightgbmDecisionDiagnostics,
+  decision: {
+    requestedProvider: DecisionMode | "system_local";
+    providerUsed: string;
+    providerMetadata?: JsonObject;
+  }
+): void {
+  if (decision.requestedProvider !== "lightgbm_model") {
+    return;
+  }
+
+  diagnostics.requestedDecisions += 1;
+
+  if (decision.providerUsed === "lightgbm_model") {
+    diagnostics.completedByLightgbm += 1;
+    const rerankSkip = metadataStringValue(
+      decision.providerMetadata,
+      "lightgbm_rollout_rerank_skipped_reason"
+    );
+    if (rerankSkip) {
+      countByKey(diagnostics.rerankSkippedByReason, rerankSkip);
+    }
+    return;
+  }
+
+  if (decision.providerUsed === "server_heuristic") {
+    diagnostics.delegatedToServerHeuristic += 1;
+    countByKey(
+      diagnostics.delegatedByReason,
+      inferLightgbmDelegationReason(decision.providerMetadata)
+    );
+    const rerankSkip = metadataStringValue(
+      decision.providerMetadata,
+      "lightgbm_rollout_rerank_skipped_reason"
+    );
+    if (rerankSkip) {
+      countByKey(diagnostics.rerankSkippedByReason, rerankSkip);
+    }
+    const legalActionCount = metadataNumberValue(
+      decision.providerMetadata,
+      "lightgbm_small_branch_legal_action_count"
+    );
+    if (legalActionCount !== null) {
+      countByKey(
+        diagnostics.smallBranchLegalActionCount,
+        String(legalActionCount)
+      );
+    }
+    return;
+  }
+
+  diagnostics.localFallbackDecisions += 1;
+}
+
+export function mergeLightgbmDecisionDiagnostics(
+  target: LightgbmDecisionDiagnostics,
+  source: LightgbmDecisionDiagnostics
+): void {
+  target.requestedDecisions += source.requestedDecisions;
+  target.completedByLightgbm += source.completedByLightgbm;
+  target.delegatedToServerHeuristic += source.delegatedToServerHeuristic;
+  target.localFallbackDecisions += source.localFallbackDecisions;
+  mergeCounts(target.delegatedByReason, source.delegatedByReason);
+  mergeCounts(target.rerankSkippedByReason, source.rerankSkippedByReason);
+  mergeCounts(
+    target.smallBranchLegalActionCount,
+    source.smallBranchLegalActionCount
+  );
 }
 
 function cloneTeamScores(
@@ -577,7 +730,7 @@ function findMatchingLegalAction(
               sortCardIds(chosenAction.cardIds) &&
             candidate.phoenixAsRank === chosenAction.phoenixAsRank
           );
-        case "select_pass":
+        case "select_pass": {
           if (
             chosenAction.type !== "select_pass" ||
             candidate.seat !== chosenAction.seat
@@ -612,6 +765,7 @@ function findMatchingLegalAction(
           }
           const allowedCardIds = new Set(candidate.availableCardIds);
           return chosenCardIds.every((cardId) => allowedCardIds.has(cardId));
+        }
         case "assign_dragon_trick":
           return (
             chosenAction.type === "assign_dragon_trick" &&
@@ -856,10 +1010,6 @@ function buildHandSeed(
     return `${baseSeed}-${index}`;
   }
   return `${baseSeed}-${index}-hand-${handNumber}`;
-}
-
-function getCurrentHandNumber(state: Pick<GameState, "matchHistory">): number {
-  return state.matchHistory.length + 1;
 }
 
 function buildDecisionTelemetryMetadata(config: {
@@ -1161,40 +1311,6 @@ function resolveRequestedProvider(
   return overrides?.[seat] ?? defaultProvider;
 }
 
-function getActorLegalActions(
-  legalActions: LegalActionMap,
-  actor: SeatId | typeof SYSTEM_ACTOR
-): unknown[] {
-  const actorActions = legalActions[actor] ?? [];
-  return Array.isArray(actorActions) ? actorActions : [];
-}
-
-function hasActorLegalActions(
-  legalActions: LegalActionMap,
-  actor: SeatId | typeof SYSTEM_ACTOR
-): boolean {
-  return getActorLegalActions(legalActions, actor).length > 0;
-}
-
-function actorHasLegalActionTypes(
-  legalActions: LegalActionMap,
-  actor: SeatId,
-  actionTypes: LegalAction["type"][]
-): boolean {
-  return (legalActions[actor] ?? []).some((action) =>
-    actionTypes.includes(action.type)
-  );
-}
-
-function listSeatActorsWithLegalActionTypes(
-  legalActions: LegalActionMap,
-  actionTypes: LegalAction["type"][]
-): SeatId[] {
-  return SEAT_IDS.filter((seat) =>
-    actorHasLegalActionTypes(legalActions, seat, actionTypes)
-  );
-}
-
 function summarizeLegalActors(legalActions: LegalActionMap): JsonObject {
   const actors = Object.fromEntries(
     [
@@ -1229,28 +1345,6 @@ export function resolveAutomatedContinuationActor(config: {
   state: GameState;
 }): ContinuationActorResolution {
   return resolveContinuationActor(config) as ContinuationActorResolution;
-}
-
-function resolveNextActor(
-  legalActions: LegalActionMap,
-  state: GameState
-): SeatId | typeof SYSTEM_ACTOR {
-  const resolution = resolveAutomatedContinuationActor({
-    legalActions,
-    state
-  });
-  if (resolution.ok) {
-    return resolution.actor;
-  }
-
-  throw new Error(
-    [
-      "No legal actor was available for the next self-play decision.",
-      `stop_reason=${resolution.stopReason}`,
-      `phase=${state.phase}`,
-      `activeSeat=${String(state.activeSeat ?? "null")}`
-    ].join(" ")
-  );
 }
 
 function resolveDecisionScoringPath(config?: {
@@ -1335,16 +1429,6 @@ function shouldUseRichServerHeuristicScoring(config: {
   void config.actor;
   void config.legalActions;
   return config.state.phase === "grand_tichu_window";
-}
-
-function buildFastDecisionStatePayload(
-  stateRaw: JsonObject,
-  actorSeat: SeatId
-): JsonObject {
-  return buildServerFastPathState(
-    stateRaw as unknown as GameState,
-    actorSeat
-  ) as unknown as JsonObject;
 }
 
 export function validateServerHeuristicDecisionRequestContract(
@@ -1610,16 +1694,53 @@ async function requestJson(
     timeoutMs !== undefined
       ? setTimeout(() => abortController.abort(), timeoutMs)
       : undefined;
-  const init: RequestInit = { method, signal: abortController.signal };
-  if (requestBody) {
-    init.headers = {
-      "content-type": "application/json"
-    };
-    init.body = requestBody;
-  }
-  let response: Response;
+  const requestUrl = new URL(url);
+  const agent = getSharedBackendAgent(requestUrl.protocol);
+  const requestOptions: HttpRequestOptions | HttpsRequestOptions = {
+    protocol: requestUrl.protocol,
+    hostname: requestUrl.hostname,
+    port:
+      requestUrl.port.length > 0
+        ? Number(requestUrl.port)
+        : requestUrl.protocol === "https:"
+          ? 443
+          : 80,
+    path: `${requestUrl.pathname}${requestUrl.search}`,
+    method,
+    agent,
+    signal: abortController.signal,
+    headers: requestBody
+      ? {
+          "content-type": "application/json",
+          "content-length": Buffer.byteLength(requestBody, "utf8")
+        }
+      : undefined
+  };
+  let responseStatus = 0;
+  let responseText = "";
   try {
-    response = await fetch(url, init);
+    responseText = await new Promise<string>((resolve, reject) => {
+      const requestImpl =
+        requestUrl.protocol === "https:" ? httpsRequest : httpRequest;
+      const req = requestImpl(requestOptions, (res) => {
+        responseStatus = res.statusCode ?? 0;
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk: Buffer | string) => {
+          chunks.push(
+            typeof chunk === "string" ? Buffer.from(chunk) : chunk
+          );
+        });
+        res.on("end", () => {
+          resolve(Buffer.concat(chunks).toString("utf8"));
+        });
+        res.on("error", reject);
+      });
+      req.on("error", reject);
+      if (requestBody) {
+        req.write(requestBody);
+      }
+      req.end();
+    });
   } catch (error) {
     const latencyMs = Date.now() - startedAt;
     if (timeoutHandle) {
@@ -1654,33 +1775,7 @@ async function requestJson(
     clearTimeout(timeoutHandle);
   }
 
-  let responseText: string;
   const responseReadStartedAt = Date.now();
-  try {
-    responseText = await response.text();
-  } catch (error) {
-    const latencyMs = Date.now() - startedAt;
-    const message = error instanceof Error ? error.message : String(error);
-    traceBackendRequest(requestContext, "backend_request_failure", {
-      failure_kind: "unexpected_failure",
-      latency_ms: latencyMs,
-      status: response.status,
-      payload_bytes: payloadBytes,
-      message
-    });
-    throw new BackendRequestFailure(
-      "unexpected_failure",
-      `Request to ${url} failed while reading the response body: ${message}`,
-      {
-        method,
-        url,
-        request_kind: requestContext.request_kind,
-        status: response.status,
-        latency_ms: latencyMs,
-        cause: message
-      }
-    );
-  }
   const responseMs = Date.now() - responseReadStartedAt;
 
   let payload: JsonObject = {};
@@ -1696,27 +1791,27 @@ async function requestJson(
   }
   const parseMs = Date.now() - parseStartedAt;
   const latencyMs = Date.now() - startedAt;
-  if (!response.ok) {
+  if (responseStatus < 200 || responseStatus >= 300) {
     traceBackendRequest(requestContext, "backend_request_failure", {
       failure_kind: "backend_rejection",
       latency_ms: latencyMs,
       response_ms: responseMs,
       parse_ms: parseMs,
-      status: response.status,
+      status: responseStatus,
       payload_bytes: payloadBytes,
       ...(Object.keys(payload).length > 0 ? { body: payload } : {}),
       ...(rawBody ? { raw_body: rawBody } : {})
     });
     throw new BackendRequestFailure(
       "backend_rejection",
-      `Request to ${url} failed (${response.status}): ${
+      `Request to ${url} failed (${responseStatus}): ${
         rawBody ?? JSON.stringify(payload)
       }`,
       {
         method,
         url,
         request_kind: requestContext.request_kind,
-        status: response.status,
+        status: responseStatus,
         latency_ms: latencyMs,
         response_ms: responseMs,
         parse_ms: parseMs,
@@ -1729,11 +1824,11 @@ async function requestJson(
     latency_ms: latencyMs,
     response_ms: responseMs,
     parse_ms: parseMs,
-    status: response.status,
+    status: responseStatus,
     payload_bytes: payloadBytes
   });
   return {
-    status: response.status,
+    status: responseStatus,
     payload,
     ...(rawBody ? { raw_body: rawBody } : {}),
     latency_ms: latencyMs,
@@ -2561,6 +2656,7 @@ export async function resolveDecision(config: {
     providerFailureKind: null,
     providerFailureTimedOut: false,
     latencyMs: Date.now() - startedAt,
+    providerMetadata: metadata,
     telemetryFailureStats: createTelemetryFailureStats()
   };
 }
@@ -2590,6 +2686,7 @@ async function runSingleGame(
   const eventsByPhase: Record<string, number> = {};
   const latencyByProvider: Record<string, { count: number; totalMs: number }> =
     {};
+  const lightgbmDiagnostics = createLightgbmDecisionDiagnostics();
   const telemetryFailureStats = createTelemetryFailureStats();
   const telemetryFailureTracker = createTelemetryFailureTracker();
   let telemetryRuntimeState: TelemetryRuntimeState | null = null;
@@ -3003,6 +3100,7 @@ async function runSingleGame(
         }
 
         countByKey(providerUsage, resolved.providerUsed);
+        recordLightgbmDecisionDiagnostics(lightgbmDiagnostics, resolved);
         countByKey(decisionsByPhase, result.nextState.phase);
         recordLatency(
           latencyByProvider,
@@ -3271,6 +3369,10 @@ async function runSingleGame(
     ...telemetryFailureStats,
     telemetryBackoffUntil,
     telemetryRuntime: telemetryRuntimeState,
+    lightgbmDiagnostics:
+      lightgbmDiagnostics.requestedDecisions > 0
+        ? cloneLightgbmDecisionDiagnostics(lightgbmDiagnostics)
+        : null,
     decisionProviderFailures,
     decisionTimeoutCount,
     stopReason,
@@ -3307,9 +3409,7 @@ export async function runSelfPlayBatchDetailed(
   const usesBackendProvider = [...requestedProviders].some(
     (provider) => provider !== "local"
   );
-  const telemetryRequiresBackend =
-    options.telemetryEnabled && options.strictTelemetry === true;
-  if (telemetryRequiresBackend || usesBackendProvider) {
+  if (usesBackendProvider) {
     try {
       await verifyBackend(backendBaseUrl, {
         ...(options.traceBackend ? { traceBackend: true } : {}),
@@ -3320,7 +3420,7 @@ export async function runSelfPlayBatchDetailed(
     } catch (error) {
       const providerRequiresBackend =
         usesBackendProvider && options.serverFallbackEnabled === false;
-      if (telemetryRequiresBackend || providerRequiresBackend) {
+      if (providerRequiresBackend) {
         throw error;
       }
       emitDecisionDiagnostic(options, "backend_health_check_failure", {
@@ -3383,6 +3483,7 @@ export async function runSelfPlayBatchDetailed(
     telemetryFailureByKind: {},
     telemetryBackoffUntil: null,
     telemetryRuntime: null,
+    lightgbmDiagnostics: null,
     averageLatencyByProvider: {}
   };
 
@@ -3446,6 +3547,13 @@ export async function runSelfPlayBatchDetailed(
       mergeCounts(summary.decisionsByPhase, game.decisionsByPhase);
       mergeCounts(summary.eventsByPhase, game.eventsByPhase);
       mergeCounts(summary.providerUsage, game.providerUsage);
+      if (game.lightgbmDiagnostics !== null) {
+        summary.lightgbmDiagnostics ??= createLightgbmDecisionDiagnostics();
+        mergeLightgbmDecisionDiagnostics(
+          summary.lightgbmDiagnostics,
+          game.lightgbmDiagnostics
+        );
+      }
       mergeCounts(summary.totalScoreByTeam, game.teamScores);
       mergeCounts(summary.handWinCountsByTeam, game.handWinCountsByTeam);
       mergeCounts(

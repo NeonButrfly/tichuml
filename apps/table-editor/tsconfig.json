@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "outDir": "./dist",
+    "types": ["vite/client"],
+    "paths": {
+      "@tichuml/table-layout-schema": ["../../packages/table-layout-schema/src/index.ts"],
+      "@tichuml/fresh-alt-authoring": ["../../apps/web/src/altTableFresh/authoringLayout.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts"]
+}

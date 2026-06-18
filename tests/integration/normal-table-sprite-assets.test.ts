@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   computeNormalSpriteTransform,
+  NORMAL_TABLE_SPRITE_BASE_SRC,
+  NORMAL_TABLE_SPRITE_DRAGON_SRC,
   getNormalSpriteHiddenPassCount,
   getNormalSpritePassDirection,
   getNormalSpriteSelectedHandAnchors,
@@ -13,6 +15,11 @@ import {
 } from "../../apps/web/src/normal-table-sprite-assets";
 
 describe("normal table sprite assets", () => {
+  it("pins the classic runtime to the flattened 2D plate instead of the split base plus dragon stack", () => {
+    expect(NORMAL_TABLE_SPRITE_BASE_SRC).toBe("/tv_ed/t/plate.png");
+    expect(NORMAL_TABLE_SPRITE_DRAGON_SRC).toBeNull();
+  });
+
   it("maps standard and special cards to the authored sprite pack", () => {
     expect(
       resolveNormalSpriteCardFaceSrc({

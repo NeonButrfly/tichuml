@@ -11,6 +11,7 @@ import {
   type TelemetryRuntimeState
 } from "@tichuml/shared";
 import {
+  clearTelemetryEndpointBackoff,
   createTelemetryFailureStats,
   createTelemetryFailureTracker,
   emitTelemetryDecision,
@@ -734,6 +735,7 @@ export async function replayPersistedTelemetry(config: {
       }
       let fileFailed = false;
       for (const record of records) {
+        clearTelemetryEndpointBackoff(record.endpoint);
         const telemetry = {
           ...record.telemetry,
           strictTelemetry: false

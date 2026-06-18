@@ -70,6 +70,14 @@ Quick reference:
 - `npm run ml:train` supports `imitation_binary`,
   `observed_outcome_regression`, `rollout_regression`, and
   `rollout_ranker`.
+- `npm run ml:train` now prints target distribution, simple baseline RMSE/MAE,
+  model-vs-baseline improvement, and a Spearman interpretation band so
+  completed training runs can still be rejected when the learning signal is
+  weak. See issue `#79` for the current quality-tracking thread.
+- `scripts/outcome_reward_diagnostics.py --run-root training-runs/<run_id>`
+  inspects a completed observed-outcome run, writes markdown + JSON diagnostics,
+  and highlights recorded-vs-recomputed validation metric drift alongside
+  grouped target summaries and baseline comparisons.
 - `npm run ml:live-bootstrap` builds a rollout-labeled candidate model from
   live `gameplay` telemetry, including mixed `human_ui` and AI-provider rows
   when explicitly allowed, and can screen that candidate through the normal
@@ -513,6 +521,15 @@ May 31, 2026 mirrored validation pass. Use
 `LIGHTGBM_CONFIDENCE_DELEGATION_MAX_PRE_DELEGATION_MS` to skip that extra
 heuristic handoff when LightGBM has already spent too much of the client-side
 timeout budget before delegation would even begin.
+When a self-play smoke uses `--provider lightgbm_model`, the summary now also
+reports a `lightgbmDiagnostics` block so low model usage is explainable without
+manual database queries. That block surfaces how many requested LightGBM
+decisions stayed on the model, how many delegated back to
+`server_heuristic`, how many fell back locally after transport failure, and
+which delegation gates dominated (`phase_delegated`, `tichu_call_delegated`,
+`small_branch_delegated`, `confidence_delegated`, plus rollout-rerank skip
+reasons). This workflow is tracked in
+[#93](https://github.com/NeonButrfly/tichuml/issues/93).
 
 Both commands prefer the repo `.venv` automatically when it exists, so they use
 the same Python environment created by the bootstrap scripts.

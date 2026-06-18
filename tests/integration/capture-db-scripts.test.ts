@@ -80,7 +80,7 @@ function parseJsonLog(logFile: string) {
     .map((line) => JSON.parse(line) as { argv: string[] });
 }
 
-function createMockNode(binDir: string, logFile: string) {
+function createMockNode(binDir: string) {
   const mockScript = path.join(binDir, "mock-node.mjs");
   fs.writeFileSync(
     mockScript,
@@ -257,7 +257,7 @@ set -euo pipefail
   );
 }
 
-function createMockDocker(binDir: string, logFile: string) {
+function createMockDocker(binDir: string) {
   const mockScript = path.join(binDir, "mock-docker.mjs");
   fs.writeFileSync(
     mockScript,
@@ -397,10 +397,10 @@ function createFixtureRepo() {
   copyFixtureFile(tempDir, "scripts/capture-db-core.mjs");
   fs.chmodSync(path.join(scriptsDir, "capture-db.sh"), 0o755);
 
-  createMockNode(binDir, logFile);
+  createMockNode(binDir);
   createMockPgDump(binDir);
   createMockPsql(binDir);
-  createMockDocker(binDir, dockerLogFile);
+  createMockDocker(binDir);
   createMockSha256(binDir);
   createMockSevenZip(binDir);
 

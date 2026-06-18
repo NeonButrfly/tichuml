@@ -4124,39 +4124,40 @@ body.normal-layout-locked {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  padding: 0;
-}
-
-.normal-viewport__board-frame {
-  position: absolute;
-  inset: 0;
-  overflow: visible;
+  padding: var(--normal-shell-pad-y, 12px) var(--normal-shell-pad-x, 12px);
 }
 
 .normal-viewport__board {
   position: relative;
-  width: 1536px;
-  height: 1024px;
+  width: 100%;
+  height: 100%;
   min-width: 0;
   min-height: 0;
   display: block;
   padding: 0;
   overflow: hidden;
-  border-radius: 24px;
-  background-color: #162315;
-  background-position: center;
-  background-repeat: no-repeat;
-  background-size: 100% 100%;
-  box-shadow: 0 28px 64px rgba(0, 0, 0, 0.34);
+  border-radius: 8px;
+  background:
+    radial-gradient(
+      circle at 50% 38%,
+      rgba(122, 175, 139, 0.18),
+      transparent 30%
+    ),
+    linear-gradient(180deg, #163f22 0%, #12361d 48%, #0d2d18 100%);
+  box-shadow:
+    0 28px 64px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .normal-viewport__board::before {
   content: "";
   position: absolute;
-  inset: 0;
-  border-radius: 24px;
-  border: 0;
-  box-shadow: none;
+  inset: 12px;
+  border-radius: 22px;
+  border: 1px solid rgba(236, 243, 238, 0.2);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 0 0 1px rgba(0, 0, 0, 0.14);
   pointer-events: none;
 }
 

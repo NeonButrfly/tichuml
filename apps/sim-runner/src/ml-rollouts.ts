@@ -45,6 +45,8 @@ type ParsedArgs = {
   concurrency: number;
   resume: boolean;
   backendUrl: string;
+  sampleTimeoutMs: number;
+  sampleTimeoutRetries: number;
   continuationExplorationProfile?: "off" | "conservative" | "training_diversity";
   continuationExplorationRate?: number;
   continuationExplorationTopN?: number;
@@ -154,6 +156,18 @@ type RolloutResultRow = {
   rollout_failure_reason: string | null;
 };
 
+type RolloutAttemptResult =
+  | {
+      status: "completed";
+      row: RolloutResultRow;
+      transientRetryCount: number;
+    }
+  | {
+      status: "deferred_transient_failure";
+      row: RolloutResultRow;
+      transientRetryCount: number;
+    };
+
 type RolloutQuality = {
   created_at: string;
   jobs_discovered: number;
@@ -163,8 +177,11 @@ type RolloutQuality = {
   jobs_failed: number;
   sample_runs_succeeded: number;
   sample_runs_failed: number;
+  transient_retries_attempted: number;
+  jobs_deferred_transient_failure: number;
   skipped_invalid_forced_action: number;
   skipped_missing_state_raw: number;
+  skipped_non_concrete_state_raw: number;
   skipped_actor_mismatch: number;
   skipped_parse_failures: number;
   phase: string | null;
@@ -183,6 +200,44 @@ const DEFAULT_OUTPUT = "ml/data/rollout_rows.jsonl";
 const DEFAULT_JOBS_OUTPUT = "artifacts/ml/rollout-jobs.jsonl";
 const DEFAULT_QUALITY_JSON = "artifacts/ml/rollout-quality.json";
 const DEFAULT_QUALITY_MD = "artifacts/ml/rollout-quality.md";
+const DEFAULT_RETRYABLE_FAILURES_JSONL = "artifacts/ml/rollout-retryable-failures.jsonl";
+const DEFAULT_SAMPLE_TIMEOUT_MS = 15_000;
+const DEFAULT_SAMPLE_TIMEOUT_RETRIES = 2;
+
+export async function withTimeout<T>(
+  operation: Promise<T>,
+  timeoutMs: number,
+  label: string
+): Promise<T> {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    return operation;
+  }
+
+  let timeoutHandle: NodeJS.Timeout | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutHandle = setTimeout(() => {
+      reject(new Error(`${label}_timeout_${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([operation, timeoutPromise]);
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
+  }
+}
+
+function emitRolloutTrace(event: string, payload: Record<string, unknown>): void {
+  process.stdout.write(
+    `${JSON.stringify({
+      ts: new Date().toISOString(),
+      event,
+      ...payload
+    })}\n`
+  );
+}
 
 export function resolveForcedActionFromCandidate(
   stateRaw: GameState | null,
@@ -219,7 +274,59 @@ export function resolveForcedActionFromCandidate(
 export function shouldUseFullStateRolloutContinuation(
   continuationProvider: ProviderMode
 ): boolean {
-  return continuationProvider !== "local";
+  return continuationProvider === "lightgbm_model";
+}
+
+export function isTransientRolloutFailureReason(
+  failureReason: string | null | undefined
+): boolean {
+  return typeof failureReason === "string" &&
+    /^rollout_sample_timeout_\d+ms$/.test(failureReason);
+}
+
+export function isResultCompleteForResume(
+  row: Pick<
+    RolloutResultRow,
+    "rollout_samples" | "rollout_failure_reason" | "rollout_available"
+  >,
+  expectedSamples: number
+): boolean {
+  if (row.rollout_available && row.rollout_samples >= expectedSamples) {
+    return true;
+  }
+
+  if (isTransientRolloutFailureReason(row.rollout_failure_reason)) {
+    return false;
+  }
+
+  return true;
+}
+
+export function hasConcreteRolloutStateHands(
+  stateRaw: GameState | null
+): boolean {
+  if (!stateRaw || typeof stateRaw !== "object") {
+    return false;
+  }
+
+  for (const seat of SEAT_IDS) {
+    const hand = stateRaw.hands?.[seat];
+    if (!Array.isArray(hand)) {
+      return false;
+    }
+    for (const card of hand) {
+      if (
+        typeof card !== "object" ||
+        card === null ||
+        Array.isArray(card) ||
+        typeof (card as { id?: unknown }).id !== "string"
+      ) {
+        return false;
+      }
+    }
+  }
+
+  return true;
 }
 
 function parseArgs(argv: string[]): ParsedArgs {
@@ -241,6 +348,8 @@ function parseArgs(argv: string[]): ParsedArgs {
         "  --concurrency <count>",
         "  --resume",
         "  --backend-url <url>",
+        "  --sample-timeout-ms <ms>",
+        "  --sample-timeout-retries <count>",
         "  --continuation-exploration-profile <off|conservative|training_diversity>",
         "  --continuation-exploration-rate <rate>",
         "  --continuation-exploration-top-n <count>",
@@ -262,7 +371,9 @@ function parseArgs(argv: string[]): ParsedArgs {
     seed: "rollout",
     concurrency: 1,
     resume: false,
-    backendUrl: "http://127.0.0.1:4310"
+    backendUrl: "http://127.0.0.1:4310",
+    sampleTimeoutMs: DEFAULT_SAMPLE_TIMEOUT_MS,
+    sampleTimeoutRetries: DEFAULT_SAMPLE_TIMEOUT_RETRIES
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -341,6 +452,18 @@ function parseArgs(argv: string[]): ParsedArgs {
       case "--backend-url":
         if (next) {
           parsed.backendUrl = next;
+          index += 1;
+        }
+        break;
+      case "--sample-timeout-ms":
+        if (next) {
+          parsed.sampleTimeoutMs = Math.max(1, Number(next));
+          index += 1;
+        }
+        break;
+      case "--sample-timeout-retries":
+        if (next) {
+          parsed.sampleTimeoutRetries = Math.max(0, Number(next));
           index += 1;
         }
         break;
@@ -471,7 +594,10 @@ async function loadExportSelection(
   return selection;
 }
 
-async function loadExistingResults(outputPath: string): Promise<Set<string>> {
+async function loadExistingResults(
+  outputPath: string,
+  expectedSamples: number
+): Promise<Set<string>> {
   const existing = new Set<string>();
   if (!fs.existsSync(outputPath)) {
     return existing;
@@ -495,7 +621,27 @@ async function loadExistingResults(outputPath: string): Promise<Set<string>> {
       typeof payload.candidate_action_key === "string"
         ? payload.candidate_action_key
         : null;
-    if (Number.isFinite(decisionId) && candidateActionKey) {
+    const rolloutSamples =
+      typeof payload.rollout_samples === "number"
+        ? payload.rollout_samples
+        : Number(payload.rollout_samples);
+    const rolloutAvailable = payload.rollout_available === true;
+    const rolloutFailureReason =
+      typeof payload.rollout_failure_reason === "string"
+        ? payload.rollout_failure_reason
+        : null;
+    if (
+      Number.isFinite(decisionId) &&
+      candidateActionKey &&
+      isResultCompleteForResume(
+        {
+          rollout_samples: Number.isFinite(rolloutSamples) ? rolloutSamples : 0,
+          rollout_available: rolloutAvailable,
+          rollout_failure_reason: rolloutFailureReason
+        },
+        expectedSamples
+      )
+    ) {
       existing.add(`${decisionId}:${candidateActionKey}`);
     }
   }
@@ -505,7 +651,7 @@ async function loadExistingResults(outputPath: string): Promise<Set<string>> {
 async function fetchDecisionRows(
   sql: postgres.Sql,
   args: ParsedArgs,
-  exportSelection: ExportSelection
+  decisionIdsFilter: number[]
 ): Promise<DecisionRow[]> {
   const clauses: string[] = [];
   const params: unknown[] = [];
@@ -531,9 +677,9 @@ async function fetchDecisionRows(
     clauses.push(`hand_id = $${params.length + 1}`);
     params.push(args.handId);
   }
-  if (exportSelection.size > 0 && args.decisionId === undefined) {
+  if (decisionIdsFilter.length > 0 && args.decisionId === undefined) {
     clauses.push(`id = ANY($${params.length + 1})`);
-    params.push([...exportSelection.keys()]);
+    params.push(decisionIdsFilter);
   }
 
   const whereClause = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
@@ -561,6 +707,26 @@ async function fetchDecisionRows(
   return limitDecisionRowsRoundRobinByGame(rows, args.maxDecisions);
 }
 
+export function resolvePendingDecisionIds(
+  exportSelection: ExportSelection,
+  existingResults: Set<string>
+): number[] {
+  if (exportSelection.size === 0) {
+    return [];
+  }
+
+  const pending: number[] = [];
+  for (const [decisionId, candidateKeys] of exportSelection.entries()) {
+    for (const candidateKey of candidateKeys) {
+      if (!existingResults.has(`${decisionId}:${candidateKey}`)) {
+        pending.push(decisionId);
+        break;
+      }
+    }
+  }
+  return pending;
+}
+
 function buildJobs(
   decisions: DecisionRow[],
   exportSelection: ExportSelection
@@ -568,12 +734,14 @@ function buildJobs(
   jobs: RolloutJob[];
   decisionsById: Map<number, DecisionRow>;
   skippedMissingStateRaw: number;
+  skippedNonConcreteStateRaw: number;
   skippedActorMismatch: number;
   skippedParseFailures: number;
 } {
   const jobs: RolloutJob[] = [];
   const decisionsById = new Map<number, DecisionRow>();
   let skippedMissingStateRaw = 0;
+  let skippedNonConcreteStateRaw = 0;
   let skippedActorMismatch = 0;
   let skippedParseFailures = 0;
 
@@ -587,6 +755,10 @@ function buildJobs(
     const stateRaw = decision.state_raw as unknown as GameState | null;
     if (!stateRaw) {
       skippedMissingStateRaw += 1;
+      continue;
+    }
+    if (!hasConcreteRolloutStateHands(stateRaw)) {
+      skippedNonConcreteStateRaw += 1;
       continue;
     }
     const actorSeat = decision.actor_seat as SeatId;
@@ -634,6 +806,7 @@ function buildJobs(
     jobs,
     decisionsById,
     skippedMissingStateRaw,
+    skippedNonConcreteStateRaw,
     skippedActorMismatch,
     skippedParseFailures
   };
@@ -659,8 +832,11 @@ function qualityMarkdown(payload: RolloutQuality): string {
     `- jobs_failed: ${payload.jobs_failed}`,
     `- sample_runs_succeeded: ${payload.sample_runs_succeeded}`,
     `- sample_runs_failed: ${payload.sample_runs_failed}`,
+    `- transient_retries_attempted: ${payload.transient_retries_attempted}`,
+    `- jobs_deferred_transient_failure: ${payload.jobs_deferred_transient_failure}`,
     `- skipped_invalid_forced_action: ${payload.skipped_invalid_forced_action}`,
     `- skipped_missing_state_raw: ${payload.skipped_missing_state_raw}`,
+    `- skipped_non_concrete_state_raw: ${payload.skipped_non_concrete_state_raw}`,
     `- skipped_actor_mismatch: ${payload.skipped_actor_mismatch}`,
     `- skipped_parse_failures: ${payload.skipped_parse_failures}`,
     `- continuation_provider: ${payload.continuation_provider}`,
@@ -709,28 +885,32 @@ async function runSingleRolloutJob(
   job: RolloutJob,
   args: ParsedArgs,
   decision: DecisionRow
-): Promise<RolloutResultRow> {
+): Promise<RolloutAttemptResult> {
   const stateRaw = decision.state_raw as unknown as GameState | null;
   if (!stateRaw) {
     return {
-      decision_id: job.decisionId,
-      candidate_action_key: job.candidateActionKey,
-      rollout_available: false,
-      rollout_samples: 0,
-      rollout_failures: args.rolloutsPerAction,
-      rollout_mean_actor_team_delta: null,
-      rollout_median_actor_team_delta: null,
-      rollout_std_actor_team_delta: null,
-      rollout_win_rate: null,
-      rollout_hand_win_rate: null,
-      rollout_tichu_success_rate: null,
-      rollout_grand_tichu_success_rate: null,
-      rollout_mean_finish_rank_actor: null,
-      rollout_mean_finish_rank_partner: null,
-      rollout_continuation_provider: args.continuationProvider,
-      rollout_seed: buildRolloutSeed(args.seed, job.decisionId, job.candidateActionKey, 0),
-      rollout_engine_version: job.engineVersion,
-      rollout_failure_reason: "missing_state_raw"
+      status: "completed",
+      transientRetryCount: 0,
+      row: {
+        decision_id: job.decisionId,
+        candidate_action_key: job.candidateActionKey,
+        rollout_available: false,
+        rollout_samples: 0,
+        rollout_failures: args.rolloutsPerAction,
+        rollout_mean_actor_team_delta: null,
+        rollout_median_actor_team_delta: null,
+        rollout_std_actor_team_delta: null,
+        rollout_win_rate: null,
+        rollout_hand_win_rate: null,
+        rollout_tichu_success_rate: null,
+        rollout_grand_tichu_success_rate: null,
+        rollout_mean_finish_rank_actor: null,
+        rollout_mean_finish_rank_partner: null,
+        rollout_continuation_provider: args.continuationProvider,
+        rollout_seed: buildRolloutSeed(args.seed, job.decisionId, job.candidateActionKey, 0),
+        rollout_engine_version: job.engineVersion,
+        rollout_failure_reason: "missing_state_raw"
+      }
     };
   }
 
@@ -741,24 +921,28 @@ async function runSingleRolloutJob(
   );
   if (!forcedActionResolution.forcedAction) {
     return {
-      decision_id: job.decisionId,
-      candidate_action_key: job.candidateActionKey,
-      rollout_available: false,
-      rollout_samples: 0,
-      rollout_failures: args.rolloutsPerAction,
-      rollout_mean_actor_team_delta: null,
-      rollout_median_actor_team_delta: null,
-      rollout_std_actor_team_delta: null,
-      rollout_win_rate: null,
-      rollout_hand_win_rate: null,
-      rollout_tichu_success_rate: null,
-      rollout_grand_tichu_success_rate: null,
-      rollout_mean_finish_rank_actor: null,
-      rollout_mean_finish_rank_partner: null,
-      rollout_continuation_provider: args.continuationProvider,
-      rollout_seed: buildRolloutSeed(args.seed, job.decisionId, job.candidateActionKey, 0),
-      rollout_engine_version: job.engineVersion,
-      rollout_failure_reason: forcedActionResolution.failureReason
+      status: "completed",
+      transientRetryCount: 0,
+      row: {
+        decision_id: job.decisionId,
+        candidate_action_key: job.candidateActionKey,
+        rollout_available: false,
+        rollout_samples: 0,
+        rollout_failures: args.rolloutsPerAction,
+        rollout_mean_actor_team_delta: null,
+        rollout_median_actor_team_delta: null,
+        rollout_std_actor_team_delta: null,
+        rollout_win_rate: null,
+        rollout_hand_win_rate: null,
+        rollout_tichu_success_rate: null,
+        rollout_grand_tichu_success_rate: null,
+        rollout_mean_finish_rank_actor: null,
+        rollout_mean_finish_rank_partner: null,
+        rollout_continuation_provider: args.continuationProvider,
+        rollout_seed: buildRolloutSeed(args.seed, job.decisionId, job.candidateActionKey, 0),
+        rollout_engine_version: job.engineVersion,
+        rollout_failure_reason: forcedActionResolution.failureReason
+      }
     };
   }
   const forcedAction = forcedActionResolution.forcedAction;
@@ -766,6 +950,7 @@ async function runSingleRolloutJob(
   const samples = [];
   let rolloutFailures = 0;
   let lastFailureReason: string | null = null;
+  let transientRetryCount = 0;
 
   for (let sampleIndex = 0; sampleIndex < args.rolloutsPerAction; sampleIndex += 1) {
     const sampleSeed = buildRolloutSeed(
@@ -775,71 +960,127 @@ async function runSingleRolloutJob(
       sampleIndex
     );
     void sampleSeed;
-    try {
-      let result = applyEngineAction(
-        stateRaw,
-        coerceEngineAction(JSON.parse(JSON.stringify(forcedAction)) as JsonObject)
-      );
-      let continuationDecisionIndex = decision.decision_index + 1;
-      let safetyCounter = 0;
+    let sampleCompleted = false;
+    for (
+      let attemptIndex = 0;
+      attemptIndex <= args.sampleTimeoutRetries;
+      attemptIndex += 1
+    ) {
+      try {
+        const metrics = await withTimeout(
+          (async () => {
+            const sampleStartedAt = Date.now();
+            let result = applyEngineAction(
+              stateRaw,
+              coerceEngineAction(JSON.parse(JSON.stringify(forcedAction)) as JsonObject)
+            );
+            let continuationDecisionIndex = decision.decision_index + 1;
+            let safetyCounter = 0;
 
-      while (result.nextState.phase !== "finished") {
-        if (safetyCounter >= 5_000) {
-          throw new Error("rollout_decision_limit_reached");
+            while (result.nextState.phase !== "finished") {
+              if (
+                Number.isFinite(args.sampleTimeoutMs) &&
+                args.sampleTimeoutMs > 0 &&
+                Date.now() - sampleStartedAt >= args.sampleTimeoutMs
+              ) {
+                throw new Error(`rollout_sample_timeout_${args.sampleTimeoutMs}ms`);
+              }
+              if (safetyCounter >= 5_000) {
+                throw new Error("rollout_decision_limit_reached");
+              }
+              safetyCounter += 1;
+              const actor = resolveNextActor(result.legalActions, result.nextState);
+              const continuationMetadata = buildRolloutContinuationMetadata({
+                args,
+                job,
+                decisionIndex: continuationDecisionIndex,
+                sampleSeed,
+                sampleIndex
+              });
+              const resolved = await resolveDecision({
+                backendBaseUrl: args.backendUrl,
+                telemetryEnabled: false,
+                gameId: job.gameId,
+                handId: job.handId,
+                actor,
+                decisionIndex: continuationDecisionIndex,
+                stateRaw: result.nextState as unknown as JsonObject,
+                stateNorm: result.derivedView as unknown as JsonObject,
+                legalActions: result.legalActions,
+                phase: result.nextState.phase,
+                defaultProvider: args.continuationProvider,
+                quiet: true,
+                serverFallbackEnabled: true,
+                ...(continuationMetadata ? { metadata: continuationMetadata } : {}),
+                fullStateDecisionRequests: shouldUseFullStateRolloutContinuation(
+                  args.continuationProvider
+                )
+              });
+              result = applyEngineAction(result.nextState, resolved.chosenAction);
+              continuationDecisionIndex += 1;
+            }
+
+            return extractRolloutSampleMetrics(result.nextState, job.actorSeat);
+          })(),
+          args.sampleTimeoutMs,
+          "rollout_sample"
+        );
+        samples.push(metrics);
+        sampleCompleted = true;
+        break;
+      } catch (error) {
+        lastFailureReason =
+          error instanceof Error ? error.message : String(error);
+        if (
+          isTransientRolloutFailureReason(lastFailureReason) &&
+          attemptIndex < args.sampleTimeoutRetries
+        ) {
+          transientRetryCount += 1;
+          continue;
         }
-        safetyCounter += 1;
-        const actor = resolveNextActor(result.legalActions, result.nextState);
-        const continuationMetadata = buildRolloutContinuationMetadata({
-          args,
-          job,
-          decisionIndex: continuationDecisionIndex,
-          sampleSeed,
-          sampleIndex
-        });
-        const resolved = await resolveDecision({
-          backendBaseUrl: args.backendUrl,
-          telemetryEnabled: false,
-          gameId: job.gameId,
-          handId: job.handId,
-          actor,
-          decisionIndex: continuationDecisionIndex,
-          stateRaw: result.nextState as unknown as JsonObject,
-          stateNorm: result.derivedView as unknown as JsonObject,
-          legalActions: result.legalActions,
-          phase: result.nextState.phase,
-          defaultProvider: args.continuationProvider,
-          quiet: true,
-          serverFallbackEnabled: true,
-          ...(continuationMetadata ? { metadata: continuationMetadata } : {}),
-          fullStateDecisionRequests: shouldUseFullStateRolloutContinuation(
-            args.continuationProvider
-          )
-        });
-        result = applyEngineAction(result.nextState, resolved.chosenAction);
-        continuationDecisionIndex += 1;
+        rolloutFailures += 1;
+        break;
       }
+    }
 
-      samples.push(extractRolloutSampleMetrics(result.nextState, job.actorSeat));
-    } catch (error) {
-      rolloutFailures += 1;
-      lastFailureReason =
-        error instanceof Error ? error.message : String(error);
+    if (!sampleCompleted && isTransientRolloutFailureReason(lastFailureReason)) {
+      const deferredRow: RolloutResultRow = {
+        decision_id: job.decisionId,
+        candidate_action_key: job.candidateActionKey,
+        rollout_available: false,
+        rollout_samples: samples.length,
+        rollout_failures: rolloutFailures,
+        ...summarizeRolloutSamples(samples),
+        rollout_continuation_provider: args.continuationProvider,
+        rollout_seed: buildRolloutSeed(args.seed, job.decisionId, job.candidateActionKey, 0),
+        rollout_engine_version: job.engineVersion,
+        rollout_failure_reason: lastFailureReason
+      };
+      return {
+        status: "deferred_transient_failure",
+        row: deferredRow,
+        transientRetryCount
+      };
     }
   }
 
   const summary = summarizeRolloutSamples(samples);
   return {
-    decision_id: job.decisionId,
-    candidate_action_key: job.candidateActionKey,
-    rollout_available: samples.length > 0,
-    rollout_samples: samples.length,
-    rollout_failures: rolloutFailures,
-    ...summary,
-    rollout_continuation_provider: args.continuationProvider,
-    rollout_seed: buildRolloutSeed(args.seed, job.decisionId, job.candidateActionKey, 0),
-    rollout_engine_version: job.engineVersion,
-    rollout_failure_reason:
-      samples.length > 0 && rolloutFailures === 0 ? null : lastFailureReason
+    status: "completed",
+    transientRetryCount,
+    row: {
+      decision_id: job.decisionId,
+      candidate_action_key: job.candidateActionKey,
+      rollout_available: samples.length > 0,
+      rollout_samples: samples.length,
+      rollout_failures: rolloutFailures,
+      ...summary,
+      rollout_continuation_provider: args.continuationProvider,
+      rollout_seed: buildRolloutSeed(args.seed, job.decisionId, job.candidateActionKey, 0),
+      rollout_engine_version: job.engineVersion,
+      rollout_failure_reason:
+        samples.length > 0 && rolloutFailures === 0 ? null : lastFailureReason
+    }
   };
 }
 
@@ -869,9 +1110,24 @@ async function main(): Promise<void> {
   const jobsOutputPath = path.resolve(DEFAULT_JOBS_OUTPUT);
   const qualityJsonPath = path.resolve(DEFAULT_QUALITY_JSON);
   const qualityMdPath = path.resolve(DEFAULT_QUALITY_MD);
+  const retryableFailuresPath = path.resolve(DEFAULT_RETRYABLE_FAILURES_JSONL);
   const existingResults = args.resume
-    ? await loadExistingResults(outputPath)
+    ? await loadExistingResults(outputPath, args.rolloutsPerAction)
     : new Set<string>();
+  const pendingDecisionIds = resolvePendingDecisionIds(
+    exportSelection,
+    existingResults
+  );
+  emitRolloutTrace("ml_rollouts_start", {
+    output: outputPath,
+    resume: args.resume,
+    existing_results: existingResults.size,
+    export_selection_decisions: exportSelection.size,
+    pending_decision_ids: pendingDecisionIds.length,
+    concurrency: args.concurrency,
+    rollouts_per_action: args.rolloutsPerAction,
+    sample_timeout_ms: args.sampleTimeoutMs
+  });
   const quality: RolloutQuality = {
     created_at: new Date().toISOString(),
     jobs_discovered: 0,
@@ -881,8 +1137,11 @@ async function main(): Promise<void> {
     jobs_failed: 0,
     sample_runs_succeeded: 0,
     sample_runs_failed: 0,
+    transient_retries_attempted: 0,
+    jobs_deferred_transient_failure: 0,
     skipped_invalid_forced_action: 0,
     skipped_missing_state_raw: 0,
+    skipped_non_concrete_state_raw: 0,
     skipped_actor_mismatch: 0,
     skipped_parse_failures: 0,
     phase: resolvePhaseFilter(args.phase) ?? null,
@@ -903,15 +1162,31 @@ async function main(): Promise<void> {
     await fs.promises.writeFile(outputPath, "", "utf8");
   }
   await fs.promises.writeFile(jobsOutputPath, "", "utf8");
+  await fs.promises.writeFile(retryableFailuresPath, "", "utf8");
 
   const sql = postgres(args.databaseUrl, { max: 1, idle_timeout: 5 });
   try {
-    const decisions = await fetchDecisionRows(sql, args, exportSelection);
+    const decisionIdsFilter =
+      args.decisionId === undefined &&
+      args.inputExport &&
+      exportSelection.size > 0
+        ? pendingDecisionIds
+        : [];
+    const decisions = await fetchDecisionRows(sql, args, decisionIdsFilter);
     const built = buildJobs(decisions, exportSelection);
     quality.skipped_missing_state_raw = built.skippedMissingStateRaw;
+    quality.skipped_non_concrete_state_raw = built.skippedNonConcreteStateRaw;
     quality.skipped_actor_mismatch = built.skippedActorMismatch;
     quality.skipped_parse_failures = built.skippedParseFailures;
     quality.jobs_discovered = built.jobs.length;
+    emitRolloutTrace("ml_rollouts_jobs_built", {
+      decisions: decisions.length,
+      jobs_discovered: built.jobs.length,
+      skipped_missing_state_raw: built.skippedMissingStateRaw,
+      skipped_non_concrete_state_raw: built.skippedNonConcreteStateRaw,
+      skipped_actor_mismatch: built.skippedActorMismatch,
+      skipped_parse_failures: built.skippedParseFailures
+    });
 
     const pendingJobs = built.jobs.filter((job) => {
       const key = `${job.decisionId}:${job.candidateActionKey}`;
@@ -920,6 +1195,11 @@ async function main(): Promise<void> {
         return false;
       }
       return true;
+    });
+    emitRolloutTrace("ml_rollouts_pending_jobs", {
+      jobs_discovered: quality.jobs_discovered,
+      jobs_skipped_existing: quality.jobs_skipped_existing,
+      pending_jobs: pendingJobs.length
     });
 
     for (const job of pendingJobs) {
@@ -931,7 +1211,36 @@ async function main(): Promise<void> {
       if (!decision) {
         return;
       }
-      const row = await runSingleRolloutJob(job, args, decision);
+      emitRolloutTrace("ml_rollouts_job_start", {
+        decision_id: job.decisionId,
+        candidate_action_key: job.candidateActionKey
+      });
+      const attempt = await runSingleRolloutJob(job, args, decision);
+      const row = attempt.row;
+      quality.transient_retries_attempted += attempt.transientRetryCount;
+      if (attempt.status === "deferred_transient_failure") {
+        quality.jobs_deferred_transient_failure += 1;
+        quality.sample_runs_succeeded += row.rollout_samples;
+        quality.sample_runs_failed += row.rollout_failures;
+        if (row.rollout_failure_reason) {
+          quality.failure_reason_counts[row.rollout_failure_reason] =
+            (quality.failure_reason_counts[row.rollout_failure_reason] ?? 0) + 1;
+        }
+        await appendJsonlLine(retryableFailuresPath, row);
+        emitRolloutTrace("ml_rollouts_job_finish", {
+          decision_id: row.decision_id,
+          candidate_action_key: row.candidate_action_key,
+          rollout_available: row.rollout_available,
+          rollout_samples: row.rollout_samples,
+          rollout_failures: row.rollout_failures,
+          rollout_failure_reason: row.rollout_failure_reason,
+          retryable: true,
+          transient_retry_count: attempt.transientRetryCount,
+          jobs_executed: quality.jobs_executed,
+          pending_jobs_remaining: Math.max(0, pendingJobs.length - quality.jobs_executed)
+        });
+        return;
+      }
       quality.jobs_executed += 1;
       quality.sample_runs_succeeded += row.rollout_samples;
       quality.sample_runs_failed += row.rollout_failures;
@@ -948,6 +1257,17 @@ async function main(): Promise<void> {
         }
       }
       await appendJsonlLine(outputPath, row);
+      emitRolloutTrace("ml_rollouts_job_finish", {
+        decision_id: row.decision_id,
+        candidate_action_key: row.candidate_action_key,
+        rollout_available: row.rollout_available,
+        rollout_samples: row.rollout_samples,
+        rollout_failures: row.rollout_failures,
+        rollout_failure_reason: row.rollout_failure_reason,
+        transient_retry_count: attempt.transientRetryCount,
+        jobs_executed: quality.jobs_executed,
+        pending_jobs_remaining: Math.max(0, pendingJobs.length - quality.jobs_executed)
+      });
     });
   } finally {
     await sql.end({ timeout: 5 });
@@ -960,21 +1280,34 @@ async function main(): Promise<void> {
     "utf8"
   );
   await fs.promises.writeFile(qualityMdPath, qualityMarkdown(quality), "utf8");
+  emitRolloutTrace("ml_rollouts_complete", {
+    jobs_executed: quality.jobs_executed,
+    jobs_succeeded: quality.jobs_succeeded,
+    jobs_failed: quality.jobs_failed,
+    sample_runs_succeeded: quality.sample_runs_succeeded,
+    sample_runs_failed: quality.sample_runs_failed,
+    failure_reason_counts: quality.failure_reason_counts
+  });
 
   process.stdout.write(
     `${JSON.stringify({
       accepted: true,
       output: outputPath,
       jobs_output: jobsOutputPath,
+      retryable_failures_output: retryableFailuresPath,
       quality_output: qualityJsonPath,
       jobs_executed: quality.jobs_executed,
       jobs_succeeded: quality.jobs_succeeded,
-      jobs_failed: quality.jobs_failed
+      jobs_failed: quality.jobs_failed,
+      jobs_deferred_transient_failure: quality.jobs_deferred_transient_failure
     })}\n`
   );
 }
 
 void main().catch((error) => {
+  emitRolloutTrace("ml_rollouts_fatal", {
+    message: error instanceof Error ? error.message : String(error)
+  });
   process.stderr.write(
     `${JSON.stringify({
       accepted: false,

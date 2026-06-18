@@ -72,7 +72,7 @@ function copyFixtureFile(
   fs.copyFileSync(sourcePath, targetPath);
 }
 
-function createMockPsql(binDir: string, logFile: string) {
+function createMockPsql(binDir: string) {
   const mockScript = path.join(binDir, "mock-psql.mjs");
   fs.writeFileSync(
     mockScript,
@@ -138,7 +138,7 @@ function createFixtureRepo() {
     "DATABASE_URL=postgres://from-env-file:pw@localhost:5544/from_env_file\n",
     "utf8"
   );
-  createMockPsql(binDir, logFile);
+  createMockPsql(binDir);
   return { tempDir, scriptsDir, binDir, logFile };
 }
 

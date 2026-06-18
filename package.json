@@ -8,16 +8,16 @@
     "packages/*"
   ],
   "scripts": {
-    "clean": "rimraf apps/web/dist apps/server/dist apps/sim-runner/dist packages/shared/dist packages/engine/dist packages/telemetry/dist packages/ai-heuristics/dist packages/ui-kit/dist coverage",
+    "clean": "rimraf apps/web/dist apps/server/dist apps/sim-runner/dist apps/table-editor/dist packages/shared/dist packages/engine/dist packages/telemetry/dist packages/ai-heuristics/dist packages/ui-kit/dist packages/table-layout-schema/dist coverage",
     "lint": "eslint .",
-    "test": "vitest run",
+    "test": "npm run build:table-layout-schema && vitest run",
     "dev:web": "npm run dev -w @tichuml/web",
     "verify:browser:alt": "tsx scripts/browser-verify.ts --start-dev-web",
     "dev:server": "npm run dev -w @tichuml/server",
     "start:server": "npm run start -w @tichuml/server",
     "bootstrap:windows": "powershell -ExecutionPolicy Bypass -File scripts/bootstrap.ps1",
     "bootstrap:unix": "bash scripts/bootstrap.sh",
-    "build": "npm run clean && npm run build:shared && npm run build:engine && npm run build:telemetry && npm run build:ai && npm run build:ui-kit && npm run build:server && npm run build:sim-runner && npm run build:web",
+    "build": "npm run clean && npm run build:shared && npm run build:engine && npm run build:telemetry && npm run build:ai && npm run build:ui-kit && npm run build:table-layout-schema && npm run build:server && npm run build:sim-runner && npm run build:web",
     "build:shared": "npm run build -w @tichuml/shared",
     "build:engine": "npm run build -w @tichuml/engine",
     "build:telemetry": "npm run build -w @tichuml/telemetry",
@@ -52,7 +52,10 @@
     "ml:train": "tsx scripts/run-python.ts ml/train_lightgbm.py",
     "ml:bootstrap": "tsx scripts/ml-bootstrap.ts",
     "ml:live-bootstrap": "tsx scripts/ml-live-bootstrap.ts",
-    "ml:evaluate": "tsx apps/sim-runner/src/evaluate.ts"
+    "ml:evaluate": "tsx apps/sim-runner/src/evaluate.ts",
+    "editor:table": "npm --prefix apps/table-editor run dev",
+    "editor:table:build": "npm --prefix apps/table-editor run build",
+    "build:table-layout-schema": "npm run build -w @tichuml/table-layout-schema"
   },
   "devDependencies": {
     "@eslint/js": "^9.24.0",
@@ -75,6 +78,11 @@
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.29.1",
     "vite": "^7.1.5",
-    "vitest": "^3.2.4"
+    "vitest": "^4.1.8"
+  },
+  "allowScripts": {
+    "esbuild@0.27.4": true,
+    "fsevents@2.3.3": true,
+    "fsevents@2.3.2": true
   }
 }

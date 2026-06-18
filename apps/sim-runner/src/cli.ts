@@ -1090,11 +1090,16 @@ async function runForever(args: ParsedArgs): Promise<void> {
   }
 }
 
-async function main(): Promise<void> {
-  const args = parseArgs(process.argv.slice(2));
+type CliOutput = Pick<Console, "log" | "info" | "warn" | "error">;
+
+export async function runCli(
+  argv: string[] = process.argv.slice(2),
+  output: CliOutput = console
+): Promise<number> {
+  const args = parseArgs(argv);
   if (args.forever) {
     await runForever(args);
-    return;
+    return 0;
   }
 
   const originalLog = console.log;
@@ -1159,10 +1164,10 @@ async function main(): Promise<void> {
     console.error = originalError;
   }
 
-  console.log(JSON.stringify(summary, null, args.quiet ? 0 : 2));
+  output.log(JSON.stringify(summary, null, args.quiet ? 0 : 2));
 
   if (summary.errors > 0 || summary.gamesPlayed !== args.games) {
-    console.error(
+    output.error(
       JSON.stringify(
         {
           accepted: false,
@@ -1176,8 +1181,14 @@ async function main(): Promise<void> {
         args.quiet ? 0 : 2
       )
     );
-    process.exitCode = 1;
+    return 1;
   }
+
+  return 0;
+}
+
+async function main(): Promise<void> {
+  process.exitCode = await runCli();
 }
 
 const isMainModule = process.argv[1]

@@ -9,6 +9,7 @@ describe("player table mode helpers", () => {
     expect(getPlayerTableVariantFromSearch("?table=alt")).toBe("alternate");
     expect(getPlayerTableVariantFromSearch("?table=luxury")).toBe("alternate");
     expect(getPlayerTableVariantFromSearch("?table=normal")).toBe("normal");
+    expect(getPlayerTableVariantFromSearch("?table=classic")).toBe("normal");
     expect(getPlayerTableVariantFromSearch("")).toBe("normal");
   });
 

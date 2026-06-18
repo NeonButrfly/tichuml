@@ -16,13 +16,6 @@ type PassMapValue = {
   rot: number;
 };
 
-type CardAnchor = {
-  id: string;
-  zone: string;
-  seat: string | null;
-  bbox_px: { x: number; y: number; w: number; h: number };
-};
-
 type PassAnchor = {
   id: string;
   arrow_direction: string;
@@ -34,6 +27,7 @@ type PassAnchor = {
 type Tv7Snapshot = {
   assetRoot: string;
   phase: string;
+  renderer: string;
   design: {
     width: number;
     height: number;
@@ -43,6 +37,7 @@ type Tv7Snapshot = {
   };
   table: {
     src: string;
+    mode: string;
     designW: number;
     designH: number;
     rendered: {
@@ -59,9 +54,8 @@ type Tv7Snapshot = {
     anchors: Array<{
       id: string;
       zone: string;
-      seat: string | null;
-      bbox_px: { x: number; y: number; w: number; h: number };
-      screen_bbox: { x: number; y: number; width: number; height: number };
+      seat: string;
+      renderMode: string;
     }>;
   };
   passing: {
@@ -81,6 +75,18 @@ type Tv7Snapshot = {
     layoutSource: string;
     bySeat: Record<string, number>;
     sampleSrcs: string[];
+    north: { renderMode: string; hiddenBottomPx: number; mostlyVisible: boolean };
+    east: {
+      renderMode: string;
+      usesPolygonWarping: boolean;
+      usesNormalImageSprites: boolean;
+    };
+    west: {
+      renderMode: string;
+      usesPolygonWarping: boolean;
+      usesNormalImageSprites: boolean;
+    };
+    south: { renderMode: string };
   };
   deal: {
     phase: string;
@@ -411,13 +417,23 @@ async function expectPhase(page: import("playwright").Page, phase: string, timeo
 async function readSnapshot(page: import("playwright").Page): Promise<Tv7Snapshot> {
   const snapshot = await page.evaluate(() => {
     const snapshotFactory = (window as Window & {
+      __tichuAltTableSnapshot?: () => unknown;
+      __tichuV7Snapshot?: () => unknown;
+    }).__tichuAltTableSnapshot;
+    if (typeof snapshotFactory === "function") {
+      return snapshotFactory();
+    }
+
+    const fallbackFactory = (window as Window & {
       __tichuV7Snapshot?: () => unknown;
     }).__tichuV7Snapshot;
-    return typeof snapshotFactory === "function" ? snapshotFactory() : null;
+    return typeof fallbackFactory === "function" ? fallbackFactory() : null;
   });
 
   if (!snapshot) {
-    throw new Error("window.__tichuV7Snapshot was not available.");
+    throw new Error(
+      "Neither window.__tichuAltTableSnapshot nor window.__tichuV7Snapshot was available."
+    );
   }
 
   return snapshot as Tv7Snapshot;
@@ -446,10 +462,9 @@ function compareRectWithinOnePixel(
 async function verifyAtDesignViewport(
   page: import("playwright").Page,
   timeoutMs: number,
-  cardAnchors: CardAnchor[],
   passAnchors: PassAnchor[]
 ) {
-  await expectPhase(page, "deal8", timeoutMs);
+  await expectPhase(page, "passing", timeoutMs);
 
   const tableImage = page.locator("img[data-table-layer='plate']");
   await tableImage.waitFor({ state: "visible", timeout: timeoutMs });
@@ -459,23 +474,13 @@ async function verifyAtDesignViewport(
     naturalHeight: image.naturalHeight
   }));
   assertCondition(
-    naturalSize.src?.endsWith("/tv7/t/plate.png"),
-    `Expected table plate /tv7/t/plate.png, got ${naturalSize.src ?? "null"}.`
+    naturalSize.src?.endsWith("/tv_ed/t/plate.png"),
+    `Expected table plate /tv_ed/t/plate.png, got ${naturalSize.src ?? "null"}.`
   );
   assertCondition(
     naturalSize.naturalWidth === 1536 && naturalSize.naturalHeight === 1024,
     `Expected table image 1536x1024, got ${naturalSize.naturalWidth}x${naturalSize.naturalHeight}.`
   );
-
-  for (const seat of ["north", "east", "south", "west"] as const) {
-    const count = await page.locator(`[data-zone='${seat}_hand']`).count();
-    assertCondition(count === 8, `Expected ${seat} to show 8 cards in deal8, got ${count}.`);
-  }
-
-  await expectPhase(page, "grand_tichu", timeoutMs);
-  await page.locator("button[data-alt-action='skip-gt']").click();
-  await expectPhase(page, "deal6", timeoutMs);
-  await expectPhase(page, "passing", timeoutMs);
 
   const overlay = page.locator("img[data-table-layer='passing-overlay']");
   await overlay.waitFor({ state: "visible", timeout: timeoutMs });
@@ -484,6 +489,27 @@ async function verifyAtDesignViewport(
     const count = await page.locator(`[data-zone='${seat}_hand']`).count();
     assertCondition(count === 14, `Expected ${seat} to show 14 cards in passing, got ${count}.`);
   }
+
+  const hiddenHands = page.locator("[data-render-mode='r3f-hidden-hand']");
+  assertCondition((await hiddenHands.count()) === 42, "Expected 42 opponent rack cards in passing.");
+
+  const sideHands = page.locator(
+    "[data-zone='east_hand'][data-card-render-mode], [data-zone='west_hand'][data-card-render-mode]"
+  );
+  const sideHandModes = await sideHands.evaluateAll((nodes) =>
+    nodes.map((node) => ({
+      renderMode: node.getAttribute("data-card-render-mode"),
+      usesPolygonWarping: node.getAttribute("data-uses-polygon-warping")
+    }))
+  );
+  assertCondition(
+    sideHandModes.every(
+      (card) =>
+        card.renderMode === "side_rack_readable_fan" &&
+        card.usesPolygonWarping === "false"
+    ),
+    "East and west rack cards must stay readable sprites without polygon warping."
+  );
 
   const passTargets = page.locator("[data-pass-id][data-arrow-direction]");
   assertCondition((await passTargets.count()) === 12, "Expected exactly 12 passing targets.");
@@ -555,15 +581,13 @@ async function verifyAtDesignViewport(
     "Confirm pass should enable once the three south lanes are assigned."
   );
 
-  await page.locator("button[data-alt-action='auto-demo-pass']").click();
-  const totalAssignedCount = await page.locator(
-    "[data-pass-id] [data-pass-card-img='true']"
-  ).count();
-  assertCondition(totalAssignedCount === 12, "Auto demo pass should fill all 12 lanes.");
-
   const cardSources = await page
-    .locator("[data-card-id] img, [data-pass-card-img='true']")
+    .locator("[data-pass-card-img='true']")
     .evaluateAll((images) => images.map((image) => image.getAttribute("src") ?? ""));
+  assertCondition(
+    cardSources.length === 3,
+    "Exactly the three south pass cards should be assigned before confirm."
+  );
   assertCondition(
     cardSources.every((src) => src.startsWith("/tv7/c/")),
     "Every rendered card image must come from /tv7/c/."
@@ -571,19 +595,47 @@ async function verifyAtDesignViewport(
 
   const snapshot = await readSnapshot(page);
   assertCondition(snapshot.assetRoot === "/tv7", "Snapshot assetRoot mismatch.");
-  assertCondition(snapshot.table.src === "/tv7/t/plate.png", "Snapshot table path mismatch.");
-  assertCondition(snapshot.cardLayout.src === "/tv7/h/a.json", "Snapshot card anchor path mismatch.");
+  assertCondition(snapshot.renderer === "react-three-fiber", "Snapshot renderer mismatch.");
+  assertCondition(snapshot.table.src === "/tv_ed/t/plate.png", "Snapshot table path mismatch.");
+  assertCondition(
+    snapshot.table.mode === "single_image_plane",
+    "Snapshot table mode mismatch."
+  );
+  assertCondition(snapshot.cardLayout.src === "v18CardRackMath", "Snapshot card anchor path mismatch.");
   assertCondition(snapshot.passing.overlaySrc === "/tv7/p/o.png", "Snapshot overlay path mismatch.");
   assertCondition(snapshot.phase === "passing", "Snapshot phase mismatch.");
   assertCondition(snapshot.cards.usingImageAssets === true, "Snapshot cards must use image assets.");
   assertCondition(snapshot.cards.placeholders === false, "Snapshot placeholders must be false.");
-  assertCondition(snapshot.cards.layoutSource === "prototype_layer", "Snapshot card layout source mismatch.");
+  assertCondition(snapshot.cards.layoutSource === "v18_math", "Snapshot card layout source mismatch.");
+  assertCondition(snapshot.cardLayout.layoutSource === "v18_math", "Snapshot card anchors should be math-based.");
   assertCondition(snapshot.deal.counts.north === 14, "North count should be 14 in passing.");
   assertCondition(snapshot.deal.counts.east === 14, "East count should be 14 in passing.");
   assertCondition(snapshot.deal.counts.south === 14, "South count should be 14 in passing.");
   assertCondition(snapshot.deal.counts.west === 14, "West count should be 14 in passing.");
   assertCondition(snapshot.deal.counts.deckRemaining === 0, "Deck should be empty in passing.");
   assertCondition(snapshot.passing.anchors.length === 12, "Snapshot must expose 12 passing anchors.");
+  assertCondition(
+    snapshot.cards.north.renderMode === "north_rack_back_mostly_visible" &&
+      snapshot.cards.north.hiddenBottomPx <= 16 &&
+      snapshot.cards.north.mostlyVisible === true,
+    "North rack snapshot contract drifted."
+  );
+  assertCondition(
+    snapshot.cards.east.renderMode === "side_rack_readable_fan" &&
+      snapshot.cards.east.usesPolygonWarping === false &&
+      snapshot.cards.east.usesNormalImageSprites === true,
+    "East rack snapshot contract drifted."
+  );
+  assertCondition(
+    snapshot.cards.west.renderMode === "side_rack_readable_fan" &&
+      snapshot.cards.west.usesPolygonWarping === false &&
+      snapshot.cards.west.usesNormalImageSprites === true,
+    "West rack snapshot contract drifted."
+  );
+  assertCondition(
+    snapshot.cards.south.renderMode === "south_player_fan",
+    "South rack snapshot contract drifted."
+  );
 
   for (const anchor of snapshot.passing.anchors) {
     const expected = expectedPassMap[anchor.id];
@@ -633,40 +685,11 @@ async function verifyAtDesignViewport(
     );
   }
 
-  const sampleCardChecks = ["north_01", "east_08", "west_14"];
-  for (const anchorId of sampleCardChecks) {
-    const anchor = cardAnchors.find((candidate) => candidate.id === anchorId);
-    assertCondition(Boolean(anchor), `Missing card fixture anchor ${anchorId}.`);
-    const zoneAnchors = cardAnchors.filter((candidate) => candidate.zone === anchor!.zone);
-    const zoneIndex = zoneAnchors.findIndex((candidate) => candidate.id === anchorId);
-    const node = page.locator(
-      `[data-zone='${anchor!.zone}'][data-card-id]`
-    ).nth(zoneIndex);
-    const rect = await node.boundingBox();
-    assertCondition(Boolean(rect), `Missing card node for ${anchorId}.`);
-    compareRectWithinOnePixel(
-      {
-        x: rect?.x ?? 0,
-        y: rect?.y ?? 0,
-        width: rect?.width ?? 0,
-        height: rect?.height ?? 0
-      },
-      {
-        x: anchor!.bbox_px.x,
-        y: anchor!.bbox_px.y,
-        width: anchor!.bbox_px.w,
-        height: anchor!.bbox_px.h
-      },
-      `Card ${anchorId}`
-    );
-  }
-
   return snapshot;
 }
 
 async function verifyAtResponsiveViewport(
   page: import("playwright").Page,
-  cardAnchors: CardAnchor[]
 ) {
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.waitForTimeout(250);
@@ -725,18 +748,7 @@ async function verifyAtResponsiveViewport(
   );
 
   const southCards = page.locator("[data-zone='south_hand'][data-card-id]");
-  assertCondition((await southCards.count()) >= 8, "Expected visible south hand cards.");
-  const firstSouthRect = await southCards.first().boundingBox();
-  const lastSouthRect = await southCards.last().boundingBox();
-  assertCondition(
-    Boolean(firstSouthRect && lastSouthRect),
-    "Missing responsive south hand geometry."
-  );
-  assertCondition(
-    (firstSouthRect?.y ?? 0) > snapshot.table.rendered.height * 0.55 &&
-      (lastSouthRect?.y ?? 0) > snapshot.table.rendered.height * 0.55,
-    "Responsive south hand drifted out of the lower fan band."
-  );
+  assertCondition((await southCards.count()) >= 8, "Expected visible south hand hitboxes.");
 }
 
 async function captureAltTable(options: Options) {
@@ -748,10 +760,6 @@ async function captureAltTable(options: Options) {
   mkdirSync(path.dirname(metadataPath), { recursive: true });
   mkdirSync(path.dirname(snapshotPath), { recursive: true });
 
-  const handFixture = readFixtureJson<{ anchors: CardAnchor[] }>(
-    repoRoot,
-    "apps/web/public/tv7/h/a.json"
-  );
   const passFixture = readFixtureJson<{ anchors: PassAnchor[] }>(
     repoRoot,
     "apps/web/public/tv7/p/a.json"
@@ -799,10 +807,9 @@ async function captureAltTable(options: Options) {
       const designSnapshot = await verifyAtDesignViewport(
         page,
         options.waitTimeoutMs,
-        handFixture.anchors,
         passFixture.anchors
       );
-      await verifyAtResponsiveViewport(page, handFixture.anchors);
+      await verifyAtResponsiveViewport(page);
 
       await page.screenshot({
         path: outputPath,

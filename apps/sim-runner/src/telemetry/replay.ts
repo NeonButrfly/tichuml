@@ -1,10 +1,15 @@
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   createDefaultTelemetryStorageRoot,
   replayPersistedTelemetry
 } from "./async-telemetry.js";
 
-function parseArgs(argv: string[]): { storageRoot: string; quiet: boolean } {
+type ReplayCliOutput = Pick<Console, "log" | "error">;
+
+export function parseReplayArgs(
+  argv: string[]
+): { storageRoot: string; quiet: boolean } {
   let storageRoot = createDefaultTelemetryStorageRoot();
   let quiet = false;
 
@@ -30,24 +35,41 @@ function parseArgs(argv: string[]): { storageRoot: string; quiet: boolean } {
   return { storageRoot, quiet };
 }
 
-async function main(): Promise<void> {
-  const args = parseArgs(process.argv.slice(2));
-  await replayPersistedTelemetry({
+export async function runReplayCli(
+  argv: string[] = process.argv.slice(2),
+  output: ReplayCliOutput = console
+): Promise<number> {
+  const args = parseReplayArgs(argv);
+  const summary = await replayPersistedTelemetry({
     storageRoot: args.storageRoot,
-    quiet: args.quiet
+    quiet: true
   });
+  if (!args.quiet) {
+    output.log(JSON.stringify(summary, null, 2));
+  }
+  return 0;
 }
 
-main().catch((error) => {
-  console.error(
-    JSON.stringify(
-      {
-        accepted: false,
-        error: error instanceof Error ? error.message : String(error)
-      },
-      null,
-      2
-    )
-  );
-  process.exitCode = 1;
-});
+async function main(): Promise<void> {
+  process.exitCode = await runReplayCli();
+}
+
+const isMainModule = process.argv[1]
+  ? path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+  : false;
+
+if (isMainModule) {
+  main().catch((error) => {
+    console.error(
+      JSON.stringify(
+        {
+          accepted: false,
+          error: error instanceof Error ? error.message : String(error)
+        },
+        null,
+        2
+      )
+    );
+    process.exitCode = 1;
+  });
+}

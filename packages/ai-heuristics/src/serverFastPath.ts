@@ -1232,10 +1232,6 @@ export function generateFastPassSelectCandidates(config: {
     .slice(0, SERVER_HEURISTIC_FAST_PATH_LIMITS.pass_select_candidate_cap);
 }
 
-function actionUsesCard(action: Extract<LegalAction, { type: "play_cards" }>, cardId: string): boolean {
-  return action.cardIds.includes(cardId);
-}
-
 function scorePassTurnAction(config: {
   state: ServerFastPathState;
   actor: SeatId;
@@ -1243,7 +1239,6 @@ function scorePassTurnAction(config: {
   passAction: Extract<LegalAction, { type: "pass_turn" }>;
 }): ServerFastPathCandidate {
   const weights = SERVER_HEURISTIC_FAST_PATH_WEIGHTS;
-  const partner = getPartnerSeat(config.actor);
   const partnerWinning =
     config.state.currentTrick !== null &&
     getTeamForSeat(config.state.currentTrick.currentWinner) ===

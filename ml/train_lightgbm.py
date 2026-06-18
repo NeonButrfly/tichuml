@@ -59,6 +59,16 @@ RUNTIME_TACTICAL_FEATURES = {
     "isolated_low_singles_count",
 }
 RUNTIME_TACTICAL_PREFIXES = ("urgency_mode_",)
+GROUPING_COLUMN_ALIASES = {
+    "seat": ["seat", "actor_seat"],
+    "team": ["team", "actor_team"],
+    "action_type": ["action_type", "chosen_action_type", "candidate_action_type"],
+}
+SPEARMAN_GUIDANCE = [
+    (0.20, "useful"),
+    (0.10, "promising"),
+    (0.03, "weak"),
+]
 
 
 def load_frame(path: str) -> pd.DataFrame:
@@ -272,6 +282,242 @@ def split_frame(
     )
 
 
+def resolve_grouping_column(frame: pd.DataFrame, logical_name: str) -> str | None:
+    for column in GROUPING_COLUMN_ALIASES.get(logical_name, []):
+        if column in frame.columns:
+            return column
+    return None
+
+
+def safe_spearman(truth: pd.Series, predictions: pd.Series) -> float | None:
+    if len(truth.index) <= 1 or len(predictions.index) <= 1:
+        return None
+    aligned_truth = pd.Series(truth, copy=False).reset_index(drop=True)
+    aligned_predictions = pd.Series(predictions, copy=False).reset_index(drop=True)
+    score = aligned_truth.corr(aligned_predictions, method="spearman")
+    if pd.isna(score):
+        return None
+    return float(score)
+
+
+def target_distribution_summary(series: pd.Series) -> dict[str, Any]:
+    numeric = pd.to_numeric(series, errors="coerce")
+    non_null = numeric.dropna()
+    quantiles = (
+        non_null.quantile([0.01, 0.05, 0.25, 0.5, 0.75, 0.95, 0.99])
+        if not non_null.empty
+        else pd.Series(dtype="float64")
+    )
+
+    def quantile_value(key: float) -> float | None:
+        value = quantiles.get(key)
+        if value is None or pd.isna(value):
+            return None
+        return float(value)
+
+    p1 = quantile_value(0.01)
+    p99 = quantile_value(0.99)
+    return {
+        "count": int(len(series.index)),
+        "null_count": int(numeric.isna().sum()),
+        "zero_count": int((non_null == 0).sum()),
+        "min": float(non_null.min()) if not non_null.empty else None,
+        "max": float(non_null.max()) if not non_null.empty else None,
+        "mean": float(non_null.mean()) if not non_null.empty else None,
+        "std": float(non_null.std(ddof=0)) if not non_null.empty else None,
+        "p1": p1,
+        "p5": quantile_value(0.05),
+        "p25": quantile_value(0.25),
+        "p50": quantile_value(0.5),
+        "p75": quantile_value(0.75),
+        "p95": quantile_value(0.95),
+        "p99": p99,
+        "extreme_negative_count": int((non_null <= p1).sum()) if p1 is not None else 0,
+        "extreme_positive_count": int((non_null >= p99).sum()) if p99 is not None else 0,
+        "extreme_thresholds": {
+            "negative_at_or_below": p1,
+            "positive_at_or_above": p99,
+        },
+    }
+
+
+def evaluate_regression_predictions(
+    truth: pd.Series,
+    predictions: pd.Series,
+) -> dict[str, Any]:
+    return {
+        "rmse": float(math.sqrt(mean_squared_error(truth, predictions))),
+        "mae": float(mean_absolute_error(truth, predictions)),
+        "spearman": safe_spearman(truth, predictions),
+    }
+
+
+def grouped_mean_predictions(
+    train_frame: pd.DataFrame,
+    validation_frame: pd.DataFrame,
+    target_column: str,
+    group_columns: list[str],
+    fallback: pd.Series,
+) -> pd.Series:
+    if validation_frame.empty:
+        return pd.Series(dtype="float64")
+
+    def normalize_keys(frame: pd.DataFrame) -> pd.DataFrame:
+        normalized = frame[group_columns].copy()
+        for column in group_columns:
+            normalized[column] = normalized[column].astype("string").fillna("__MISSING__")
+        return normalized
+
+    grouped_targets = train_frame[[*group_columns, target_column]].copy()
+    grouped_targets[group_columns] = normalize_keys(grouped_targets)
+    lookup = (
+        grouped_targets.groupby(group_columns, dropna=False)[target_column]
+        .mean()
+        .reset_index(name="prediction")
+    )
+    validation_keys = normalize_keys(validation_frame).reset_index(drop=True)
+    validation_keys["row_order"] = list(range(len(validation_keys.index)))
+    merged = (
+        validation_keys.merge(lookup, on=group_columns, how="left")
+        .sort_values("row_order")
+        .reset_index(drop=True)
+    )
+    predictions = pd.to_numeric(merged["prediction"], errors="coerce")
+    fallback_series = fallback.reset_index(drop=True)
+    return predictions.combine_first(fallback_series)
+
+
+def regression_baselines(
+    train_frame: pd.DataFrame,
+    validation_frame: pd.DataFrame,
+    target_column: str,
+) -> dict[str, Any]:
+    baselines: dict[str, Any] = {}
+    if validation_frame.empty:
+        return baselines
+
+    truth = validation_frame[target_column].astype(float).reset_index(drop=True)
+    global_mean_value = float(train_frame[target_column].astype(float).mean())
+    global_predictions = pd.Series(global_mean_value, index=range(len(truth.index)), dtype="float64")
+    baselines["global_mean"] = {
+        "strategy": "global_mean",
+        "train_value": global_mean_value,
+        "validation": evaluate_regression_predictions(truth, global_predictions),
+    }
+
+    action_type_column = resolve_grouping_column(train_frame, "action_type")
+    if action_type_column and action_type_column in validation_frame.columns:
+        grouped_predictions = grouped_mean_predictions(
+            train_frame,
+            validation_frame,
+            target_column,
+            [action_type_column],
+            global_predictions,
+        )
+        baselines["grouped_by_action_type"] = {
+            "strategy": "grouped_mean",
+            "group_columns": [action_type_column],
+            "validation": evaluate_regression_predictions(truth, grouped_predictions),
+        }
+
+    seat_column = resolve_grouping_column(train_frame, "seat")
+    if (
+        seat_column
+        and seat_column in validation_frame.columns
+        and action_type_column
+        and action_type_column in validation_frame.columns
+    ):
+        fallback_predictions = grouped_mean_predictions(
+            train_frame,
+            validation_frame,
+            target_column,
+            [action_type_column],
+            global_predictions,
+        )
+        grouped_predictions = grouped_mean_predictions(
+            train_frame,
+            validation_frame,
+            target_column,
+            [seat_column, action_type_column],
+            fallback_predictions,
+        )
+        baselines["grouped_by_seat_action_type"] = {
+            "strategy": "grouped_mean",
+            "group_columns": [seat_column, action_type_column],
+            "validation": evaluate_regression_predictions(truth, grouped_predictions),
+        }
+
+    return baselines
+
+
+def compare_model_to_baselines(
+    validation_metrics: dict[str, Any],
+    baseline_metrics: dict[str, Any],
+) -> dict[str, Any]:
+    model_rmse = validation_metrics.get("rmse")
+    model_mae = validation_metrics.get("mae")
+    candidates: list[tuple[str, dict[str, Any]]] = []
+    for name, payload in baseline_metrics.items():
+        metrics = payload.get("validation")
+        if not isinstance(metrics, dict) or metrics.get("rmse") is None:
+            continue
+        candidates.append((name, metrics))
+
+    if model_rmse is None or model_mae is None or not candidates:
+        return {
+            "best_baseline": None,
+            "rmse_improvement": None,
+            "rmse_improvement_pct": None,
+            "mae_improvement": None,
+            "mae_improvement_pct": None,
+        }
+
+    best_name, best_metrics = min(candidates, key=lambda item: item[1]["rmse"])
+    baseline_rmse = float(best_metrics["rmse"])
+    baseline_mae = float(best_metrics["mae"])
+    rmse_improvement = baseline_rmse - float(model_rmse)
+    mae_improvement = baseline_mae - float(model_mae)
+    return {
+        "best_baseline": {
+            "name": best_name,
+            "rmse": baseline_rmse,
+            "mae": baseline_mae,
+        },
+        "rmse_improvement": rmse_improvement,
+        "rmse_improvement_pct": (rmse_improvement / baseline_rmse) if baseline_rmse else None,
+        "mae_improvement": mae_improvement,
+        "mae_improvement_pct": (mae_improvement / baseline_mae) if baseline_mae else None,
+    }
+
+
+def spearman_interpretation(score: float | None) -> dict[str, Any]:
+    guidance = (
+        "> 0.20 useful; > 0.10 promising; 0.03-0.10 weak; "
+        "near 0 not useful; negative likely broken/mismatched target"
+    )
+    if score is None:
+        return {
+            "label": "unavailable",
+            "interpretation": "No validation Spearman was available.",
+            "guidance": guidance,
+            "score": None,
+        }
+    if score < 0:
+        label = "negative likely broken/mismatched target"
+    else:
+        label = "near 0 not useful"
+        for threshold, candidate_label in SPEARMAN_GUIDANCE:
+            if score >= threshold:
+                label = candidate_label
+                break
+    return {
+        "label": label,
+        "interpretation": label,
+        "guidance": guidance,
+        "score": float(score),
+    }
+
+
 def build_ranker_relevance_labels(
     frame: pd.DataFrame,
     target_column: str,
@@ -443,6 +689,10 @@ def top_action_average_value(frame: pd.DataFrame, scores: pd.Series, target_colu
 
 def report_markdown(report: dict[str, Any]) -> str:
     metrics = make_json_safe(report["validation_metrics"])
+    target_distribution = make_json_safe(report.get("target_distribution", {}))
+    baselines = make_json_safe(report.get("baseline_metrics", {}))
+    model_vs_baseline = make_json_safe(report.get("model_vs_baseline", {}))
+    spearman_summary = make_json_safe(report.get("spearman_interpretation", {}))
     return "\n".join(
         [
             "# Training Report",
@@ -459,6 +709,30 @@ def report_markdown(report: dict[str, Any]) -> str:
             "## Validation Metrics",
             "",
             *[f"- {key}: {value}" for key, value in metrics.items()],
+            "",
+            "## Target Distribution",
+            "",
+            *[f"- {key}: {value}" for key, value in target_distribution.items()],
+            "",
+            "## Baselines",
+            "",
+            *(
+                [
+                    f"- {name}: rmse={payload.get('validation', {}).get('rmse')}, "
+                    f"mae={payload.get('validation', {}).get('mae')}"
+                    for name, payload in baselines.items()
+                ]
+                if baselines
+                else ["- none"]
+            ),
+            "",
+            "## Model Vs Baseline",
+            "",
+            *[f"- {key}: {value}" for key, value in model_vs_baseline.items()],
+            "",
+            "## Spearman Interpretation",
+            "",
+            *[f"- {key}: {value}" for key, value in spearman_summary.items()],
         ]
     )
 
@@ -585,6 +859,7 @@ def main() -> None:
     ranker_validation_labels: pd.Series | None = None
 
     validation_metrics: dict[str, Any] = {}
+    baseline_metrics: dict[str, Any] = {}
     if args.objective == "imitation_binary":
         labels = train_frame[target_column].astype(int)
         if labels.nunique() < 2:
@@ -670,10 +945,17 @@ def main() -> None:
                     math.sqrt(mean_squared_error(truth, validation_scores))
                 ),
                 "mae": float(mean_absolute_error(truth, validation_scores)),
-                "spearman": float(pd.Series(truth).corr(validation_scores, method="spearman"))
-                if len(validation_scores.index) > 1
-                else None,
+                "spearman": safe_spearman(truth, validation_scores),
             }
+            baseline_metrics = regression_baselines(
+                train_frame,
+                validation_frame,
+                target_column,
+            )
+
+    target_distribution = target_distribution_summary(frame[target_column])
+    model_vs_baseline = compare_model_to_baselines(validation_metrics, baseline_metrics)
+    spearman_summary = spearman_interpretation(validation_metrics.get("spearman"))
 
     model_path = Path(args.output)
     model_path.parent.mkdir(parents=True, exist_ok=True)
@@ -708,7 +990,13 @@ def main() -> None:
         "train_row_count": int(len(train_frame.index)),
         "validation_row_count": int(len(validation_frame.index)),
         "train_validation_split_method": split_method,
+        "validation_fraction": args.validation_fraction,
+        "random_state": args.random_state,
+        "target_distribution": target_distribution,
         "validation_metrics": validation_metrics,
+        "baseline_metrics": baseline_metrics,
+        "model_vs_baseline": model_vs_baseline,
+        "spearman_interpretation": spearman_summary,
         "model_type": "lightgbm_action_model",
         "phase": phase_alias(args.phase),
         "source_dataset_path": str(Path(args.input)),
@@ -739,7 +1027,13 @@ def main() -> None:
         "feature_profile": args.feature_profile,
         "excluded_columns": excluded,
         "train_validation_split_method": split_method,
+        "validation_fraction": args.validation_fraction,
+        "random_state": args.random_state,
+        "target_distribution": target_distribution,
         "validation_metrics": validation_metrics,
+        "baseline_metrics": baseline_metrics,
+        "model_vs_baseline": model_vs_baseline,
+        "spearman_interpretation": spearman_summary,
         "source_dataset_path": str(Path(args.input)),
         "rollout_dataset_path": str(Path(args.rollout_input)) if args.rollout_input else None,
         "ranking_label_strategy": ranker_label_strategy,
@@ -771,7 +1065,11 @@ def main() -> None:
                 "row_count": meta["row_count"],
                 "feature_count": len(feature_columns),
                 "feature_profile": args.feature_profile,
+                "target_distribution": target_distribution,
                 "validation_metrics": validation_metrics,
+                "baseline_metrics": baseline_metrics,
+                "model_vs_baseline": model_vs_baseline,
+                "spearman_interpretation": spearman_summary,
             }
         )
     )

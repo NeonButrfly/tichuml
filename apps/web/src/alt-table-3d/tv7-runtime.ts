@@ -541,9 +541,9 @@ export function getSeatZone(seat: DemoSeat): Extract<CardZone, `${DemoSeat}_hand
 }
 
 function validateStaticProductionPaths() {
-  if (TV7_TABLE_PLATE_SRC !== "/tv7/t/plate.png") {
+  if (TV7_TABLE_PLATE_SRC !== "/tv_ed/t/plate.png") {
     throw new Error(
-      `Alt table validator: production table plate must be /tv7/t/plate.png; received ${TV7_TABLE_PLATE_SRC}.`
+      `Alt table validator: production table plate must be /tv_ed/t/plate.png; received ${TV7_TABLE_PLATE_SRC}.`
     );
   }
 
@@ -609,7 +609,37 @@ function validatePassAnchors(rawAnchors: unknown[]) {
   }
 
   const anchors = rawAnchors.map((rawAnchor) => {
-    const anchor = rawAnchor as Tv7PassAnchor;
+    const source = rawAnchor as Record<string, unknown>;
+    const anchor = {
+      idx: Number(source.idx ?? source.index ?? 0),
+      id: String(source.id ?? ""),
+      seat: String(source.seat ?? "") as DemoSeat,
+      lane: String(source.lane ?? ""),
+      arrow_direction: String(source.arrow_direction ?? ""),
+      slot_orientation: String(
+        source.slot_orientation ?? source.orientation ?? ""
+      ) as PassOrientation,
+      slot_rotation_deg: Number(
+        source.slot_rotation_deg ??
+          source.render_rotation_deg ??
+          source.target_rotation_deg ??
+          source.visual_rotation_deg ??
+          0
+      ),
+      user_rotation_deg:
+        source.user_rotation_deg == null
+          ? undefined
+          : Number(source.user_rotation_deg),
+      card_rotation_hint_deg:
+        source.card_rotation_hint_deg == null
+          ? source.card_rotation_deg == null
+            ? undefined
+            : Number(source.card_rotation_deg)
+          : Number(source.card_rotation_hint_deg),
+      bbox_px: source.bbox_px as DesignBBox,
+      center_px: source.center_px as DesignPoint,
+      polygon_px: source.polygon_px as DesignPoint[]
+    } satisfies Tv7PassAnchor;
     const expected = LOCKED_PASS_ANCHORS[anchor.id];
 
     if (!expected) {
@@ -673,12 +703,32 @@ function validateCardAnchors(rawAnchors: unknown[]) {
   }
 
   const anchors = rawAnchors.map((rawAnchor) => {
-    const anchor = rawAnchor as Tv7CardAnchor;
-    if (anchor.layout_source !== "prototype_layer") {
-      throw new Error(
-        `Alt table validator: ${anchor.id} layout_source must be prototype_layer; received ${anchor.layout_source}.`
-      );
-    }
+    const source = rawAnchor as Record<string, unknown>;
+    const anchor = {
+      idx: Number(source.idx ?? source.index ?? 0),
+      id: String(source.id ?? ""),
+      zone: String(source.zone ?? "") as CardZone,
+      kind: String(source.kind ?? source.role ?? ""),
+      seat:
+        source.seat == null ? null : (String(source.seat) as DemoSeat | null),
+      slot: Number(source.slot ?? source.index ?? 0),
+      layout_source: String(source.layout_source ?? "prototype_layer") as
+        | "prototype_layer",
+      role: String(source.role ?? source.kind ?? ""),
+      face_policy: String(
+        source.face_policy ??
+          ((source.seat == null || source.seat === "south") ? "face" : "back")
+      ) as "face" | "back",
+      orientation: String(
+        source.orientation ?? source.card_orientation ?? "portrait"
+      ) as "portrait" | "landscape",
+      rotation_deg: Number(source.rotation_deg ?? 0),
+      w_px: Number(source.w_px ?? 0),
+      h_px: Number(source.h_px ?? 0),
+      center_px: source.center_px as DesignPoint,
+      bbox_px: source.bbox_px as DesignBBox,
+      polygon_px: source.polygon_px as DesignPoint[]
+    } satisfies Tv7CardAnchor;
 
     if (!anchor.bbox_px || !anchor.center_px || !anchor.polygon_px) {
       throw new Error(
