@@ -708,11 +708,14 @@ export function App() {
     ): Promise<RoundSession> => {
       if (typeof window !== "undefined") {
         const search = window.location.search;
+        const params = new URLSearchParams(search);
+        const requestedTable = params.get("table")?.trim().toLowerCase();
+        const requestedVariant = getPlayerTableVariantFromSearch(search);
         const alternatePreviewRequested =
-          getPlayerTableVariantFromSearch(search) === "alternate" ||
-          (import.meta.env.DEV &&
+          requestedVariant === "alternate" ||
+          (requestedTable !== "normal" &&
+            import.meta.env.DEV &&
             getAlternateTablePreviewModeFromSearch(search) === "pass-select");
-
         if (alternatePreviewRequested) {
           return createAlternatePassSelectPreviewSession({
             roundIndex,
@@ -816,6 +819,11 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
         ? "normal"
         : getPlayerTableVariantFromSearch(window.location.search)
     );
+
+  const activePlayerTableVariant =
+    typeof window === "undefined"
+      ? playerTableVariant
+      : getPlayerTableVariantFromSearch(window.location.search);
   const [layoutEditorActive, setLayoutEditorActive] = useState(false);
   const [mainMenuOpen, setMainMenuOpen] = useState(false);
   const [activeDialog, setActiveDialog] = useState<UiDialogId | null>(null);
@@ -3712,7 +3720,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     masterControlSnapshot,
     hotkeyDefinitions: UI_HOTKEYS,
     cardLookup,
-    playerTableVariant,
+    playerTableVariant: activePlayerTableVariant,
     onAutoplayChange: setAutoplayLocal,
     onContinueAi: continueWithAi,
     onSortModeChange: setSortMode,
@@ -3751,7 +3759,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     return <DebugGameTableView {...viewProps} />;
   }
 
-  return playerTableVariant === "alternate" ? (
+  return activePlayerTableVariant === "alternate" ? (
     <AltTable3DRoute {...viewProps} />
   ) : (
     <NormalGameTableView {...viewProps} />
