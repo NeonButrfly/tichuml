@@ -71,6 +71,51 @@ SPEARMAN_GUIDANCE = [
 ]
 
 
+def emit_training_trace(event: str, payload: dict[str, Any]) -> None:
+    print(
+        dumps_json_safe(
+            {
+                "ts": datetime.now(UTC).isoformat(),
+                "event": event,
+                **payload,
+            }
+        ),
+        flush=True,
+    )
+
+
+def make_training_progress_callback(config: dict[str, Any]):
+    total_iterations = int(config.get("total_iterations") or 0)
+    report_every = max(1, int(config.get("report_every") or 25))
+
+    def _callback(env) -> None:
+        iteration = int(env.iteration) + 1
+        if (
+            iteration == 1
+            or iteration == total_iterations
+            or iteration % report_every == 0
+        ):
+            emit_training_trace(
+                "lightgbm_training_progress",
+                {
+                    "iteration": iteration,
+                    "total_iterations": total_iterations,
+                    "iteration_progress": float(
+                        round((iteration / max(1, total_iterations)) * 100.0, 2)
+                    ),
+                    "row_count": int(config.get("row_count") or 0),
+                    "train_row_count": int(config.get("train_row_count") or 0),
+                    "validation_row_count": int(config.get("validation_row_count") or 0),
+                    "objective": config.get("objective"),
+                    "label_mode": config.get("label_mode"),
+                },
+            )
+
+    _callback.order = 10  # type: ignore[attr-defined]
+    _callback.before_iteration = False  # type: ignore[attr-defined]
+    return _callback
+
+
 def load_frame(path: str) -> pd.DataFrame:
     source = Path(path)
     if source.suffix == ".jsonl":
@@ -860,6 +905,20 @@ def main() -> None:
 
     validation_metrics: dict[str, Any] = {}
     baseline_metrics: dict[str, Any] = {}
+    total_row_count = int(len(frame.index))
+    train_row_count = int(len(train_frame.index))
+    validation_row_count = int(len(validation_frame.index))
+    emit_training_trace(
+        "lightgbm_training_start",
+        {
+            "objective": args.objective,
+            "label_mode": label_mode,
+            "row_count": total_row_count,
+            "train_row_count": train_row_count,
+            "validation_row_count": validation_row_count,
+            "feature_count": len(feature_columns),
+        },
+    )
     if args.objective == "imitation_binary":
         labels = train_frame[target_column].astype(int)
         if labels.nunique() < 2:
@@ -872,7 +931,23 @@ def main() -> None:
             random_state=args.random_state,
             verbose=-1,
         )
-        model.fit(train_frame[feature_columns], labels)
+        model.fit(
+            train_frame[feature_columns],
+            labels,
+            callbacks=[
+                make_training_progress_callback(
+                    {
+                        "objective": args.objective,
+                        "label_mode": label_mode,
+                        "row_count": total_row_count,
+                        "train_row_count": train_row_count,
+                        "validation_row_count": validation_row_count,
+                        "total_iterations": 400,
+                        "report_every": 25,
+                    }
+                )
+            ],
+        )
         if not validation_frame.empty and validation_frame[target_column].nunique() >= 2:
             validation_scores = pd.Series(
                 model.predict_proba(validation_frame[feature_columns])[:, 1]
@@ -913,6 +988,19 @@ def main() -> None:
             train_frame[feature_columns],
             ranker_train_labels,
             group=group_sizes,
+            callbacks=[
+                make_training_progress_callback(
+                    {
+                        "objective": args.objective,
+                        "label_mode": label_mode,
+                        "row_count": total_row_count,
+                        "train_row_count": train_row_count,
+                        "validation_row_count": validation_row_count,
+                        "total_iterations": 300,
+                        "report_every": 25,
+                    }
+                )
+            ],
         )
         if not validation_frame.empty:
             validation_scores = pd.Series(model.predict(validation_frame[feature_columns]))
@@ -936,6 +1024,19 @@ def main() -> None:
         model.fit(
             train_frame[feature_columns],
             train_frame[target_column].astype(float),
+            callbacks=[
+                make_training_progress_callback(
+                    {
+                        "objective": args.objective,
+                        "label_mode": label_mode,
+                        "row_count": total_row_count,
+                        "train_row_count": train_row_count,
+                        "validation_row_count": validation_row_count,
+                        "total_iterations": 400,
+                        "report_every": 25,
+                    }
+                )
+            ],
         )
         if not validation_frame.empty:
             validation_scores = pd.Series(model.predict(validation_frame[feature_columns]))
@@ -1053,6 +1154,17 @@ def main() -> None:
     report_output.parent.mkdir(parents=True, exist_ok=True)
     report_output.write_text(dumps_json_safe(report, indent=2) + "\n", encoding="utf-8")
     report_output.with_suffix(".md").write_text(report_markdown(report), encoding="utf-8")
+    emit_training_trace(
+        "lightgbm_training_complete",
+        {
+            "row_count": meta["row_count"],
+            "train_row_count": meta["train_row_count"],
+            "validation_row_count": meta["validation_row_count"],
+            "objective": args.objective,
+            "model_output_path": str(model_path),
+            "meta_output_path": str(meta_path),
+        },
+    )
 
     print(
         dumps_json_safe(

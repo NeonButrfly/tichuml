@@ -179,6 +179,7 @@ type RolloutQuality = {
   sample_runs_failed: number;
   transient_retries_attempted: number;
   jobs_deferred_transient_failure: number;
+  jobs_processed: number;
   skipped_invalid_forced_action: number;
   skipped_missing_state_raw: number;
   skipped_non_concrete_state_raw: number;
@@ -821,6 +822,25 @@ async function appendJsonlLine(targetPath: string, payload: unknown): Promise<vo
   );
 }
 
+function emitRolloutProgress(payload: {
+  quality: RolloutQuality;
+  pendingJobsRemaining: number;
+}): void {
+  emitRolloutTrace("ml_rollouts_progress", {
+    jobs_discovered: payload.quality.jobs_discovered,
+    jobs_skipped_existing: payload.quality.jobs_skipped_existing,
+    jobs_executed: payload.quality.jobs_executed,
+    jobs_processed: payload.quality.jobs_processed,
+    jobs_succeeded: payload.quality.jobs_succeeded,
+    jobs_failed: payload.quality.jobs_failed,
+    jobs_deferred_transient_failure: payload.quality.jobs_deferred_transient_failure,
+    sample_runs_succeeded: payload.quality.sample_runs_succeeded,
+    sample_runs_failed: payload.quality.sample_runs_failed,
+    transient_retries_attempted: payload.quality.transient_retries_attempted,
+    pending_jobs_remaining: payload.pendingJobsRemaining
+  });
+}
+
 function qualityMarkdown(payload: RolloutQuality): string {
   return [
     "# Rollout Quality Report",
@@ -828,6 +848,7 @@ function qualityMarkdown(payload: RolloutQuality): string {
     `- jobs_discovered: ${payload.jobs_discovered}`,
     `- jobs_skipped_existing: ${payload.jobs_skipped_existing}`,
     `- jobs_executed: ${payload.jobs_executed}`,
+    `- jobs_processed: ${payload.jobs_processed}`,
     `- jobs_succeeded: ${payload.jobs_succeeded}`,
     `- jobs_failed: ${payload.jobs_failed}`,
     `- sample_runs_succeeded: ${payload.sample_runs_succeeded}`,
@@ -1139,6 +1160,7 @@ async function main(): Promise<void> {
     sample_runs_failed: 0,
     transient_retries_attempted: 0,
     jobs_deferred_transient_failure: 0,
+    jobs_processed: 0,
     skipped_invalid_forced_action: 0,
     skipped_missing_state_raw: 0,
     skipped_non_concrete_state_raw: 0,
@@ -1201,6 +1223,10 @@ async function main(): Promise<void> {
       jobs_skipped_existing: quality.jobs_skipped_existing,
       pending_jobs: pendingJobs.length
     });
+    emitRolloutProgress({
+      quality,
+      pendingJobsRemaining: pendingJobs.length
+    });
 
     for (const job of pendingJobs) {
       await appendJsonlLine(jobsOutputPath, job);
@@ -1220,6 +1246,8 @@ async function main(): Promise<void> {
       quality.transient_retries_attempted += attempt.transientRetryCount;
       if (attempt.status === "deferred_transient_failure") {
         quality.jobs_deferred_transient_failure += 1;
+        quality.jobs_processed =
+          quality.jobs_executed + quality.jobs_deferred_transient_failure;
         quality.sample_runs_succeeded += row.rollout_samples;
         quality.sample_runs_failed += row.rollout_failures;
         if (row.rollout_failure_reason) {
@@ -1237,11 +1265,18 @@ async function main(): Promise<void> {
           retryable: true,
           transient_retry_count: attempt.transientRetryCount,
           jobs_executed: quality.jobs_executed,
+          jobs_processed: quality.jobs_processed,
           pending_jobs_remaining: Math.max(0, pendingJobs.length - quality.jobs_executed)
+        });
+        emitRolloutProgress({
+          quality,
+          pendingJobsRemaining: Math.max(0, pendingJobs.length - quality.jobs_executed)
         });
         return;
       }
       quality.jobs_executed += 1;
+      quality.jobs_processed =
+        quality.jobs_executed + quality.jobs_deferred_transient_failure;
       quality.sample_runs_succeeded += row.rollout_samples;
       quality.sample_runs_failed += row.rollout_failures;
       if (row.rollout_available) {
@@ -1266,7 +1301,12 @@ async function main(): Promise<void> {
         rollout_failure_reason: row.rollout_failure_reason,
         transient_retry_count: attempt.transientRetryCount,
         jobs_executed: quality.jobs_executed,
+        jobs_processed: quality.jobs_processed,
         pending_jobs_remaining: Math.max(0, pendingJobs.length - quality.jobs_executed)
+      });
+      emitRolloutProgress({
+        quality,
+        pendingJobsRemaining: Math.max(0, pendingJobs.length - quality.jobs_executed)
       });
     });
   } finally {
@@ -1282,6 +1322,7 @@ async function main(): Promise<void> {
   await fs.promises.writeFile(qualityMdPath, qualityMarkdown(quality), "utf8");
   emitRolloutTrace("ml_rollouts_complete", {
     jobs_executed: quality.jobs_executed,
+    jobs_processed: quality.jobs_processed,
     jobs_succeeded: quality.jobs_succeeded,
     jobs_failed: quality.jobs_failed,
     sample_runs_succeeded: quality.sample_runs_succeeded,
@@ -1297,6 +1338,7 @@ async function main(): Promise<void> {
       retryable_failures_output: retryableFailuresPath,
       quality_output: qualityJsonPath,
       jobs_executed: quality.jobs_executed,
+      jobs_processed: quality.jobs_processed,
       jobs_succeeded: quality.jobs_succeeded,
       jobs_failed: quality.jobs_failed,
       jobs_deferred_transient_failure: quality.jobs_deferred_transient_failure
