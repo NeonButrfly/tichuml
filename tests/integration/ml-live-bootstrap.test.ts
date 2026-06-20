@@ -39,6 +39,9 @@ describe("live ml bootstrap orchestration", () => {
       "build:server",
       "ml:evaluate",
     ]);
+    expect(plan.datasetPath).toBe(
+      join("training-runs", "live-20260601-000001", "ml", "train.parquet")
+    );
     expect(plan.steps[0]?.args).toEqual([
       "run",
       "ml:export:raw",

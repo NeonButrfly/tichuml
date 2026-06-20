@@ -141,7 +141,7 @@ export function buildLiveMlBootstrapPlan(
     options.candidateBackendPort,
     "--candidate-backend-port"
   );
-  const datasetPath = path.join(outputDir, "train.jsonl");
+  const datasetPath = path.join(outputDir, "train.parquet");
   const manifestPath = path.join(outputDir, "dataset_metadata.json");
   const rolloutPath = path.join(outputDir, "rollout_rows.jsonl");
   const modelPath = path.join(outputDir, "lightgbm_action_model.txt");
