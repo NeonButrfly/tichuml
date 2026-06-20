@@ -162,7 +162,7 @@ export function buildLiveMlBootstrapPlan(
     "--source",
     telemetrySource,
     "--format",
-    "jsonl",
+    "parquet",
     "--include-rollouts",
     "--output-dir",
     outputDir,

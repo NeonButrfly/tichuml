@@ -51,7 +51,7 @@ describe("live ml bootstrap orchestration", () => {
       "--source",
       "gameplay",
       "--format",
-      "jsonl",
+      "parquet",
       "--include-rollouts",
       "--output-dir",
       "training-runs/live-20260601-000001/ml",
