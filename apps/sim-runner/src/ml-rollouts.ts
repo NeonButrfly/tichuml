@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { spawnSync } from "node:child_process";
 import path from "node:path";
 import readline from "node:readline";
 import postgres from "postgres";
@@ -47,7 +48,10 @@ type ParsedArgs = {
   backendUrl: string;
   sampleTimeoutMs: number;
   sampleTimeoutRetries: number;
-  continuationExplorationProfile?: "off" | "conservative" | "training_diversity";
+  continuationExplorationProfile?:
+    | "off"
+    | "conservative"
+    | "training_diversity";
   continuationExplorationRate?: number;
   continuationExplorationTopN?: number;
   continuationExplorationMaxScoreGap?: number;
@@ -57,6 +61,7 @@ type ParsedArgs = {
 };
 
 type ExportSelection = Map<number, Set<string>>;
+type StructuredExportKind = "parquet" | "csv" | "csv.gz";
 
 type DecisionRow = {
   id: number;
@@ -201,7 +206,8 @@ const DEFAULT_OUTPUT = "ml/data/rollout_rows.jsonl";
 const DEFAULT_JOBS_OUTPUT = "artifacts/ml/rollout-jobs.jsonl";
 const DEFAULT_QUALITY_JSON = "artifacts/ml/rollout-quality.json";
 const DEFAULT_QUALITY_MD = "artifacts/ml/rollout-quality.md";
-const DEFAULT_RETRYABLE_FAILURES_JSONL = "artifacts/ml/rollout-retryable-failures.jsonl";
+const DEFAULT_RETRYABLE_FAILURES_JSONL =
+  "artifacts/ml/rollout-retryable-failures.jsonl";
 const DEFAULT_SAMPLE_TIMEOUT_MS = 15_000;
 const DEFAULT_SAMPLE_TIMEOUT_RETRIES = 2;
 
@@ -230,7 +236,10 @@ export async function withTimeout<T>(
   }
 }
 
-function emitRolloutTrace(event: string, payload: Record<string, unknown>): void {
+function emitRolloutTrace(
+  event: string,
+  payload: Record<string, unknown>
+): void {
   process.stdout.write(
     `${JSON.stringify({
       ts: new Date().toISOString(),
@@ -256,10 +265,15 @@ export function resolveForcedActionFromCandidate(
   }
 
   try {
-    const candidateAction = JSON.parse(candidateActionCanonicalJson) as JsonObject;
+    const candidateAction = JSON.parse(
+      candidateActionCanonicalJson
+    ) as JsonObject;
     const legalActions = getLegalActions(stateRaw);
     const actorLegalActions = legalActions[actorSeat] ?? [];
-    const forcedAction = findMatchingLegalAction(actorLegalActions, candidateAction);
+    const forcedAction = findMatchingLegalAction(
+      actorLegalActions,
+      candidateAction
+    );
     return {
       forcedAction,
       failureReason: forcedAction ? null : "invalid_forced_action"
@@ -281,8 +295,10 @@ export function shouldUseFullStateRolloutContinuation(
 export function isTransientRolloutFailureReason(
   failureReason: string | null | undefined
 ): boolean {
-  return typeof failureReason === "string" &&
-    /^rollout_sample_timeout_\d+ms$/.test(failureReason);
+  return (
+    typeof failureReason === "string" &&
+    /^rollout_sample_timeout_\d+ms$/.test(failureReason)
+  );
 }
 
 export function isResultCompleteForResume(
@@ -338,7 +354,7 @@ function parseArgs(argv: string[]): ParsedArgs {
         "",
         "Options:",
         "  --database-url <url>",
-        "  --input-export <path-to-jsonl>",
+        "  --input-export <path-to-export>",
         "  --output <path-to-jsonl>",
         "  --max-decisions <count>",
         "  --phase <phase>",
@@ -550,7 +566,7 @@ function resolveNextActor(
   );
 }
 
-async function loadExportSelection(
+export async function loadExportSelection(
   inputExport: string | undefined
 ): Promise<ExportSelection> {
   const selection: ExportSelection = new Map();
@@ -559,37 +575,167 @@ async function loadExportSelection(
   }
 
   const resolved = path.resolve(inputExport);
-  if (!resolved.endsWith(".jsonl")) {
+  const lowered = resolved.toLowerCase();
+  if (lowered.endsWith(".jsonl")) {
+    const reader = readline.createInterface({
+      input: fs.createReadStream(resolved, { encoding: "utf8" }),
+      crlfDelay: Infinity
+    });
+
+    for await (const line of reader) {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        continue;
+      }
+      const payload = JSON.parse(trimmed) as Record<string, unknown>;
+      addExportSelectionRecord(
+        selection,
+        payload.decision_id,
+        payload.candidate_action_key
+      );
+    }
+
+    return selection;
+  }
+
+  if (lowered.endsWith(".parquet")) {
+    return loadStructuredExportSelection(resolved, "parquet");
+  }
+
+  if (lowered.endsWith(".csv.gz")) {
+    return loadStructuredExportSelection(resolved, "csv.gz");
+  }
+
+  if (lowered.endsWith(".csv")) {
+    return loadStructuredExportSelection(resolved, "csv");
+  }
+
+  throw new Error(
+    "ml:rollouts supports --input-export for JSONL, parquet, and CSV exports. Re-run ml:export with a supported --format or omit --input-export."
+  );
+}
+
+function addExportSelectionRecord(
+  selection: ExportSelection,
+  decisionIdRaw: unknown,
+  candidateActionKeyRaw: unknown
+): void {
+  const decisionId =
+    typeof decisionIdRaw === "number" ? decisionIdRaw : Number(decisionIdRaw);
+  const candidateActionKey =
+    typeof candidateActionKeyRaw === "string" ? candidateActionKeyRaw : null;
+  if (!Number.isFinite(decisionId) || !candidateActionKey) {
+    return;
+  }
+
+  const existing = selection.get(decisionId) ?? new Set<string>();
+  existing.add(candidateActionKey);
+  selection.set(decisionId, existing);
+}
+
+function resolvePythonExecutable(cwd: string): string {
+  const configured = process.env.PYTHON_EXECUTABLE?.trim();
+  if (configured && isUsableExecutable(configured)) {
+    return configured;
+  }
+
+  const windowsVenv = path.join(cwd, ".venv", "Scripts", "python.exe");
+  if (fs.existsSync(windowsVenv) && isUsableExecutable(windowsVenv)) {
+    return windowsVenv;
+  }
+
+  const unixVenv = path.join(cwd, ".venv", "bin", "python");
+  if (fs.existsSync(unixVenv) && isUsableExecutable(unixVenv)) {
+    return unixVenv;
+  }
+
+  if (isUsableExecutable("python")) {
+    return "python";
+  }
+
+  if (isUsableExecutable("python3")) {
+    return "python3";
+  }
+
+  return "python";
+}
+
+function isUsableExecutable(candidate: string): boolean {
+  const result = spawnSync(candidate, ["--version"], {
+    stdio: "ignore",
+    timeout: 2_000,
+    shell: false
+  });
+  return result.error === undefined && result.status === 0;
+}
+
+function loadStructuredExportSelection(
+  resolved: string,
+  kind: StructuredExportKind
+): ExportSelection {
+  const python = resolvePythonExecutable(process.cwd());
+  const script = [
+    "from pathlib import Path",
+    "import json",
+    "import sys",
+    "import pandas as pd",
+    "source = Path(sys.argv[1])",
+    "kind = sys.argv[2]",
+    "if kind == 'parquet':",
+    "    frame = pd.read_parquet(source, columns=['decision_id', 'candidate_action_key'])",
+    "elif kind == 'csv':",
+    "    frame = pd.read_csv(source, usecols=['decision_id', 'candidate_action_key'])",
+    "else:",
+    "    frame = pd.read_csv(source, usecols=['decision_id', 'candidate_action_key'])",
+    "for row in frame.itertuples(index=False):",
+    "    decision_id = getattr(row, 'decision_id', None)",
+    "    candidate_action_key = getattr(row, 'candidate_action_key', None)",
+    "    if pd.isna(decision_id) or pd.isna(candidate_action_key):",
+    "        continue",
+    "    try:",
+    "        normalized_decision_id = int(decision_id)",
+    "    except (TypeError, ValueError):",
+    "        continue",
+    "    normalized_candidate_action_key = str(candidate_action_key)",
+    "    if not normalized_candidate_action_key:",
+    "        continue",
+    "    print(json.dumps({'decision_id': normalized_decision_id, 'candidate_action_key': normalized_candidate_action_key}))"
+  ].join("\n");
+
+  const result = spawnSync(python, ["-c", script, resolved, kind], {
+    cwd: process.cwd(),
+    env: process.env,
+    encoding: "utf8",
+    shell: false,
+    maxBuffer: 64 * 1024 * 1024
+  });
+
+  if (result.error) {
+    throw result.error;
+  }
+  if (result.status !== 0) {
+    const stderr =
+      typeof result.stderr === "string" ? result.stderr.trim() : "";
     throw new Error(
-      "ml:rollouts currently supports --input-export only for JSONL exports. Re-run ml:export with --format jsonl or omit --input-export."
+      stderr.length > 0
+        ? `Unable to read export selection from ${path.basename(resolved)}: ${stderr}`
+        : `Unable to read export selection from ${path.basename(resolved)}`
     );
   }
 
-  const reader = readline.createInterface({
-    input: fs.createReadStream(resolved, { encoding: "utf8" }),
-    crlfDelay: Infinity
-  });
-
-  for await (const line of reader) {
+  const selection: ExportSelection = new Map();
+  const stdout = typeof result.stdout === "string" ? result.stdout : "";
+  for (const line of stdout.split(/\r?\n/u)) {
     const trimmed = line.trim();
     if (!trimmed) {
       continue;
     }
     const payload = JSON.parse(trimmed) as Record<string, unknown>;
-    const decisionId =
-      typeof payload.decision_id === "number"
-        ? payload.decision_id
-        : Number(payload.decision_id);
-    const candidateActionKey =
-      typeof payload.candidate_action_key === "string"
-        ? payload.candidate_action_key
-        : null;
-    if (!Number.isFinite(decisionId) || !candidateActionKey) {
-      continue;
-    }
-    const existing = selection.get(decisionId) ?? new Set<string>();
-    existing.add(candidateActionKey);
-    selection.set(decisionId, existing);
+    addExportSelectionRecord(
+      selection,
+      payload.decision_id,
+      payload.candidate_action_key
+    );
   }
 
   return selection;
@@ -663,7 +809,9 @@ async function fetchDecisionRows(
     params.push(phase);
   }
   if (args.provider) {
-    clauses.push(`COALESCE(provider_used, requested_provider) = $${params.length + 1}`);
+    clauses.push(
+      `COALESCE(provider_used, requested_provider) = $${params.length + 1}`
+    );
     params.push(args.provider);
   }
   if (args.decisionId !== undefined) {
@@ -683,7 +831,8 @@ async function fetchDecisionRows(
     params.push(decisionIdsFilter);
   }
 
-  const whereClause = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
+  const whereClause =
+    clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
   const query = `
     SELECT
       id,
@@ -813,7 +962,10 @@ function buildJobs(
   };
 }
 
-async function appendJsonlLine(targetPath: string, payload: unknown): Promise<void> {
+async function appendJsonlLine(
+  targetPath: string,
+  payload: unknown
+): Promise<void> {
   await fs.promises.mkdir(path.dirname(targetPath), { recursive: true });
   await fs.promises.appendFile(
     targetPath,
@@ -833,7 +985,8 @@ function emitRolloutProgress(payload: {
     jobs_processed: payload.quality.jobs_processed,
     jobs_succeeded: payload.quality.jobs_succeeded,
     jobs_failed: payload.quality.jobs_failed,
-    jobs_deferred_transient_failure: payload.quality.jobs_deferred_transient_failure,
+    jobs_deferred_transient_failure:
+      payload.quality.jobs_deferred_transient_failure,
     sample_runs_succeeded: payload.quality.sample_runs_succeeded,
     sample_runs_failed: payload.quality.sample_runs_failed,
     transient_retries_attempted: payload.quality.transient_retries_attempted,
@@ -928,7 +1081,12 @@ async function runSingleRolloutJob(
         rollout_mean_finish_rank_actor: null,
         rollout_mean_finish_rank_partner: null,
         rollout_continuation_provider: args.continuationProvider,
-        rollout_seed: buildRolloutSeed(args.seed, job.decisionId, job.candidateActionKey, 0),
+        rollout_seed: buildRolloutSeed(
+          args.seed,
+          job.decisionId,
+          job.candidateActionKey,
+          0
+        ),
         rollout_engine_version: job.engineVersion,
         rollout_failure_reason: "missing_state_raw"
       }
@@ -960,7 +1118,12 @@ async function runSingleRolloutJob(
         rollout_mean_finish_rank_actor: null,
         rollout_mean_finish_rank_partner: null,
         rollout_continuation_provider: args.continuationProvider,
-        rollout_seed: buildRolloutSeed(args.seed, job.decisionId, job.candidateActionKey, 0),
+        rollout_seed: buildRolloutSeed(
+          args.seed,
+          job.decisionId,
+          job.candidateActionKey,
+          0
+        ),
         rollout_engine_version: job.engineVersion,
         rollout_failure_reason: forcedActionResolution.failureReason
       }
@@ -973,7 +1136,11 @@ async function runSingleRolloutJob(
   let lastFailureReason: string | null = null;
   let transientRetryCount = 0;
 
-  for (let sampleIndex = 0; sampleIndex < args.rolloutsPerAction; sampleIndex += 1) {
+  for (
+    let sampleIndex = 0;
+    sampleIndex < args.rolloutsPerAction;
+    sampleIndex += 1
+  ) {
     const sampleSeed = buildRolloutSeed(
       args.seed,
       job.decisionId,
@@ -993,7 +1160,9 @@ async function runSingleRolloutJob(
             const sampleStartedAt = Date.now();
             let result = applyEngineAction(
               stateRaw,
-              coerceEngineAction(JSON.parse(JSON.stringify(forcedAction)) as JsonObject)
+              coerceEngineAction(
+                JSON.parse(JSON.stringify(forcedAction)) as JsonObject
+              )
             );
             let continuationDecisionIndex = decision.decision_index + 1;
             let safetyCounter = 0;
@@ -1004,13 +1173,18 @@ async function runSingleRolloutJob(
                 args.sampleTimeoutMs > 0 &&
                 Date.now() - sampleStartedAt >= args.sampleTimeoutMs
               ) {
-                throw new Error(`rollout_sample_timeout_${args.sampleTimeoutMs}ms`);
+                throw new Error(
+                  `rollout_sample_timeout_${args.sampleTimeoutMs}ms`
+                );
               }
               if (safetyCounter >= 5_000) {
                 throw new Error("rollout_decision_limit_reached");
               }
               safetyCounter += 1;
-              const actor = resolveNextActor(result.legalActions, result.nextState);
+              const actor = resolveNextActor(
+                result.legalActions,
+                result.nextState
+              );
               const continuationMetadata = buildRolloutContinuationMetadata({
                 args,
                 job,
@@ -1032,12 +1206,18 @@ async function runSingleRolloutJob(
                 defaultProvider: args.continuationProvider,
                 quiet: true,
                 serverFallbackEnabled: true,
-                ...(continuationMetadata ? { metadata: continuationMetadata } : {}),
-                fullStateDecisionRequests: shouldUseFullStateRolloutContinuation(
-                  args.continuationProvider
-                )
+                ...(continuationMetadata
+                  ? { metadata: continuationMetadata }
+                  : {}),
+                fullStateDecisionRequests:
+                  shouldUseFullStateRolloutContinuation(
+                    args.continuationProvider
+                  )
               });
-              result = applyEngineAction(result.nextState, resolved.chosenAction);
+              result = applyEngineAction(
+                result.nextState,
+                resolved.chosenAction
+              );
               continuationDecisionIndex += 1;
             }
 
@@ -1064,7 +1244,10 @@ async function runSingleRolloutJob(
       }
     }
 
-    if (!sampleCompleted && isTransientRolloutFailureReason(lastFailureReason)) {
+    if (
+      !sampleCompleted &&
+      isTransientRolloutFailureReason(lastFailureReason)
+    ) {
       const deferredRow: RolloutResultRow = {
         decision_id: job.decisionId,
         candidate_action_key: job.candidateActionKey,
@@ -1073,7 +1256,12 @@ async function runSingleRolloutJob(
         rollout_failures: rolloutFailures,
         ...summarizeRolloutSamples(samples),
         rollout_continuation_provider: args.continuationProvider,
-        rollout_seed: buildRolloutSeed(args.seed, job.decisionId, job.candidateActionKey, 0),
+        rollout_seed: buildRolloutSeed(
+          args.seed,
+          job.decisionId,
+          job.candidateActionKey,
+          0
+        ),
         rollout_engine_version: job.engineVersion,
         rollout_failure_reason: lastFailureReason
       };
@@ -1097,7 +1285,12 @@ async function runSingleRolloutJob(
       rollout_failures: rolloutFailures,
       ...summary,
       rollout_continuation_provider: args.continuationProvider,
-      rollout_seed: buildRolloutSeed(args.seed, job.decisionId, job.candidateActionKey, 0),
+      rollout_seed: buildRolloutSeed(
+        args.seed,
+        job.decisionId,
+        job.candidateActionKey,
+        0
+      ),
       rollout_engine_version: job.engineVersion,
       rollout_failure_reason:
         samples.length > 0 && rolloutFailures === 0 ? null : lastFailureReason
@@ -1252,7 +1445,8 @@ async function main(): Promise<void> {
         quality.sample_runs_failed += row.rollout_failures;
         if (row.rollout_failure_reason) {
           quality.failure_reason_counts[row.rollout_failure_reason] =
-            (quality.failure_reason_counts[row.rollout_failure_reason] ?? 0) + 1;
+            (quality.failure_reason_counts[row.rollout_failure_reason] ?? 0) +
+            1;
         }
         await appendJsonlLine(retryableFailuresPath, row);
         emitRolloutTrace("ml_rollouts_job_finish", {
@@ -1266,11 +1460,17 @@ async function main(): Promise<void> {
           transient_retry_count: attempt.transientRetryCount,
           jobs_executed: quality.jobs_executed,
           jobs_processed: quality.jobs_processed,
-          pending_jobs_remaining: Math.max(0, pendingJobs.length - quality.jobs_executed)
+          pending_jobs_remaining: Math.max(
+            0,
+            pendingJobs.length - quality.jobs_executed
+          )
         });
         emitRolloutProgress({
           quality,
-          pendingJobsRemaining: Math.max(0, pendingJobs.length - quality.jobs_executed)
+          pendingJobsRemaining: Math.max(
+            0,
+            pendingJobs.length - quality.jobs_executed
+          )
         });
         return;
       }
@@ -1302,11 +1502,17 @@ async function main(): Promise<void> {
         transient_retry_count: attempt.transientRetryCount,
         jobs_executed: quality.jobs_executed,
         jobs_processed: quality.jobs_processed,
-        pending_jobs_remaining: Math.max(0, pendingJobs.length - quality.jobs_executed)
+        pending_jobs_remaining: Math.max(
+          0,
+          pendingJobs.length - quality.jobs_executed
+        )
       });
       emitRolloutProgress({
         quality,
-        pendingJobsRemaining: Math.max(0, pendingJobs.length - quality.jobs_executed)
+        pendingJobsRemaining: Math.max(
+          0,
+          pendingJobs.length - quality.jobs_executed
+        )
       });
     });
   } finally {

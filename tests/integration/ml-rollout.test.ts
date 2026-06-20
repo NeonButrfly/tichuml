@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
 import type { LegalAction } from "@tichuml/engine";
 import {
   applyEngineAction,
   createScenarioState,
   getLegalActions
 } from "@tichuml/engine";
+import { spawnSync } from "node:child_process";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import {
   buildRolloutSeed,
   extractRolloutSampleMetrics,
@@ -18,11 +22,29 @@ import {
   isResultCompleteForResume,
   isTransientRolloutFailureReason,
   limitDecisionRowsRoundRobinByGame,
+  loadExportSelection,
   resolveForcedActionFromCandidate as resolveForcedActionForRollout,
   shouldUseFullStateRolloutContinuation,
   withTimeout
 } from "../../apps/sim-runner/src/ml-rollouts";
 import { buildHeuristicDecisionOptions } from "../../apps/sim-runner/src/self-play-batch";
+
+function runPythonSnippet(snippet: string, args: string[] = []) {
+  return spawnSync(
+    process.execPath,
+    [
+      join("node_modules", "tsx", "dist", "cli.mjs"),
+      "scripts/run-python.ts",
+      "-c",
+      snippet,
+      ...args
+    ],
+    {
+      cwd: process.cwd(),
+      encoding: "utf8"
+    }
+  );
+}
 
 describe("ml rollout helpers", () => {
   it("maps seats to stable teams", () => {
@@ -204,7 +226,9 @@ describe("ml rollout helpers", () => {
 
   it("keeps full-state backend continuation enabled for server-backed rollouts", () => {
     expect(shouldUseFullStateRolloutContinuation("local")).toBe(false);
-    expect(shouldUseFullStateRolloutContinuation("server_heuristic")).toBe(false);
+    expect(shouldUseFullStateRolloutContinuation("server_heuristic")).toBe(
+      false
+    );
     expect(shouldUseFullStateRolloutContinuation("lightgbm_model")).toBe(true);
   });
 
@@ -219,9 +243,9 @@ describe("ml rollout helpers", () => {
   });
 
   it("treats sample timeouts as transient rollout failures", () => {
-    expect(isTransientRolloutFailureReason("rollout_sample_timeout_3000ms")).toBe(
-      true
-    );
+    expect(
+      isTransientRolloutFailureReason("rollout_sample_timeout_3000ms")
+    ).toBe(true);
     expect(
       isTransientRolloutFailureReason("rollout_decision_limit_reached")
     ).toBe(false);
@@ -394,6 +418,40 @@ describe("ml rollout helpers", () => {
     expect(new Set(selected.map((row) => row.game_id))).toEqual(
       new Set(["game-a", "game-b"])
     );
+  });
+
+  it("loads rollout selections from parquet exports", async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "ml-rollout-selection-"));
+    const parquetPath = join(tempDir, "selection.parquet");
+
+    try {
+      const buildExport = runPythonSnippet(
+        [
+          "from pathlib import Path",
+          "import pandas as pd",
+          "dataset = Path(__import__('sys').argv[1])",
+          "frame = pd.DataFrame([",
+          "    {'decision_id': 101, 'candidate_action_key': 'candidate-a'},",
+          "    {'decision_id': 101, 'candidate_action_key': 'candidate-b'},",
+          "    {'decision_id': 202, 'candidate_action_key': 'candidate-c'},",
+          "])",
+          "frame.to_parquet(dataset, index=False)",
+          "print('parquet-ok')"
+        ].join("\n"),
+        [parquetPath]
+      );
+
+      expect(buildExport.status).toBe(0);
+      expect(buildExport.stdout).toContain("parquet-ok");
+
+      const selection = await loadExportSelection(parquetPath);
+      expect(selection.get(101)).toEqual(
+        new Set(["candidate-a", "candidate-b"])
+      );
+      expect(selection.get(202)).toEqual(new Set(["candidate-c"]));
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 
   it("treats malformed candidate actions as row-level rollout failures", () => {
