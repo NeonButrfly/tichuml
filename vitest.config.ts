@@ -9,7 +9,8 @@ export default defineConfig({
       "@tichuml/engine": path.resolve("packages/engine/src/index.ts"),
       "@tichuml/telemetry": path.resolve("packages/telemetry/src/index.ts"),
       "@tichuml/ai-heuristics": path.resolve("packages/ai-heuristics/src/index.ts"),
-      "@tichuml/ui-kit": path.resolve("packages/ui-kit/src/index.ts")
+      "@tichuml/ui-kit": path.resolve("packages/ui-kit/src/index.ts"),
+      "@tichuml/table-layout-schema": path.resolve("packages/table-layout-schema/src/index.ts")
     }
   },
   test: {
