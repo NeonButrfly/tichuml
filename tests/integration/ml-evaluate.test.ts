@@ -1,10 +1,14 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 import {
   buildLatestSummary,
   buildProviderComparisonSummary,
   evaluateImprovementGate,
   parseArgs,
+  readModelMetadata,
   resolveEvaluationOutputPaths
 } from "../../apps/sim-runner/src/evaluate";
 
@@ -228,9 +232,9 @@ describe("ml evaluation helpers", () => {
 
   it("defaults decision timeouts to the sim runner budget and accepts overrides", () => {
     expect(parseArgs([]).decisionTimeoutMs).toBe(2000);
-    expect(
-      parseArgs(["--decision-timeout-ms", "3500"]).decisionTimeoutMs
-    ).toBe(3500);
+    expect(parseArgs(["--decision-timeout-ms", "3500"]).decisionTimeoutMs).toBe(
+      3500
+    );
   });
 
   it("writes default evaluation reports under eval/results instead of tracked artifacts", () => {
@@ -243,20 +247,10 @@ describe("ml evaluation helpers", () => {
     );
 
     expect(resolved.outputPath).toBe(
-      path.join(
-        "C:/tichu/tichuml",
-        "eval",
-        "results",
-        "evaluation-report.json"
-      )
+      path.join("C:/tichu/tichuml", "eval", "results", "evaluation-report.json")
     );
     expect(resolved.markdownPath).toBe(
-      path.join(
-        "C:/tichu/tichuml",
-        "eval",
-        "results",
-        "evaluation-report.md"
-      )
+      path.join("C:/tichu/tichuml", "eval", "results", "evaluation-report.md")
     );
     expect(resolved.latestPath).toBe(
       path.join("C:/tichu/tichuml", "eval", "results", "latest_summary.json")
@@ -267,5 +261,39 @@ describe("ml evaluation helpers", () => {
     expect(resolved.timestampedCompatPath).toContain(
       "lightgbm_model_vs_server_heuristic_mirrored.json"
     );
+  });
+
+  it("prefers candidate model metadata when live bootstrap provides overrides", () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "ml-evaluate-model-"));
+    const modelDir = join(tempDir, "ml");
+    const candidateModelPath = join(modelDir, "lightgbm_action_model.txt");
+    const candidateMetaPath = join(modelDir, "lightgbm_action_model.meta.json");
+
+    try {
+      mkdirSync(modelDir, { recursive: true });
+      writeFileSync(candidateModelPath, "candidate-model", "utf8");
+      writeFileSync(
+        candidateMetaPath,
+        JSON.stringify(
+          {
+            model_version: "candidate@2026-06-22",
+            objective: "rollout_ranker"
+          },
+          null,
+          2
+        ),
+        "utf8"
+      );
+
+      const metadata = readModelMetadata("C:/tichu/tichuml", true, {
+        modelPathOverride: candidateModelPath,
+        modelMetaPathOverride: candidateMetaPath
+      });
+
+      expect(metadata.modelFile).toBe(candidateModelPath);
+      expect(metadata.modelVersion).toBe("candidate@2026-06-22");
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 });

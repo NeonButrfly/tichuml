@@ -202,7 +202,12 @@ export function resolveEvaluationOutputPaths(
       : path.join(repoRoot, outputPathArg)
     : defaultOutputPath;
   const markdownPath = outputPath.replace(/\.json$/i, ".md");
-  const latestPath = path.join(repoRoot, "eval", "results", "latest_summary.json");
+  const latestPath = path.join(
+    repoRoot,
+    "eval",
+    "results",
+    "latest_summary.json"
+  );
   const timestampedCompatPath = path.join(
     repoRoot,
     "eval",
@@ -255,10 +260,7 @@ function parseSeatProvider(
   seatProviders[seat] = provider;
 }
 
-function parseNumber(
-  value: string | undefined,
-  fallback: number
-): number {
+function parseNumber(value: string | undefined, fallback: number): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
 }
@@ -509,7 +511,10 @@ function buildLegPlans(args: ParsedArgs): EvaluationLegPlan[] {
       name: "mirror",
       seed: `${args.seed}:mirror`,
       defaultProvider: args.ewProvider,
-      seatProviders: buildSeatProvidersForTeams(args.ewProvider, args.nsProvider)
+      seatProviders: buildSeatProvidersForTeams(
+        args.ewProvider,
+        args.nsProvider
+      )
     });
   }
 
@@ -551,16 +556,20 @@ function buildLegSummary(
       ])
     ),
     team_assignments: {
-      "team-0":
-        (seatProviders["seat-0"] ?? seatProviders["seat-2"] ?? defaultProvider) as ProviderMode,
-      "team-1":
-        (seatProviders["seat-1"] ?? seatProviders["seat-3"] ?? defaultProvider) as ProviderMode
+      "team-0": (seatProviders["seat-0"] ??
+        seatProviders["seat-2"] ??
+        defaultProvider) as ProviderMode,
+      "team-1": (seatProviders["seat-1"] ??
+        seatProviders["seat-3"] ??
+        defaultProvider) as ProviderMode
     },
     win_counts: winCounts,
     hand_win_counts: handWinCounts,
     win_rate_by_team: {
-      "team-0": gamesPlayed > 0 ? roundRate(winCounts["team-0"] / gamesPlayed) : 0,
-      "team-1": gamesPlayed > 0 ? roundRate(winCounts["team-1"] / gamesPlayed) : 0,
+      "team-0":
+        gamesPlayed > 0 ? roundRate(winCounts["team-0"] / gamesPlayed) : 0,
+      "team-1":
+        gamesPlayed > 0 ? roundRate(winCounts["team-1"] / gamesPlayed) : 0,
       tie: gamesPlayed > 0 ? roundRate(winCounts.tie / gamesPlayed) : 0
     },
     hand_win_rate_by_team: {
@@ -605,20 +614,25 @@ function buildLegSummary(
   };
 }
 
-function wilsonInterval95(successes: number, total: number): [number, number] | null {
+function wilsonInterval95(
+  successes: number,
+  total: number
+): [number, number] | null {
   if (total <= 0) {
     return null;
   }
   const z = 1.96;
   const phat = successes / total;
   const denominator = 1 + (z * z) / total;
-  const center =
-    (phat + (z * z) / (2 * total)) / denominator;
+  const center = (phat + (z * z) / (2 * total)) / denominator;
   const margin =
     (z *
       Math.sqrt((phat * (1 - phat)) / total + (z * z) / (4 * total * total))) /
     denominator;
-  return [roundRate(Math.max(0, center - margin)), roundRate(Math.min(1, center + margin))];
+  return [
+    roundRate(Math.max(0, center - margin)),
+    roundRate(Math.min(1, center + margin))
+  ];
 }
 
 export function buildProviderComparisonSummary(
@@ -642,7 +656,10 @@ export function buildProviderComparisonSummary(
   let providerBTotalScore = 0;
   let providerADoubleVictories = 0;
   let providerBDoubleVictories = 0;
-  const latencyTotals: Record<ProviderMode, { weightedMs: number; decisions: number }> = {
+  const latencyTotals: Record<
+    ProviderMode,
+    { weightedMs: number; decisions: number }
+  > = {
     local: { weightedMs: 0, decisions: 0 },
     server_heuristic: { weightedMs: 0, decisions: 0 },
     lightgbm_model: { weightedMs: 0, decisions: 0 }
@@ -708,13 +725,15 @@ export function buildProviderComparisonSummary(
   const providerAAverageLatency =
     latencyTotals[providerA].decisions > 0
       ? roundValue(
-          latencyTotals[providerA].weightedMs / latencyTotals[providerA].decisions
+          latencyTotals[providerA].weightedMs /
+            latencyTotals[providerA].decisions
         )
       : null;
   const providerBAverageLatency =
     latencyTotals[providerB].decisions > 0
       ? roundValue(
-          latencyTotals[providerB].weightedMs / latencyTotals[providerB].decisions
+          latencyTotals[providerB].weightedMs /
+            latencyTotals[providerB].decisions
         )
       : null;
 
@@ -742,7 +761,9 @@ export function buildProviderComparisonSummary(
     provider_b_average_score:
       totalGames > 0 ? roundValue(providerBTotalScore / totalGames) : 0,
     average_score_delta_provider_a_minus_b:
-      totalGames > 0 ? roundValue((providerATotalScore - providerBTotalScore) / totalGames) : 0,
+      totalGames > 0
+        ? roundValue((providerATotalScore - providerBTotalScore) / totalGames)
+        : 0,
     provider_a_total_score: providerATotalScore,
     provider_b_total_score: providerBTotalScore,
     provider_a_double_victories: providerADoubleVictories,
@@ -767,10 +788,16 @@ function identifyGateProviders(args: ParsedArgs): {
   if (args.nsProvider === args.ewProvider) {
     return { challenger: null, baseline: null };
   }
-  if (args.nsProvider === "lightgbm_model" && args.ewProvider !== "lightgbm_model") {
+  if (
+    args.nsProvider === "lightgbm_model" &&
+    args.ewProvider !== "lightgbm_model"
+  ) {
     return { challenger: "lightgbm_model", baseline: args.ewProvider };
   }
-  if (args.ewProvider === "lightgbm_model" && args.nsProvider !== "lightgbm_model") {
+  if (
+    args.ewProvider === "lightgbm_model" &&
+    args.nsProvider !== "lightgbm_model"
+  ) {
     return { challenger: "lightgbm_model", baseline: args.nsProvider };
   }
   if (
@@ -819,7 +846,8 @@ export function evaluateImprovementGate(config: {
         {
           name: "gate_skipped",
           passed: false,
-          details: "Improvement gate applies only when comparing distinct providers."
+          details:
+            "Improvement gate applies only when comparing distinct providers."
         }
       ]
     };
@@ -846,16 +874,18 @@ export function evaluateImprovementGate(config: {
     details: `games=${gamesEvaluated}, required=${config.args.minGamesForGate}`
   });
 
-  const winRate = comparison?.provider_a === providers.challenger
-    ? comparison.provider_a_match_win_rate
-    : comparison?.provider_b === providers.challenger
-      ? comparison.provider_b_match_win_rate
-      : 0;
-  const scoreDelta = comparison?.provider_a === providers.challenger
-    ? comparison.average_score_delta_provider_a_minus_b
-    : comparison
-      ? -comparison.average_score_delta_provider_a_minus_b
-      : 0;
+  const winRate =
+    comparison?.provider_a === providers.challenger
+      ? comparison.provider_a_match_win_rate
+      : comparison?.provider_b === providers.challenger
+        ? comparison.provider_b_match_win_rate
+        : 0;
+  const scoreDelta =
+    comparison?.provider_a === providers.challenger
+      ? comparison.average_score_delta_provider_a_minus_b
+      : comparison
+        ? -comparison.average_score_delta_provider_a_minus_b
+        : 0;
   const beatsBaseline = winRate > 0.5 && scoreDelta > 0;
   checks.push({
     name: "beats_baseline",
@@ -924,9 +954,13 @@ export function evaluateImprovementGate(config: {
   };
 }
 
-function readModelMetadata(
+export function readModelMetadata(
   repoRoot: string,
-  usesLightgbm: boolean
+  usesLightgbm: boolean,
+  config?: {
+    modelPathOverride?: string | null;
+    modelMetaPathOverride?: string | null;
+  }
 ): {
   modelFile: string | null;
   modelVersion: string | null;
@@ -935,18 +969,33 @@ function readModelMetadata(
     return { modelFile: null, modelVersion: null };
   }
 
-  const metaPath = path.join(
-    repoRoot,
-    "ml",
-    "model_registry",
-    "lightgbm_action_model.meta.json"
-  );
-  const modelPath = path.join(
-    repoRoot,
-    "ml",
-    "model_registry",
-    "lightgbm_action_model.txt"
-  );
+  const candidateModelPath =
+    config?.modelPathOverride?.trim() ||
+    process.env.LIGHTGBM_MODEL_PATH?.trim() ||
+    null;
+  const candidateMetaPath =
+    config?.modelMetaPathOverride?.trim() ||
+    process.env.LIGHTGBM_MODEL_META_PATH?.trim() ||
+    null;
+
+  const metaPath =
+    candidateMetaPath && fs.existsSync(candidateMetaPath)
+      ? candidateMetaPath
+      : path.join(
+          repoRoot,
+          "ml",
+          "model_registry",
+          "lightgbm_action_model.meta.json"
+        );
+  const modelPath =
+    candidateModelPath && fs.existsSync(candidateModelPath)
+      ? candidateModelPath
+      : path.join(
+          repoRoot,
+          "ml",
+          "model_registry",
+          "lightgbm_action_model.txt"
+        );
   if (!fs.existsSync(metaPath)) {
     return {
       modelFile: fs.existsSync(modelPath) ? modelPath : null,
@@ -966,7 +1015,7 @@ function readModelMetadata(
         metadata.model_version ??
         (metadata.objective && metadata.created_at
           ? `${metadata.objective}@${metadata.created_at}`
-          : metadata.created_at ?? null)
+          : (metadata.created_at ?? null))
     };
   } catch {
     return {
@@ -1073,8 +1122,12 @@ function buildMarkdownReport(report: EvaluationReport): string {
       `- Providers: NS=${leg.ns_provider}, EW=${leg.ew_provider}, games=${leg.games_played}, hands=${leg.hands_played}`
     );
     lines.push(`- Win rates: ${JSON.stringify(leg.win_rate_by_team)}`);
-    lines.push(`- Hand win rates: ${JSON.stringify(leg.hand_win_rate_by_team)}`);
-    lines.push(`- Total score by team: ${JSON.stringify(leg.total_score_by_team)}`);
+    lines.push(
+      `- Hand win rates: ${JSON.stringify(leg.hand_win_rate_by_team)}`
+    );
+    lines.push(
+      `- Total score by team: ${JSON.stringify(leg.total_score_by_team)}`
+    );
     lines.push(
       `- Tichu call/success: ${leg.tichu_call_rate ?? "n/a"} / ${leg.tichu_success_rate ?? "n/a"}`
     );
@@ -1114,7 +1167,9 @@ function buildMarkdownReport(report: EvaluationReport): string {
     `- Applied: ${report.gate.applied}, passed: ${report.gate.passed}, challenger: ${report.gate.challenger_provider ?? "n/a"}, baseline: ${report.gate.baseline_provider ?? "n/a"}`
   );
   for (const check of report.gate.checks) {
-    lines.push(`- ${check.name}: ${check.passed ? "pass" : "fail"} (${check.details})`);
+    lines.push(
+      `- ${check.name}: ${check.passed ? "pass" : "fail"} (${check.details})`
+    );
   }
   lines.push("");
   lines.push(
@@ -1165,18 +1220,14 @@ async function main(): Promise<void> {
     path.dirname(fileURLToPath(import.meta.url)),
     "../../.."
   );
-  const {
-    outputPath,
-    markdownPath,
-    latestPath,
-    timestampedCompatPath
-  } = resolveEvaluationOutputPaths(
-    repoRoot,
-    args.outputPath,
-    args.nsProvider,
-    args.ewProvider,
-    args.mirrorSeats
-  );
+  const { outputPath, markdownPath, latestPath, timestampedCompatPath } =
+    resolveEvaluationOutputPaths(
+      repoRoot,
+      args.outputPath,
+      args.nsProvider,
+      args.ewProvider,
+      args.mirrorSeats
+    );
   const outputDir = path.dirname(outputPath);
   fs.mkdirSync(outputDir, { recursive: true });
   fs.mkdirSync(path.dirname(latestPath), { recursive: true });
