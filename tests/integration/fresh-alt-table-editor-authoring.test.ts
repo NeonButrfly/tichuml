@@ -179,13 +179,23 @@ describe("fresh alt table editor authoring contract", () => {
       FRESH_ALT_AUTHORING_LAYOUT_PATH,
       "utf8"
     );
+    const freshCardsLayerSource = readFileSync(
+      fileURLToPath(
+        new URL("../../apps/web/src/altTableFresh/FreshCardsLayer.tsx", import.meta.url)
+      ),
+      "utf8"
+    );
 
     expect(propertiesSource).toContain("Card Local Rotation (degrees)");
     expect(propertiesSource).toContain("Card Local Pivot");
     expect(propertiesSource).toContain("cardLocalRotation");
     expect(propertiesSource).toContain("cardLocalPivot");
+    expect(propertiesSource).toContain("Backs Inward");
+    expect(propertiesSource).toContain("applyBacksInwardPreset");
     expect(authoringLayoutSource).toContain("cardLocalRotation");
     expect(authoringLayoutSource).toContain("cardLocalPivot");
+    expect(freshCardsLayerSource).toContain("data-card-plane");
+    expect(freshCardsLayerSource).toContain("cardPlaneStyle");
   });
 
   it("projects card-local rotation and pivot onto every card in a hand", async () => {

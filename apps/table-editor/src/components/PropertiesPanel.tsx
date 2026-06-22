@@ -119,6 +119,28 @@ function HandProperties({
     [layout, side, onLayoutChange]
   );
 
+  const applyBacksInwardPreset = useCallback(() => {
+    const presetYBySide: Partial<Record<SideHandId, number>> = {
+      east: -68,
+      west: 68,
+      north: 0
+    };
+    const yDegrees = presetYBySide[side] ?? 0;
+
+    updateFan(
+      (f) => ({
+        ...f,
+        cardLocalRotation: {
+          x: degreesToRadians(0),
+          y: degreesToRadians(yDegrees),
+          z: degreesToRadians(0)
+        },
+        cardLocalPivot: { x: 0, y: 0, z: 0 }
+      }),
+      "Apply backs inward card preset"
+    );
+  }, [side, updateFan]);
+
   return (
     <div className="editor-properties">
       <div className="editor-properties__title">{side.charAt(0).toUpperCase() + side.slice(1)} Hand Master</div>
@@ -342,6 +364,12 @@ function HandProperties({
       <div className="editor-properties__section">
         <div className="editor-properties__section-title">Actions</div>
         <div className="editor-properties__actions">
+          <button
+            className="editor-properties__action-btn"
+            onClick={applyBacksInwardPreset}
+          >
+            Backs Inward
+          </button>
           {otherSides.map((fromSide) => (
             <button key={`mirror-${fromSide}`} className="editor-properties__action-btn" onClick={() => handleMirrorFrom(fromSide)}>
               Mirror from {fromSide}

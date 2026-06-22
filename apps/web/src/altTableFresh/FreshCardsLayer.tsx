@@ -38,9 +38,7 @@ function renderCardShell(config: {
       ? point.y - hiddenBottom / 2
       : point.y) - (card.selected ? (card.liftPx ?? 24) * fit.scale : 0);
   const localRotation = card.anchor.localRotationDeg;
-  const localRotationTransform = localRotation
-    ? ` rotateX(${localRotation.x}deg) rotateY(${localRotation.y}deg) rotateZ(${localRotation.z}deg)`
-    : "";
+  const localRotationTransform = getCardPlaneTransform(localRotation);
 
   const shellStyle = {
     position: "absolute",
@@ -49,8 +47,8 @@ function renderCardShell(config: {
     width,
     height: visibleHeight,
     overflow: "hidden",
-    transform: `translate(-50%, -50%) rotate(${card.anchor.rotationDeg}deg)${localRotationTransform} scaleX(${card.anchor.scaleX}) scaleY(${card.anchor.scaleY})`,
-    transformOrigin: card.anchor.transformOrigin ?? "center center",
+    transform: `translate(-50%, -50%) rotate(${card.anchor.rotationDeg}deg) scaleX(${card.anchor.scaleX}) scaleY(${card.anchor.scaleY})`,
+    transformOrigin: "center center",
     transformStyle: "preserve-3d",
     zIndex: card.anchor.zIndex + (card.selected ? 30 : 0),
     outline: showDebug ? "1px solid rgba(64, 220, 255, 0.85)" : "none",
@@ -63,21 +61,32 @@ function renderCardShell(config: {
       : "none"
   } as const;
 
+  const cardPlaneStyle = {
+    width: "100%",
+    height: fullHeight,
+    transform: localRotationTransform,
+    transformOrigin: card.anchor.transformOrigin ?? "center center",
+    transformStyle: "preserve-3d",
+    backfaceVisibility: "visible"
+  } as const;
+
   const imageNode = (
-    <img
-      src={card.src}
-      alt=""
-      draggable={false}
-      style={{
-        display: "block",
-        width: "100%",
-        height: fullHeight,
-        objectFit: "fill",
-        userSelect: "none",
-        pointerEvents: "none",
-        opacity: card.opacity ?? 1
-      }}
-    />
+    <div data-card-plane="true" style={cardPlaneStyle}>
+      <img
+        src={card.src}
+        alt=""
+        draggable={false}
+        style={{
+          display: "block",
+          width: "100%",
+          height: fullHeight,
+          objectFit: "fill",
+          userSelect: "none",
+          pointerEvents: "none",
+          opacity: card.opacity ?? 1
+        }}
+      />
+    </div>
   );
 
   if (card.interactive) {
@@ -112,6 +121,16 @@ function renderCardShell(config: {
       {imageNode}
     </div>
   );
+}
+
+function getCardPlaneTransform(
+  localRotation: CardAnchor["localRotationDeg"] | undefined
+) {
+  if (!localRotation) {
+    return "none";
+  }
+
+  return `rotateX(${localRotation.x}deg) rotateY(${localRotation.y}deg) rotateZ(${localRotation.z}deg)`;
 }
 
 export function FreshCardsLayer({

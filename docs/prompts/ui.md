@@ -14,6 +14,24 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 
 ## Entries
 
+### 2026-06-22 - Fresh ALT editor needs east/west card backs inward presets
+
+- Prompt Signal: After the first master card-local rotation controls landed, the
+  user clarified that east and west cards still could not be tuned exactly so
+  their backs face toward the table on a 3D plane.
+- Interpreted Requirement: Issue
+  [#107](https://github.com/NeonButrfly/tichuml/issues/107) is the canonical
+  tracker. The editor should separate outer card placement from inner card-plane
+  3D rotation and provide known-good East/West backs-inward presets while
+  leaving manual X/Y/Z fine tuning available.
+- Affected Systems: `apps/table-editor/`,
+  `apps/web/src/altTableFresh/FreshCardsLayer.tsx`,
+  `tests/integration/fresh-alt-table-editor-authoring.test.ts`,
+  Fresh ALT authoring preview rendering.
+- Linked GitHub Issue: [#107](https://github.com/NeonButrfly/tichuml/issues/107)
+- Milestone: none; targeted editor authoring enhancement.
+- Status Source: GitHub issue state only.
+
 ### 2026-06-22 - Fresh ALT table editor needs master per-card 3D rotation controls
 
 - Prompt Signal: While using the standalone luxury table editor, the user
