@@ -192,10 +192,30 @@ describe("fresh alt table editor authoring contract", () => {
     expect(propertiesSource).toContain("cardLocalPivot");
     expect(propertiesSource).toContain("Backs Inward");
     expect(propertiesSource).toContain("applyBacksInwardPreset");
+    expect(propertiesSource).toContain("Apply readable backs inward card preset");
+    expect(propertiesSource).not.toContain("presetYBySide");
     expect(authoringLayoutSource).toContain("cardLocalRotation");
     expect(authoringLayoutSource).toContain("cardLocalPivot");
     expect(freshCardsLayerSource).toContain("data-card-plane");
+    expect(freshCardsLayerSource).toContain("data-card-back-faces");
     expect(freshCardsLayerSource).toContain("cardPlaneStyle");
+  });
+
+  it("projects east and west hidden cards as readable table-center-facing side racks", async () => {
+    const authoringHelpers = await import(
+      pathToFileURL(FRESH_ALT_AUTHORING_LAYOUT_PATH).href
+    );
+
+    const scene = authoringHelpers.createFreshAltAuthoringScene();
+
+    for (const card of [...scene.hands.east, ...scene.hands.west]) {
+      expect(card.renderMode).toBe("side_rack_readable_fan");
+      expect(card.cardBackFaces).toBe("table_center");
+      expect(card.scaleX).toBeGreaterThan(0.6);
+      expect(card.scaleX).toBeLessThan(0.8);
+      expect(Math.abs(card.rotationDeg)).toBeLessThan(30);
+      expect(card.localRotationDeg).toEqual({ x: 0, y: 0, z: 0 });
+    }
   });
 
   it("projects card-local rotation and pivot onto every card in a hand", async () => {

@@ -361,6 +361,10 @@ function interpolateAnchor(
     zIndex: Math.round(lerp(left.zIndex, right.zIndex, localT))
   };
 
+  if (left.cardBackFaces !== undefined) {
+    interpolated.cardBackFaces = left.cardBackFaces;
+  }
+
   if (left.hiddenBottomPx !== undefined || right.hiddenBottomPx !== undefined) {
     return {
       ...interpolated,

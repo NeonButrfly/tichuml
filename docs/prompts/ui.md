@@ -1276,3 +1276,23 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 - Linked GitHub Issue: [#28](https://github.com/NeonButrfly/tichuml/issues/28)
 - Milestone: [6.4 – Gameplay & UX Stabilization](https://github.com/NeonButrfly/tichuml/milestone/23)
 - Status Source: GitHub issue state only.
+
+### 2026-06-22 - Fresh table editor side card backs must face the table center readably
+
+- Prompt Signal: After the card-local rotation and Backs Inward preset work,
+  the user reported that the east and west card backs still did not face the
+  table correctly and that more axis tuning was not producing the desired
+  result.
+- Interpreted Requirement: Issue
+  [#108](https://github.com/NeonButrfly/tichuml/issues/108) is the canonical
+  tracker. The editor preview must stop treating east/west backs inward as a
+  CSS Y-axis squeeze of flat sprites and instead render those hidden hands
+  under the established readable side-rack, table-center-facing contract.
+- Affected Systems: `apps/web/src/altTableFresh/freshTableMath.ts`,
+  `apps/web/src/altTableFresh/authoringLayout.ts`,
+  `apps/web/src/altTableFresh/FreshCardsLayer.tsx`,
+  `apps/table-editor/src/components/PropertiesPanel.tsx`,
+  `tests/integration/fresh-alt-table-editor-authoring.test.ts`.
+- Linked GitHub Issue: [#108](https://github.com/NeonButrfly/tichuml/issues/108)
+- Milestone: none; scoped editor bugfix.
+- Status Source: GitHub issue state only.

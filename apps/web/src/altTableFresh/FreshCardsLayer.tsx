@@ -97,6 +97,7 @@ function renderCardShell(config: {
         data-card-id={card.id}
         data-seat={card.seat}
         data-render-mode={card.anchor.renderMode}
+        data-card-back-faces={card.anchor.cardBackFaces}
         style={shellStyle}
         aria-label={card.ariaLabel}
         draggable={card.draggable}
@@ -115,6 +116,7 @@ function renderCardShell(config: {
       data-card-id={card.id}
       data-seat={card.seat}
       data-render-mode={card.anchor.renderMode}
+      data-card-back-faces={card.anchor.cardBackFaces}
       aria-hidden="true"
       style={shellStyle}
     >

@@ -8,8 +8,10 @@ export type CardAnchor = {
   index: number;
   renderMode:
     | "north_rack"
+    | "side_rack_readable_fan"
     | "side_rack_portrait_fan"
     | "south_player_fan";
+  cardBackFaces?: "table_center" | "player";
   centerPx: { x: number; y: number };
   wPx: number;
   hPx: number;
@@ -109,7 +111,8 @@ export function makeSideHandAnchors(seat: "west" | "east"): CardAnchor[] {
       seat,
       zone: `${seat}_hand`,
       index: i + 1,
-      renderMode: "side_rack_portrait_fan",
+      renderMode: "side_rack_readable_fan",
+      cardBackFaces: "table_center",
       centerPx: {
         x: lerp(top.x, bottom.x, t),
         y: lerp(top.y, bottom.y, t)
@@ -117,7 +120,7 @@ export function makeSideHandAnchors(seat: "west" | "east"): CardAnchor[] {
       wPx: cardW,
       hPx: cardH,
       rotationDeg: baseRot + (t - 0.5) * fanSpread,
-      scaleX: 1,
+      scaleX: 0.72,
       scaleY: 1,
       zIndex: 40 + i
     };

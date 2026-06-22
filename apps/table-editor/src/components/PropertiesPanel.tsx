@@ -120,24 +120,17 @@ function HandProperties({
   );
 
   const applyBacksInwardPreset = useCallback(() => {
-    const presetYBySide: Partial<Record<SideHandId, number>> = {
-      east: -68,
-      west: 68,
-      north: 0
-    };
-    const yDegrees = presetYBySide[side] ?? 0;
-
     updateFan(
       (f) => ({
         ...f,
         cardLocalRotation: {
           x: degreesToRadians(0),
-          y: degreesToRadians(yDegrees),
+          y: degreesToRadians(0),
           z: degreesToRadians(0)
         },
         cardLocalPivot: { x: 0, y: 0, z: 0 }
       }),
-      "Apply backs inward card preset"
+      "Apply readable backs inward card preset"
     );
   }, [side, updateFan]);
 
