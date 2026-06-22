@@ -14,6 +14,8 @@ export type CardAnchor = {
   wPx: number;
   hPx: number;
   rotationDeg: number;
+  localRotationDeg?: { x: number; y: number; z: number };
+  transformOrigin?: string;
   scaleX: number;
   scaleY: number;
   zIndex: number;

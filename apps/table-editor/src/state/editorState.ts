@@ -7,6 +7,7 @@ import {
   type HandMasterTransform,
   type CardFanSettings,
   createDefaultAltTableLayout,
+  createDefaultCardFanSettings,
   PASSING_LANE_IDS,
   SIDE_HAND_IDS
 } from "@tichuml/table-layout-schema";
@@ -61,12 +62,40 @@ export function loadFromLocalStorage(): AltTableLayout | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === "object" && parsed.schemaVersion === 1) {
-      return parsed as AltTableLayout;
+      return normalizeEditorLayout(parsed as AltTableLayout);
     }
     return null;
   } catch {
     return null;
   }
+}
+
+function normalizeEditorLayout(layout: AltTableLayout): AltTableLayout {
+  const defaultFan = createDefaultCardFanSettings();
+  return {
+    ...layout,
+    hands: {
+      north: normalizeHandFan(layout.hands.north, defaultFan),
+      east: normalizeHandFan(layout.hands.east, defaultFan),
+      west: normalizeHandFan(layout.hands.west, defaultFan),
+      south: normalizeHandFan(layout.hands.south, defaultFan)
+    }
+  };
+}
+
+function normalizeHandFan<THand extends AltTableLayout["hands"][SideHandId]>(
+  hand: THand,
+  defaultFan: CardFanSettings
+): THand {
+  return {
+    ...hand,
+    fan: {
+      ...defaultFan,
+      ...hand.fan,
+      cardLocalRotation: hand.fan.cardLocalRotation ?? defaultFan.cardLocalRotation,
+      cardLocalPivot: hand.fan.cardLocalPivot ?? defaultFan.cardLocalPivot
+    }
+  };
 }
 
 export function clearLocalStorage(): void {

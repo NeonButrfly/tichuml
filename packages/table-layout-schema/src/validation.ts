@@ -82,6 +82,8 @@ function validateFanSettings(value: unknown, path: string): string[] {
   if (!isBoolean(value.reverseOrder)) {
     errors.push(`${path}.reverseOrder: expected boolean`);
   }
+  errors.push(...validateVec3(value.cardLocalRotation, `${path}.cardLocalRotation`));
+  errors.push(...validateVec3(value.cardLocalPivot, `${path}.cardLocalPivot`));
   return errors;
 }
 

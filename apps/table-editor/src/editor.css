@@ -197,6 +197,8 @@
 .editor-preview__authoring {
   position: relative;
   overflow: hidden;
+  perspective: 1200px;
+  perspective-origin: 50% 50%;
   background:
     radial-gradient(circle at top, rgba(66, 37, 18, 0.24), rgba(8, 6, 5, 0.96) 50%),
     #090706;
@@ -213,6 +215,7 @@
 .editor-preview__arrow-hit {
   position: absolute;
   transform: translate(-50%, -50%);
+  z-index: 500;
 }
 
 .editor-preview__hand-hit {

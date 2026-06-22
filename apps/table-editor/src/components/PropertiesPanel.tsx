@@ -168,6 +168,41 @@ function HandProperties({
         onChange={(v) => updateMaster((m) => ({ ...m, pivot: v }), "Move pivot")}
       />
 
+      <Vec3Section
+        title="Card Local Rotation (degrees)"
+        value={{
+          x: radiansToDegrees(hand.fan.cardLocalRotation.x),
+          y: radiansToDegrees(hand.fan.cardLocalRotation.y),
+          z: radiansToDegrees(hand.fan.cardLocalRotation.z)
+        }}
+        step={1}
+        onChange={(v) =>
+          updateFan(
+            (f) => ({
+              ...f,
+              cardLocalRotation: {
+                x: degreesToRadians(v.x),
+                y: degreesToRadians(v.y),
+                z: degreesToRadians(v.z)
+              }
+            }),
+            "Rotate cards locally"
+          )
+        }
+      />
+
+      <Vec3Section
+        title="Card Local Pivot"
+        value={hand.fan.cardLocalPivot}
+        step={0.05}
+        onChange={(v) =>
+          updateFan(
+            (f) => ({ ...f, cardLocalPivot: v }),
+            "Move card local pivot"
+          )
+        }
+      />
+
       <div className="editor-properties__section">
         <div className="editor-properties__section-title">Fan Settings</div>
 

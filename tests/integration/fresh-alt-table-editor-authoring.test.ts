@@ -172,4 +172,45 @@ describe("fresh alt table editor authoring contract", () => {
     expect(jsonModalSource).toContain("alt-table-layout.json");
     expect(jsonModalSource).toContain("navigator.clipboard.writeText");
   });
+
+  it("exposes master card-local 3D rotation and pivot controls for editable hands", () => {
+    const propertiesSource = readFileSync(PROPERTIES_PANEL_PATH, "utf8");
+    const authoringLayoutSource = readFileSync(
+      FRESH_ALT_AUTHORING_LAYOUT_PATH,
+      "utf8"
+    );
+
+    expect(propertiesSource).toContain("Card Local Rotation (degrees)");
+    expect(propertiesSource).toContain("Card Local Pivot");
+    expect(propertiesSource).toContain("cardLocalRotation");
+    expect(propertiesSource).toContain("cardLocalPivot");
+    expect(authoringLayoutSource).toContain("cardLocalRotation");
+    expect(authoringLayoutSource).toContain("cardLocalPivot");
+  });
+
+  it("projects card-local rotation and pivot onto every card in a hand", async () => {
+    const authoringHelpers = await import(
+      pathToFileURL(FRESH_ALT_AUTHORING_LAYOUT_PATH).href
+    );
+    const schema = await import("@tichuml/table-layout-schema");
+    const layout = schema.createDefaultAltTableLayout();
+    layout.hands.east.fan.cardLocalRotation = {
+      x: Math.PI / 8,
+      y: Math.PI / 6,
+      z: Math.PI / 12
+    };
+    layout.hands.east.fan.cardLocalPivot = { x: -0.5, y: -0.5, z: 0 };
+
+    const scene = authoringHelpers.createFreshAltAuthoringScene(layout);
+
+    expect(scene.hands.east.length).toBeGreaterThan(1);
+    for (const card of scene.hands.east) {
+      expect(card.localRotationDeg).toEqual({
+        x: 22.5,
+        y: 30,
+        z: 15
+      });
+      expect(card.transformOrigin).toBe("0% 0%");
+    }
+  });
 });

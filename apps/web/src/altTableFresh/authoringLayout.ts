@@ -213,9 +213,30 @@ function projectHandLayout(handId: FreshAltHandId, hand: SideHandLayout): CardAn
       },
       wPx: anchor.wPx * widthRatio * scaleX,
       hPx: anchor.hPx * heightRatio * scaleY,
-      rotationDeg: anchor.rotationDeg + deltaRotation + rotationDeg
+      rotationDeg: anchor.rotationDeg + deltaRotation + rotationDeg,
+      localRotationDeg: {
+        x: roundDegrees(radiansToDegrees(hand.fan.cardLocalRotation.x)),
+        y: roundDegrees(radiansToDegrees(hand.fan.cardLocalRotation.y)),
+        z: roundDegrees(radiansToDegrees(hand.fan.cardLocalRotation.z))
+      },
+      transformOrigin: getCardTransformOrigin(hand.fan.cardLocalPivot)
     };
   });
+}
+
+function roundDegrees(value: number): number {
+  return Number(value.toFixed(6));
+}
+
+function getCardTransformOrigin(pivot: Vec3): string {
+  const x = (pivot.x + 0.5) * 100;
+  const y = (pivot.y + 0.5) * 100;
+
+  return `${roundCssPercent(x)}% ${roundCssPercent(y)}%`;
+}
+
+function roundCssPercent(value: number): number {
+  return Number(value.toFixed(4));
 }
 
 function projectPassingLane(

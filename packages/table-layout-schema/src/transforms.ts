@@ -116,7 +116,9 @@ export function mirrorHandLayout(source: SideHandLayout, targetId: SideHandId): 
         ...source.fan,
         fanDirection: (source.fan.fanDirection === 1 ? -1 : 1) as 1 | -1,
         reverseOrder: !source.fan.reverseOrder,
-        localRotationStep: -source.fan.localRotationStep
+        localRotationStep: -source.fan.localRotationStep,
+        cardLocalRotation: mirrorRotationY(source.fan.cardLocalRotation),
+        cardLocalPivot: mirrorVec3X(source.fan.cardLocalPivot)
       }
     };
   }
@@ -133,7 +135,9 @@ export function mirrorHandLayout(source: SideHandLayout, targetId: SideHandId): 
       ...source.fan,
       fanDirection: (source.fan.fanDirection === 1 ? -1 : 1) as 1 | -1,
       reverseOrder: !source.fan.reverseOrder,
-      localRotationStep: -source.fan.localRotationStep
+      localRotationStep: -source.fan.localRotationStep,
+      cardLocalRotation: mirrorRotationNorthSouth(source.fan.cardLocalRotation),
+      cardLocalPivot: mirrorVec3Z(source.fan.cardLocalPivot)
     }
   };
 }

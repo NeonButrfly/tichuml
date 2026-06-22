@@ -37,6 +37,10 @@ function renderCardShell(config: {
     (card.anchor.renderMode === "north_rack"
       ? point.y - hiddenBottom / 2
       : point.y) - (card.selected ? (card.liftPx ?? 24) * fit.scale : 0);
+  const localRotation = card.anchor.localRotationDeg;
+  const localRotationTransform = localRotation
+    ? ` rotateX(${localRotation.x}deg) rotateY(${localRotation.y}deg) rotateZ(${localRotation.z}deg)`
+    : "";
 
   const shellStyle = {
     position: "absolute",
@@ -45,8 +49,9 @@ function renderCardShell(config: {
     width,
     height: visibleHeight,
     overflow: "hidden",
-    transform: `translate(-50%, -50%) rotate(${card.anchor.rotationDeg}deg) scaleX(${card.anchor.scaleX}) scaleY(${card.anchor.scaleY})`,
-    transformOrigin: "center center",
+    transform: `translate(-50%, -50%) rotate(${card.anchor.rotationDeg}deg)${localRotationTransform} scaleX(${card.anchor.scaleX}) scaleY(${card.anchor.scaleY})`,
+    transformOrigin: card.anchor.transformOrigin ?? "center center",
+    transformStyle: "preserve-3d",
     zIndex: card.anchor.zIndex + (card.selected ? 30 : 0),
     outline: showDebug ? "1px solid rgba(64, 220, 255, 0.85)" : "none",
     border: "none",

@@ -49,6 +49,8 @@ describe("generateFanLocalTransforms", () => {
     arc: 0.15,
     depthStep: 0.02,
     localRotationStep: 0.009,
+    cardLocalRotation: { x: 0, y: 0, z: 0 },
+    cardLocalPivot: { x: -0.5, y: -0.5, z: 0 },
     startOffset: 0,
     fanDirection: 1,
     reverseOrder: false
@@ -277,6 +279,50 @@ describe("validateAltTableLayout", () => {
     expect(layout.hands.west.master.position.x).toBeLessThan(0);
   });
 
+  it("defaults each hand to a master per-card local rotation and upper-left pivot", () => {
+    const layout = createDefaultAltTableLayout();
+
+    for (const hand of Object.values(layout.hands)) {
+      expect(hand.fan.cardLocalRotation).toEqual({ x: 0, y: 0, z: 0 });
+      expect(hand.fan.cardLocalPivot).toEqual({ x: -0.5, y: -0.5, z: 0 });
+    }
+  });
+
+  it("validates card-local rotation and pivot as vec3 fan fields", () => {
+    const layout = createDefaultAltTableLayout();
+    layout.hands.east.fan.cardLocalRotation = { x: Math.PI / 8, y: Math.PI / 6, z: 0 };
+    layout.hands.east.fan.cardLocalPivot = { x: -0.5, y: -0.5, z: 0 };
+
+    const result = validateAltTableLayout(layout);
+
+    expect(result.valid).toBe(true);
+    expect(result.errors).toEqual([]);
+  });
+
+  it("rejects invalid card-local rotation and pivot fan fields", () => {
+    const layout = createDefaultAltTableLayout();
+    const invalid = {
+      ...layout,
+      hands: {
+        ...layout.hands,
+        east: {
+          ...layout.hands.east,
+          fan: {
+            ...layout.hands.east.fan,
+            cardLocalRotation: { x: "bad", y: 0, z: 0 },
+            cardLocalPivot: { x: -0.5, y: null, z: 0 }
+          }
+        }
+      }
+    };
+
+    const result = validateAltTableLayout(invalid);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain("hands.east.fan.cardLocalRotation.x: expected number");
+    expect(result.errors).toContain("hands.east.fan.cardLocalPivot.y: expected number");
+  });
+
   it("rejects non-object input", () => {
     const result = validateAltTableLayout("not an object");
     expect(result.valid).toBe(false);
@@ -349,6 +395,12 @@ describe("safeParseLayout", () => {
 
   it("round-trips exported alt layout json without drift", () => {
     const layout = createDefaultAltTableLayout();
+    layout.hands.east.fan.cardLocalRotation = {
+      x: Math.PI / 8,
+      y: Math.PI / 6,
+      z: Math.PI / 12
+    };
+    layout.hands.east.fan.cardLocalPivot = { x: -0.5, y: -0.5, z: 0 };
     const json = JSON.stringify(layout, null, 2);
     const result = safeParseLayout(json);
 

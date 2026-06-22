@@ -28,6 +28,8 @@ export interface CardFanSettings {
   arc: number;
   depthStep: number;
   localRotationStep: number;
+  cardLocalRotation: Vec3;
+  cardLocalPivot: Vec3;
   startOffset: number;
   fanDirection: 1 | -1;
   reverseOrder: boolean;
@@ -125,6 +127,8 @@ export function createDefaultCardFanSettings(): CardFanSettings {
     arc: 0.15,
     depthStep: 0.02,
     localRotationStep: 0.009,
+    cardLocalRotation: createDefaultVec3(),
+    cardLocalPivot: createDefaultVec3(-0.5, -0.5, 0),
     startOffset: 0,
     fanDirection: 1,
     reverseOrder: false

@@ -14,6 +14,27 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 
 ## Entries
 
+### 2026-06-22 - Fresh ALT table editor needs master per-card 3D rotation controls
+
+- Prompt Signal: While using the standalone luxury table editor, the user
+  clarified that rotating the whole hand was not the needed operation. The
+  requested behavior is card-level rotation around a 3D axis, visually from the
+  card/corner level, so hidden-card backs can face inward while all cards in the
+  selected hand rotate together through one master card control.
+- Interpreted Requirement: Issue
+  [#106](https://github.com/NeonButrfly/tichuml/issues/106) is the canonical
+  tracker. `apps/table-editor` should expose editable card-local X/Y/Z rotation
+  and card-local pivot controls for editable hands, keep `south` locked, and
+  apply the selected hand's master per-card settings to every rendered card in
+  that hand without moving or rotating the entire hand group.
+- Affected Systems: `apps/table-editor/`,
+  `packages/table-layout-schema/`,
+  `apps/web/src/altTableFresh/`,
+  Fresh ALT authoring preview rendering, layout import/export JSON.
+- Linked GitHub Issue: [#106](https://github.com/NeonButrfly/tichuml/issues/106)
+- Milestone: none; targeted editor authoring enhancement.
+- Status Source: GitHub issue state only.
+
 ### 2026-06-14 - Fresh ALT table needs a truly standalone editor that mirrors the real luxury surface
 
 - Prompt Signal: The latest ALT-table follow-up asked to check the recent
