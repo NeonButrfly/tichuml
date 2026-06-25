@@ -122,6 +122,8 @@ describe("live ml bootstrap orchestration", () => {
       "true",
       "--telemetry",
       "false",
+      "--decision-timeout-ms",
+      "5000",
       "--backend-url",
       "http://127.0.0.1:4312",
       "--output",

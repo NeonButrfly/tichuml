@@ -1069,3 +1069,19 @@ supported size limit.`, leaving the control UI stuck at `Batches=0`,
   [6.5 – Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
 - Status:
   Lives in GitHub, not here.
+
+## 2026-06-25 - Raise the live bootstrap decision timeout for candidate evaluation
+
+- Prompt signal:
+  The live candidate-backed model load/evaluation path was timing out too early, so the bootstrap needed a longer decision timeout before rerunning.
+- Interpreted requirement:
+  Issue [#109](https://github.com/NeonButrfly/tichuml/issues/109) tracks this pass. The live bootstrap should pass a longer decision timeout only on the candidate evaluation path, keep normal `ml:evaluate` defaults unchanged, and be re-run against the fixed timeout so the model load can complete.
+- Affected systems:
+  `scripts/ml-live-bootstrap.ts`,
+  `tests/integration/ml-live-bootstrap.test.ts`,
+  live bootstrap execution on `192.168.50.36`,
+  and the ML prompt-capture docs.
+- Linked GitHub issue:
+  [#109](https://github.com/NeonButrfly/tichuml/issues/109)
+- Status:
+  Lives in GitHub, not here.

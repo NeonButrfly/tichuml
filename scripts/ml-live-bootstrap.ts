@@ -157,6 +157,7 @@ export function buildLiveMlBootstrapPlan(
   const candidateBackendUrl = options.skipEvaluate
     ? null
     : `http://127.0.0.1:${candidateBackendPort}`;
+  const evaluationDecisionTimeoutMs = 5_000;
 
   const exportArgs = [
     "run",
@@ -273,6 +274,8 @@ export function buildLiveMlBootstrapPlan(
         "true",
         "--telemetry",
         "false",
+        "--decision-timeout-ms",
+        String(evaluationDecisionTimeoutMs),
         "--backend-url",
         candidateBackendUrl ?? "",
         "--output",
