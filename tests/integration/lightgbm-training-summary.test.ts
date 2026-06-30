@@ -34,6 +34,7 @@ describe("lightgbm training summary", () => {
       const metaPath = join(tempDir, "model.meta.json");
       const reportPath = join(tempDir, "training-report.json");
       const importancePath = join(tempDir, "feature-importance.csv");
+      const heartbeatPath = join(tempDir, "training-progress.json");
 
       try {
         const buildDataset = runPythonSnippet(
@@ -100,6 +101,8 @@ describe("lightgbm training summary", () => {
             reportPath,
             "--feature-importance-output",
             importancePath,
+            "--heartbeat-output",
+            heartbeatPath,
             "--phase",
             "trick_play",
             "--objective",
@@ -116,7 +119,16 @@ describe("lightgbm training summary", () => {
         );
 
         expect(result.status).toBe(0);
-        const payload = JSON.parse(result.stdout);
+        const outputLines = result.stdout
+          .trim()
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean);
+        expect(outputLines.some((line) => line.includes("lightgbm_load_start"))).toBe(true);
+        expect(outputLines.some((line) => line.includes("lightgbm_load_complete"))).toBe(true);
+        expect(outputLines.some((line) => line.includes("lightgbm_training_start"))).toBe(true);
+        expect(outputLines.some((line) => line.includes("lightgbm_training_complete"))).toBe(true);
+        const payload = JSON.parse(outputLines.at(-1) ?? "");
         expect(payload.accepted).toBe(true);
         expect(payload.target_distribution.p50).toBeTypeOf("number");
         expect(payload.baseline_metrics.global_mean.validation.rmse).toBeTypeOf(
@@ -131,6 +143,12 @@ describe("lightgbm training summary", () => {
         expect(report.baseline_metrics.grouped_by_action_type).toBeTruthy();
         expect(report.model_vs_baseline.best_baseline.name).toBeTruthy();
         expect(report.spearman_interpretation.guidance).toContain("near 0");
+
+        const heartbeat = JSON.parse(readFileSync(heartbeatPath, "utf8"));
+        expect(heartbeat.event).toBe("lightgbm_training_complete");
+        expect(heartbeat.phase).toBe("complete");
+        expect(heartbeat.row_count).toBe(40);
+        expect(heartbeat.objective).toBe("observed_outcome_regression");
       } finally {
         rmSync(tempDir, { recursive: true, force: true });
       }

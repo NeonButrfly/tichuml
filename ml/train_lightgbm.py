@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
+import signal
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -69,15 +71,47 @@ SPEARMAN_GUIDANCE = [
     (0.10, "promising"),
     (0.03, "weak"),
 ]
+JSONL_PROGRESS_CHUNK_ROWS = 50_000
+JSONL_PROGRESS_REPORT_EVERY_CHUNKS = 5
+DEFAULT_HEARTBEAT_FILENAME = "training-progress.json"
+HEARTBEAT_OUTPUT_PATH: Path | None = None
+HEARTBEAT_STATE: dict[str, Any] = {}
+
+
+def resolve_default_heartbeat_path(report_output: str) -> Path:
+    report_path = Path(report_output)
+    return report_path.with_name(DEFAULT_HEARTBEAT_FILENAME)
+
+
+def update_training_heartbeat(payload: dict[str, Any]) -> None:
+    if HEARTBEAT_OUTPUT_PATH is None:
+        return
+    HEARTBEAT_STATE.update(make_json_safe(payload))
+    HEARTBEAT_STATE["updated_at"] = datetime.now(UTC).isoformat()
+    HEARTBEAT_OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    HEARTBEAT_OUTPUT_PATH.write_text(
+        dumps_json_safe(HEARTBEAT_STATE, indent=2) + "\n", encoding="utf-8"
+    )
 
 
 def emit_training_trace(event: str, payload: dict[str, Any]) -> None:
+    timestamp = datetime.now(UTC).isoformat()
+    safe_payload = make_json_safe(payload)
+    update_training_heartbeat(
+        {
+            "event": event,
+            "status": safe_payload.get("status", HEARTBEAT_STATE.get("status", "running")),
+            "phase": safe_payload.get("phase", HEARTBEAT_STATE.get("phase")),
+            "pid": os.getpid(),
+            **safe_payload,
+        }
+    )
     print(
         dumps_json_safe(
             {
-                "ts": datetime.now(UTC).isoformat(),
+                "ts": timestamp,
                 "event": event,
-                **payload,
+                **safe_payload,
             }
         ),
         flush=True,
@@ -108,6 +142,8 @@ def make_training_progress_callback(config: dict[str, Any]):
                     "validation_row_count": int(config.get("validation_row_count") or 0),
                     "objective": config.get("objective"),
                     "label_mode": config.get("label_mode"),
+                    "phase": "fit",
+                    "status": "running",
                 },
             )
 
@@ -116,13 +152,95 @@ def make_training_progress_callback(config: dict[str, Any]):
     return _callback
 
 
-def load_frame(path: str) -> pd.DataFrame:
+def install_signal_handlers() -> None:
+    def _handle_signal(signum: int, _frame: Any) -> None:
+        emit_training_trace(
+            "lightgbm_training_interrupted",
+            {
+                "signal": signum,
+                "signal_name": signal.Signals(signum).name,
+                "phase": HEARTBEAT_STATE.get("phase", "unknown"),
+                "status": "interrupted",
+            },
+        )
+        raise SystemExit(128 + signum)
+
+    signal.signal(signal.SIGTERM, _handle_signal)
+    signal.signal(signal.SIGINT, _handle_signal)
+
+
+def load_frame(path: str, dataset_label: str = "training_input") -> pd.DataFrame:
     source = Path(path)
+    emit_training_trace(
+        "lightgbm_load_start",
+        {
+            "phase": "load",
+            "status": "running",
+            "dataset_label": dataset_label,
+            "input_path": str(source),
+            "input_format": source.suffix or "parquet",
+        },
+    )
     if source.suffix == ".jsonl":
-        return pd.read_json(source, lines=True)
+        chunks: list[pd.DataFrame] = []
+        row_count = 0
+        chunk_count = 0
+        for chunk in pd.read_json(
+            source, lines=True, chunksize=JSONL_PROGRESS_CHUNK_ROWS
+        ):
+            chunks.append(chunk)
+            chunk_count += 1
+            row_count += int(len(chunk.index))
+            if (
+                chunk_count == 1
+                or chunk_count % JSONL_PROGRESS_REPORT_EVERY_CHUNKS == 0
+            ):
+                emit_training_trace(
+                    "lightgbm_load_progress",
+                    {
+                        "phase": "load",
+                        "status": "running",
+                        "dataset_label": dataset_label,
+                        "input_path": str(source),
+                        "chunk_count": chunk_count,
+                        "rows_loaded": row_count,
+                    },
+                )
+        frame = (
+            pd.concat(chunks, ignore_index=True)
+            if chunks
+            else pd.DataFrame()
+        )
+        emit_training_trace(
+            "lightgbm_load_complete",
+            {
+                "phase": "load",
+                "status": "running",
+                "dataset_label": dataset_label,
+                "input_path": str(source),
+                "row_count": int(len(frame.index)),
+                "column_count": int(len(frame.columns)),
+                "chunk_count": chunk_count,
+            },
+        )
+        return frame
     if source.suffix == ".gz":
-        return pd.read_csv(source)
-    return pd.read_parquet(source)
+        frame = pd.read_csv(source)
+    else:
+        frame = pd.read_parquet(source)
+    emit_training_trace(
+        "lightgbm_load_complete",
+        {
+            "phase": "load",
+            "status": "running",
+            "dataset_label": dataset_label,
+            "input_path": str(source),
+            "row_count": int(len(frame.index)),
+            "column_count": int(len(frame.columns)),
+            "chunk_count": None,
+        },
+    )
+    return frame
 
 
 def load_manifest(path: str | None) -> dict[str, Any]:
@@ -137,7 +255,16 @@ def load_manifest(path: str | None) -> dict[str, Any]:
 def merge_rollout_input(frame: pd.DataFrame, rollout_input: str | None) -> pd.DataFrame:
     if not rollout_input:
         return frame
-    rollout_frame = load_frame(rollout_input)
+    emit_training_trace(
+        "lightgbm_rollout_merge_start",
+        {
+            "phase": "merge_rollout",
+            "status": "running",
+            "row_count": int(len(frame.index)),
+            "rollout_input_path": rollout_input,
+        },
+    )
+    rollout_frame = load_frame(rollout_input, dataset_label="rollout_input")
     join_keys = [key for key in ["decision_id", "candidate_action_key"] if key in frame.columns and key in rollout_frame.columns]
     if len(join_keys) != 2:
         raise ValueError(
@@ -163,6 +290,16 @@ def merge_rollout_input(frame: pd.DataFrame, rollout_input: str | None) -> pd.Da
             merged = merged.drop(columns=[merged_column])
             continue
         merged = merged.rename(columns={merged_column: column})
+    emit_training_trace(
+        "lightgbm_rollout_merge_complete",
+        {
+            "phase": "merge_rollout",
+            "status": "running",
+            "row_count": int(len(merged.index)),
+            "column_count": int(len(merged.columns)),
+            "rollout_input_path": rollout_input,
+        },
+    )
     return merged
 
 
@@ -813,6 +950,7 @@ def main() -> None:
         "--feature-importance-output",
         default=str(DEFAULT_FEATURE_IMPORTANCE),
     )
+    parser.add_argument("--heartbeat-output", default=None)
     parser.add_argument(
         "--feature-profile",
         choices=["runtime_raw", "full"],
@@ -833,12 +971,27 @@ def main() -> None:
         action="store_true",
     )
     args = parser.parse_args()
+    global HEARTBEAT_OUTPUT_PATH
+    heartbeat_output = args.heartbeat_output or str(
+        resolve_default_heartbeat_path(args.report_output)
+    )
+    HEARTBEAT_OUTPUT_PATH = Path(heartbeat_output)
+    install_signal_handlers()
 
     label_mode, default_target = objective_defaults(args.objective)
     target_column = args.target_column or default_target
     manifest = load_manifest(args.manifest_input)
-    frame = load_frame(args.input)
+    frame = load_frame(args.input, dataset_label="training_input")
     frame = merge_rollout_input(frame, args.rollout_input)
+    emit_training_trace(
+        "lightgbm_phase_filter_complete",
+        {
+            "phase": "phase_filter",
+            "status": "running",
+            "requested_phase": args.phase,
+            "row_count": int(len(frame.index)),
+        },
+    )
     frame = filter_phase(frame, args.phase)
     if frame.empty:
         raise ValueError("No training rows were found for the requested phase.")
@@ -849,6 +1002,15 @@ def main() -> None:
         )
 
     frame = frame[frame[target_column].notna()].copy()
+    emit_training_trace(
+        "lightgbm_target_filter_complete",
+        {
+            "phase": "target_filter",
+            "status": "running",
+            "target_column": target_column,
+            "row_count": int(len(frame.index)),
+        },
+    )
     if frame.empty:
         raise ValueError(f"Target column '{target_column}' has no non-null rows after filtering.")
 
@@ -891,6 +1053,16 @@ def main() -> None:
             f"No feature columns were available for training profile '{args.feature_profile}'."
         )
     feature_frame = normalize_feature_frame(frame[feature_columns])
+    emit_training_trace(
+        "lightgbm_feature_selection_complete",
+        {
+            "phase": "feature_prep",
+            "status": "running",
+            "feature_profile": args.feature_profile,
+            "feature_count": len(feature_columns),
+            "row_count": int(len(frame.index)),
+        },
+    )
 
     excluded = excluded_columns(frame, manifest, feature_columns, target_column, args.objective)
     train_frame, validation_frame, split_method = split_frame(
@@ -898,6 +1070,17 @@ def main() -> None:
         args.objective,
         args.validation_fraction,
         args.random_state,
+    )
+    emit_training_trace(
+        "lightgbm_split_complete",
+        {
+            "phase": "split",
+            "status": "running",
+            "split_method": split_method,
+            "row_count": int(len(frame.index)),
+            "train_row_count": int(len(train_frame.index)),
+            "validation_row_count": int(len(validation_frame.index)),
+        },
     )
     ranker_label_strategy = None
     ranker_train_labels: pd.Series | None = None
@@ -917,6 +1100,8 @@ def main() -> None:
             "train_row_count": train_row_count,
             "validation_row_count": validation_row_count,
             "feature_count": len(feature_columns),
+            "phase": "fit",
+            "status": "running",
         },
     )
     if args.objective == "imitation_binary":
@@ -1102,6 +1287,7 @@ def main() -> None:
         "phase": phase_alias(args.phase),
         "source_dataset_path": str(Path(args.input)),
         "rollout_dataset_path": str(Path(args.rollout_input)) if args.rollout_input else None,
+        "heartbeat_output_path": str(HEARTBEAT_OUTPUT_PATH) if HEARTBEAT_OUTPUT_PATH else None,
         "ranking_label_strategy": ranker_label_strategy,
         "ranker_max_relevance": args.ranker_max_relevance if args.objective == "rollout_ranker" else None,
         "min_rollout_decision_spread": args.min_rollout_decision_spread,
@@ -1137,6 +1323,7 @@ def main() -> None:
         "spearman_interpretation": spearman_summary,
         "source_dataset_path": str(Path(args.input)),
         "rollout_dataset_path": str(Path(args.rollout_input)) if args.rollout_input else None,
+        "heartbeat_output_path": str(HEARTBEAT_OUTPUT_PATH) if HEARTBEAT_OUTPUT_PATH else None,
         "ranking_label_strategy": ranker_label_strategy,
         "ranker_max_relevance": args.ranker_max_relevance if args.objective == "rollout_ranker" else None,
         "min_rollout_decision_spread": args.min_rollout_decision_spread,
@@ -1163,6 +1350,9 @@ def main() -> None:
             "objective": args.objective,
             "model_output_path": str(model_path),
             "meta_output_path": str(meta_path),
+            "heartbeat_output_path": str(HEARTBEAT_OUTPUT_PATH) if HEARTBEAT_OUTPUT_PATH else None,
+            "phase": "complete",
+            "status": "complete",
         },
     )
 
@@ -1177,6 +1367,7 @@ def main() -> None:
                 "row_count": meta["row_count"],
                 "feature_count": len(feature_columns),
                 "feature_profile": args.feature_profile,
+                "heartbeat_output_path": str(HEARTBEAT_OUTPUT_PATH) if HEARTBEAT_OUTPUT_PATH else None,
                 "target_distribution": target_distribution,
                 "validation_metrics": validation_metrics,
                 "baseline_metrics": baseline_metrics,
