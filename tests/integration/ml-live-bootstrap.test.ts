@@ -40,7 +40,7 @@ describe("live ml bootstrap orchestration", () => {
       "ml:evaluate",
     ]);
     expect(plan.datasetPath).toBe(
-      join("training-runs", "live-20260601-000001", "ml", "train.parquet")
+      join("training-runs", "live-20260601-000001", "ml", "train.jsonl")
     );
     expect(plan.steps[0]?.args).toEqual([
       "run",
@@ -51,7 +51,7 @@ describe("live ml bootstrap orchestration", () => {
       "--source",
       "gameplay",
       "--format",
-      "parquet",
+      "jsonl",
       "--include-rollouts",
       "--output-dir",
       "training-runs/live-20260601-000001/ml",

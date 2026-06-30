@@ -146,7 +146,7 @@ export function buildLiveMlBootstrapPlan(
     options.candidateBackendPort,
     "--candidate-backend-port"
   );
-  const datasetPath = path.join(outputDir, "train.parquet");
+  const datasetPath = path.join(outputDir, "train.jsonl");
   const manifestPath = path.join(outputDir, "dataset_metadata.json");
   const rolloutPath = path.join(outputDir, "rollout_rows.jsonl");
   const modelPath = path.join(outputDir, "lightgbm_action_model.txt");
@@ -158,7 +158,6 @@ export function buildLiveMlBootstrapPlan(
     ? null
     : `http://127.0.0.1:${candidateBackendPort}`;
   const evaluationDecisionTimeoutMs = 5_000;
-
   const exportArgs = [
     "run",
     "ml:export:raw",
@@ -168,10 +167,10 @@ export function buildLiveMlBootstrapPlan(
     "--source",
     telemetrySource,
     "--format",
-    "parquet",
+    "jsonl",
     "--include-rollouts",
     "--output-dir",
-    outputDir
+    outputDir,
   ];
   if (options.provider) {
     exportArgs.push("--provider", options.provider);
@@ -195,7 +194,7 @@ export function buildLiveMlBootstrapPlan(
     "--rollouts-per-action",
     String(rolloutsPerAction),
     "--backend-url",
-    backendUrl
+    backendUrl,
   ];
   appendOptionalFlag(rolloutArgs, "--max-decisions", rolloutMaxDecisions);
 
@@ -222,7 +221,7 @@ export function buildLiveMlBootstrapPlan(
     "--report-output",
     trainingReportPath,
     "--feature-importance-output",
-    featureImportancePath
+    featureImportancePath,
   ];
   if (minRolloutDecisionSpread > 0) {
     trainArgs.push(
@@ -235,17 +234,17 @@ export function buildLiveMlBootstrapPlan(
     {
       label: "ml:export",
       command: "npm",
-      args: exportArgs
+      args: exportArgs,
     },
     {
       label: "ml:rollouts",
       command: "npm",
-      args: rolloutArgs
+      args: rolloutArgs,
     },
     {
       label: "ml:train",
       command: "npm",
-      args: trainArgs
+      args: trainArgs,
     }
   ];
 
@@ -253,7 +252,7 @@ export function buildLiveMlBootstrapPlan(
     steps.push({
       label: "build:server",
       command: "npm",
-      args: ["run", "build", "-w", "@tichuml/server"]
+      args: ["run", "build", "-w", "@tichuml/server"],
     });
     steps.push({
       label: "ml:evaluate",
@@ -279,7 +278,7 @@ export function buildLiveMlBootstrapPlan(
         "--backend-url",
         candidateBackendUrl ?? "",
         "--output",
-        evaluationReportPath
+        evaluationReportPath,
       ]
     });
   }
@@ -361,7 +360,7 @@ export function readEvaluationSummary(reportPath: string): {
       typeof parsed.model_file === "string" &&
       parsed.model_file.trim().length > 0
         ? parsed.model_file
-        : null
+        : null,
   };
 }
 
@@ -451,8 +450,8 @@ function startCandidateBackend(config: {
       PORT: String(config.backendPort),
       BACKEND_BASE_URL: `http://127.0.0.1:${config.backendPort}`,
       LIGHTGBM_MODEL_PATH: config.modelPath,
-      LIGHTGBM_MODEL_META_PATH: config.modelMetaPath
-    }
+      LIGHTGBM_MODEL_META_PATH: config.modelMetaPath,
+    },
   });
 }
 
@@ -493,7 +492,7 @@ async function main(): Promise<void> {
       "server_heuristic",
     candidateBackendPort:
       readOptionalIntegerArg(argv, "--candidate-backend-port") ?? 4312,
-    skipEvaluate: argv.includes("--skip-evaluate")
+    skipEvaluate: argv.includes("--skip-evaluate"),
   });
 
   let candidateBackend: ChildProcessWithoutNullStreams | null = null;
@@ -508,7 +507,7 @@ async function main(): Promise<void> {
         }
         assertCandidateArtifactsExist({
           modelPath: plan.modelPath,
-          modelMetaPath: plan.modelMetaPath
+          modelMetaPath: plan.modelMetaPath,
         });
         const candidateBackendPort = Number.parseInt(
           backendUrl.split(":").at(-1) ?? "",
@@ -524,24 +523,19 @@ async function main(): Promise<void> {
         await waitForHealth(`${backendUrl}/health`);
         await runCommand(step.command, step.args, {
           LIGHTGBM_MODEL_PATH: path.resolve(plan.modelPath),
-          LIGHTGBM_MODEL_META_PATH: path.resolve(plan.modelMetaPath)
+          LIGHTGBM_MODEL_META_PATH: path.resolve(plan.modelMetaPath),
         });
-        const evaluationSummary = readEvaluationSummary(
-          plan.evaluationReportPath
-        );
+        const evaluationSummary = readEvaluationSummary(plan.evaluationReportPath);
         if (
           evaluationSummary.modelFile === null ||
-          path.resolve(evaluationSummary.modelFile) !==
-            path.resolve(plan.modelPath)
+          path.resolve(evaluationSummary.modelFile) !== path.resolve(plan.modelPath)
         ) {
           throw new Error(
             `Evaluation report used ${evaluationSummary.modelFile ?? "no model_file"} instead of candidate model ${path.resolve(plan.modelPath)}.`
           );
         }
         if (!evaluationSummary.gatePassed) {
-          throw new Error(
-            "Live gameplay bootstrap evaluation gate did not pass."
-          );
+          throw new Error("Live gameplay bootstrap evaluation gate did not pass.");
         }
         await stopChildProcess(candidateBackend);
         candidateBackend = null;
