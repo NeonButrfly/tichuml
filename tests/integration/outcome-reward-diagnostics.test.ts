@@ -97,7 +97,14 @@ describe("outcome reward diagnostics", () => {
         );
 
         expect(result.status).toBe(0);
-        const parsed = JSON.parse(result.stdout);
+        const parsed = JSON.parse(
+          result.stdout
+            .trim()
+            .split("\n")
+            .map((line) => line.trim())
+            .filter(Boolean)
+            .at(-1) ?? ""
+        );
         expect(parsed.accepted).toBe(true);
         expect(parsed.target_column).toBe("outcome_reward");
         expect(parsed.row_count).toBe(6);

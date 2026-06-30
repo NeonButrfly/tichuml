@@ -164,7 +164,7 @@ describe("ml export and training regressions", () => {
     "trains rollout_ranker on continuous rollout values by deriving relevance labels",
     () => {
       const tempDir = mkdtempSync(join(tmpdir(), "ml-ranker-rollout-"));
-      const datasetPath = join(tempDir, "train.parquet");
+      const datasetPath = join(tempDir, "train.jsonl");
       const manifestPath = join(tempDir, "dataset_metadata.json");
       const modelPath = join(tempDir, "model.txt");
       const metaPath = join(tempDir, "model.meta.json");
@@ -178,12 +178,12 @@ describe("ml export and training regressions", () => {
             "import pandas as pd",
             "dataset = Path(__import__('sys').argv[1])",
             "frame = pd.DataFrame([",
-            "    {'phase': 'trick_play', 'game_id': 'g1', 'decision_id': 'd1', 'rollout_mean_actor_team_delta': 90.0, 'actor_team_score': 100.0, 'opponent_team_score': 80.0, 'pass_action_flag': 0},",
-            "    {'phase': 'trick_play', 'game_id': 'g1', 'decision_id': 'd1', 'rollout_mean_actor_team_delta': 15.0, 'actor_team_score': 95.0, 'opponent_team_score': 85.0, 'pass_action_flag': 1},",
-            "    {'phase': 'trick_play', 'game_id': 'g2', 'decision_id': 'd2', 'rollout_mean_actor_team_delta': 40.0, 'actor_team_score': 88.0, 'opponent_team_score': 102.0, 'pass_action_flag': 0},",
-            "    {'phase': 'trick_play', 'game_id': 'g2', 'decision_id': 'd2', 'rollout_mean_actor_team_delta': -10.0, 'actor_team_score': 84.0, 'opponent_team_score': 106.0, 'pass_action_flag': 1},",
+            "    {'phase': 'trick_play', 'game_id': 'g1', 'decision_id': 'd1', 'actor_seat': 'seat-0', 'chosen_action_type': 'play_cards', 'action_rank': 1, 'rollout_mean_actor_team_delta': 90.0, 'actor_team_score': 100.0, 'opponent_team_score': 80.0, 'pass_action_flag': 0},",
+            "    {'phase': 'trick_play', 'game_id': 'g1', 'decision_id': 'd1', 'actor_seat': 'seat-0', 'chosen_action_type': 'pass_turn', 'action_rank': 2, 'rollout_mean_actor_team_delta': 15.0, 'actor_team_score': 95.0, 'opponent_team_score': 85.0, 'pass_action_flag': 1},",
+            "    {'phase': 'trick_play', 'game_id': 'g2', 'decision_id': 'd2', 'actor_seat': 'seat-1', 'chosen_action_type': 'play_cards', 'action_rank': 1, 'rollout_mean_actor_team_delta': 40.0, 'actor_team_score': 88.0, 'opponent_team_score': 102.0, 'pass_action_flag': 0},",
+            "    {'phase': 'trick_play', 'game_id': 'g2', 'decision_id': 'd2', 'actor_seat': 'seat-1', 'chosen_action_type': 'pass_turn', 'action_rank': 2, 'rollout_mean_actor_team_delta': -10.0, 'actor_team_score': 84.0, 'opponent_team_score': 106.0, 'pass_action_flag': 1},",
             "])",
-            "frame.to_parquet(dataset, index=False)",
+            "frame.to_json(dataset, orient='records', lines=True)",
             "print('dataset-ok')",
           ].join("\n"),
           [datasetPath]
@@ -199,6 +199,7 @@ describe("ml export and training regressions", () => {
                 "actor_team_score",
                 "opponent_team_score",
                 "pass_action_flag",
+                "action_rank",
               ],
             },
             null,
@@ -230,7 +231,7 @@ describe("ml export and training regressions", () => {
             "--objective",
             "rollout_ranker",
             "--validation-fraction",
-            "0",
+            "0.5",
           ],
           {
             cwd: REPO_ROOT,
@@ -240,6 +241,28 @@ describe("ml export and training regressions", () => {
 
         expect(result.status).toBe(0);
         expect(result.stdout).toContain('"accepted": true');
+        const payload = JSON.parse(
+          result.stdout
+            .trim()
+            .split("\n")
+            .map((line) => line.trim())
+            .filter(Boolean)
+            .at(-1) ?? ""
+        );
+        expect(payload.validation_metrics).toHaveProperty("pairwise_accuracy");
+        expect(payload.baseline_metrics.grouped_by_action_type_mean_target).toBeTruthy();
+        expect(
+          payload.baseline_metrics.grouped_by_seat_action_type_mean_target
+        ).toBeTruthy();
+        expect(payload.model_vs_baseline.best_baseline.name).toBeTruthy();
+
+        const report = JSON.parse(readFileSync(reportPath, "utf8"));
+        expect(report.baseline_metrics.action_rank_descending).toBeTruthy();
+        expect(
+          report.baseline_metrics.grouped_by_action_type_mean_target.validation
+            .ndcg_at_1
+        ).toBeTypeOf("number");
+        expect(report.model_vs_baseline.best_baseline.metric).toBe("pairwise_accuracy");
       } finally {
         rmSync(tempDir, { recursive: true, force: true });
       }

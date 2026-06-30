@@ -534,6 +534,21 @@ def evaluate_regression_predictions(
     }
 
 
+def evaluate_ranker_predictions(
+    frame: pd.DataFrame,
+    scores: pd.Series,
+    target_column: str,
+) -> dict[str, Any]:
+    return {
+        "ndcg_at_1": ndcg_at_k(frame, scores, target_column, 1),
+        "ndcg_at_3": ndcg_at_k(frame, scores, target_column, 3),
+        "pairwise_accuracy": pairwise_accuracy(frame, scores, target_column),
+        "top_action_average_rollout_value": top_action_average_value(
+            frame, scores, target_column
+        ),
+    }
+
+
 def grouped_mean_predictions(
     train_frame: pd.DataFrame,
     validation_frame: pd.DataFrame,
@@ -632,6 +647,86 @@ def regression_baselines(
     return baselines
 
 
+def ranker_baselines(
+    train_frame: pd.DataFrame,
+    validation_frame: pd.DataFrame,
+    target_column: str,
+) -> dict[str, Any]:
+    baselines: dict[str, Any] = {}
+    if validation_frame.empty:
+        return baselines
+
+    global_mean_value = float(train_frame[target_column].astype(float).mean())
+    global_predictions = pd.Series(
+        global_mean_value,
+        index=range(len(validation_frame.index)),
+        dtype="float64",
+    )
+
+    if "action_rank" in validation_frame.columns:
+        action_rank_scores = pd.to_numeric(
+            validation_frame["action_rank"], errors="coerce"
+        ).reset_index(drop=True)
+        if action_rank_scores.notna().any():
+            fallback_rank = float(action_rank_scores.max()) + 1.0
+            baselines["action_rank_descending"] = {
+                "strategy": "lower_action_rank_is_better",
+                "validation": evaluate_ranker_predictions(
+                    validation_frame,
+                    -action_rank_scores.fillna(fallback_rank),
+                    target_column,
+                ),
+            }
+
+    action_type_column = resolve_grouping_column(train_frame, "action_type")
+    action_type_predictions: pd.Series | None = None
+    if action_type_column and action_type_column in validation_frame.columns:
+        action_type_predictions = grouped_mean_predictions(
+            train_frame,
+            validation_frame,
+            target_column,
+            [action_type_column],
+            global_predictions,
+        )
+        baselines["grouped_by_action_type_mean_target"] = {
+            "strategy": "grouped_mean_target",
+            "group_columns": [action_type_column],
+            "validation": evaluate_ranker_predictions(
+                validation_frame,
+                action_type_predictions,
+                target_column,
+            ),
+        }
+
+    seat_column = resolve_grouping_column(train_frame, "seat")
+    if (
+        seat_column
+        and seat_column in validation_frame.columns
+        and action_type_column
+        and action_type_column in validation_frame.columns
+    ):
+        seat_action_predictions = grouped_mean_predictions(
+            train_frame,
+            validation_frame,
+            target_column,
+            [seat_column, action_type_column],
+            action_type_predictions
+            if action_type_predictions is not None
+            else global_predictions,
+        )
+        baselines["grouped_by_seat_action_type_mean_target"] = {
+            "strategy": "grouped_mean_target",
+            "group_columns": [seat_column, action_type_column],
+            "validation": evaluate_ranker_predictions(
+                validation_frame,
+                seat_action_predictions,
+                target_column,
+            ),
+        }
+
+    return baselines
+
+
 def compare_model_to_baselines(
     validation_metrics: dict[str, Any],
     baseline_metrics: dict[str, Any],
@@ -669,6 +764,69 @@ def compare_model_to_baselines(
         "rmse_improvement_pct": (rmse_improvement / baseline_rmse) if baseline_rmse else None,
         "mae_improvement": mae_improvement,
         "mae_improvement_pct": (mae_improvement / baseline_mae) if baseline_mae else None,
+    }
+
+
+def compare_ranker_to_baselines(
+    validation_metrics: dict[str, Any],
+    baseline_metrics: dict[str, Any],
+) -> dict[str, Any]:
+    metric_preferences = [
+        ("pairwise_accuracy", True),
+        ("ndcg_at_1", True),
+        ("ndcg_at_3", True),
+        ("top_action_average_rollout_value", True),
+    ]
+
+    for metric_name, higher_is_better in metric_preferences:
+        model_value = validation_metrics.get(metric_name)
+        if model_value is None:
+            continue
+
+        candidates: list[tuple[str, float]] = []
+        for name, payload in baseline_metrics.items():
+            metrics = payload.get("validation")
+            if not isinstance(metrics, dict):
+                continue
+            baseline_value = metrics.get(metric_name)
+            if baseline_value is None:
+                continue
+            candidates.append((name, float(baseline_value)))
+
+        if not candidates:
+            continue
+
+        best_name, best_value = (
+            max(candidates, key=lambda item: item[1])
+            if higher_is_better
+            else min(candidates, key=lambda item: item[1])
+        )
+        improvement = float(model_value) - best_value
+        if not higher_is_better:
+            improvement *= -1.0
+        return {
+            "best_baseline": {
+                "name": best_name,
+                "metric": metric_name,
+                "value": best_value,
+                "model_value": float(model_value),
+            },
+            "metric": metric_name,
+            "improvement": improvement,
+            "improvement_pct": (
+                (improvement / abs(best_value))
+                if best_value not in (0.0, -0.0)
+                else None
+            ),
+            "higher_is_better": higher_is_better,
+        }
+
+    return {
+        "best_baseline": None,
+        "metric": None,
+        "improvement": None,
+        "improvement_pct": None,
+        "higher_is_better": None,
     }
 
 
@@ -900,8 +1058,11 @@ def report_markdown(report: dict[str, Any]) -> str:
             "",
             *(
                 [
-                    f"- {name}: rmse={payload.get('validation', {}).get('rmse')}, "
-                    f"mae={payload.get('validation', {}).get('mae')}"
+                    f"- {name}: "
+                    + ", ".join(
+                        f"{metric}={value}"
+                        for metric, value in payload.get("validation", {}).items()
+                    )
                     for name, payload in baselines.items()
                 ]
                 if baselines
@@ -1189,14 +1350,16 @@ def main() -> None:
         )
         if not validation_frame.empty:
             validation_scores = pd.Series(model.predict(validation_frame[feature_columns]))
-            validation_metrics = {
-                "ndcg_at_1": ndcg_at_k(validation_frame, validation_scores, target_column, 1),
-                "ndcg_at_3": ndcg_at_k(validation_frame, validation_scores, target_column, 3),
-                "pairwise_accuracy": pairwise_accuracy(validation_frame, validation_scores, target_column),
-                "top_action_average_rollout_value": top_action_average_value(
-                    validation_frame, validation_scores, target_column
-                ),
-            }
+            validation_metrics = evaluate_ranker_predictions(
+                validation_frame,
+                validation_scores,
+                target_column,
+            )
+            baseline_metrics = ranker_baselines(
+                train_frame,
+                validation_frame,
+                target_column,
+            )
     else:
         model = LGBMRegressor(
             objective="regression",
@@ -1240,7 +1403,16 @@ def main() -> None:
             )
 
     target_distribution = target_distribution_summary(frame[target_column])
-    model_vs_baseline = compare_model_to_baselines(validation_metrics, baseline_metrics)
+    if args.objective == "rollout_ranker":
+        model_vs_baseline = compare_ranker_to_baselines(
+            validation_metrics,
+            baseline_metrics,
+        )
+    else:
+        model_vs_baseline = compare_model_to_baselines(
+            validation_metrics,
+            baseline_metrics,
+        )
     spearman_summary = spearman_interpretation(validation_metrics.get("spearman"))
 
     model_path = Path(args.output)

@@ -219,8 +219,12 @@ machine-parseable and deterministic under the same explicit DB/provider scope.
 - `artifacts/ml/training-report.md`
 - `artifacts/ml/feature-importance.csv`
 - training metadata including `feature_profile`, `phase`, `feature_names`,
-  target distribution, baseline RMSE/MAE, model-vs-baseline improvement, and
-  a Spearman interpretation band
+  target distribution, baseline comparisons, model-vs-baseline improvement,
+  and a Spearman interpretation band
+- `rollout_ranker` reports now include simple ranker baselines such as
+  `action_rank_descending`, grouped action-type mean target, and grouped
+  seat/action-type mean target so failed runs can be compared against trivial
+  heuristics before launching another large loop
 
 `ml:evaluate` writes:
 
@@ -258,6 +262,18 @@ The default gate checks:
 
 The current evaluation harness writes pass or fail details into
 `artifacts/ml/evaluation-report.json`.
+
+For a finished rollout-ranker run, use:
+
+- `scripts/rollout_ranker_postmortem.py --run-root <training-run-root>`
+
+That script writes:
+
+- `diagnostics/rollout_ranker_postmortem.json`
+- `diagnostics/rollout_ranker_postmortem.md`
+
+and summarizes validation metrics, internal baselines, evaluation fallback
+contamination, and the highest-regret decision groups from the validation split.
 
 ## Safe runtime usage
 
