@@ -25,6 +25,8 @@ describe("live ml bootstrap orchestration", () => {
       featureProfile: "runtime_raw",
       objective: "rollout_ranker",
       minRolloutDecisionSpread: 20,
+      minRolloutSamples: 2,
+      minRolloutStddev: 10,
       evaluateGames: 8,
       evaluateMinGamesForGate: 8,
       evaluateBaselineProvider: "server_heuristic",
@@ -104,6 +106,10 @@ describe("live ml bootstrap orchestration", () => {
       plan.featureImportancePath,
       "--min-rollout-decision-spread",
       "20",
+      "--min-rollout-samples",
+      "2",
+      "--min-rollout-stddev",
+      "10",
     ]);
     expect(plan.steps[3]?.args).toEqual(["run", "build", "-w", "@tichuml/server"]);
     expect(plan.steps[4]?.args).toEqual([
@@ -145,6 +151,8 @@ describe("live ml bootstrap orchestration", () => {
       featureProfile: "runtime_raw",
       objective: "rollout_ranker",
       minRolloutDecisionSpread: 0,
+      minRolloutSamples: 0,
+      minRolloutStddev: 0,
       evaluateGames: 8,
       evaluateMinGamesForGate: 8,
       evaluateBaselineProvider: "server_heuristic",
@@ -157,6 +165,8 @@ describe("live ml bootstrap orchestration", () => {
     expect(plan.steps[0]?.args).not.toContain("--allow-mixed-providers");
     expect(plan.steps[1]?.args).not.toContain("--max-decisions");
     expect(plan.steps[2]?.args).not.toContain("--min-rollout-decision-spread");
+    expect(plan.steps[2]?.args).not.toContain("--min-rollout-samples");
+    expect(plan.steps[2]?.args).not.toContain("--min-rollout-stddev");
     expect(plan.steps.map((step) => step.label)).toEqual([
       "ml:export",
       "ml:rollouts",
@@ -179,6 +189,8 @@ describe("live ml bootstrap orchestration", () => {
         featureProfile: "runtime_raw",
         objective: "rollout_ranker",
         minRolloutDecisionSpread: 0,
+        minRolloutSamples: 0,
+        minRolloutStddev: 0,
         evaluateGames: 8,
         evaluateMinGamesForGate: 8,
         evaluateBaselineProvider: "server_heuristic",

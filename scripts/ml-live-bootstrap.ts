@@ -21,6 +21,8 @@ export type LiveMlBootstrapOptions = {
   featureProfile: FeatureProfile;
   objective: TrainingObjective;
   minRolloutDecisionSpread: number;
+  minRolloutSamples: number;
+  minRolloutStddev: number;
   evaluateGames: number;
   evaluateMinGamesForGate: number;
   evaluateBaselineProvider: ProviderMode;
@@ -134,6 +136,14 @@ export function buildLiveMlBootstrapPlan(
     options.minRolloutDecisionSpread,
     "--min-rollout-decision-spread"
   );
+  const minRolloutSamples = requireNonNegativeNumber(
+    options.minRolloutSamples,
+    "--min-rollout-samples"
+  );
+  const minRolloutStddev = requireNonNegativeNumber(
+    options.minRolloutStddev,
+    "--min-rollout-stddev"
+  );
   const evaluateGames = requirePositiveInteger(
     options.evaluateGames,
     "--evaluate-games"
@@ -228,6 +238,12 @@ export function buildLiveMlBootstrapPlan(
       "--min-rollout-decision-spread",
       String(minRolloutDecisionSpread)
     );
+  }
+  if (minRolloutSamples > 0) {
+    trainArgs.push("--min-rollout-samples", String(minRolloutSamples));
+  }
+  if (minRolloutStddev > 0) {
+    trainArgs.push("--min-rollout-stddev", String(minRolloutStddev));
   }
 
   const steps: LiveMlBootstrapStep[] = [
@@ -484,6 +500,10 @@ async function main(): Promise<void> {
       "rollout_ranker",
     minRolloutDecisionSpread:
       readOptionalNumberArg(argv, "--min-rollout-decision-spread") ?? 0,
+    minRolloutSamples:
+      readOptionalIntegerArg(argv, "--min-rollout-samples") ?? 0,
+    minRolloutStddev:
+      readOptionalNumberArg(argv, "--min-rollout-stddev") ?? 0,
     evaluateGames: readOptionalIntegerArg(argv, "--evaluate-games") ?? 8,
     evaluateMinGamesForGate:
       readOptionalIntegerArg(argv, "--evaluate-min-games-for-gate") ?? 8,

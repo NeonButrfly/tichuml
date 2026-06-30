@@ -910,6 +910,67 @@ def filter_rollout_decisions_by_spread(
     return filtered, filtered_out_decision_count, filtered_out_row_count
 
 
+def filter_rollout_decisions_by_quality(
+    frame: pd.DataFrame,
+    *,
+    min_rollout_samples: int,
+    min_rollout_stddev: float,
+) -> tuple[pd.DataFrame, int, int, int, int]:
+    if min_rollout_samples <= 0 and min_rollout_stddev <= 0:
+        return frame, 0, 0, 0, 0
+    if "decision_id" not in frame.columns:
+        raise ValueError(
+            "Rollout quality filtering requires decision_id groups."
+        )
+
+    kept_mask = pd.Series(True, index=frame.index, dtype="bool")
+    filtered_out_low_sample_decision_count = 0
+    filtered_out_low_stddev_decision_count = 0
+
+    if min_rollout_samples > 0:
+        if "rollout_samples" not in frame.columns:
+            raise ValueError(
+                "--min-rollout-samples requires rollout_samples in the training dataset."
+            )
+        grouped_samples = frame.groupby("decision_id", sort=False)["rollout_samples"].min()
+        kept_decision_ids = grouped_samples[
+            pd.to_numeric(grouped_samples, errors="coerce").fillna(0) >= min_rollout_samples
+        ].index
+        filtered_out_low_sample_decision_count = int(
+            len(grouped_samples.index) - len(kept_decision_ids)
+        )
+        kept_mask &= frame["decision_id"].isin(kept_decision_ids)
+
+    if min_rollout_stddev > 0:
+        if "rollout_std_actor_team_delta" not in frame.columns:
+            raise ValueError(
+                "--min-rollout-stddev requires rollout_std_actor_team_delta in the training dataset."
+            )
+        grouped_stddev = frame.groupby("decision_id", sort=False)[
+            "rollout_std_actor_team_delta"
+        ].max()
+        kept_decision_ids = grouped_stddev[
+            pd.to_numeric(grouped_stddev, errors="coerce").fillna(0) >= min_rollout_stddev
+        ].index
+        filtered_out_low_stddev_decision_count = int(
+            len(grouped_stddev.index) - len(kept_decision_ids)
+        )
+        kept_mask &= frame["decision_id"].isin(kept_decision_ids)
+
+    filtered = frame[kept_mask].copy()
+    filtered_out_row_count = int(len(frame.index) - len(filtered.index))
+    filtered_out_decision_count = int(
+        frame["decision_id"].nunique() - filtered["decision_id"].nunique()
+    )
+    return (
+        filtered,
+        filtered_out_decision_count,
+        filtered_out_row_count,
+        filtered_out_low_sample_decision_count,
+        filtered_out_low_stddev_decision_count,
+    )
+
+
 def delegated_runtime_action_columns(
     *, objective: str, feature_profile: str, phase: str | None
 ) -> list[str]:
@@ -1128,6 +1189,16 @@ def main() -> None:
         default=0.0,
     )
     parser.add_argument(
+        "--min-rollout-samples",
+        type=int,
+        default=0,
+    )
+    parser.add_argument(
+        "--min-rollout-stddev",
+        type=float,
+        default=0.0,
+    )
+    parser.add_argument(
         "--include-delegated-runtime-actions",
         action="store_true",
     )
@@ -1191,6 +1262,8 @@ def main() -> None:
 
     filtered_out_decision_count = 0
     filtered_out_row_count = 0
+    filtered_out_low_sample_decision_count = 0
+    filtered_out_low_stddev_decision_count = 0
     if args.min_rollout_decision_spread > 0:
         if args.objective not in {"rollout_regression", "rollout_ranker"}:
             raise ValueError(
@@ -1204,6 +1277,29 @@ def main() -> None:
         if frame.empty:
             raise ValueError(
                 "No rollout training rows remain after applying the decision spread filter."
+            )
+
+    if args.min_rollout_samples > 0 or args.min_rollout_stddev > 0:
+        if args.objective not in {"rollout_regression", "rollout_ranker"}:
+            raise ValueError(
+                "--min-rollout-samples and --min-rollout-stddev are only supported for rollout objectives."
+            )
+        (
+            frame,
+            quality_filtered_out_decision_count,
+            quality_filtered_out_row_count,
+            filtered_out_low_sample_decision_count,
+            filtered_out_low_stddev_decision_count,
+        ) = filter_rollout_decisions_by_quality(
+            frame,
+            min_rollout_samples=args.min_rollout_samples,
+            min_rollout_stddev=args.min_rollout_stddev,
+        )
+        filtered_out_decision_count += quality_filtered_out_decision_count
+        filtered_out_row_count += quality_filtered_out_row_count
+        if frame.empty:
+            raise ValueError(
+                "No rollout training rows remain after applying rollout quality filters."
             )
 
     feature_columns = apply_feature_profile(
@@ -1463,10 +1559,14 @@ def main() -> None:
         "ranking_label_strategy": ranker_label_strategy,
         "ranker_max_relevance": args.ranker_max_relevance if args.objective == "rollout_ranker" else None,
         "min_rollout_decision_spread": args.min_rollout_decision_spread,
+        "min_rollout_samples": args.min_rollout_samples,
+        "min_rollout_stddev": args.min_rollout_stddev,
         "excluded_delegated_action_types": excluded_delegated_action_types,
         "filtered_out_delegated_action_row_count": filtered_out_delegated_action_row_count,
         "filtered_out_decision_count": filtered_out_decision_count,
         "filtered_out_row_count": filtered_out_row_count,
+        "filtered_out_low_sample_decision_count": filtered_out_low_sample_decision_count,
+        "filtered_out_low_stddev_decision_count": filtered_out_low_stddev_decision_count,
         "model_id": model_id,
         "model_version": model_id,
     }
@@ -1499,10 +1599,14 @@ def main() -> None:
         "ranking_label_strategy": ranker_label_strategy,
         "ranker_max_relevance": args.ranker_max_relevance if args.objective == "rollout_ranker" else None,
         "min_rollout_decision_spread": args.min_rollout_decision_spread,
+        "min_rollout_samples": args.min_rollout_samples,
+        "min_rollout_stddev": args.min_rollout_stddev,
         "excluded_delegated_action_types": excluded_delegated_action_types,
         "filtered_out_delegated_action_row_count": filtered_out_delegated_action_row_count,
         "filtered_out_decision_count": filtered_out_decision_count,
         "filtered_out_row_count": filtered_out_row_count,
+        "filtered_out_low_sample_decision_count": filtered_out_low_sample_decision_count,
+        "filtered_out_low_stddev_decision_count": filtered_out_low_stddev_decision_count,
         "model_output_path": str(model_path),
         "meta_output_path": str(meta_path),
         "feature_importance_output_path": str(feature_importance_output),
