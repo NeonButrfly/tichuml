@@ -155,13 +155,14 @@ visible when stored metadata is wrong.
 Build a live-gameplay rollout-training candidate without a new self-play batch:
 
 ```powershell
-npm run ml:live-bootstrap -- --output-dir training-runs/live-gameplay-001/ml --allow-mixed-providers --rollout-max-decisions 250 --rollouts-per-action 2
+npm run ml:live-bootstrap -- --output-dir training-runs/live-gameplay-001/ml --allow-mixed-providers --rollout-max-decisions 250 --rollouts-per-action 2 --objective rollout_regression
 ```
 
 `ml:live-bootstrap` exports `source=gameplay` trick-play rows as JSONL, keeps
 mixed live providers only when you opt in with `--allow-mixed-providers`, runs
 offline rollout relabeling against that export selection, and trains a
-rollout-based candidate model bundle into the requested output directory. It
+rollout-regression candidate model bundle into the requested output directory
+by default, unless you explicitly override `--objective`. It
 then starts a temporary backend pinned to that candidate model and runs the
 normal mirrored `ml:evaluate` improvement gate against it. The command still
 does not auto-promote or repoint the live backend model for you; it only tells

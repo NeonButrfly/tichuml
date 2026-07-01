@@ -19,7 +19,7 @@ export type LiveMlBootstrapOptions = {
   continuationProvider: ProviderMode;
   rolloutsPerAction: number;
   featureProfile: FeatureProfile;
-  objective: TrainingObjective;
+  objective?: TrainingObjective | null;
   minRolloutDecisionSpread: number;
   minRolloutSamples: number;
   minRolloutStddev: number;
@@ -156,6 +156,7 @@ export function buildLiveMlBootstrapPlan(
     options.candidateBackendPort,
     "--candidate-backend-port"
   );
+  const objective = options.objective ?? "rollout_regression";
   const datasetPath = path.join(outputDir, "train.jsonl");
   const manifestPath = path.join(outputDir, "dataset_metadata.json");
   const rolloutPath = path.join(outputDir, "rollout_rows.jsonl");
@@ -221,7 +222,7 @@ export function buildLiveMlBootstrapPlan(
     "--phase",
     "trick_play",
     "--objective",
-    options.objective,
+    objective,
     "--feature-profile",
     options.featureProfile,
     "--output",
@@ -496,8 +497,8 @@ async function main(): Promise<void> {
       (readArg(argv, "--feature-profile") as FeatureProfile | null) ??
       "runtime_raw",
     objective:
-      (readArg(argv, "--objective") as TrainingObjective | null) ??
-      "rollout_ranker",
+      (readArg(argv, "--objective")?.trim() as TrainingObjective | null) ??
+      null,
     minRolloutDecisionSpread:
       readOptionalNumberArg(argv, "--min-rollout-decision-spread") ?? 0,
     minRolloutSamples:

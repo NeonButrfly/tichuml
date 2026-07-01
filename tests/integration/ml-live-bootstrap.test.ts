@@ -137,6 +137,32 @@ describe("live ml bootstrap orchestration", () => {
     ]);
   });
 
+  it("defaults the live bootstrap objective to rollout_regression", () => {
+    const plan = buildLiveMlBootstrapPlan({
+      outputDir: "training-runs/live-default-objective/ml",
+      backendUrl: "http://127.0.0.1:4310",
+      telemetrySource: "gameplay",
+      provider: null,
+      allowMixedProviders: true,
+      exportLimit: 5000,
+      rolloutMaxDecisions: 250,
+      continuationProvider: "server_heuristic",
+      rolloutsPerAction: 2,
+      featureProfile: "runtime_raw",
+      minRolloutDecisionSpread: 20,
+      minRolloutSamples: 0,
+      minRolloutStddev: 0,
+      evaluateGames: 8,
+      evaluateMinGamesForGate: 8,
+      evaluateBaselineProvider: "server_heuristic",
+      candidateBackendPort: 4312,
+      skipEvaluate: true,
+    });
+
+    expect(plan.steps[2]?.args).toContain("rollout_regression");
+    expect(plan.steps[2]?.args).not.toContain("rollout_ranker");
+  });
+
   it("switches to a single-provider gameplay slice when requested", () => {
     const plan = buildLiveMlBootstrapPlan({
       outputDir: "training-runs/live-human-only/ml",

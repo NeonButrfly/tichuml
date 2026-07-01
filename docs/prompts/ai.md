@@ -14,6 +14,24 @@ Use this file to preserve AI and bot-behavior prompt intent and link it to GitHu
 
 ## Entries
 
+### 2026-07-01 - Live bootstrap should not default rollout training to ranking
+
+- Prompt Signal: The live training run was still producing terrible results and
+  the investigation showed `ml:live-bootstrap` had been defaulting to
+  `rollout_ranker` even though the rollout-label training docs and validation
+  flow are built around regression-style rollout values.
+- Interpreted Requirement: Issue
+  [#114](https://github.com/NeonButrfly/tichuml/issues/114) tracks changing
+  the live bootstrap default to `rollout_regression` while preserving explicit
+  objective overrides, so the generated candidate bundle starts from the less
+  noisy rollout target instead of ranking on sparse live rollout labels.
+- Affected Systems: `scripts/ml-live-bootstrap.ts`,
+  `tests/integration/ml-live-bootstrap.test.ts`,
+  `docs/ml-strategy-improvement.md`, `README.md`.
+- Linked GitHub Issue: [#114](https://github.com/NeonButrfly/tichuml/issues/114)
+- Milestone: [6.5 – Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status Source: GitHub issue state only.
+
 ### 2026-06-01 - LightGBM serving should step up from raw move scoring to top-K plus rollout choice
 
 - Prompt Signal: The latest AI-behavior request explicitly pushed the project
