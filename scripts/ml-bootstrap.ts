@@ -2,9 +2,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { parseEnvFile } from "../apps/server/src/config/env-file.ts";
 
 export type MlBootstrapOptions = {
-  runId: string;
+  runId?: string | null;
   gameIdPrefix: string;
   outputDir: string;
   backendUrl: string;
@@ -25,6 +26,12 @@ export type MlBootstrapPlan = {
   manifestPath: string;
   steps: MlBootstrapStep[];
 };
+
+const TRAINING_DATABASE_ENV_KEYS = [
+  "TRAINING_DATABASE_URL",
+  "TICHU_TRAINING_DATABASE_URL",
+  "DATABASE_URL"
+] as const;
 
 function requireNonEmpty(value: string, flag: string): string {
   const normalized = value.trim();
@@ -58,7 +65,7 @@ function requirePositiveInteger(value: number, flag: string): number {
 export function buildMlBootstrapPlan(
   options: MlBootstrapOptions
 ): MlBootstrapPlan {
-  const runId = requireNonEmpty(options.runId, "--run-id");
+  const runId = options.runId?.trim() ? requireNonEmpty(options.runId, "--run-id") : null;
   const gameIdPrefix = requireNonEmpty(options.gameIdPrefix, "--game-id-prefix");
   const outputDir = requireNonEmpty(options.outputDir, "--output-dir");
   const backendUrl = requireNonEmpty(options.backendUrl, "--backend-url");
@@ -73,6 +80,21 @@ export function buildMlBootstrapPlan(
   const datasetPath = path.join(outputDir, "train.parquet");
   const manifestPath = path.join(outputDir, "dataset_metadata.json");
 
+  const exportArgs = [
+    "run",
+    "ml:export",
+    "--",
+    "--game-id-prefix",
+    gameIdPrefix,
+    "--output-dir",
+    outputDir,
+    "--provider",
+    options.provider
+  ];
+  if (runId) {
+    exportArgs.splice(3, 0, "--run-id", runId);
+  }
+
   return {
     outputDir,
     datasetPath,
@@ -81,19 +103,7 @@ export function buildMlBootstrapPlan(
       {
         label: "ml:export",
         command: "npm",
-        args: [
-          "run",
-          "ml:export",
-          "--",
-          "--run-id",
-          runId,
-          "--game-id-prefix",
-          gameIdPrefix,
-          "--output-dir",
-          outputDir,
-          "--provider",
-          options.provider
-        ]
+        args: exportArgs
       },
       {
         label: "ml:train",
@@ -131,6 +141,10 @@ export function buildMlBootstrapPlan(
           options.provider,
           "--mirror-seats",
           "true",
+          "--telemetry",
+          "false",
+          "--decision-timeout-ms",
+          "5000",
           "--backend-url",
           backendUrl
         ]
@@ -139,11 +153,43 @@ export function buildMlBootstrapPlan(
   };
 }
 
-function runCommand(command: string, args: string[]): Promise<void> {
+export function resolveMlBootstrapCommandEnv(
+  env: NodeJS.ProcessEnv,
+  repoRoot = process.cwd()
+): NodeJS.ProcessEnv {
+  const diskEnv = {
+    ...parseEnvFile(path.join(repoRoot, ".env")),
+    ...parseEnvFile(path.join(repoRoot, "apps/server/.env"))
+  };
+  const resolvedEnv: NodeJS.ProcessEnv = {};
+  for (const key of TRAINING_DATABASE_ENV_KEYS) {
+    const explicitValue = env[key];
+    if (typeof explicitValue === "string" && explicitValue.trim().length > 0) {
+      resolvedEnv[key] = explicitValue;
+      break;
+    }
+    const fileValue = diskEnv[key];
+    if (typeof fileValue === "string" && fileValue.trim().length > 0) {
+      resolvedEnv[key] = fileValue;
+      break;
+    }
+  }
+  return resolvedEnv;
+}
+
+function runCommand(
+  command: string,
+  args: string[],
+  envOverrides?: NodeJS.ProcessEnv
+): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       stdio: "inherit",
-      shell: process.platform === "win32"
+      shell: process.platform === "win32",
+      env: {
+        ...process.env,
+        ...(envOverrides ?? {})
+      }
     });
 
     child.on("close", (code) => {
@@ -183,8 +229,9 @@ function readGatePassed(repoRoot: string): boolean {
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   const evaluateGames = readNumberArg(argv, "--evaluate-games", 100);
+  const commandEnv = resolveMlBootstrapCommandEnv(process.env);
   const plan = buildMlBootstrapPlan({
-    runId: readArg(argv, "--run-id") ?? "",
+    runId: readArg(argv, "--run-id"),
     gameIdPrefix: readArg(argv, "--game-id-prefix") ?? "",
     outputDir: readArg(argv, "--output-dir") ?? "",
     backendUrl: readArg(argv, "--backend-url") ?? "http://127.0.0.1:4310",
@@ -200,7 +247,7 @@ async function main(): Promise<void> {
   });
 
   for (const step of plan.steps) {
-    await runCommand(step.command, step.args);
+    await runCommand(step.command, step.args, commandEnv);
   }
 
   if (!readGatePassed(process.cwd())) {
