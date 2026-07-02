@@ -523,6 +523,93 @@ def target_distribution_summary(series: pd.Series) -> dict[str, Any]:
     }
 
 
+def rollout_training_coverage_summary(
+    frame: pd.DataFrame,
+    target_column: str,
+) -> dict[str, Any] | None:
+    if target_column not in frame.columns or "decision_id" not in frame.columns:
+        return None
+
+    labeled = frame[frame[target_column].notna()].copy()
+    if labeled.empty:
+        return {
+            "labeled_row_count": 0,
+            "labeled_decision_count": 0,
+            "labeled_game_count": 0,
+            "rows_per_decision": {
+                "min": 0,
+                "p50": 0,
+                "p95": 0,
+                "max": 0,
+                "mean": 0,
+            },
+            "top_decisions_by_row_count": [],
+        }
+
+    rows_per_decision = labeled.groupby("decision_id", dropna=False).size()
+    quantiles = rows_per_decision.quantile([0.5, 0.95])
+
+    def compact_number(value: float | int | None) -> float | int | None:
+        if value is None or pd.isna(value):
+            return None
+        numeric = float(value)
+        if numeric.is_integer():
+            return int(numeric)
+        return round(numeric, 4)
+
+    top_decisions_frame = (
+        labeled.groupby("decision_id", dropna=False)
+        .agg(
+            row_count=("decision_id", "size"),
+            game_id=("game_id", "first") if "game_id" in labeled.columns else ("decision_id", "first"),
+            hand_id=("hand_id", "first") if "hand_id" in labeled.columns else ("decision_id", "first"),
+        )
+        .reset_index()
+    )
+    if "game_id" not in labeled.columns:
+        top_decisions_frame["game_id"] = None
+    if "hand_id" not in labeled.columns:
+        top_decisions_frame["hand_id"] = None
+    top_decisions_frame["decision_id"] = top_decisions_frame["decision_id"].map(
+        lambda value: None if pd.isna(value) else str(value)
+    )
+    top_decisions_frame = top_decisions_frame.sort_values(
+        by=["row_count", "decision_id"],
+        ascending=[False, True],
+        kind="stable",
+    )
+
+    top_decisions = [
+        {
+            "decision_id": row["decision_id"],
+            "row_count": int(row["row_count"]),
+            "game_id": None if pd.isna(row["game_id"]) else str(row["game_id"]),
+            "hand_id": None if pd.isna(row["hand_id"]) else str(row["hand_id"]),
+        }
+        for row in top_decisions_frame.head(10).to_dict(orient="records")
+    ]
+
+    labeled_game_count = (
+        int(labeled["game_id"].nunique(dropna=True))
+        if "game_id" in labeled.columns
+        else 0
+    )
+
+    return {
+        "labeled_row_count": int(len(labeled.index)),
+        "labeled_decision_count": int(rows_per_decision.shape[0]),
+        "labeled_game_count": labeled_game_count,
+        "rows_per_decision": {
+            "min": compact_number(rows_per_decision.min()),
+            "p50": compact_number(quantiles.get(0.5)),
+            "p95": compact_number(quantiles.get(0.95)),
+            "max": compact_number(rows_per_decision.max()),
+            "mean": compact_number(rows_per_decision.mean()),
+        },
+        "top_decisions_by_row_count": top_decisions,
+    }
+
+
 def evaluate_regression_predictions(
     truth: pd.Series,
     predictions: pd.Series,
@@ -1093,6 +1180,11 @@ def report_markdown(report: dict[str, Any]) -> str:
     target_distribution = make_json_safe(report.get("target_distribution", {}))
     baselines = make_json_safe(report.get("baseline_metrics", {}))
     model_vs_baseline = make_json_safe(report.get("model_vs_baseline", {}))
+    rollout_training_coverage = make_json_safe(
+        report.get("rollout_training_coverage", {})
+    )
+    if not isinstance(rollout_training_coverage, dict):
+        rollout_training_coverage = {}
     spearman_summary = make_json_safe(report.get("spearman_interpretation", {}))
     return "\n".join(
         [
@@ -1133,6 +1225,10 @@ def report_markdown(report: dict[str, Any]) -> str:
             "## Model Vs Baseline",
             "",
             *[f"- {key}: {value}" for key, value in model_vs_baseline.items()],
+            "",
+            "## Rollout Training Coverage",
+            "",
+            *[f"- {key}: {value}" for key, value in rollout_training_coverage.items()],
             "",
             "## Spearman Interpretation",
             "",
@@ -1499,6 +1595,11 @@ def main() -> None:
             )
 
     target_distribution = target_distribution_summary(frame[target_column])
+    rollout_training_coverage = (
+        rollout_training_coverage_summary(frame, target_column)
+        if args.objective in {"rollout_regression", "rollout_ranker"}
+        else None
+    )
     if args.objective == "rollout_ranker":
         model_vs_baseline = compare_ranker_to_baselines(
             validation_metrics,
@@ -1547,6 +1648,7 @@ def main() -> None:
         "validation_fraction": args.validation_fraction,
         "random_state": args.random_state,
         "target_distribution": target_distribution,
+        "rollout_training_coverage": rollout_training_coverage,
         "validation_metrics": validation_metrics,
         "baseline_metrics": baseline_metrics,
         "model_vs_baseline": model_vs_baseline,
@@ -1589,6 +1691,7 @@ def main() -> None:
         "validation_fraction": args.validation_fraction,
         "random_state": args.random_state,
         "target_distribution": target_distribution,
+        "rollout_training_coverage": rollout_training_coverage,
         "validation_metrics": validation_metrics,
         "baseline_metrics": baseline_metrics,
         "model_vs_baseline": model_vs_baseline,
@@ -1645,6 +1748,7 @@ def main() -> None:
                 "feature_profile": args.feature_profile,
                 "heartbeat_output_path": str(HEARTBEAT_OUTPUT_PATH) if HEARTBEAT_OUTPUT_PATH else None,
                 "target_distribution": target_distribution,
+                "rollout_training_coverage": rollout_training_coverage,
                 "validation_metrics": validation_metrics,
                 "baseline_metrics": baseline_metrics,
                 "model_vs_baseline": model_vs_baseline,

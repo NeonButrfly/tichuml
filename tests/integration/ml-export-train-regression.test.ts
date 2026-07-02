@@ -672,6 +672,23 @@ describe("ml export and training regressions", () => {
 
         expect(result.status).toBe(0);
         expect(result.stdout).toContain('"accepted": true');
+        const report = JSON.parse(readFileSync(reportPath, "utf8"));
+        expect(report.rollout_training_coverage).toEqual({
+          labeled_row_count: 4,
+          labeled_decision_count: 2,
+          labeled_game_count: 2,
+          rows_per_decision: {
+            min: 2,
+            p50: 2,
+            p95: 2,
+            max: 2,
+            mean: 2,
+          },
+          top_decisions_by_row_count: [
+            { decision_id: "1", row_count: 2, game_id: "g1", hand_id: null },
+            { decision_id: "2", row_count: 2, game_id: "g2", hand_id: null },
+          ],
+        });
       } finally {
         rmSync(tempDir, { recursive: true, force: true });
       }

@@ -229,7 +229,10 @@ machine-parseable and deterministic under the same explicit DB/provider scope.
 - `artifacts/ml/feature-importance.csv`
 - training metadata including `feature_profile`, `phase`, `feature_names`,
   target distribution, baseline comparisons, model-vs-baseline improvement,
-  and a Spearman interpretation band
+  a Spearman interpretation band, and rollout training coverage summaries for
+  rollout objectives so bounded smokes can show how many labeled rows,
+  decisions, and games actually reached training plus which decisions dominate
+  the sample
 - `rollout_ranker` reports now include simple ranker baselines such as
   `action_rank_descending`, grouped action-type mean target, and grouped
   seat/action-type mean target so failed runs can be compared against trivial

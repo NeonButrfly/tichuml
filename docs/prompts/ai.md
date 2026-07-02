@@ -34,6 +34,25 @@ Use this file to preserve AI and bot-behavior prompt intent and link it to GitHu
 - Milestone: none
 - Status Source: GitHub issue state only.
 
+### 2026-07-02 - Rollout smoke diagnostics must expose actual labeled coverage, not only sparse rollout rows
+
+- Prompt Signal: After the bounded live smoke still looked suspicious, the
+  follow-up debugging request focused on whether rollout metadata was being lost
+  before training and asked for the eval suspicion to be resolved rather than
+  hand-waved.
+- Interpreted Requirement: Issue
+  [#115](https://github.com/NeonButrfly/tichuml/issues/115) also tracks adding
+  explicit rollout training coverage diagnostics so rollout objectives report
+  the labeled row, decision, and game counts that actually reached training,
+  plus decision-concentration summaries, instead of forcing operators to infer
+  quality from sparse `rollout_rows.jsonl` artifacts alone.
+- Affected Systems: `ml/train_lightgbm.py`,
+  `tests/integration/ml-export-train-regression.test.ts`,
+  `docs/ml-strategy-improvement.md`.
+- Linked GitHub Issue: [#115](https://github.com/NeonButrfly/tichuml/issues/115)
+- Milestone: none
+- Status Source: GitHub issue state only.
+
 ### 2026-07-01 - Live bootstrap should not default rollout training to ranking
 
 - Prompt Signal: The live training run was still producing terrible results and
