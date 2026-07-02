@@ -168,6 +168,14 @@ normal mirrored `ml:evaluate` improvement gate against it. The command still
 does not auto-promote or repoint the live backend model for you; it only tells
 you whether the newly trained live-data candidate cleared the gate.
 
+For bounded live gameplay exports, `--source gameplay --limit <N>` now prefers
+the newest telemetry rows first (`ORDER BY ts DESC, id DESC`) before rollout
+relabeling and training. That keeps smoke and medium bootstrap runs anchored to
+recent gameplay behavior instead of silently training on the oldest rows still
+present in the database. Issue
+[#115](https://github.com/NeonButrfly/tichuml/issues/115) tracks this live
+sample hardening pass.
+
 The bootstrap launcher now also treats candidate evaluation integrity as part
 of the gate: it fails fast if the run-local model artifacts are missing, it
 automatically reassigns the temporary candidate backend to a free localhost

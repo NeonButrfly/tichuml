@@ -53,6 +53,24 @@ Use this file to preserve AI and bot-behavior prompt intent and link it to GitHu
 - Milestone: none
 - Status Source: GitHub issue state only.
 
+### 2026-07-02 - Bounded live gameplay bootstrap must train on recent gameplay, not stale oldest-first slices
+
+- Prompt Signal: After repeated live bootstrap loops kept producing obviously
+  stale-looking smoke results, the follow-up request pushed on whether the
+  pipeline was accidentally reusing an old LightGBM model or otherwise circling
+  on outdated gameplay evidence.
+- Interpreted Requirement: Issue
+  [#115](https://github.com/NeonButrfly/tichuml/issues/115) also tracks fixing
+  bounded `source=gameplay` export ordering so live bootstrap limits prefer the
+  newest gameplay telemetry rows first instead of taking the oldest rows before
+  rollout labeling and training.
+- Affected Systems: `ml/export_training_rows.py`,
+  `tests/integration/ml-export-train-regression.test.ts`,
+  `docs/ml-strategy-improvement.md`.
+- Linked GitHub Issue: [#115](https://github.com/NeonButrfly/tichuml/issues/115)
+- Milestone: none
+- Status Source: GitHub issue state only.
+
 ### 2026-07-01 - Live bootstrap should not default rollout training to ranking
 
 - Prompt Signal: The live training run was still producing terrible results and

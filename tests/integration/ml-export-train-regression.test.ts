@@ -500,6 +500,22 @@ describe("ml export and training regressions", () => {
     expect(lines).toEqual(["True", "True"]);
   });
 
+  it("orders bounded gameplay export queries from newest telemetry first", () => {
+    const result = runPythonSnippet(
+      [
+        "from pathlib import Path",
+        "import sys",
+        "sys.path.insert(0, str(Path('ml').resolve()))",
+        "from export_training_rows import build_query",
+        "query, _ = build_query('trick_play', None, 5000, None, None, 'gameplay')",
+        "print('ORDER BY ts DESC, id DESC' in query)",
+      ].join("\n")
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout.trim()).toBe("True");
+  });
+
   it("derives observed hand outcomes from attributed decision hand_result when roundSummary is absent", () => {
     const result = runPythonSnippet(
       [

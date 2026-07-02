@@ -716,6 +716,10 @@ def build_query(
 
     where_clause = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     limit_clause = "LIMIT %s" if isinstance(limit, int) and limit > 0 else ""
+    if source and source.strip() == "gameplay":
+        order_clause = "ORDER BY ts DESC, id DESC"
+    else:
+        order_clause = "ORDER BY game_id ASC, hand_id ASC, decision_index ASC, ts ASC, id ASC"
     if limit_clause:
         params.append(limit)
 
@@ -760,7 +764,7 @@ def build_query(
             hand_result
         FROM decisions
         {where_clause}
-        ORDER BY game_id ASC, hand_id ASC, decision_index ASC, ts ASC, id ASC
+        {order_clause}
         {limit_clause}
     """
     return query, params
