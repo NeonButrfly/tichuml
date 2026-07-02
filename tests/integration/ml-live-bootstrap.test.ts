@@ -6,8 +6,12 @@ import { describe, expect, it } from "vitest";
 import {
   assertCandidateArtifactsExist,
   assertCandidateBackendPortAvailable,
+  assertTrainingDecisionQuality,
   buildLiveMlBootstrapPlan,
+  overrideEvaluationBackendUrl,
   readEvaluationSummary,
+  readTrainingReportSummary,
+  resolveCandidateBackendPort,
 } from "../../scripts/ml-live-bootstrap.js";
 
 describe("live ml bootstrap orchestration", () => {
@@ -268,6 +272,51 @@ describe("live ml bootstrap orchestration", () => {
     }
   });
 
+  it("reads the training summary for smoke-quality checks", () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "ml-live-bootstrap-train-report-"));
+    const reportPath = join(tempDir, "training-report.json");
+
+    try {
+      writeFileSync(
+        reportPath,
+        JSON.stringify(
+          {
+            row_count: 417,
+            decision_count: 21,
+            game_count: 9,
+          },
+          null,
+          2
+        ),
+        "utf8"
+      );
+
+      expect(readTrainingReportSummary(reportPath)).toEqual({
+        rowCount: 417,
+        decisionCount: 21,
+        gameCount: 9,
+      });
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects training samples that collapse to too few decisions and games", () => {
+    expect(() =>
+      assertTrainingDecisionQuality(
+        {
+          rowCount: 51,
+          decisionCount: 1,
+          gameCount: 1,
+        },
+        {
+          minDecisionCount: 10,
+          minGameCount: 3,
+        }
+      )
+    ).toThrow(/too narrow for trustworthy candidate evaluation/i);
+  });
+
   it("rejects an occupied candidate backend port", async () => {
     const server = createServer();
     await new Promise<void>((resolvePromise, reject) => {
@@ -284,6 +333,68 @@ describe("live ml bootstrap orchestration", () => {
       await expect(
         assertCandidateBackendPortAvailable(port ?? 0)
       ).rejects.toThrow(/already in use/i);
+    } finally {
+      await new Promise<void>((resolvePromise, reject) => {
+        server.close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolvePromise();
+        });
+      });
+    }
+  });
+
+  it("falls back to a free candidate backend port when the preferred port is occupied", async () => {
+    const server = createServer();
+    await new Promise<void>((resolvePromise, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", () => resolvePromise());
+    });
+
+    const address = server.address();
+    const occupiedPort =
+      address && typeof address === "object" ? address.port : null;
+
+    try {
+      expect(occupiedPort).not.toBeNull();
+      const resolvedPort = await resolveCandidateBackendPort(occupiedPort ?? 0);
+      expect(resolvedPort).not.toBe(occupiedPort);
+
+      const basePlan = buildLiveMlBootstrapPlan({
+        outputDir: "training-runs/live-20260601-000001/ml",
+        backendUrl: "http://127.0.0.1:4310",
+        telemetrySource: "gameplay",
+        provider: null,
+        allowMixedProviders: true,
+        exportLimit: 5000,
+        rolloutMaxDecisions: 250,
+        continuationProvider: "server_heuristic",
+        rolloutsPerAction: 2,
+        featureProfile: "runtime_raw",
+        objective: "rollout_regression",
+        minRolloutDecisionSpread: 20,
+        minRolloutSamples: 2,
+        minRolloutStddev: 10,
+        evaluateGames: 8,
+        evaluateMinGamesForGate: 8,
+        evaluateBaselineProvider: "server_heuristic",
+        candidateBackendPort: occupiedPort ?? 4312,
+        skipEvaluate: false,
+      });
+
+      const updatedPlan = overrideEvaluationBackendUrl(
+        basePlan,
+        `http://127.0.0.1:${resolvedPort}`
+      );
+
+      expect(updatedPlan.candidateBackendUrl).toBe(
+        `http://127.0.0.1:${resolvedPort}`
+      );
+      expect(updatedPlan.steps.at(-1)?.args).toContain(
+        `http://127.0.0.1:${resolvedPort}`
+      );
     } finally {
       await new Promise<void>((resolvePromise, reject) => {
         server.close((error) => {

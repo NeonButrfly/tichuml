@@ -14,6 +14,26 @@ Use this file to preserve AI and bot-behavior prompt intent and link it to GitHu
 
 ## Entries
 
+### 2026-07-01 - Live bootstrap eval must recover from stale ports and reject low-signal smoke samples
+
+- Prompt Signal: The latest live-training recovery request asked to fix the
+  candidate evaluation port and lifecycle, then make sure repeated smoke and
+  medium runs are producing high-quality decision data instead of silently
+  accepting a collapsed one-decision sample.
+- Interpreted Requirement: Issue
+  [#115](https://github.com/NeonButrfly/tichuml/issues/115) tracks hardening
+  `ml:live-bootstrap` so candidate evaluation can recover onto a free localhost
+  port when stale runtime state still owns the default eval port, candidate
+  backend shutdown is more aggressive, and bounded live smokes are blocked from
+  running evaluation when the training report shows too few unique decisions or
+  games to trust the result.
+- Affected Systems: `scripts/ml-live-bootstrap.ts`,
+  `tests/integration/ml-live-bootstrap.test.ts`,
+  `docs/ml-strategy-improvement.md`.
+- Linked GitHub Issue: [#115](https://github.com/NeonButrfly/tichuml/issues/115)
+- Milestone: none
+- Status Source: GitHub issue state only.
+
 ### 2026-07-01 - Live bootstrap should not default rollout training to ranking
 
 - Prompt Signal: The live training run was still producing terrible results and

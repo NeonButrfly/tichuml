@@ -169,10 +169,18 @@ does not auto-promote or repoint the live backend model for you; it only tells
 you whether the newly trained live-data candidate cleared the gate.
 
 The bootstrap launcher now also treats candidate evaluation integrity as part
-of the gate: it fails fast if the run-local model artifacts are missing, if the
-temporary candidate backend port is already occupied, or if the evaluation
-report says a different model file was evaluated. That prevents a stale backend
-or missing candidate bundle from being mistaken for a successful new run.
+of the gate: it fails fast if the run-local model artifacts are missing, it
+automatically reassigns the temporary candidate backend to a free localhost
+port when the default evaluation port is still occupied by stale runtime state,
+it force-stops the temporary candidate backend more aggressively at shutdown,
+and it refuses to launch candidate evaluation when the training report shows an
+overly narrow smoke sample. The default evaluation-quality floor is at least 10
+unique decisions across at least 3 games, overrideable with
+`--min-training-decisions-for-evaluate` and
+`--min-training-games-for-evaluate`. The evaluation report must still name the
+candidate model file explicitly. Together those checks prevent a stale backend,
+a dirty eval port, or a one-decision smoke from being mistaken for a
+successful new run.
 
 ## Data products
 
