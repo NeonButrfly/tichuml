@@ -151,6 +151,54 @@ require_database_url() {
   fi
 }
 
+database_target_field() {
+  local field_name="$1"
+  require_database_url || return 1
+  node "$BACKEND_REPO_ROOT/scripts/database-target.mjs" field "$DATABASE_URL" "$field_name"
+}
+
+database_target_is_local() {
+  require_database_url || return 1
+  node "$BACKEND_REPO_ROOT/scripts/database-target.mjs" is-local "$DATABASE_URL" >/dev/null
+}
+
+database_target_host() {
+  database_target_field host
+}
+
+database_target_port() {
+  database_target_field port
+}
+
+database_target_scope() {
+  database_target_field scope
+}
+
+database_connection_ready() {
+  require_command psql
+  require_database_url || return 1
+  psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -t -A -c "SELECT 1" >/dev/null 2>&1
+}
+
+ensure_database_runtime_prerequisites() {
+  require_database_url || exit 1
+  require_command node
+
+  if database_target_is_local; then
+    ensure_docker_running
+    if docker_compose_available; then
+      log_ok "Docker Compose is available via $(docker_compose_command)"
+    else
+      log_fail "Docker Compose is unavailable. Rerun scripts/install-backend.sh."
+      exit 1
+    fi
+    return
+  fi
+
+  require_command psql
+  log_info "DATABASE_URL targets remote Postgres at $(database_target_host):$(database_target_port)"
+}
+
 db_exec() {
   local sql="$1"
   require_command psql
@@ -254,6 +302,7 @@ print_identity() {
   local backend_url="${BACKEND_LOCAL_URL:-${BACKEND_BASE_URL:-http://127.0.0.1:${PORT:-4310}}}"
   log_info "Repo root: $BACKEND_REPO_ROOT"
   log_info "Backend URL: $backend_url"
+  log_info "Database target: $(database_target_host):$(database_target_port) ($(database_target_scope))"
   log_info "Postgres container: $POSTGRES_CONTAINER_NAME"
   log_info "Postgres identity: user=$POSTGRES_USER db=$POSTGRES_DB port=$POSTGRES_PORT"
 }
@@ -517,11 +566,40 @@ ensure_docker_ready() {
 }
 
 start_postgres() {
+  if ! database_target_is_local; then
+    log_step "Skipping local Postgres startup for remote database target"
+    log_info "DATABASE_URL points to $(database_target_host):$(database_target_port)"
+    return
+  fi
+
   log_step "Starting Postgres via docker compose"
   docker_compose up -d postgres
 }
 
 wait_for_postgres() {
+  local target_host target_port
+  target_host="$(database_target_host)"
+  target_port="$(database_target_port)"
+
+  if ! database_target_is_local; then
+    log_step "Waiting for remote Postgres readiness at $target_host:$target_port"
+    local remote_attempt=0
+    while [ "$remote_attempt" -lt 60 ]; do
+      if database_connection_ready; then
+        log_ok "Remote Postgres is accepting connections at $target_host:$target_port"
+        return
+      fi
+      remote_attempt=$((remote_attempt + 1))
+      if [ $((remote_attempt % 5)) -eq 1 ]; then
+        log_info "Remote Postgres not ready yet at $target_host:$target_port (${remote_attempt}/60)"
+      fi
+      sleep 2
+    done
+
+    log_fail "Remote Postgres at $target_host:$target_port did not report ready within the timeout window."
+    exit 1
+  fi
+
   log_step "Waiting for Postgres readiness"
   local attempt=0
   while [ "$attempt" -lt 60 ]; do
@@ -1042,13 +1120,7 @@ prepare_runtime_stack() {
 
   ensure_runtime_dirs
   load_repo_env
-  ensure_docker_running
-  if docker_compose_available; then
-    log_ok "Docker Compose is available via $(docker_compose_command)"
-  else
-    log_fail "Docker Compose is unavailable. Rerun scripts/install-backend.sh."
-    exit 1
-  fi
+  ensure_database_runtime_prerequisites
   install_node_dependencies_if_needed
   verify_node_workspace_dependencies
   install_ml_requirements_if_needed

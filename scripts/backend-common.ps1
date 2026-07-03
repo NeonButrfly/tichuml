@@ -130,6 +130,86 @@ function Assert-DatabaseUrl {
   }
 }
 
+function Get-DatabaseTarget {
+  Assert-DatabaseUrl
+
+  $target = [System.Uri]$env:DATABASE_URL
+  $host = $target.Host.Trim().ToLowerInvariant()
+  $port = if ($target.Port -gt 0) { [string]$target.Port } else { "5432" }
+  $database = $target.AbsolutePath.TrimStart("/")
+
+  $aliases = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+  foreach ($alias in @("localhost", "127.0.0.1", "::1", "0.0.0.0", $env:COMPUTERNAME, "$env:COMPUTERNAME.$env:USERDNSDOMAIN")) {
+    if (-not [string]::IsNullOrWhiteSpace($alias)) {
+      $trimmed = $alias.Trim().ToLowerInvariant()
+      [void]$aliases.Add($trimmed)
+      $shortAlias = $trimmed.Split(".")[0]
+      if (-not [string]::IsNullOrWhiteSpace($shortAlias)) {
+        [void]$aliases.Add($shortAlias)
+      }
+    }
+  }
+
+  try {
+    $addresses = [System.Net.Dns]::GetHostAddresses([System.Net.Dns]::GetHostName())
+    foreach ($address in $addresses) {
+      if (-not [string]::IsNullOrWhiteSpace($address.IPAddressToString)) {
+        [void]$aliases.Add($address.IPAddressToString.Trim().ToLowerInvariant())
+      }
+    }
+  } catch {
+  }
+
+  $isLocal = $aliases.Contains($host)
+  [pscustomobject]@{
+    Database = $database
+    Host = $host
+    IsLocal = $isLocal
+    Port = $port
+    Scope = if ($isLocal) { "local" } else { "remote" }
+  }
+}
+
+function Test-DatabaseTargetIsLocal {
+  (Get-DatabaseTarget).IsLocal
+}
+
+function Test-DatabaseConnectionReady {
+  Assert-DatabaseUrl
+
+  if (Test-CommandExists "psql") {
+    & psql $env:DATABASE_URL "-X" "-v" "ON_ERROR_STOP=1" "-t" "-A" "-c" "SELECT 1" *> $null
+    return ($LASTEXITCODE -eq 0)
+  }
+
+  $target = Get-DatabaseTarget
+  $client = New-Object System.Net.Sockets.TcpClient
+  try {
+    $task = $client.ConnectAsync($target.Host, [int]$target.Port)
+    if (-not $task.Wait(2000)) {
+      return $false
+    }
+    return $client.Connected
+  } catch {
+    return $false
+  } finally {
+    $client.Dispose()
+  }
+}
+
+function Ensure-DatabaseRuntimePrerequisites {
+  $target = Get-DatabaseTarget
+  if ($target.IsLocal) {
+    Ensure-Docker
+    return
+  }
+
+  if (-not (Test-CommandExists "psql")) {
+    Write-Warn "psql is not installed; remote database readiness will fall back to a TCP-only probe."
+  }
+  Write-Info ("DATABASE_URL targets remote Postgres at {0}:{1}" -f $target.Host, $target.Port)
+}
+
 function Invoke-DbExec {
   param(
     [string]$Sql,
@@ -389,16 +469,26 @@ function Install-MLRequirementsIfNeeded {
 
 function Prepare-RuntimeStack {
   Write-Step "Preparing Windows backend runtime stack"
-  foreach ($cmd in @("git", "node", "npm.cmd", "docker")) { if (-not (Test-CommandExists $cmd)) { throw "Required command missing: $cmd" } }
+  foreach ($cmd in @("git", "node", "npm.cmd")) { if (-not (Test-CommandExists $cmd)) { throw "Required command missing: $cmd" } }
   Ensure-RuntimeDirs
   Import-DotEnv
   Set-CanonicalDatabaseIdentity
-  Ensure-Docker
+  if ((Get-DatabaseTarget).IsLocal -and -not (Test-CommandExists "docker")) {
+    throw "Required command missing: docker"
+  }
+  Ensure-DatabaseRuntimePrerequisites
   Install-NodeDependenciesIfNeeded
   Install-MLRequirementsIfNeeded
 }
 
 function Start-Postgres {
+  if (-not (Test-DatabaseTargetIsLocal)) {
+    $target = Get-DatabaseTarget
+    Write-Step "Skipping local Postgres startup for remote database target"
+    Write-Info ("DATABASE_URL points to {0}:{1}" -f $target.Host, $target.Port)
+    return
+  }
+
   Write-Step "Starting Postgres via docker compose"
   Test-PostgresContainerIdentity
   Invoke-Logged "docker" @("compose", "up", "-d", "postgres") $script:RepoRoot
@@ -418,6 +508,19 @@ function Test-PostgresContainerIdentity {
 }
 
 function Wait-Postgres {
+  if (-not (Test-DatabaseTargetIsLocal)) {
+    $target = Get-DatabaseTarget
+    Write-Step ("Waiting for remote Postgres readiness at {0}:{1}" -f $target.Host, $target.Port)
+    for ($i = 1; $i -le 40; $i++) {
+      if (Test-DatabaseConnectionReady) {
+        Write-Ok ("Remote Postgres is accepting connections at {0}:{1}" -f $target.Host, $target.Port)
+        return
+      }
+      Start-Sleep -Seconds 2
+    }
+    throw ("Remote Postgres at {0}:{1} did not become ready" -f $target.Host, $target.Port)
+  }
+
   Write-Step "Waiting for Postgres readiness"
   $container = if ($env:POSTGRES_CONTAINER_NAME) { $env:POSTGRES_CONTAINER_NAME } else { "tichu-postgres" }
   $user = if ($env:POSTGRES_USER) { $env:POSTGRES_USER } else { "tichu" }
@@ -505,12 +608,22 @@ function Show-BackendStatus {
   Ensure-RuntimeDirs
   Import-DotEnv
   foreach ($cmd in @("git", "node", "npm.cmd", "docker")) { if (Test-CommandExists $cmd) { Write-Ok "$cmd is installed" } else { Write-Fail "$cmd is missing" } }
-  if (Test-DockerReachable) { Write-Ok "Docker daemon is running" } else { Write-Fail "Docker daemon is not running" }
-  $container = if ($env:POSTGRES_CONTAINER_NAME) { $env:POSTGRES_CONTAINER_NAME } else { "tichu-postgres" }
-  try {
-    $running = docker inspect -f "{{.State.Running}}" $container 2>$null
-    if ($running -eq "true") { Write-Ok "Postgres container is running" } else { Write-Fail "Postgres container is not running" }
-  } catch { Write-Fail "Postgres container not found" }
+  $target = Get-DatabaseTarget
+  Write-Info ("Database target: {0}:{1} ({2})" -f $target.Host, $target.Port, $target.Scope)
+  if ($target.IsLocal) {
+    if (Test-DockerReachable) { Write-Ok "Docker daemon is running" } else { Write-Fail "Docker daemon is not running" }
+    $container = if ($env:POSTGRES_CONTAINER_NAME) { $env:POSTGRES_CONTAINER_NAME } else { "tichu-postgres" }
+    try {
+      $running = docker inspect -f "{{.State.Running}}" $container 2>$null
+      if ($running -eq "true") { Write-Ok "Postgres container is running" } else { Write-Fail "Postgres container is not running" }
+    } catch { Write-Fail "Postgres container not found" }
+  } else {
+    if (Test-DatabaseConnectionReady) {
+      Write-Ok ("Remote Postgres is reachable at {0}:{1}" -f $target.Host, $target.Port)
+    } else {
+      Write-Fail ("Remote Postgres is not reachable at {0}:{1}" -f $target.Host, $target.Port)
+    }
+  }
   $backendPid = Get-BackendPid
   if ($backendPid) {
     Write-Ok "Backend process is running with pid $backendPid"
