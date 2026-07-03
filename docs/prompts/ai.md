@@ -14,6 +14,30 @@ Use this file to preserve AI and bot-behavior prompt intent and link it to GitHu
 
 ## Entries
 
+### 2026-07-02 - ML smoke gates must fail when the trained LightGBM candidate is barely serving decisions
+
+- Prompt Signal: After repeated bootstrap and smoke loops still looked
+  suspicious, the follow-up request pushed on whether evaluation was circling
+  on an old model and why the runs could still complete when the challenger was
+  quietly delegating most of its requested workload back to the heuristic.
+- Interpreted Requirement: Issue
+  [#118](https://github.com/NeonButrfly/tichuml/issues/118) tracks making
+  evaluation integrity explicit: plain `ml:bootstrap` must evaluate through an
+  isolated candidate backend pinned to the newly trained run-local model
+  bundle, and both bootstrap wrappers must fail smoke gates when
+  `lightgbm_model` barely serves its requested decisions. The evaluation report
+  must surface LightGBM requested/served/delegated counts and service rate so
+  suspicious runs are auditable without manual DB queries.
+- Affected Systems: `scripts/ml-bootstrap.ts`,
+  `scripts/ml-live-bootstrap.ts`, `apps/sim-runner/src/evaluate.ts`,
+  `tests/integration/ml-bootstrap.test.ts`,
+  `tests/integration/ml-live-bootstrap.test.ts`,
+  `tests/integration/ml-evaluate.test.ts`,
+  `docs/ml-strategy-improvement.md`.
+- Linked GitHub Issue: [#118](https://github.com/NeonButrfly/tichuml/issues/118)
+- Milestone: none
+- Status Source: GitHub issue state only.
+
 ### 2026-07-01 - Live bootstrap eval must recover from stale ports and reject low-signal smoke samples
 
 - Prompt Signal: The latest live-training recovery request asked to fix the

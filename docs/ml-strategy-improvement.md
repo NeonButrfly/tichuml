@@ -134,12 +134,27 @@ npm run ml:bootstrap -- --run-id <run_id> --game-id-prefix <game_id_prefix> --ou
 
 `ml:bootstrap` runs scoped `ml:export`, trains against `outcome_reward`, runs
 mirrored `ml:evaluate`, and exits non-zero if the evaluation gate does not
-pass. For a short host-side smoke, pass `--evaluate-min-games-for-gate <n>` to
-keep the gate threshold aligned with the smaller evaluation sample:
+pass. It now writes a run-local candidate model bundle under the requested
+output directory, builds the server package, starts a temporary localhost
+backend pinned to that candidate model, verifies the evaluation report names
+that candidate model file explicitly, and only then accepts the run. This
+prevents plain bootstrap from accidentally scoring an older long-lived backend
+model that was loaded before the new training step.
+
+For a short host-side smoke, pass `--evaluate-min-games-for-gate <n>` to keep
+the game-count gate aligned with the smaller evaluation sample:
 
 ```powershell
 npm run ml:bootstrap -- --run-id <run_id> --game-id-prefix <game_id_prefix> --output-dir training-runs/<run_id>/ml --provider server_heuristic --backend-url http://127.0.0.1:4310 --evaluate-games 3 --evaluate-min-games-for-gate 3
 ```
+
+Bootstrap and live-bootstrap smokes now also treat LightGBM service coverage as
+part of evaluation integrity. The default smoke wrappers require at least 50
+LightGBM-served challenger decisions and at least a 0.1 LightGBM
+requested-to-served service rate before the gate can pass. The evaluation
+artifacts now surface the underlying requested/served/delegated LightGBM counts
+so a suspicious run fails with explicit evidence instead of requiring manual DB
+inspection.
 
 Diagnose a completed observed-outcome training run:
 
@@ -186,8 +201,12 @@ overly narrow smoke sample. The default evaluation-quality floor is at least 10
 unique decisions across at least 3 games, overrideable with
 `--min-training-decisions-for-evaluate` and
 `--min-training-games-for-evaluate`. The evaluation report must still name the
-candidate model file explicitly. Together those checks prevent a stale backend,
-a dirty eval port, or a one-decision smoke from being mistaken for a
+candidate model file explicitly. The same gate now also records
+LightGBM-requested decisions, LightGBM-served decisions, heuristic delegation,
+and LightGBM service rate per evaluation leg, and the smoke wrappers require a
+minimum served-decision count plus minimum service rate before acceptance.
+Together those checks prevent a stale backend, a dirty eval port, a
+delegation-heavy run, or a one-decision smoke from being mistaken for a
 successful new run.
 
 ## Data products
@@ -251,6 +270,9 @@ machine-parseable and deterministic under the same explicit DB/provider scope.
 - `artifacts/ml/evaluation-report.json`
 - `artifacts/ml/evaluation-report.md`
 - `eval/results/latest_summary.json`
+- per-leg `lightgbm_diagnostics` with requested decisions, LightGBM-served
+  decisions, heuristic delegations, local fallbacks, and service rate when the
+  challenger requested `lightgbm_model`
 
 ## How to interpret labels
 
@@ -276,6 +298,9 @@ The default gate checks:
 - enough games were evaluated
 - challenger win rate beats baseline
 - average score delta is positive
+- when the challenger is `lightgbm_model`, enough requested decisions were
+  actually served by LightGBM and the LightGBM service rate stayed above the
+  configured floor
 - illegal actions do not increase
 - fallbacks do not increase
 - average latency stays within the configured limit

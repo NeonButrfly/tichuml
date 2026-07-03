@@ -175,6 +175,8 @@ export function buildLiveMlBootstrapPlan(
     ? null
     : `http://127.0.0.1:${candidateBackendPort}`;
   const evaluationDecisionTimeoutMs = 5_000;
+  const evaluationMinLightgbmServedDecisions = 50;
+  const evaluationMinLightgbmServiceRate = 0.1;
   const exportArgs = [
     "run",
     "ml:export:raw",
@@ -288,6 +290,10 @@ export function buildLiveMlBootstrapPlan(
         String(evaluateGames),
         "--min-games-for-gate",
         String(evaluateMinGamesForGate),
+        "--min-lightgbm-served-decisions",
+        String(evaluationMinLightgbmServedDecisions),
+        "--min-lightgbm-service-rate",
+        String(evaluationMinLightgbmServiceRate),
         "--ns-provider",
         "lightgbm_model",
         "--ew-provider",

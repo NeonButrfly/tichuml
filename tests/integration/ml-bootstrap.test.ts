@@ -13,14 +13,19 @@ describe("ml bootstrap orchestration", () => {
       backendUrl: "http://127.0.0.1:4310",
       provider: "server_heuristic",
       evaluateGames: 40,
-      evaluateMinGamesForGate: 12
+      evaluateMinGamesForGate: 12,
+      candidateBackendPort: 4312,
+      evaluateMinLightgbmServedDecisions: 50,
+      evaluateMinLightgbmServiceRate: 0.1
     });
 
     expect(plan.steps.map((step) => step.label)).toEqual([
       "ml:export",
       "ml:train",
+      "build:server",
       "ml:evaluate"
     ]);
+    expect(plan.candidateBackendUrl).toBe("http://127.0.0.1:4312");
     expect(plan.steps[0]?.args).toEqual([
       "run",
       "ml:export",
@@ -34,8 +39,31 @@ describe("ml bootstrap orchestration", () => {
       "--provider",
       "server_heuristic"
     ]);
-    expect(plan.steps[1]?.args.some((value) => value.endsWith("train.parquet"))).toBe(true);
-    expect(plan.steps[2]?.args).toEqual([
+    expect(plan.steps[1]?.args).toEqual([
+      "run",
+      "ml:train",
+      "--",
+      "--input",
+      plan.datasetPath,
+      "--manifest-input",
+      plan.manifestPath,
+      "--phase",
+      "trick_play",
+      "--objective",
+      "observed_outcome_regression",
+      "--target-column",
+      "outcome_reward",
+      "--output",
+      plan.modelPath,
+      "--meta-output",
+      plan.modelMetaPath,
+      "--report-output",
+      plan.trainingReportPath,
+      "--feature-importance-output",
+      plan.featureImportancePath
+    ]);
+    expect(plan.steps[2]?.args).toEqual(["run", "build", "-w", "@tichuml/server"]);
+    expect(plan.steps[3]?.args).toEqual([
       "run",
       "ml:evaluate",
       "--",
@@ -43,6 +71,10 @@ describe("ml bootstrap orchestration", () => {
       "40",
       "--min-games-for-gate",
       "12",
+      "--min-lightgbm-served-decisions",
+      "50",
+      "--min-lightgbm-service-rate",
+      "0.1",
       "--ns-provider",
       "lightgbm_model",
       "--ew-provider",
@@ -54,7 +86,9 @@ describe("ml bootstrap orchestration", () => {
       "--decision-timeout-ms",
       "5000",
       "--backend-url",
-      "http://127.0.0.1:4310"
+      "http://127.0.0.1:4312",
+      "--output",
+      plan.evaluationReportPath
     ]);
   });
 
@@ -67,7 +101,10 @@ describe("ml bootstrap orchestration", () => {
         backendUrl: "http://127.0.0.1:4310",
         provider: "server_heuristic",
         evaluateGames: 40,
-        evaluateMinGamesForGate: 40
+        evaluateMinGamesForGate: 40,
+        candidateBackendPort: 4312,
+        evaluateMinLightgbmServedDecisions: 50,
+        evaluateMinLightgbmServiceRate: 0.1
       })
     ).toThrow(/game-id-prefix/i);
   });
@@ -81,7 +118,10 @@ describe("ml bootstrap orchestration", () => {
         backendUrl: "http://127.0.0.1:4310",
         provider: "server_heuristic",
         evaluateGames: 0,
-        evaluateMinGamesForGate: 0
+        evaluateMinGamesForGate: 0,
+        candidateBackendPort: 4312,
+        evaluateMinLightgbmServedDecisions: 50,
+        evaluateMinLightgbmServiceRate: 0.1
       })
     ).toThrow(/evaluate-games/i);
   });
@@ -94,7 +134,10 @@ describe("ml bootstrap orchestration", () => {
       backendUrl: "http://127.0.0.1:4310",
       provider: "server_heuristic",
       evaluateGames: 3,
-      evaluateMinGamesForGate: 3
+      evaluateMinGamesForGate: 3,
+      candidateBackendPort: 4312,
+      evaluateMinLightgbmServedDecisions: 50,
+      evaluateMinLightgbmServiceRate: 0.1
     });
 
     expect(plan.steps[0]?.args).toEqual([
@@ -118,10 +161,13 @@ describe("ml bootstrap orchestration", () => {
       backendUrl: "http://127.0.0.1:4310",
       provider: "server_heuristic",
       evaluateGames: 40,
-      evaluateMinGamesForGate: 12
+      evaluateMinGamesForGate: 12,
+      candidateBackendPort: 4312,
+      evaluateMinLightgbmServedDecisions: 50,
+      evaluateMinLightgbmServiceRate: 0.1
     });
 
-    expect(plan.steps[2]?.args).toEqual([
+    expect(plan.steps[3]?.args).toEqual([
       "run",
       "ml:evaluate",
       "--",
@@ -129,6 +175,10 @@ describe("ml bootstrap orchestration", () => {
       "40",
       "--min-games-for-gate",
       "12",
+      "--min-lightgbm-served-decisions",
+      "50",
+      "--min-lightgbm-service-rate",
+      "0.1",
       "--ns-provider",
       "lightgbm_model",
       "--ew-provider",
@@ -140,7 +190,9 @@ describe("ml bootstrap orchestration", () => {
       "--decision-timeout-ms",
       "5000",
       "--backend-url",
-      "http://127.0.0.1:4310"
+      "http://127.0.0.1:4312",
+      "--output",
+      plan.evaluationReportPath
     ]);
   });
 
