@@ -27,7 +27,9 @@ Use this file to preserve AI and bot-behavior prompt intent and link it to GitHu
   bundle, and both bootstrap wrappers must fail smoke gates when
   `lightgbm_model` barely serves its requested decisions. The evaluation report
   must surface LightGBM requested/served/delegated counts and service rate so
-  suspicious runs are auditable without manual DB queries.
+  suspicious runs are auditable without manual DB queries, and the plain
+  bootstrap flow must allow `--skip-build-server` on already-updated hosts so
+  the isolated evaluation path does not wedge on a redundant server rebuild.
 - Affected Systems: `scripts/ml-bootstrap.ts`,
   `scripts/ml-live-bootstrap.ts`, `apps/sim-runner/src/evaluate.ts`,
   `tests/integration/ml-bootstrap.test.ts`,

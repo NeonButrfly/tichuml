@@ -217,4 +217,26 @@ describe("ml bootstrap orchestration", () => {
       TRAINING_DATABASE_URL: "postgres://training-db"
     });
   });
+
+  it("can skip the server rebuild when the host already has fresh dist artifacts", () => {
+    const plan = buildMlBootstrapPlan({
+      runId: "",
+      gameIdPrefix: "bootstrap-integrity",
+      outputDir: "training-runs/bootstrap-integrity/ml",
+      backendUrl: "http://127.0.0.1:4310",
+      provider: "server_heuristic",
+      evaluateGames: 3,
+      evaluateMinGamesForGate: 3,
+      candidateBackendPort: 4312,
+      evaluateMinLightgbmServedDecisions: 50,
+      evaluateMinLightgbmServiceRate: 0.1,
+      skipBuildServer: true
+    });
+
+    expect(plan.steps.map((step) => step.label)).toEqual([
+      "ml:export",
+      "ml:train",
+      "ml:evaluate"
+    ]);
+  });
 });

@@ -156,6 +156,11 @@ artifacts now surface the underlying requested/served/delegated LightGBM counts
 so a suspicious run fails with explicit evidence instead of requiring manual DB
 inspection.
 
+If the host already has fresh server dist artifacts from
+`scripts/update-backend.sh` or another explicit build step, `ml:bootstrap` also
+accepts `--skip-build-server` so the isolated candidate evaluation can reuse
+the existing dist bundle instead of forcing another server `tsc` build first.
+
 Diagnose a completed observed-outcome training run:
 
 ```powershell

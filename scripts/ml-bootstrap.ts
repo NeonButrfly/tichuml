@@ -19,6 +19,7 @@ export type MlBootstrapOptions = {
   candidateBackendPort: number;
   evaluateMinLightgbmServedDecisions: number;
   evaluateMinLightgbmServiceRate: number;
+  skipBuildServer?: boolean;
 };
 
 export type MlBootstrapStep = {
@@ -174,11 +175,15 @@ export function buildMlBootstrapPlan(
           featureImportancePath
         ]
       },
-      {
-        label: "build:server",
-        command: "npm",
-        args: ["run", "build", "-w", "@tichuml/server"]
-      },
+      ...(options.skipBuildServer
+        ? []
+        : ([
+            {
+              label: "build:server",
+              command: "npm",
+              args: ["run", "build", "-w", "@tichuml/server"]
+            }
+          ] satisfies MlBootstrapStep[])),
       {
         label: "ml:evaluate",
         command: "npm",
@@ -433,7 +438,8 @@ async function main(): Promise<void> {
       50
     ),
     evaluateMinLightgbmServiceRate:
-      Number(readArg(argv, "--min-lightgbm-service-rate") ?? "0.1")
+      Number(readArg(argv, "--min-lightgbm-service-rate") ?? "0.1"),
+    skipBuildServer: argv.includes("--skip-build-server")
   });
   let candidateBackend: ChildProcess | null = null;
   try {
