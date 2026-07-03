@@ -227,6 +227,14 @@ describe("server config env loading", () => {
     expect(config.telemetryPersistenceConcurrency).toBe(1);
   });
 
+  it("uses a longer default LightGBM scoring timeout when env is absent", async () => {
+    const repoRoot = await createTempRepo();
+
+    const config = loadServerConfig({}, { repoRoot });
+
+    expect(config.lightgbmScoringTimeoutMs).toBe(5000);
+  });
+
   it("falls back to the repo venv when the configured python executable is unusable", async () => {
     const repoRoot = await createTempRepo();
     const venvPython =
