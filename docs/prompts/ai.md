@@ -139,6 +139,27 @@ Use this file to preserve AI and bot-behavior prompt intent and link it to GitHu
 - Milestone: [6.5 – Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
 - Status Source: GitHub issue state only.
 
+### 2026-07-03 - Live rollout training must not silently mix bad old providers by default
+
+- Prompt Signal: After the bootstrap integrity fixes, the follow-up request was
+  to make the smarter LightGBM path real and to make absolutely sure generated
+  training data stays at least baseline adequate instead of circling on
+  suspiciously bad runs.
+- Interpreted Requirement: Issue
+  [#79](https://github.com/NeonButrfly/tichuml/issues/79) also tracks keeping
+  default `ml:live-bootstrap` gameplay exports anchored to the canonical
+  `server_heuristic` slice unless `--allow-mixed-providers` is explicitly set.
+  Omitting `--provider` must no longer silently opt the live rollout-training
+  path into mixed historical providers, because that contaminates the rollout
+  target with stale weak-model rows and undermines the guarantee that smarter
+  LightGBM candidates start from baseline-adequate policy data.
+- Affected Systems: `scripts/ml-live-bootstrap.ts`,
+  `tests/integration/ml-live-bootstrap.test.ts`,
+  `docs/ml-strategy-improvement.md`.
+- Linked GitHub Issue: [#79](https://github.com/NeonButrfly/tichuml/issues/79)
+- Milestone: [6.5 – Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status Source: GitHub issue state only.
+
 ### 2026-06-01 - LightGBM serving should step up from raw move scoring to top-K plus rollout choice
 
 - Prompt Signal: The latest AI-behavior request explicitly pushed the project

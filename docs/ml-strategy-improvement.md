@@ -190,6 +190,14 @@ normal mirrored `ml:evaluate` improvement gate against it. The command still
 does not auto-promote or repoint the live backend model for you; it only tells
 you whether the newly trained live-data candidate cleared the gate.
 
+When you omit both `--provider` and `--allow-mixed-providers`, the live
+bootstrap launcher now pins the gameplay export to the canonical
+`server_heuristic` slice instead of silently mixing historical providers. That
+keeps default live rollout training anchored to the same baseline policy used
+by the self-play bootstrap path and avoids poisoning the rollout target with
+older weak LightGBM or heterogeneous human/AI policy mixtures unless you ask
+for that intentionally.
+
 For bounded live gameplay exports, `--source gameplay --limit <N>` now prefers
 the newest telemetry rows first (`ORDER BY ts DESC, id DESC`) before rollout
 relabeling and training. That keeps smoke and medium bootstrap runs anchored to

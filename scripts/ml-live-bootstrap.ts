@@ -68,6 +68,8 @@ export type TrainingReportQualitySummary = TrainingReportSummary & {
   baselineMaeImprovement: number | null;
 };
 
+const DEFAULT_CANONICAL_GAMEPLAY_PROVIDER = "server_heuristic";
+
 function requireNonEmpty(value: string, flag: string): string {
   const normalized = value.trim();
   if (!normalized) {
@@ -202,6 +204,8 @@ export function buildLiveMlBootstrapPlan(
     exportArgs.push("--provider", options.provider);
   } else if (options.allowMixedProviders) {
     exportArgs.push("--allow-mixed-providers");
+  } else {
+    exportArgs.push("--provider", DEFAULT_CANONICAL_GAMEPLAY_PROVIDER);
   }
   appendOptionalFlag(exportArgs, "--limit", exportLimit);
 
@@ -775,7 +779,7 @@ async function main(): Promise<void> {
     telemetrySource: readArg(argv, "--source") ?? "gameplay",
     provider: provider ? provider.trim() : null,
     allowMixedProviders:
-      argv.includes("--allow-mixed-providers") || provider === null,
+      argv.includes("--allow-mixed-providers"),
     exportLimit: readOptionalIntegerArg(argv, "--export-limit"),
     rolloutMaxDecisions: readOptionalIntegerArg(
       argv,

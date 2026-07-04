@@ -174,6 +174,50 @@ describe("live ml bootstrap orchestration", () => {
     expect(plan.steps[2]?.args).not.toContain("rollout_ranker");
   });
 
+  it("defaults gameplay exports to the canonical heuristic slice when mixed providers are not explicitly allowed", () => {
+    const plan = buildLiveMlBootstrapPlan({
+      outputDir: "training-runs/live-canonical-default/ml",
+      backendUrl: "http://127.0.0.1:4310",
+      telemetrySource: "gameplay",
+      provider: null,
+      allowMixedProviders: false,
+      exportLimit: 5000,
+      rolloutMaxDecisions: 250,
+      continuationProvider: "server_heuristic",
+      rolloutsPerAction: 2,
+      featureProfile: "runtime_raw",
+      objective: "rollout_regression",
+      minRolloutDecisionSpread: 0,
+      minRolloutSamples: 0,
+      minRolloutStddev: 0,
+      evaluateGames: 8,
+      evaluateMinGamesForGate: 8,
+      evaluateBaselineProvider: "server_heuristic",
+      candidateBackendPort: 4312,
+      skipEvaluate: true,
+    });
+
+    expect(plan.steps[0]?.args).toEqual([
+      "run",
+      "ml:export:raw",
+      "--",
+      "--phase",
+      "trick_play",
+      "--source",
+      "gameplay",
+      "--format",
+      "jsonl",
+      "--include-rollouts",
+      "--output-dir",
+      "training-runs/live-canonical-default/ml",
+      "--provider",
+      "server_heuristic",
+      "--limit",
+      "5000",
+    ]);
+    expect(plan.steps[0]?.args).not.toContain("--allow-mixed-providers");
+  });
+
   it("switches to a single-provider gameplay slice when requested", () => {
     const plan = buildLiveMlBootstrapPlan({
       outputDir: "training-runs/live-human-only/ml",
