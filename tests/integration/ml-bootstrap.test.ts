@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_BOOTSTRAP_MIN_TRAINING_DECISIONS,
+  DEFAULT_BOOTSTRAP_MIN_TRAINING_GAMES,
   buildMlBootstrapPlan,
   resolveMlBootstrapCommandEnv
 } from "../../scripts/ml-bootstrap.js";
@@ -238,5 +240,10 @@ describe("ml bootstrap orchestration", () => {
       "ml:train",
       "ml:evaluate"
     ]);
+  });
+
+  it("keeps bootstrap quality floors above tiny smoke-scale training sets", () => {
+    expect(DEFAULT_BOOTSTRAP_MIN_TRAINING_DECISIONS).toBeGreaterThanOrEqual(100);
+    expect(DEFAULT_BOOTSTRAP_MIN_TRAINING_GAMES).toBeGreaterThanOrEqual(10);
   });
 });

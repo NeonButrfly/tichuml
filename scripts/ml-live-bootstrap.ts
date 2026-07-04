@@ -61,6 +61,14 @@ export type TrainingReportSummary = {
   gameCount: number;
 };
 
+export type TrainingReportQualitySummary = TrainingReportSummary & {
+  objective: string | null;
+  validationSpearman: number | null;
+  baselineRmseImprovement: number | null;
+  baselineMaeImprovement: number | null;
+  spearmanInterpretation: string | null;
+};
+
 function requireNonEmpty(value: string, flag: string): string {
   const normalized = value.trim();
   if (!normalized) {
@@ -403,6 +411,25 @@ export function readEvaluationSummary(reportPath: string): {
 }
 
 export function readTrainingReportSummary(reportPath: string): TrainingReportSummary {
+  const qualitySummary = readTrainingReportQualitySummary(reportPath);
+  return {
+    rowCount: qualitySummary.rowCount,
+    decisionCount: qualitySummary.decisionCount,
+    gameCount: qualitySummary.gameCount,
+  };
+}
+
+function readFiniteNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function readNonEmptyString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+export function readTrainingReportQualitySummary(
+  reportPath: string
+): TrainingReportQualitySummary {
   if (!fs.existsSync(reportPath)) {
     throw new Error(`Training report was not written to ${reportPath}.`);
   }
@@ -410,24 +437,32 @@ export function readTrainingReportSummary(reportPath: string): TrainingReportSum
     row_count?: unknown;
     decision_count?: unknown;
     game_count?: unknown;
+    objective?: unknown;
+    validation_metrics?: {
+      spearman?: unknown;
+    };
+    model_vs_baseline?: {
+      rmse_improvement?: unknown;
+      mae_improvement?: unknown;
+    };
+    spearman_interpretation?: unknown;
   };
-  const rowCount =
-    typeof parsed.row_count === "number" && Number.isFinite(parsed.row_count)
-      ? parsed.row_count
-      : 0;
-  const decisionCount =
-    typeof parsed.decision_count === "number" &&
-    Number.isFinite(parsed.decision_count)
-      ? parsed.decision_count
-      : 0;
-  const gameCount =
-    typeof parsed.game_count === "number" && Number.isFinite(parsed.game_count)
-      ? parsed.game_count
-      : 0;
+  const rowCount = readFiniteNumber(parsed.row_count) ?? 0;
+  const decisionCount = readFiniteNumber(parsed.decision_count) ?? 0;
+  const gameCount = readFiniteNumber(parsed.game_count) ?? 0;
   return {
     rowCount,
     decisionCount,
     gameCount,
+    objective: readNonEmptyString(parsed.objective),
+    validationSpearman: readFiniteNumber(parsed.validation_metrics?.spearman),
+    baselineRmseImprovement: readFiniteNumber(
+      parsed.model_vs_baseline?.rmse_improvement
+    ),
+    baselineMaeImprovement: readFiniteNumber(
+      parsed.model_vs_baseline?.mae_improvement
+    ),
+    spearmanInterpretation: readNonEmptyString(parsed.spearman_interpretation),
   };
 }
 
@@ -453,6 +488,50 @@ export function assertTrainingDecisionQuality(
   throw new Error(
     `Training sample is too narrow for trustworthy candidate evaluation: ${failures.join(", ")}. ` +
       `Observed rows=${summary.rowCount}, decisions=${summary.decisionCount}, games=${summary.gameCount}.`
+  );
+}
+
+export function assertObservedOutcomeTrainingQuality(
+  summary: TrainingReportQualitySummary
+): void {
+  if (summary.objective !== "observed_outcome_regression") {
+    return;
+  }
+
+  const failures: string[] = [];
+  if (
+    summary.validationSpearman !== null &&
+    summary.validationSpearman < 0
+  ) {
+    failures.push(
+      `validation Spearman ${summary.validationSpearman.toFixed(4)} is negative`
+    );
+  }
+  if (
+    summary.baselineRmseImprovement !== null &&
+    summary.baselineRmseImprovement < 0
+  ) {
+    failures.push(
+      `RMSE improvement ${summary.baselineRmseImprovement.toFixed(2)} is worse than baseline`
+    );
+  }
+  if (
+    summary.baselineMaeImprovement !== null &&
+    summary.baselineMaeImprovement < 0
+  ) {
+    failures.push(
+      `MAE improvement ${summary.baselineMaeImprovement.toFixed(2)} is worse than baseline`
+    );
+  }
+
+  if (failures.length === 0) {
+    return;
+  }
+
+  throw new Error(
+    `Observed-outcome training report failed bootstrap quality gates: ${failures.join(", ")}. ` +
+      `Rows=${summary.rowCount}, decisions=${summary.decisionCount}, games=${summary.gameCount}, ` +
+      `spearman_interpretation=${summary.spearmanInterpretation ?? "n/a"}.`
   );
 }
 

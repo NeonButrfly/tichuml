@@ -214,6 +214,17 @@ Together those checks prevent a stale backend, a dirty eval port, a
 delegation-heavy run, or a one-decision smoke from being mistaken for a
 successful new run.
 
+Plain self-play `ml:bootstrap` now applies a stricter pre-evaluation training
+gate because the observed-outcome path was repeatedly producing tiny
+four-match bundles that still reached head-to-head evaluation. Before it starts
+the temporary candidate backend, the bootstrap script now requires at least 100
+training decisions across at least 10 games by default, and
+`observed_outcome_regression` runs are rejected outright when the saved
+`training-report.json` already shows negative Spearman or worse-than-baseline
+RMSE/MAE lift. That keeps obviously broken or smoke-scale candidates from
+burning another eval loop when the offline report already says the model is not
+usable.
+
 ## Data products
 
 `ml:export` writes:

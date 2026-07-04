@@ -4,12 +4,14 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 import {
+  assertObservedOutcomeTrainingQuality,
   assertCandidateArtifactsExist,
   assertCandidateBackendPortAvailable,
   assertTrainingDecisionQuality,
   buildLiveMlBootstrapPlan,
   overrideEvaluationBackendUrl,
   readEvaluationSummary,
+  readTrainingReportQualitySummary,
   readTrainingReportSummary,
   resolveCandidateBackendPort,
 } from "../../scripts/ml-live-bootstrap.js";
@@ -305,6 +307,49 @@ describe("live ml bootstrap orchestration", () => {
     }
   });
 
+  it("reads observed-outcome quality signals from the training report", () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "ml-live-bootstrap-quality-"));
+    const reportPath = join(tempDir, "training-report.json");
+
+    try {
+      writeFileSync(
+        reportPath,
+        JSON.stringify(
+          {
+            row_count: 4247,
+            decision_count: 4863,
+            game_count: 4,
+            objective: "observed_outcome_regression",
+            validation_metrics: {
+              spearman: -0.22365742304581662,
+            },
+            model_vs_baseline: {
+              rmse_improvement: -46.95,
+              mae_improvement: -43.95,
+            },
+            spearman_interpretation: "negative likely broken/mismatched target",
+          },
+          null,
+          2
+        ),
+        "utf8"
+      );
+
+      expect(readTrainingReportQualitySummary(reportPath)).toEqual({
+        rowCount: 4247,
+        decisionCount: 4863,
+        gameCount: 4,
+        objective: "observed_outcome_regression",
+        validationSpearman: -0.22365742304581662,
+        baselineRmseImprovement: -46.95,
+        baselineMaeImprovement: -43.95,
+        spearmanInterpretation: "negative likely broken/mismatched target",
+      });
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it("rejects training samples that collapse to too few decisions and games", () => {
     expect(() =>
       assertTrainingDecisionQuality(
@@ -319,6 +364,36 @@ describe("live ml bootstrap orchestration", () => {
         }
       )
     ).toThrow(/too narrow for trustworthy candidate evaluation/i);
+  });
+
+  it("rejects observed-outcome reports that are worse than baseline", () => {
+    expect(() =>
+      assertObservedOutcomeTrainingQuality({
+        rowCount: 4247,
+        decisionCount: 4863,
+        gameCount: 4,
+        objective: "observed_outcome_regression",
+        validationSpearman: -0.22365742304581662,
+        baselineRmseImprovement: -46.95,
+        baselineMaeImprovement: -43.95,
+        spearmanInterpretation: "negative likely broken/mismatched target",
+      })
+    ).toThrow(/failed bootstrap quality gates/i);
+  });
+
+  it("allows observed-outcome reports with positive ranking and baseline lift", () => {
+    expect(() =>
+      assertObservedOutcomeTrainingQuality({
+        rowCount: 12000,
+        decisionCount: 12500,
+        gameCount: 40,
+        objective: "observed_outcome_regression",
+        validationSpearman: 0.18,
+        baselineRmseImprovement: 12.4,
+        baselineMaeImprovement: 9.7,
+        spearmanInterpretation: "positive useful signal",
+      })
+    ).not.toThrow();
   });
 
   it("rejects an occupied candidate backend port", async () => {

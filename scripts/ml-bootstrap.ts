@@ -3,8 +3,11 @@ import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { parseEnvFile } from "../apps/server/src/config/env-file.ts";
 import {
+  assertObservedOutcomeTrainingQuality,
+  assertTrainingDecisionQuality,
   assertCandidateArtifactsExist,
   readEvaluationSummary,
+  readTrainingReportQualitySummary,
   resolveCandidateBackendPort
 } from "./ml-live-bootstrap.ts";
 
@@ -40,6 +43,9 @@ export type MlBootstrapPlan = {
   candidateBackendUrl: string;
   steps: MlBootstrapStep[];
 };
+
+export const DEFAULT_BOOTSTRAP_MIN_TRAINING_DECISIONS = 100;
+export const DEFAULT_BOOTSTRAP_MIN_TRAINING_GAMES = 10;
 
 const TRAINING_DATABASE_ENV_KEYS = [
   "TRAINING_DATABASE_URL",
@@ -416,6 +422,16 @@ async function stopChildProcess(child: ChildProcess | null): Promise<void> {
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   const evaluateGames = readNumberArg(argv, "--evaluate-games", 100);
+  const minTrainingDecisionCountForEvaluate = readNumberArg(
+    argv,
+    "--min-training-decisions-for-evaluate",
+    DEFAULT_BOOTSTRAP_MIN_TRAINING_DECISIONS
+  );
+  const minTrainingGameCountForEvaluate = readNumberArg(
+    argv,
+    "--min-training-games-for-evaluate",
+    DEFAULT_BOOTSTRAP_MIN_TRAINING_GAMES
+  );
   const commandEnv = resolveMlBootstrapCommandEnv(process.env);
   let runtimePlan = buildMlBootstrapPlan({
     runId: readArg(argv, "--run-id"),
@@ -444,6 +460,18 @@ async function main(): Promise<void> {
   let candidateBackend: ChildProcess | null = null;
   try {
     for (const step of runtimePlan.steps) {
+      if (step.label === "ml:train") {
+        await runCommand(step.command, step.args, commandEnv);
+        const trainingSummary = readTrainingReportQualitySummary(
+          runtimePlan.trainingReportPath
+        );
+        assertTrainingDecisionQuality(trainingSummary, {
+          minDecisionCount: minTrainingDecisionCountForEvaluate,
+          minGameCount: minTrainingGameCountForEvaluate
+        });
+        assertObservedOutcomeTrainingQuality(trainingSummary);
+        continue;
+      }
       if (step.label === "ml:evaluate") {
         assertCandidateArtifactsExist({
           modelPath: runtimePlan.modelPath,

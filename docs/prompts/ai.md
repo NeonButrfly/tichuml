@@ -14,6 +14,31 @@ Use this file to preserve AI and bot-behavior prompt intent and link it to GitHu
 
 ## Entries
 
+### 2026-07-03 - Plain self-play bootstrap must reject tiny or offline-bad observed-outcome candidates before evaluation
+
+- Prompt Signal: After the large training loop still kept producing terrible
+  LightGBM results, the follow-up request pushed to stop circling, determine
+  why training was not working, and fix the pipeline instead of launching
+  another misleading evaluation.
+- Interpreted Requirement: Issue
+  [#124](https://github.com/NeonButrfly/tichuml/issues/124) tracks hardening
+  plain `ml:bootstrap` so self-play observed-outcome candidates cannot reach
+  head-to-head evaluation when the scoped training bundle is obviously too
+  small or the saved offline metrics already show the model is worse than
+  trivial baselines. The bootstrap flow must read `training-report.json` after
+  `ml:train`, require a materially larger training slice than the live smoke
+  gate, and reject negative-Spearman / negative-lift
+  `observed_outcome_regression` runs before starting the temporary candidate
+  backend.
+- Affected Systems: `scripts/ml-bootstrap.ts`,
+  `scripts/ml-live-bootstrap.ts`,
+  `tests/integration/ml-bootstrap.test.ts`,
+  `tests/integration/ml-live-bootstrap.test.ts`,
+  `docs/ml-strategy-improvement.md`.
+- Linked GitHub Issue: [#124](https://github.com/NeonButrfly/tichuml/issues/124)
+- Milestone: [6.5 – Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status Source: GitHub issue state only.
+
 ### 2026-07-02 - ML smoke gates must fail when the trained LightGBM candidate is barely serving decisions
 
 - Prompt Signal: After repeated bootstrap and smoke loops still looked
