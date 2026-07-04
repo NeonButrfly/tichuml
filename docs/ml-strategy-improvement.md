@@ -220,8 +220,8 @@ four-match bundles that still reached head-to-head evaluation. Before it starts
 the temporary candidate backend, the bootstrap script now requires at least 100
 training decisions across at least 10 games by default, and
 `observed_outcome_regression` runs are rejected outright when the saved
-`training-report.json` already shows negative Spearman or worse-than-baseline
-RMSE/MAE lift. That keeps obviously broken or smoke-scale candidates from
+`training-report.json` already shows worse-than-baseline RMSE/MAE lift. That
+keeps obviously broken or smoke-scale candidates from
 burning another eval loop when the offline report already says the model is not
 usable.
 

@@ -27,9 +27,8 @@ Use this file to preserve AI and bot-behavior prompt intent and link it to GitHu
   small or the saved offline metrics already show the model is worse than
   trivial baselines. The bootstrap flow must read `training-report.json` after
   `ml:train`, require a materially larger training slice than the live smoke
-  gate, and reject negative-Spearman / negative-lift
-  `observed_outcome_regression` runs before starting the temporary candidate
-  backend.
+  gate, and reject negative-lift `observed_outcome_regression` runs before
+  starting the temporary candidate backend.
 - Affected Systems: `scripts/ml-bootstrap.ts`,
   `scripts/ml-live-bootstrap.ts`,
   `tests/integration/ml-bootstrap.test.ts`,

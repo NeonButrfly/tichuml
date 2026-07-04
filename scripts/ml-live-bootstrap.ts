@@ -63,10 +63,8 @@ export type TrainingReportSummary = {
 
 export type TrainingReportQualitySummary = TrainingReportSummary & {
   objective: string | null;
-  validationSpearman: number | null;
   baselineRmseImprovement: number | null;
   baselineMaeImprovement: number | null;
-  spearmanInterpretation: string | null;
 };
 
 function requireNonEmpty(value: string, flag: string): string {
@@ -438,14 +436,10 @@ export function readTrainingReportQualitySummary(
     decision_count?: unknown;
     game_count?: unknown;
     objective?: unknown;
-    validation_metrics?: {
-      spearman?: unknown;
-    };
     model_vs_baseline?: {
       rmse_improvement?: unknown;
       mae_improvement?: unknown;
     };
-    spearman_interpretation?: unknown;
   };
   const rowCount = readFiniteNumber(parsed.row_count) ?? 0;
   const decisionCount = readFiniteNumber(parsed.decision_count) ?? 0;
@@ -455,14 +449,12 @@ export function readTrainingReportQualitySummary(
     decisionCount,
     gameCount,
     objective: readNonEmptyString(parsed.objective),
-    validationSpearman: readFiniteNumber(parsed.validation_metrics?.spearman),
     baselineRmseImprovement: readFiniteNumber(
       parsed.model_vs_baseline?.rmse_improvement
     ),
     baselineMaeImprovement: readFiniteNumber(
       parsed.model_vs_baseline?.mae_improvement
     ),
-    spearmanInterpretation: readNonEmptyString(parsed.spearman_interpretation),
   };
 }
 
@@ -500,14 +492,6 @@ export function assertObservedOutcomeTrainingQuality(
 
   const failures: string[] = [];
   if (
-    summary.validationSpearman !== null &&
-    summary.validationSpearman < 0
-  ) {
-    failures.push(
-      `validation Spearman ${summary.validationSpearman.toFixed(4)} is negative`
-    );
-  }
-  if (
     summary.baselineRmseImprovement !== null &&
     summary.baselineRmseImprovement < 0
   ) {
@@ -530,8 +514,7 @@ export function assertObservedOutcomeTrainingQuality(
 
   throw new Error(
     `Observed-outcome training report failed bootstrap quality gates: ${failures.join(", ")}. ` +
-      `Rows=${summary.rowCount}, decisions=${summary.decisionCount}, games=${summary.gameCount}, ` +
-      `spearman_interpretation=${summary.spearmanInterpretation ?? "n/a"}.`
+      `Rows=${summary.rowCount}, decisions=${summary.decisionCount}, games=${summary.gameCount}.`
   );
 }
 

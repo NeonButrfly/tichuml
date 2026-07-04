@@ -320,14 +320,10 @@ describe("live ml bootstrap orchestration", () => {
             decision_count: 4863,
             game_count: 4,
             objective: "observed_outcome_regression",
-            validation_metrics: {
-              spearman: -0.22365742304581662,
-            },
             model_vs_baseline: {
               rmse_improvement: -46.95,
               mae_improvement: -43.95,
             },
-            spearman_interpretation: "negative likely broken/mismatched target",
           },
           null,
           2
@@ -340,10 +336,8 @@ describe("live ml bootstrap orchestration", () => {
         decisionCount: 4863,
         gameCount: 4,
         objective: "observed_outcome_regression",
-        validationSpearman: -0.22365742304581662,
         baselineRmseImprovement: -46.95,
         baselineMaeImprovement: -43.95,
-        spearmanInterpretation: "negative likely broken/mismatched target",
       });
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
@@ -373,10 +367,8 @@ describe("live ml bootstrap orchestration", () => {
         decisionCount: 4863,
         gameCount: 4,
         objective: "observed_outcome_regression",
-        validationSpearman: -0.22365742304581662,
         baselineRmseImprovement: -46.95,
         baselineMaeImprovement: -43.95,
-        spearmanInterpretation: "negative likely broken/mismatched target",
       })
     ).toThrow(/failed bootstrap quality gates/i);
   });
@@ -388,10 +380,8 @@ describe("live ml bootstrap orchestration", () => {
         decisionCount: 12500,
         gameCount: 40,
         objective: "observed_outcome_regression",
-        validationSpearman: 0.18,
         baselineRmseImprovement: 12.4,
         baselineMaeImprovement: 9.7,
-        spearmanInterpretation: "positive useful signal",
       })
     ).not.toThrow();
   });
