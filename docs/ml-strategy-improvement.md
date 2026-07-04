@@ -132,14 +132,15 @@ Run the scoped post-readiness loop end to end:
 npm run ml:bootstrap -- --run-id <run_id> --game-id-prefix <game_id_prefix> --output-dir training-runs/<run_id>/ml --provider server_heuristic --backend-url http://127.0.0.1:4310 --evaluate-games 100
 ```
 
-`ml:bootstrap` runs scoped `ml:export`, trains against `outcome_reward`, runs
-mirrored `ml:evaluate`, and exits non-zero if the evaluation gate does not
-pass. It now writes a run-local candidate model bundle under the requested
-output directory, builds the server package, starts a temporary localhost
-backend pinned to that candidate model, verifies the evaluation report names
-that candidate model file explicitly, and only then accepts the run. This
-prevents plain bootstrap from accidentally scoring an older long-lived backend
-model that was loaded before the new training step.
+`ml:bootstrap` runs scoped `ml:export`, trains an `imitation_binary` seed model
+from the selected heuristic provider's chosen actions, runs mirrored
+`ml:evaluate`, and exits non-zero if the evaluation gate does not pass. It now
+writes a run-local candidate model bundle under the requested output directory,
+builds the server package, starts a temporary localhost backend pinned to that
+candidate model, verifies the evaluation report names that candidate model file
+explicitly, and only then accepts the run. This prevents plain bootstrap from
+accidentally scoring an older long-lived backend model that was loaded before
+the new training step.
 
 For a short host-side smoke, pass `--evaluate-min-games-for-gate <n>` to keep
 the game-count gate aligned with the smaller evaluation sample:
@@ -218,12 +219,12 @@ Plain self-play `ml:bootstrap` now applies a stricter pre-evaluation training
 gate because the observed-outcome path was repeatedly producing tiny
 four-match bundles that still reached head-to-head evaluation. Before it starts
 the temporary candidate backend, the bootstrap script now requires at least 100
-training decisions across at least 10 games by default, and
-`observed_outcome_regression` runs are rejected outright when the saved
-`training-report.json` already shows worse-than-baseline RMSE/MAE lift. That
-keeps obviously broken or smoke-scale candidates from
-burning another eval loop when the offline report already says the model is not
-usable.
+training decisions across at least 10 games by default, trains the seed as
+`imitation_binary`, and rejects the candidate unless `training-report.json`
+shows at least `0.6` `top1_chosen_action_recall` against the heuristic-chosen
+actions. That keeps obviously broken or smoke-scale candidates from burning
+another eval loop when the offline report already says the seed model is not
+learning the baseline policy it was generated from.
 
 ## Data products
 

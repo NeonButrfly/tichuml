@@ -63,6 +63,7 @@ export type TrainingReportSummary = {
 
 export type TrainingReportQualitySummary = TrainingReportSummary & {
   objective: string | null;
+  top1ChosenActionRecall: number | null;
   baselineRmseImprovement: number | null;
   baselineMaeImprovement: number | null;
 };
@@ -436,6 +437,9 @@ export function readTrainingReportQualitySummary(
     decision_count?: unknown;
     game_count?: unknown;
     objective?: unknown;
+    validation_metrics?: {
+      top1_chosen_action_recall?: unknown;
+    };
     model_vs_baseline?: {
       rmse_improvement?: unknown;
       mae_improvement?: unknown;
@@ -449,6 +453,9 @@ export function readTrainingReportQualitySummary(
     decisionCount,
     gameCount,
     objective: readNonEmptyString(parsed.objective),
+    top1ChosenActionRecall: readFiniteNumber(
+      parsed.validation_metrics?.top1_chosen_action_recall
+    ),
     baselineRmseImprovement: readFiniteNumber(
       parsed.model_vs_baseline?.rmse_improvement
     ),
@@ -514,6 +521,31 @@ export function assertObservedOutcomeTrainingQuality(
 
   throw new Error(
     `Observed-outcome training report failed bootstrap quality gates: ${failures.join(", ")}. ` +
+      `Rows=${summary.rowCount}, decisions=${summary.decisionCount}, games=${summary.gameCount}.`
+  );
+}
+
+export function assertHeuristicImitationTrainingQuality(
+  summary: TrainingReportQualitySummary,
+  config: {
+    minTop1ChosenActionRecall: number;
+  }
+): void {
+  if (summary.objective !== "imitation_binary") {
+    return;
+  }
+
+  const top1Recall = summary.top1ChosenActionRecall;
+  if (
+    top1Recall !== null &&
+    top1Recall >= config.minTop1ChosenActionRecall
+  ) {
+    return;
+  }
+
+  throw new Error(
+    `Heuristic imitation training report failed bootstrap quality gates: ` +
+      `top1_chosen_action_recall=${top1Recall ?? "n/a"} < required ${config.minTop1ChosenActionRecall}. ` +
       `Rows=${summary.rowCount}, decisions=${summary.decisionCount}, games=${summary.gameCount}.`
   );
 }

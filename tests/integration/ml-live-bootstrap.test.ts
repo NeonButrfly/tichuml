@@ -7,6 +7,7 @@ import {
   assertObservedOutcomeTrainingQuality,
   assertCandidateArtifactsExist,
   assertCandidateBackendPortAvailable,
+  assertHeuristicImitationTrainingQuality,
   assertTrainingDecisionQuality,
   buildLiveMlBootstrapPlan,
   overrideEvaluationBackendUrl,
@@ -320,6 +321,9 @@ describe("live ml bootstrap orchestration", () => {
             decision_count: 4863,
             game_count: 4,
             objective: "observed_outcome_regression",
+            validation_metrics: {
+              top1_chosen_action_recall: 0.82,
+            },
             model_vs_baseline: {
               rmse_improvement: -46.95,
               mae_improvement: -43.95,
@@ -336,6 +340,7 @@ describe("live ml bootstrap orchestration", () => {
         decisionCount: 4863,
         gameCount: 4,
         objective: "observed_outcome_regression",
+        top1ChosenActionRecall: 0.82,
         baselineRmseImprovement: -46.95,
         baselineMaeImprovement: -43.95,
       });
@@ -371,6 +376,40 @@ describe("live ml bootstrap orchestration", () => {
         baselineMaeImprovement: -43.95,
       })
     ).toThrow(/failed bootstrap quality gates/i);
+  });
+
+  it("rejects heuristic imitation reports with weak top1 chosen-action recall", () => {
+    expect(() =>
+      assertHeuristicImitationTrainingQuality(
+        {
+          rowCount: 12000,
+          decisionCount: 1800,
+          gameCount: 40,
+          objective: "imitation_binary",
+          top1ChosenActionRecall: 0.38,
+          baselineRmseImprovement: null,
+          baselineMaeImprovement: null,
+        },
+        { minTop1ChosenActionRecall: 0.6 }
+      )
+    ).toThrow(/heuristic imitation training report failed/i);
+  });
+
+  it("allows heuristic imitation reports with baseline-adequate recall", () => {
+    expect(() =>
+      assertHeuristicImitationTrainingQuality(
+        {
+          rowCount: 12000,
+          decisionCount: 1800,
+          gameCount: 40,
+          objective: "imitation_binary",
+          top1ChosenActionRecall: 0.74,
+          baselineRmseImprovement: null,
+          baselineMaeImprovement: null,
+        },
+        { minTop1ChosenActionRecall: 0.6 }
+      )
+    ).not.toThrow();
   });
 
   it("allows observed-outcome reports with positive ranking and baseline lift", () => {

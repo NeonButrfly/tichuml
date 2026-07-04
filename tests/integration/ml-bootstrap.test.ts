@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_BOOTSTRAP_MIN_HEURISTIC_TOP1_RECALL,
   DEFAULT_BOOTSTRAP_MIN_TRAINING_DECISIONS,
   DEFAULT_BOOTSTRAP_MIN_TRAINING_GAMES,
   buildMlBootstrapPlan,
@@ -52,9 +53,7 @@ describe("ml bootstrap orchestration", () => {
       "--phase",
       "trick_play",
       "--objective",
-      "observed_outcome_regression",
-      "--target-column",
-      "outcome_reward",
+      "imitation_binary",
       "--output",
       plan.modelPath,
       "--meta-output",
@@ -245,5 +244,6 @@ describe("ml bootstrap orchestration", () => {
   it("keeps bootstrap quality floors above tiny smoke-scale training sets", () => {
     expect(DEFAULT_BOOTSTRAP_MIN_TRAINING_DECISIONS).toBeGreaterThanOrEqual(100);
     expect(DEFAULT_BOOTSTRAP_MIN_TRAINING_GAMES).toBeGreaterThanOrEqual(10);
+    expect(DEFAULT_BOOTSTRAP_MIN_HEURISTIC_TOP1_RECALL).toBeGreaterThanOrEqual(0.6);
   });
 });

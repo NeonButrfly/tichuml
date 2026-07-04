@@ -3,6 +3,7 @@ import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { parseEnvFile } from "../apps/server/src/config/env-file.ts";
 import {
+  assertHeuristicImitationTrainingQuality,
   assertObservedOutcomeTrainingQuality,
   assertTrainingDecisionQuality,
   assertCandidateArtifactsExist,
@@ -46,6 +47,7 @@ export type MlBootstrapPlan = {
 
 export const DEFAULT_BOOTSTRAP_MIN_TRAINING_DECISIONS = 100;
 export const DEFAULT_BOOTSTRAP_MIN_TRAINING_GAMES = 10;
+export const DEFAULT_BOOTSTRAP_MIN_HEURISTIC_TOP1_RECALL = 0.6;
 
 const TRAINING_DATABASE_ENV_KEYS = [
   "TRAINING_DATABASE_URL",
@@ -72,6 +74,15 @@ function readNumberArg(argv: string[], flag: string, fallback: number): number {
     return fallback;
   }
   const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function readFloatArg(argv: string[], flag: string, fallback: number): number {
+  const value = readArg(argv, flag);
+  if (!value) {
+    return fallback;
+  }
+  const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
@@ -168,9 +179,7 @@ export function buildMlBootstrapPlan(
           "--phase",
           "trick_play",
           "--objective",
-          "observed_outcome_regression",
-          "--target-column",
-          "outcome_reward",
+          "imitation_binary",
           "--output",
           modelPath,
           "--meta-output",
@@ -432,6 +441,11 @@ async function main(): Promise<void> {
     "--min-training-games-for-evaluate",
     DEFAULT_BOOTSTRAP_MIN_TRAINING_GAMES
   );
+  const minHeuristicTop1Recall = readFloatArg(
+    argv,
+    "--min-heuristic-top1-recall",
+    DEFAULT_BOOTSTRAP_MIN_HEURISTIC_TOP1_RECALL
+  );
   const commandEnv = resolveMlBootstrapCommandEnv(process.env);
   let runtimePlan = buildMlBootstrapPlan({
     runId: readArg(argv, "--run-id"),
@@ -468,6 +482,9 @@ async function main(): Promise<void> {
         assertTrainingDecisionQuality(trainingSummary, {
           minDecisionCount: minTrainingDecisionCountForEvaluate,
           minGameCount: minTrainingGameCountForEvaluate
+        });
+        assertHeuristicImitationTrainingQuality(trainingSummary, {
+          minTop1ChosenActionRecall: minHeuristicTop1Recall
         });
         assertObservedOutcomeTrainingQuality(trainingSummary);
         continue;

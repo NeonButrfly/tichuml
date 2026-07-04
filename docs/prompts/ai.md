@@ -14,21 +14,21 @@ Use this file to preserve AI and bot-behavior prompt intent and link it to GitHu
 
 ## Entries
 
-### 2026-07-03 - Plain self-play bootstrap must reject tiny or offline-bad observed-outcome candidates before evaluation
+### 2026-07-03 - Plain self-play bootstrap must seed from heuristic imitation before evaluation
 
 - Prompt Signal: After the large training loop still kept producing terrible
   LightGBM results, the follow-up request pushed to stop circling, determine
-  why training was not working, and fix the pipeline instead of launching
-  another misleading evaluation.
+  why training was not working, and make the generated training data at least
+  baseline adequate before launching another misleading evaluation.
 - Interpreted Requirement: Issue
   [#124](https://github.com/NeonButrfly/tichuml/issues/124) tracks hardening
-  plain `ml:bootstrap` so self-play observed-outcome candidates cannot reach
-  head-to-head evaluation when the scoped training bundle is obviously too
-  small or the saved offline metrics already show the model is worse than
-  trivial baselines. The bootstrap flow must read `training-report.json` after
-  `ml:train`, require a materially larger training slice than the live smoke
-  gate, and reject negative-lift `observed_outcome_regression` runs before
-  starting the temporary candidate backend.
+  plain `ml:bootstrap` so self-play heuristic bootstrap candidates are first
+  trained as `imitation_binary` seed models against the selected heuristic
+  provider's choices, not weak observed-outcome labels. The bootstrap flow must
+  read `training-report.json` after `ml:train`, require a materially larger
+  training slice than the live smoke gate, and reject imitation seeds whose
+  top-1 chosen-action recall is below the configured baseline-adequacy floor
+  before starting the temporary candidate backend.
 - Affected Systems: `scripts/ml-bootstrap.ts`,
   `scripts/ml-live-bootstrap.ts`,
   `tests/integration/ml-bootstrap.test.ts`,
