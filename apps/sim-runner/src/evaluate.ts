@@ -16,6 +16,8 @@ type ParsedArgs = {
   seed: string;
   telemetryEnabled: boolean;
   backendBaseUrl?: string;
+  modelPathOverride?: string;
+  modelMetaPathOverride?: string;
   decisionTimeoutMs: number;
   quiet: boolean;
   progress: boolean;
@@ -375,6 +377,18 @@ export function parseArgs(argv: string[]): ParsedArgs {
       case "--backend-url":
         if (next) {
           parsed.backendBaseUrl = next;
+        }
+        index += 1;
+        break;
+      case "--model-path":
+        if (next) {
+          parsed.modelPathOverride = next;
+        }
+        index += 1;
+        break;
+      case "--model-meta-path":
+        if (next) {
+          parsed.modelMetaPathOverride = next;
         }
         index += 1;
         break;
@@ -1415,7 +1429,10 @@ async function main(): Promise<void> {
       (provider): provider is ProviderMode => provider !== undefined
     )
   ].includes("lightgbm_model");
-  const modelMetadata = readModelMetadata(repoRoot, usesLightgbm);
+  const modelMetadata = readModelMetadata(repoRoot, usesLightgbm, {
+    modelPathOverride: args.modelPathOverride,
+    modelMetaPathOverride: args.modelMetaPathOverride
+  });
   const reportTimestamp = new Date().toISOString();
   const primaryLeg = comparisonRuns[0];
   if (!primaryLeg) {

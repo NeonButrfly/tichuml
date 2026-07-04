@@ -229,6 +229,10 @@ export function buildMlBootstrapPlan(
           "5000",
           "--backend-url",
           candidateBackendUrl,
+          "--model-path",
+          modelPath,
+          "--model-meta-path",
+          modelMetaPath,
           "--output",
           evaluationReportPath
         ]
@@ -245,20 +249,28 @@ export function resolveMlBootstrapCommandEnv(
     ...parseEnvFile(path.join(repoRoot, ".env")),
     ...parseEnvFile(path.join(repoRoot, "apps/server/.env"))
   };
-  const resolvedEnv: NodeJS.ProcessEnv = {};
+  let resolvedDatabaseUrl: string | null = null;
   for (const key of TRAINING_DATABASE_ENV_KEYS) {
     const explicitValue = env[key];
     if (typeof explicitValue === "string" && explicitValue.trim().length > 0) {
-      resolvedEnv[key] = explicitValue;
+      resolvedDatabaseUrl = explicitValue.trim();
       break;
     }
     const fileValue = diskEnv[key];
     if (typeof fileValue === "string" && fileValue.trim().length > 0) {
-      resolvedEnv[key] = fileValue;
+      resolvedDatabaseUrl = fileValue.trim();
       break;
     }
   }
-  return resolvedEnv;
+  if (!resolvedDatabaseUrl) {
+    return {};
+  }
+  return {
+    TRAINING_DATABASE_URL: resolvedDatabaseUrl,
+    TICHU_TRAINING_DATABASE_URL: resolvedDatabaseUrl,
+    DATABASE_URL: resolvedDatabaseUrl,
+    DATABASE_URL_OVERRIDE_ENABLED: "true"
+  };
 }
 
 function runCommand(
@@ -520,7 +532,11 @@ async function main(): Promise<void> {
           modelMetaPath: path.resolve(runtimePlan.modelMetaPath)
         });
         await waitForHealth(`${runtimePlan.candidateBackendUrl}/health`);
-        await runCommand(evaluationStep.command, evaluationStep.args, commandEnv);
+        await runCommand(evaluationStep.command, evaluationStep.args, {
+          ...commandEnv,
+          LIGHTGBM_MODEL_PATH: path.resolve(runtimePlan.modelPath),
+          LIGHTGBM_MODEL_META_PATH: path.resolve(runtimePlan.modelMetaPath)
+        });
         const evaluationSummary = readEvaluationSummary(
           runtimePlan.evaluationReportPath
         );

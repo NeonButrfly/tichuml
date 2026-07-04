@@ -315,6 +315,22 @@ describe("ml evaluation helpers", () => {
     expect(parseArgs(["--min-lightgbm-service-rate", "0.2"]).minLightgbmServiceRate).toBe(0.2);
   });
 
+  it("accepts explicit candidate model path overrides from CLI args", () => {
+    const parsed = parseArgs([
+      "--model-path",
+      "training-runs/smoke/ml/lightgbm_action_model.txt",
+      "--model-meta-path",
+      "training-runs/smoke/ml/lightgbm_action_model.meta.json"
+    ]);
+
+    expect(parsed.modelPathOverride).toBe(
+      "training-runs/smoke/ml/lightgbm_action_model.txt"
+    );
+    expect(parsed.modelMetaPathOverride).toBe(
+      "training-runs/smoke/ml/lightgbm_action_model.meta.json"
+    );
+  });
+
   it("writes default evaluation reports under eval/results instead of tracked artifacts", () => {
     const resolved = resolveEvaluationOutputPaths(
       "C:/tichu/tichuml",

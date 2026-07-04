@@ -91,6 +91,10 @@ describe("ml bootstrap orchestration", () => {
       "5000",
       "--backend-url",
       "http://127.0.0.1:4312",
+      "--model-path",
+      plan.modelPath,
+      "--model-meta-path",
+      plan.modelMetaPath,
       "--output",
       plan.evaluationReportPath
     ]);
@@ -198,6 +202,10 @@ describe("ml bootstrap orchestration", () => {
       "5000",
       "--backend-url",
       "http://127.0.0.1:4312",
+      "--model-path",
+      plan.modelPath,
+      "--model-meta-path",
+      plan.modelMetaPath,
       "--output",
       plan.evaluationReportPath
     ]);
@@ -211,7 +219,10 @@ describe("ml bootstrap orchestration", () => {
         TICHU_TRAINING_DATABASE_URL: ""
       })
     ).toEqual({
-      DATABASE_URL: "postgres://db"
+      TRAINING_DATABASE_URL: "postgres://db",
+      TICHU_TRAINING_DATABASE_URL: "postgres://db",
+      DATABASE_URL: "postgres://db",
+      DATABASE_URL_OVERRIDE_ENABLED: "true"
     });
 
     expect(
@@ -221,7 +232,10 @@ describe("ml bootstrap orchestration", () => {
         TICHU_TRAINING_DATABASE_URL: ""
       })
     ).toEqual({
-      TRAINING_DATABASE_URL: "postgres://training-db"
+      TRAINING_DATABASE_URL: "postgres://training-db",
+      TICHU_TRAINING_DATABASE_URL: "postgres://training-db",
+      DATABASE_URL: "postgres://training-db",
+      DATABASE_URL_OVERRIDE_ENABLED: "true"
     });
   });
 
