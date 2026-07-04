@@ -478,6 +478,21 @@ describe("ml export and training regressions", () => {
     expect(result.stdout.trim()).toBe("candidate_rows");
   });
 
+  it("switches imitation exports onto candidate-action rows when requested", () => {
+    const result = runPythonSnippet(
+      [
+        "from pathlib import Path",
+        "import sys",
+        "sys.path.insert(0, str(Path('ml').resolve()))",
+      "from export_training_rows import resolve_export_mode",
+      "print(resolve_export_mode('imitation', False, False, True))",
+      ].join("; ")
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout.trim()).toBe("candidate_rows");
+  });
+
   it("adds gameplay source filtering to ml export queries", () => {
     const result = runPythonSnippet(
       [

@@ -1197,8 +1197,9 @@ def resolve_export_mode(
     label_mode: str,
     include_rollouts: bool,
     has_rollout_input: bool,
+    include_candidates: bool = False,
 ) -> str:
-    if label_mode == "rollout" or include_rollouts or has_rollout_input:
+    if include_candidates or label_mode == "rollout" or include_rollouts or has_rollout_input:
         return "candidate_rows"
     return "chosen_decision_rows"
 
@@ -2337,6 +2338,7 @@ def main() -> None:
     parser.add_argument("--no-include-outcomes", dest="include_outcomes", action="store_false")
     parser.add_argument("--include-rollouts", dest="include_rollouts", action="store_true", default=False)
     parser.add_argument("--no-include-rollouts", dest="include_rollouts", action="store_false")
+    parser.add_argument("--include-candidates", action="store_true", default=False)
     parser.add_argument("--rollout-input", default=None)
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT))
     parser.add_argument("--output-dir", default=None)
@@ -2398,6 +2400,7 @@ def main() -> None:
         args.label_mode,
         effective_include_rollouts,
         bool(args.rollout_input),
+        bool(args.include_candidates),
     )
     if args.label_mode == "rollout" and not args.rollout_input:
         raise ValueError(

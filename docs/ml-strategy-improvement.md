@@ -132,15 +132,16 @@ Run the scoped post-readiness loop end to end:
 npm run ml:bootstrap -- --run-id <run_id> --game-id-prefix <game_id_prefix> --output-dir training-runs/<run_id>/ml --provider server_heuristic --backend-url http://127.0.0.1:4310 --evaluate-games 100
 ```
 
-`ml:bootstrap` runs scoped `ml:export`, trains an `imitation_binary` seed model
-from the selected heuristic provider's chosen actions, runs mirrored
-`ml:evaluate`, and exits non-zero if the evaluation gate does not pass. It now
-writes a run-local candidate model bundle under the requested output directory,
-builds the server package, starts a temporary localhost backend pinned to that
-candidate model, verifies the evaluation report names that candidate model file
-explicitly, and only then accepts the run. This prevents plain bootstrap from
-accidentally scoring an older long-lived backend model that was loaded before
-the new training step.
+`ml:bootstrap` runs scoped `ml:export` with `--label-mode imitation` and
+`--include-candidates`, trains an `imitation_binary` seed model from the
+selected heuristic provider's chosen actions, runs mirrored `ml:evaluate`, and
+exits non-zero if the evaluation gate does not pass. It now writes a run-local
+candidate model bundle under the requested output directory, builds the server
+package, starts a temporary localhost backend pinned to that candidate model,
+verifies the evaluation report names that candidate model file explicitly, and
+only then accepts the run. This prevents plain bootstrap from accidentally
+scoring an older long-lived backend model that was loaded before the new
+training step.
 
 For a short host-side smoke, pass `--evaluate-min-games-for-gate <n>` to keep
 the game-count gate aligned with the smaller evaluation sample:

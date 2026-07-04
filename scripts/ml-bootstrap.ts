@@ -142,6 +142,9 @@ export function buildMlBootstrapPlan(
     gameIdPrefix,
     "--output-dir",
     outputDir,
+    "--label-mode",
+    "imitation",
+    "--include-candidates",
     "--provider",
     options.provider
   ];

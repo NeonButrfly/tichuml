@@ -39,6 +39,9 @@ describe("ml bootstrap orchestration", () => {
       "selfplay-training-20260522-135206-7ecc9aa3",
       "--output-dir",
       "training-runs/training-20260522-135206-7ecc9aa3/ml",
+      "--label-mode",
+      "imitation",
+      "--include-candidates",
       "--provider",
       "server_heuristic"
     ]);
@@ -149,6 +152,9 @@ describe("ml bootstrap orchestration", () => {
       "selfplay-self-play-game-",
       "--output-dir",
       "training-runs/clean-start-smoke/ml",
+      "--label-mode",
+      "imitation",
+      "--include-candidates",
       "--provider",
       "server_heuristic"
     ]);
