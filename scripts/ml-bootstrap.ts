@@ -223,6 +223,8 @@ export function buildMlBootstrapPlan(
           options.provider,
           "--mirror-seats",
           "true",
+          "--skip-heuristic-sanity",
+          "true",
           "--telemetry",
           "false",
           "--decision-timeout-ms",

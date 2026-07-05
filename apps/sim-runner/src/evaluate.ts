@@ -18,6 +18,7 @@ type ParsedArgs = {
   backendBaseUrl?: string;
   modelPathOverride?: string;
   modelMetaPathOverride?: string;
+  skipHeuristicSanity: boolean;
   decisionTimeoutMs: number;
   quiet: boolean;
   progress: boolean;
@@ -308,6 +309,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     games: 100,
     seed: "evaluation",
     telemetryEnabled: true,
+    skipHeuristicSanity: false,
     decisionTimeoutMs: 2000,
     quiet: false,
     progress: true,
@@ -373,6 +375,12 @@ export function parseArgs(argv: string[]): ParsedArgs {
       case "--telemetry":
         parsed.telemetryEnabled = parseBoolean(next, true);
         index += 1;
+        break;
+      case "--skip-heuristic-sanity":
+        parsed.skipHeuristicSanity = parseBoolean(next, true);
+        if (next && !next.startsWith("--")) {
+          index += 1;
+        }
         break;
       case "--backend-url":
         if (next) {
@@ -517,16 +525,17 @@ function buildSeatProvidersForTeams(
   };
 }
 
-function buildLegPlans(args: ParsedArgs): EvaluationLegPlan[] {
+export function buildLegPlans(args: ParsedArgs): EvaluationLegPlan[] {
   const plans: EvaluationLegPlan[] = [];
   const comparisonSeatProviders = cloneSeatProviders(args.seatProviders);
 
   const includesDistinctProviders = args.nsProvider !== args.ewProvider;
-  if (
-    includesDistinctProviders ||
-    args.requireNoFallbackIncrease ||
-    args.requireNoIllegalActions
-  ) {
+  const needsHeuristicSanity =
+    !args.skipHeuristicSanity &&
+    (includesDistinctProviders ||
+      args.requireNoFallbackIncrease ||
+      args.requireNoIllegalActions);
+  if (needsHeuristicSanity) {
     plans.push({
       name: "heuristic_sanity",
       seed: `${args.seed}:heuristic-baseline`,

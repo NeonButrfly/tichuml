@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 import {
   buildLatestSummary,
+  buildLegPlans,
   buildProviderComparisonSummary,
   evaluateImprovementGate,
   parseArgs,
@@ -329,6 +330,24 @@ describe("ml evaluation helpers", () => {
     expect(parsed.modelMetaPathOverride).toBe(
       "training-runs/smoke/ml/lightgbm_action_model.meta.json"
     );
+  });
+
+  it("skips the heuristic sanity leg when explicitly requested", () => {
+    const parsed = parseArgs([
+      "--ns-provider",
+      "lightgbm_model",
+      "--ew-provider",
+      "server_heuristic",
+      "--mirror-seats",
+      "true",
+      "--skip-heuristic-sanity",
+      "true"
+    ]);
+
+    expect(buildLegPlans(parsed).map((leg) => leg.name)).toEqual([
+      "primary",
+      "mirror"
+    ]);
   });
 
   it("writes default evaluation reports under eval/results instead of tracked artifacts", () => {
