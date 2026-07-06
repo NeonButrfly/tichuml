@@ -1,3 +1,8 @@
+import {
+  getAltTablePassingLaneLayout,
+  projectAltTablePassingLaneToDesignRect
+} from "../alt-table-3d/altTable3DGeometry";
+
 export type Seat = "north" | "east" | "south" | "west";
 export type SeatVisualPosition = "top" | "right" | "bottom" | "left";
 
@@ -185,27 +190,30 @@ function centerFromRightEdge(rightEdge: number, width: number): number {
   return rightEdge - width / 2;
 }
 
-const LANDSCAPE_PASS_W = 128;
-const LANDSCAPE_PASS_H = 72;
-const PORTRAIT_PASS_W = 72;
-const PORTRAIT_PASS_H = 128;
-
-const NORTH_TOP_EDGE = 162;
-const SOUTH_BOTTOM_EDGE = 708;
-const WEST_LEFT_EDGE = 256;
-const EAST_RIGHT_EDGE = 1280;
-
 export function makePassingAnchors(): PassAnchor[] {
+  const laneLayout = getAltTablePassingLaneLayout();
+  const laneByKey = new Map(
+    laneLayout.map((lane) => [`${lane.seat}:${lane.target}`, lane] as const)
+  );
+  const laneRectByKey = new Map(
+    laneLayout.map((lane) => [
+      `${lane.seat}:${lane.target}`,
+      projectAltTablePassingLaneToDesignRect(lane)
+    ] as const)
+  );
+  const lane = (key: string) => laneByKey.get(key)!;
+  const laneRect = (key: string) => laneRectByKey.get(key)!;
+
   return [
     {
       id: "north_pass_left",
       seat: "north",
       target: "left",
-      centerPx: { x: 612, y: centerFromTopEdge(NORTH_TOP_EDGE, LANDSCAPE_PASS_H) },
-      wPx: LANDSCAPE_PASS_W,
-      hPx: LANDSCAPE_PASS_H,
+      centerPx: laneRect("north:east").centerPx,
+      wPx: laneRect("north:east").wPx,
+      hPx: laneRect("north:east").hPx,
       orientation: "landscape",
-      arrowDirection: "left",
+      arrowDirection: lane("north:east").arrowDir.x < 0 ? "left" : "right",
       assignedCardRotationDeg: 0,
       zIndex: 220
     },
@@ -213,11 +221,11 @@ export function makePassingAnchors(): PassAnchor[] {
       id: "north_pass_across",
       seat: "north",
       target: "across",
-      centerPx: { x: 768, y: centerFromTopEdge(NORTH_TOP_EDGE, PORTRAIT_PASS_H) },
-      wPx: PORTRAIT_PASS_W,
-      hPx: PORTRAIT_PASS_H,
+      centerPx: laneRect("north:south").centerPx,
+      wPx: laneRect("north:south").wPx,
+      hPx: laneRect("north:south").hPx,
       orientation: "portrait",
-      arrowDirection: "south",
+      arrowDirection: lane("north:south").arrowDir.z > 0 ? "south" : "north",
       assignedCardRotationDeg: 0,
       zIndex: 220
     },
@@ -225,11 +233,11 @@ export function makePassingAnchors(): PassAnchor[] {
       id: "north_pass_right",
       seat: "north",
       target: "right",
-      centerPx: { x: 924, y: centerFromTopEdge(NORTH_TOP_EDGE, LANDSCAPE_PASS_H) },
-      wPx: LANDSCAPE_PASS_W,
-      hPx: LANDSCAPE_PASS_H,
+      centerPx: laneRect("north:west").centerPx,
+      wPx: laneRect("north:west").wPx,
+      hPx: laneRect("north:west").hPx,
       orientation: "landscape",
-      arrowDirection: "right",
+      arrowDirection: lane("north:west").arrowDir.x < 0 ? "left" : "right",
       assignedCardRotationDeg: 0,
       zIndex: 220
     },
@@ -237,11 +245,11 @@ export function makePassingAnchors(): PassAnchor[] {
       id: "south_pass_left",
       seat: "south",
       target: "left",
-      centerPx: { x: 612, y: centerFromBottomEdge(SOUTH_BOTTOM_EDGE, LANDSCAPE_PASS_H) },
-      wPx: LANDSCAPE_PASS_W,
-      hPx: LANDSCAPE_PASS_H,
+      centerPx: laneRect("south:west").centerPx,
+      wPx: laneRect("south:west").wPx,
+      hPx: laneRect("south:west").hPx,
       orientation: "landscape",
-      arrowDirection: "left",
+      arrowDirection: lane("south:west").arrowDir.x < 0 ? "left" : "right",
       assignedCardRotationDeg: 0,
       zIndex: 220
     },
@@ -249,11 +257,11 @@ export function makePassingAnchors(): PassAnchor[] {
       id: "south_pass_across",
       seat: "south",
       target: "across",
-      centerPx: { x: 768, y: centerFromBottomEdge(SOUTH_BOTTOM_EDGE, PORTRAIT_PASS_H) },
-      wPx: PORTRAIT_PASS_W,
-      hPx: PORTRAIT_PASS_H,
+      centerPx: laneRect("south:north").centerPx,
+      wPx: laneRect("south:north").wPx,
+      hPx: laneRect("south:north").hPx,
       orientation: "portrait",
-      arrowDirection: "north",
+      arrowDirection: lane("south:north").arrowDir.z > 0 ? "south" : "north",
       assignedCardRotationDeg: 0,
       zIndex: 220
     },
@@ -261,11 +269,11 @@ export function makePassingAnchors(): PassAnchor[] {
       id: "south_pass_right",
       seat: "south",
       target: "right",
-      centerPx: { x: 924, y: centerFromBottomEdge(SOUTH_BOTTOM_EDGE, LANDSCAPE_PASS_H) },
-      wPx: LANDSCAPE_PASS_W,
-      hPx: LANDSCAPE_PASS_H,
+      centerPx: laneRect("south:east").centerPx,
+      wPx: laneRect("south:east").wPx,
+      hPx: laneRect("south:east").hPx,
       orientation: "landscape",
-      arrowDirection: "right",
+      arrowDirection: lane("south:east").arrowDir.x < 0 ? "left" : "right",
       assignedCardRotationDeg: 0,
       zIndex: 220
     },
@@ -273,11 +281,11 @@ export function makePassingAnchors(): PassAnchor[] {
       id: "west_pass_north",
       seat: "west",
       target: "north",
-      centerPx: { x: centerFromLeftEdge(WEST_LEFT_EDGE, PORTRAIT_PASS_W), y: 292 },
-      wPx: PORTRAIT_PASS_W,
-      hPx: PORTRAIT_PASS_H,
+      centerPx: laneRect("west:north").centerPx,
+      wPx: laneRect("west:north").wPx,
+      hPx: laneRect("west:north").hPx,
       orientation: "portrait",
-      arrowDirection: "north",
+      arrowDirection: lane("west:north").arrowDir.z > 0 ? "south" : "north",
       assignedCardRotationDeg: -90,
       zIndex: 220
     },
@@ -285,11 +293,11 @@ export function makePassingAnchors(): PassAnchor[] {
       id: "west_pass_across",
       seat: "west",
       target: "across",
-      centerPx: { x: centerFromLeftEdge(WEST_LEFT_EDGE, LANDSCAPE_PASS_W), y: 430 },
-      wPx: LANDSCAPE_PASS_W,
-      hPx: LANDSCAPE_PASS_H,
+      centerPx: laneRect("west:east").centerPx,
+      wPx: laneRect("west:east").wPx,
+      hPx: laneRect("west:east").hPx,
       orientation: "landscape",
-      arrowDirection: "east",
+      arrowDirection: lane("west:east").arrowDir.x < 0 ? "left" : "east",
       assignedCardRotationDeg: 0,
       zIndex: 220
     },
@@ -297,11 +305,11 @@ export function makePassingAnchors(): PassAnchor[] {
       id: "west_pass_south",
       seat: "west",
       target: "south",
-      centerPx: { x: centerFromLeftEdge(WEST_LEFT_EDGE, PORTRAIT_PASS_W), y: 568 },
-      wPx: PORTRAIT_PASS_W,
-      hPx: PORTRAIT_PASS_H,
+      centerPx: laneRect("west:south").centerPx,
+      wPx: laneRect("west:south").wPx,
+      hPx: laneRect("west:south").hPx,
       orientation: "portrait",
-      arrowDirection: "south",
+      arrowDirection: lane("west:south").arrowDir.z > 0 ? "south" : "north",
       assignedCardRotationDeg: 90,
       zIndex: 220
     },
@@ -309,11 +317,11 @@ export function makePassingAnchors(): PassAnchor[] {
       id: "east_pass_north",
       seat: "east",
       target: "north",
-      centerPx: { x: centerFromRightEdge(EAST_RIGHT_EDGE, PORTRAIT_PASS_W), y: 292 },
-      wPx: PORTRAIT_PASS_W,
-      hPx: PORTRAIT_PASS_H,
+      centerPx: laneRect("east:north").centerPx,
+      wPx: laneRect("east:north").wPx,
+      hPx: laneRect("east:north").hPx,
       orientation: "portrait",
-      arrowDirection: "north",
+      arrowDirection: lane("east:north").arrowDir.z > 0 ? "south" : "north",
       assignedCardRotationDeg: 90,
       zIndex: 220
     },
@@ -321,11 +329,11 @@ export function makePassingAnchors(): PassAnchor[] {
       id: "east_pass_across",
       seat: "east",
       target: "across",
-      centerPx: { x: centerFromRightEdge(EAST_RIGHT_EDGE, LANDSCAPE_PASS_W), y: 430 },
-      wPx: LANDSCAPE_PASS_W,
-      hPx: LANDSCAPE_PASS_H,
+      centerPx: laneRect("east:west").centerPx,
+      wPx: laneRect("east:west").wPx,
+      hPx: laneRect("east:west").hPx,
       orientation: "landscape",
-      arrowDirection: "west",
+      arrowDirection: lane("east:west").arrowDir.x < 0 ? "west" : "right",
       assignedCardRotationDeg: 0,
       zIndex: 220
     },
@@ -333,11 +341,11 @@ export function makePassingAnchors(): PassAnchor[] {
       id: "east_pass_south",
       seat: "east",
       target: "south",
-      centerPx: { x: centerFromRightEdge(EAST_RIGHT_EDGE, PORTRAIT_PASS_W), y: 568 },
-      wPx: PORTRAIT_PASS_W,
-      hPx: PORTRAIT_PASS_H,
+      centerPx: laneRect("east:south").centerPx,
+      wPx: laneRect("east:south").wPx,
+      hPx: laneRect("east:south").hPx,
       orientation: "portrait",
-      arrowDirection: "south",
+      arrowDirection: lane("east:south").arrowDir.z > 0 ? "south" : "north",
       assignedCardRotationDeg: -90,
       zIndex: 220
     }

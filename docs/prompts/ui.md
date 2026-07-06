@@ -1310,8 +1310,11 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
   seat-to-center vectors and expose passing-lane/action/label layout helpers
   that match the prompt before broader live-route integration.
 - Affected Systems: `apps/web/src/alt-table-3d/AltTableCards3D.tsx`,
+  `apps/web/src/alt-table-3d/altTable3DGeometry.ts`,
   `apps/web/src/alt-table-3d/AltTableScene.tsx`,
+  `apps/web/src/altTableFresh/freshTableMath.ts`,
   `tests/integration/alt-canonical-3d-scene-geometry.test.ts`,
+  `tests/integration/fresh-alt-pass-anchor-projection.test.ts`,
   `tests/integration/alt-hidden-hand-geometry.test.ts`,
   `tests/integration/alt-table-inset-config.test.ts`,
   `tests/integration/alt-front-rail-visibility.test.ts`.

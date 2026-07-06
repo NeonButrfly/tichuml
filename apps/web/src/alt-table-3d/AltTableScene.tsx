@@ -16,6 +16,14 @@ import {
   type HiddenHandCard
 } from "./AltTableCards3D";
 import {
+  getAltTableActionButtonLayout,
+  getAltTableCameraConfig,
+  getAltTablePassingLaneLayout,
+  getAltTableSeatLabelLayout,
+  getAltTableSouthHandLayout,
+  type AltTablePassingLane3D
+} from "./altTable3DGeometry";
+import {
   TV7_TABLE_PLATE_SRC,
   TV7_TABLE_REFERENCE_SRC
 } from "./tv7-runtime";
@@ -426,71 +434,13 @@ export function getAltTableInsetConfig() {
   } as const;
 }
 
-type AltTableCompassSeat = "north" | "south" | "west" | "east";
-
-export type AltTablePassingLane3D = {
-  seat: AltTableCompassSeat;
-  target: AltTableCompassSeat;
-  label: string;
-  center: { x: number; y: number; z: number };
-  width: number;
-  depth: number;
-  arrowDir: { x: -1 | 0 | 1; z: -1 | 0 | 1 };
-};
-
-export function getAltTablePassingLaneLayout(): AltTablePassingLane3D[] {
-  const y = 0.012;
-  const horizontal = { width: 1.45, depth: 0.55 };
-  const vertical = { width: 0.7, depth: 1.05 };
-
-  return [
-    { seat: "north", target: "east", label: "PASS EAST", center: { x: -1.8, y, z: -3 }, ...horizontal, arrowDir: { x: -1, z: 0 } },
-    { seat: "north", target: "south", label: "PASS SOUTH", center: { x: 0, y, z: -3 }, ...vertical, arrowDir: { x: 0, z: 1 } },
-    { seat: "north", target: "west", label: "PASS WEST", center: { x: 1.8, y, z: -3 }, ...horizontal, arrowDir: { x: 1, z: 0 } },
-    { seat: "south", target: "west", label: "PASS WEST", center: { x: -1.8, y, z: 2.65 }, ...horizontal, arrowDir: { x: -1, z: 0 } },
-    { seat: "south", target: "north", label: "PASS NORTH", center: { x: 0, y, z: 2.65 }, ...vertical, arrowDir: { x: 0, z: -1 } },
-    { seat: "south", target: "east", label: "PASS EAST", center: { x: 1.8, y, z: 2.65 }, ...horizontal, arrowDir: { x: 1, z: 0 } },
-    { seat: "west", target: "north", label: "PASS NORTH", center: { x: -5.8, y, z: -1.7 }, ...vertical, arrowDir: { x: 0, z: -1 } },
-    { seat: "west", target: "east", label: "PASS EAST", center: { x: -5.8, y, z: 0 }, ...horizontal, arrowDir: { x: 1, z: 0 } },
-    { seat: "west", target: "south", label: "PASS SOUTH", center: { x: -5.8, y, z: 1.7 }, ...vertical, arrowDir: { x: 0, z: 1 } },
-    { seat: "east", target: "north", label: "PASS NORTH", center: { x: 5.8, y, z: -1.7 }, ...vertical, arrowDir: { x: 0, z: -1 } },
-    { seat: "east", target: "west", label: "PASS WEST", center: { x: 5.8, y, z: 0 }, ...horizontal, arrowDir: { x: -1, z: 0 } },
-    { seat: "east", target: "south", label: "PASS SOUTH", center: { x: 5.8, y, z: 1.7 }, ...vertical, arrowDir: { x: 0, z: 1 } }
-  ];
-}
-
-export function getAltTableSouthHandLayout() {
-  return {
-    center: { x: 0, y: 0.018, z: 3.65 },
-    cardTiltRadians: -Math.PI * 0.44
-  } as const;
-}
-
-export function getAltTableActionButtonLayout() {
-  return {
-    center: { x: 0, y: 0.024, z: 4.55 },
-    labels: ["PASS", "TICHU", "GRAND TICHU"] as const
-  } as const;
-}
-
-export function getAltTableSeatLabelLayout() {
-  return [
-    { seat: "north", text: "NORTH", center: { x: 0, y: 0.03, z: -4.25 } },
-    { seat: "south", text: "SOUTH", center: { x: 0, y: 0.03, z: 4.25 } },
-    { seat: "west", text: "WEST", center: { x: -7.25, y: 0.03, z: 0 } },
-    { seat: "east", text: "EAST", center: { x: 7.25, y: 0.03, z: 0 } }
-  ] as const;
-}
-
-export function getAltTableCameraConfig() {
-  return {
-    position: [0, 9, 10] as const,
-    target: [0, 0, 0] as const,
-    fov: 40,
-    near: 0.1,
-    far: 64
-  } as const;
-}
+export {
+  getAltTableActionButtonLayout,
+  getAltTableCameraConfig,
+  getAltTablePassingLaneLayout,
+  getAltTableSeatLabelLayout,
+  getAltTableSouthHandLayout
+} from "./altTable3DGeometry";
 
 export function AltTableScene(props: {
   cards: HiddenHandCard[];
