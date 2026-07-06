@@ -62,26 +62,26 @@ describe("ALT hidden-hand geometry", () => {
     const config = getHiddenHandPresenceConfig();
     const seatLayout = getHiddenHandSeatLayoutConfig();
 
-    expect(config.cardWidth).toBeGreaterThan(0.44);
-    expect(config.cardHeight).toBeGreaterThan(0.62);
+    expect(config.cardWidth).toBe(0.62);
+    expect(config.cardHeight).toBe(0.88);
     expect(config.rackBuryDepth).toBeLessThan(0.035);
     expect(config.rackFloorY).toBeGreaterThan(0.09);
-    expect(seatLayout.northTilt).toBeGreaterThan(0.26);
+    expect(seatLayout.northTilt).toBe(0);
     expect(seatLayout.northYawSpread).toBeLessThanOrEqual(0.01);
-    expect(seatLayout.sideYaw).toBeGreaterThan(0.42);
-    expect(seatLayout.sideYaw).toBeLessThanOrEqual(0.46);
+    expect(seatLayout.sideYaw).toBeCloseTo(Math.PI / 2);
     expect(seatLayout.sideYawSpread).toBeLessThanOrEqual(0.003);
     expect(seatLayout.sideCardStepZ).toBeGreaterThan(0.11);
     expect(seatLayout.sideCardStepZ).toBeLessThan(0.12);
     expect(seatLayout.sideInboardOffset).toBeGreaterThan(0.29);
   });
 
-  it("keeps north cards upright but exposes more back surface toward the camera", () => {
+  it("keeps north cards upright with backs facing south toward table center", () => {
     const card = buildHiddenCard("north", 6);
     const base = designToWorld(card.anchor.center_px.x, card.anchor.center_px.y);
     const placement = resolveHiddenHandPlacement(card);
 
-    expect(placement.rotation[0]).toBeGreaterThan(0.2);
+    expect(placement.rotation[0]).toBe(0);
+    expect(placement.rotation[1]).toBeCloseTo(Math.PI, 2);
     expect(placement.position[2]).toBeGreaterThan(base[2] + 0.18);
   });
 
@@ -98,7 +98,7 @@ describe("ALT hidden-hand geometry", () => {
     expect(Math.abs(westLast.position[2] - westFirst.position[2])).toBeLessThan(1.55);
   });
 
-  it("keeps east and west cards less buried, more camera-open, and pulled inward into the trays", () => {
+  it("keeps east and west cards pulled inward with backs facing the table center", () => {
     const eastCard = buildHiddenCard("east", 6);
     const westCard = buildHiddenCard("west", 6);
     const eastBase = designToWorld(eastCard.anchor.center_px.x, eastCard.anchor.center_px.y);
@@ -110,9 +110,7 @@ describe("ALT hidden-hand geometry", () => {
     expect(westPlacement.position[0]).toBeGreaterThan(westBase[0] + 0.18);
     expect(Math.abs(eastPlacement.position[2])).toBeLessThan(Math.abs(eastBase[2]));
     expect(Math.abs(westPlacement.position[2])).toBeLessThan(Math.abs(westBase[2]));
-    expect(eastPlacement.rotation[1]).toBeLessThan(-0.42);
-    expect(eastPlacement.rotation[1]).toBeGreaterThan(-0.48);
-    expect(westPlacement.rotation[1]).toBeGreaterThan(0.42);
-    expect(westPlacement.rotation[1]).toBeLessThan(0.48);
+    expect(eastPlacement.rotation[1]).toBeCloseTo(Math.PI / 2, 2);
+    expect(westPlacement.rotation[1]).toBeCloseTo(-Math.PI / 2, 2);
   });
 });

@@ -22,8 +22,8 @@ import {
 
 const TABLE_BASE_THICKNESS = 0.18;
 const TABLE_FRAME_HEIGHT = 0.16;
-const TABLE_FRAME_WIDTH = 0.82;
-const TABLE_BORDER_WIDTH = 0.72;
+const TABLE_FRAME_WIDTH = 0.35;
+const TABLE_BORDER_WIDTH = 0.35;
 const TABLE_RAISED_RIM = 0.08;
 const TABLE_PLINTH_HEIGHT = 0.1;
 const TABLE_UPPER_DECK_HEIGHT = 0.085;
@@ -32,8 +32,8 @@ const TABLE_INNER_RAIL_HEIGHT = 0.065;
 const TABLE_INNER_RAIL_WIDTH = 0.18;
 const TABLE_INNER_GOLD_WIDTH = 0.028;
 const TABLE_FRAME_TRIM_WIDTH = 0.042;
-const FELT_INSET_X = 1.34;
-const FELT_INSET_Z = 1.1;
+const FELT_INSET_X = 0;
+const FELT_INSET_Z = 0;
 const FELT_Y = TABLE_BASE_THICKNESS / 2 + 0.004;
 const FELT_SURFACE_SRC = `data:image/svg+xml;utf8,${encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
@@ -226,7 +226,7 @@ const RACK_FOOT_DEPTH = 0.26;
 const RACK_PEDESTAL_WIDTH = 0.88;
 const RACK_PEDESTAL_DEPTH = 0.34;
 const FRONT_RAIL_HEIGHT = 0.3;
-const FRONT_RAIL_DEPTH = 0.44;
+const FRONT_RAIL_DEPTH = 0.35;
 const FRONT_BLOCK_WIDTH = 1.26;
 const FRONT_BLOCK_HEIGHT = 0.56;
 const FRONT_BLOCK_DEPTH = 0.5;
@@ -426,10 +426,67 @@ export function getAltTableInsetConfig() {
   } as const;
 }
 
+type AltTableCompassSeat = "north" | "south" | "west" | "east";
+
+export type AltTablePassingLane3D = {
+  seat: AltTableCompassSeat;
+  target: AltTableCompassSeat;
+  label: string;
+  center: { x: number; y: number; z: number };
+  width: number;
+  depth: number;
+  arrowDir: { x: -1 | 0 | 1; z: -1 | 0 | 1 };
+};
+
+export function getAltTablePassingLaneLayout(): AltTablePassingLane3D[] {
+  const y = 0.012;
+  const horizontal = { width: 1.45, depth: 0.55 };
+  const vertical = { width: 0.7, depth: 1.05 };
+
+  return [
+    { seat: "north", target: "east", label: "PASS EAST", center: { x: -1.8, y, z: -3 }, ...horizontal, arrowDir: { x: -1, z: 0 } },
+    { seat: "north", target: "south", label: "PASS SOUTH", center: { x: 0, y, z: -3 }, ...vertical, arrowDir: { x: 0, z: 1 } },
+    { seat: "north", target: "west", label: "PASS WEST", center: { x: 1.8, y, z: -3 }, ...horizontal, arrowDir: { x: 1, z: 0 } },
+    { seat: "south", target: "west", label: "PASS WEST", center: { x: -1.8, y, z: 2.65 }, ...horizontal, arrowDir: { x: -1, z: 0 } },
+    { seat: "south", target: "north", label: "PASS NORTH", center: { x: 0, y, z: 2.65 }, ...vertical, arrowDir: { x: 0, z: -1 } },
+    { seat: "south", target: "east", label: "PASS EAST", center: { x: 1.8, y, z: 2.65 }, ...horizontal, arrowDir: { x: 1, z: 0 } },
+    { seat: "west", target: "north", label: "PASS NORTH", center: { x: -5.8, y, z: -1.7 }, ...vertical, arrowDir: { x: 0, z: -1 } },
+    { seat: "west", target: "east", label: "PASS EAST", center: { x: -5.8, y, z: 0 }, ...horizontal, arrowDir: { x: 1, z: 0 } },
+    { seat: "west", target: "south", label: "PASS SOUTH", center: { x: -5.8, y, z: 1.7 }, ...vertical, arrowDir: { x: 0, z: 1 } },
+    { seat: "east", target: "north", label: "PASS NORTH", center: { x: 5.8, y, z: -1.7 }, ...vertical, arrowDir: { x: 0, z: -1 } },
+    { seat: "east", target: "west", label: "PASS WEST", center: { x: 5.8, y, z: 0 }, ...horizontal, arrowDir: { x: -1, z: 0 } },
+    { seat: "east", target: "south", label: "PASS SOUTH", center: { x: 5.8, y, z: 1.7 }, ...vertical, arrowDir: { x: 0, z: 1 } }
+  ];
+}
+
+export function getAltTableSouthHandLayout() {
+  return {
+    center: { x: 0, y: 0.018, z: 3.65 },
+    cardTiltRadians: -Math.PI * 0.44
+  } as const;
+}
+
+export function getAltTableActionButtonLayout() {
+  return {
+    center: { x: 0, y: 0.024, z: 4.55 },
+    labels: ["PASS", "TICHU", "GRAND TICHU"] as const
+  } as const;
+}
+
+export function getAltTableSeatLabelLayout() {
+  return [
+    { seat: "north", text: "NORTH", center: { x: 0, y: 0.03, z: -4.25 } },
+    { seat: "south", text: "SOUTH", center: { x: 0, y: 0.03, z: 4.25 } },
+    { seat: "west", text: "WEST", center: { x: -7.25, y: 0.03, z: 0 } },
+    { seat: "east", text: "EAST", center: { x: 7.25, y: 0.03, z: 0 } }
+  ] as const;
+}
+
 export function getAltTableCameraConfig() {
   return {
-    position: [0, 7.2, 7.05] as const,
-    fov: 41,
+    position: [0, 9, 10] as const,
+    target: [0, 0, 0] as const,
+    fov: 40,
     near: 0.1,
     far: 64
   } as const;
@@ -623,9 +680,78 @@ function AltTableWorld(props: {
         <RackShell cards={props.cards} seat="east" plaqueTexture={eastPlaqueTexture} woodTexture={woodTexture} />
         <RackShell cards={props.cards} seat="west" plaqueTexture={westPlaqueTexture} woodTexture={woodTexture} />
 
+        <PassingLaneOverlay3D />
         <AltTableCards3D cards={props.cards} texture={backTexture} />
       </group>
     </>
+  );
+}
+
+function PassingLaneOverlay3D() {
+  return (
+    <group>
+      {getAltTablePassingLaneLayout().map((lane) => (
+        <PassingLaneBox3D
+          key={`${lane.seat}-${lane.target}`}
+          lane={lane}
+        />
+      ))}
+    </group>
+  );
+}
+
+function PassingLaneBox3D(props: {
+  lane: AltTablePassingLane3D;
+}) {
+  const border = 0.035;
+  const arrowLength = Math.min(props.lane.width, props.lane.depth) * 0.45;
+  const arrowWidth = Math.min(props.lane.width, props.lane.depth) * 0.18;
+  const arrowRotation = Math.atan2(props.lane.arrowDir.z, props.lane.arrowDir.x);
+
+  return (
+    <group position={[props.lane.center.x, props.lane.center.y, props.lane.center.z]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} renderOrder={10}>
+        <planeGeometry args={[props.lane.width, props.lane.depth]} />
+        <meshBasicMaterial color="#120f04" transparent opacity={0.12} />
+      </mesh>
+      <LaneBorderBar position={[0, 0.002, -props.lane.depth / 2]} width={props.lane.width} depth={border} />
+      <LaneBorderBar position={[0, 0.002, props.lane.depth / 2]} width={props.lane.width} depth={border} />
+      <LaneBorderBar position={[-props.lane.width / 2, 0.002, 0]} width={border} depth={props.lane.depth} />
+      <LaneBorderBar position={[props.lane.width / 2, 0.002, 0]} width={border} depth={props.lane.depth} />
+      <LaneBorderBar position={[0, 0.004, -props.lane.depth * 0.28]} width={props.lane.width * 0.62} depth={border * 0.7} dashed />
+      <LaneBorderBar position={[0, 0.004, props.lane.depth * 0.28]} width={props.lane.width * 0.62} depth={border * 0.7} dashed />
+      <LaneBorderBar position={[-props.lane.width * 0.28, 0.004, 0]} width={border * 0.7} depth={props.lane.depth * 0.62} dashed />
+      <LaneBorderBar position={[props.lane.width * 0.28, 0.004, 0]} width={border * 0.7} depth={props.lane.depth * 0.62} dashed />
+      <group rotation={[0, -arrowRotation, 0]} position={[0, 0.007, 0]}>
+        <mesh rotation={[-Math.PI / 2, 0, 0]} renderOrder={12}>
+          <planeGeometry args={[arrowLength, border * 1.25]} />
+          <meshBasicMaterial color="#f0c64c" transparent opacity={0.92} toneMapped={false} />
+        </mesh>
+        <mesh position={[arrowLength / 2, 0, 0]} rotation={[-Math.PI / 2, 0, -Math.PI / 2]} renderOrder={12}>
+          <coneGeometry args={[arrowWidth, arrowWidth * 1.45, 3]} />
+          <meshBasicMaterial color="#f0c64c" transparent opacity={0.92} toneMapped={false} />
+        </mesh>
+      </group>
+    </group>
+  );
+}
+
+function LaneBorderBar(props: {
+  dashed?: boolean;
+  depth: number;
+  position: [number, number, number];
+  width: number;
+}) {
+  return (
+    <mesh position={props.position} rotation={[-Math.PI / 2, 0, 0]} renderOrder={11}>
+      <planeGeometry args={[props.width, props.depth]} />
+      <meshBasicMaterial
+        color="#f0c64c"
+        transparent
+        opacity={props.dashed ? 0.48 : 0.86}
+        toneMapped={false}
+      />
+    </mesh>
   );
 }
 

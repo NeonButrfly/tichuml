@@ -12,17 +12,17 @@ export type HiddenHandCard = {
   zone: string;
 };
 
-const CARD_WIDTH = 0.46;
-const CARD_HEIGHT = 0.644;
+const CARD_WIDTH = 0.62;
+const CARD_HEIGHT = 0.88;
 const CARD_ASPECT = 2.5 / 3.5;
 const CARD_BACK_INSET = 0.02;
 const CARD_FRONT_INSET = 0.028;
 const CARD_FRAME = 0.012;
-const CARD_THICKNESS = 0.014;
+const CARD_THICKNESS = 0.025;
 const RACK_FLOOR_Y = 0.096;
 const RACK_BURY_DEPTH = 0.03;
-const TABLE_WORLD_W = 11.4;
-const TABLE_WORLD_H = 7.6;
+const TABLE_WORLD_W = 16;
+const TABLE_WORLD_H = 10;
 const NORTH_RACK_CENTER_PX = { x: 768, y: 132 } as const;
 const EAST_RACK_CENTER_PX = { x: 1368, y: 468 } as const;
 const WEST_RACK_CENTER_PX = { x: 168, y: 468 } as const;
@@ -42,12 +42,12 @@ export function getAltHiddenCardMaterialConfig() {
 
 export function getHiddenHandSeatLayoutConfig() {
   return {
-    northTilt: 0.28,
+    northTilt: 0,
     northYawSpread: 0.009,
     northForwardOffset: 0.28,
     northCardStepX: 0.176,
     sideTilt: 0.15,
-    sideYaw: 0.44,
+    sideYaw: Math.PI / 2,
     sideYawSpread: 0.002,
     sideCardStepZ: 0.114,
     sideInboardOffset: 0.296
@@ -90,8 +90,8 @@ function HiddenHandCardMesh(props: {
   const placement = resolveHiddenHandPlacement(props.card);
   const size = getHiddenCardWorldSize(props.card.anchor);
   const material = getAltHiddenCardMaterialConfig();
-  const backZ = CARD_THICKNESS / 2 + 0.0006;
-  const frontZ = -CARD_THICKNESS / 2 - 0.0006;
+  const backZ = -CARD_THICKNESS / 2 - 0.0006;
+  const frontZ = CARD_THICKNESS / 2 + 0.0006;
 
   return (
     <group
@@ -103,7 +103,7 @@ function HiddenHandCardMesh(props: {
         <boxGeometry args={[size.width, size.height, CARD_THICKNESS]} />
         <meshStandardMaterial color={material.bodyColor} metalness={0.03} roughness={0.88} />
       </mesh>
-      <mesh castShadow position={[0, 0, backZ]} receiveShadow renderOrder={3}>
+      <mesh castShadow position={[0, 0, backZ]} receiveShadow renderOrder={3} rotation={[0, Math.PI, 0]}>
         <planeGeometry args={[size.width - CARD_BACK_INSET, size.height - CARD_BACK_INSET]} />
         <meshStandardMaterial
           map={props.texture}
@@ -114,7 +114,7 @@ function HiddenHandCardMesh(props: {
           roughness={material.backRoughness}
         />
       </mesh>
-      <mesh castShadow position={[0, 0, frontZ]} receiveShadow renderOrder={2} rotation={[0, Math.PI, 0]}>
+      <mesh castShadow position={[0, 0, frontZ]} receiveShadow renderOrder={2}>
         <planeGeometry args={[size.width - CARD_FRONT_INSET, size.height - CARD_FRONT_INSET]} />
         <meshStandardMaterial
           color={material.frontColor}
@@ -122,7 +122,7 @@ function HiddenHandCardMesh(props: {
           roughness={0.9}
         />
       </mesh>
-      <mesh castShadow position={[0, 0, backZ - 0.0003]} receiveShadow renderOrder={2}>
+      <mesh castShadow position={[0, 0, backZ + 0.0003]} receiveShadow renderOrder={2} rotation={[0, Math.PI, 0]}>
         <planeGeometry args={[size.width + CARD_FRAME, size.height + CARD_FRAME]} />
         <meshStandardMaterial color={material.frameColor} metalness={0.06} roughness={0.62} />
       </mesh>
@@ -147,11 +147,7 @@ export function resolveHiddenHandPlacement(card: HiddenHandCard) {
           rackCenter[2] +
             size.width * (layout.northForwardOffset - Math.min(seatCurve * 0.004, 0.02))
         ] as const,
-        rotation: [
-          layout.northTilt - Math.min(seatCurve * 0.005, 0.034),
-          seatOffset * layout.northYawSpread,
-          0
-        ] as const
+        rotation: [0, Math.PI + seatOffset * layout.northYawSpread, 0] as const
       };
     case "east":
       return {
@@ -161,11 +157,7 @@ export function resolveHiddenHandPlacement(card: HiddenHandCard) {
           seatedY,
           rackCenter[2] + seatOffset * layout.sideCardStepZ
         ] as const,
-        rotation: [
-          layout.sideTilt - Math.min(seatCurve * 0.004, 0.03),
-          -layout.sideYaw - seatOffset * layout.sideYawSpread,
-          0
-        ] as const
+        rotation: [0, Math.PI / 2 - seatOffset * layout.sideYawSpread, 0] as const
       };
     case "west":
       return {
@@ -175,11 +167,7 @@ export function resolveHiddenHandPlacement(card: HiddenHandCard) {
           seatedY,
           rackCenter[2] + seatOffset * layout.sideCardStepZ
         ] as const,
-        rotation: [
-          layout.sideTilt - Math.min(seatCurve * 0.004, 0.03),
-          layout.sideYaw - seatOffset * layout.sideYawSpread,
-          0
-        ] as const
+        rotation: [0, -Math.PI / 2 - seatOffset * layout.sideYawSpread, 0] as const
       };
   }
 }

@@ -34,11 +34,11 @@ describe("ALT front rail visibility", () => {
     expect(visual.translateY).toBeGreaterThan(68);
   });
 
-  it("uses a more prominent front rail assembly for the south plaque, score, and pass blocks", () => {
+  it("keeps the front rail shallow so it does not consume south play space", () => {
     const config = getFrontRailAssemblyConfig();
 
     expect(config.railHeight).toBeGreaterThan(0.28);
-    expect(config.railDepth).toBeGreaterThan(0.4);
+    expect(config.railDepth).toBeLessThanOrEqual(0.35);
     expect(config.centerBlockHeight).toBeGreaterThan(0.5);
     expect(config.sideBlockHeight).toBeGreaterThan(0.42);
   });

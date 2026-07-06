@@ -1296,3 +1296,25 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
 - Linked GitHub Issue: [#108](https://github.com/NeonButrfly/tichuml/issues/108)
 - Milestone: none; scoped editor bugfix.
 - Status Source: GitHub issue state only.
+
+### 2026-07-05 - Canonical 3D Tichu table scene needs inward-facing card backs and flat passing lanes
+
+- Prompt Signal: The user provided a full 3D scene specification requiring a
+  south-perspective Tichu table, right-handed X/Y/Z world coordinates,
+  16-by-10 green felt, thin rails, true front/back card meshes, inward-facing
+  north/east/west card backs, 12 flat XZ passing-lane rectangles, south lanes
+  above the south hand, and action buttons below the south hand.
+- Interpreted Requirement: Issue
+  [#125](https://github.com/NeonButrfly/tichuml/issues/125) is the canonical
+  tracker. The reusable R3F scene geometry must derive card facing from
+  seat-to-center vectors and expose passing-lane/action/label layout helpers
+  that match the prompt before broader live-route integration.
+- Affected Systems: `apps/web/src/alt-table-3d/AltTableCards3D.tsx`,
+  `apps/web/src/alt-table-3d/AltTableScene.tsx`,
+  `tests/integration/alt-canonical-3d-scene-geometry.test.ts`,
+  `tests/integration/alt-hidden-hand-geometry.test.ts`,
+  `tests/integration/alt-table-inset-config.test.ts`,
+  `tests/integration/alt-front-rail-visibility.test.ts`.
+- Linked GitHub Issue: [#125](https://github.com/NeonButrfly/tichuml/issues/125)
+- Milestone: none assigned; renderer/UI architecture slice.
+- Status Source: GitHub issue state only.

@@ -46,10 +46,10 @@ export function runFreshAltTableChecks() {
       (anchor) => (anchor.hiddenBottomPx ?? 0) <= 24
     ),
     eastRenderModeValid: east.every(
-      (anchor) => anchor.renderMode === "side_rack_portrait_fan"
+      (anchor) => anchor.renderMode === "side_rack_readable_fan"
     ),
     westRenderModeValid: west.every(
-      (anchor) => anchor.renderMode === "side_rack_portrait_fan"
+      (anchor) => anchor.renderMode === "side_rack_readable_fan"
     ),
     eastRotationValid: east.every(
       (anchor) => anchor.rotationDeg <= -10 && anchor.rotationDeg >= -18
@@ -90,7 +90,7 @@ export function assertFreshAltTableChecks() {
     failures.push("North rack cards must stay mostly visible with a shallow hidden-bottom crop.");
   }
   if (!result.eastRenderModeValid || !result.westRenderModeValid) {
-    failures.push("East and west rack cards must use side_rack_portrait_fan.");
+    failures.push("East and west rack cards must use side_rack_readable_fan.");
   }
   if (!result.eastRotationValid || !result.westRotationValid) {
     failures.push("East/west rack cards must use a small portrait lean around +/-14 degrees, not +/-72 or +/-90.");
