@@ -1308,13 +1308,20 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
   [#125](https://github.com/NeonButrfly/tichuml/issues/125) is the canonical
   tracker. The reusable R3F scene geometry must derive card facing from
   seat-to-center vectors and expose passing-lane/action/label layout helpers
-  that match the prompt before broader live-route integration.
+  that match the prompt before broader live-route integration. On narrow live
+  viewports, the shipped ALT route should frame like a camera crop rather than
+  a letterboxed poster: the live table may crop its left/right edges to fill
+  height, while authoring overlays remain contain-fit in the 1536x1024 design
+  space.
 - Affected Systems: `apps/web/src/alt-table-3d/AltTableCards3D.tsx`,
   `apps/web/src/alt-table-3d/altTable3DGeometry.ts`,
   `apps/web/src/alt-table-3d/AltTableScene.tsx`,
   `apps/web/src/altTableFresh/freshTableMath.ts`,
+  `apps/web/src/altTableFresh/tableFit.ts`,
+  `apps/web/src/altTableFresh/FreshAltTable.tsx`,
   `tests/integration/alt-canonical-3d-scene-geometry.test.ts`,
   `tests/integration/fresh-alt-pass-anchor-projection.test.ts`,
+  `tests/integration/fresh-alt-table-fit.test.ts`,
   `tests/integration/alt-hidden-hand-geometry.test.ts`,
   `tests/integration/alt-table-inset-config.test.ts`,
   `tests/integration/alt-front-rail-visibility.test.ts`.

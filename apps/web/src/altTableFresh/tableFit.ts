@@ -12,6 +12,16 @@ export type TableFit = {
 export function getTableFit(viewW: number, viewH: number): TableFit {
   const scale = Math.min(viewW / DESIGN_W, viewH / DESIGN_H);
 
+  return buildTableFit(viewW, viewH, scale);
+}
+
+export function getTableCoverFit(viewW: number, viewH: number): TableFit {
+  const scale = Math.max(viewW / DESIGN_W, viewH / DESIGN_H);
+
+  return buildTableFit(viewW, viewH, scale);
+}
+
+function buildTableFit(viewW: number, viewH: number, scale: number): TableFit {
   return {
     scale,
     offsetX: (viewW - DESIGN_W * scale) / 2,

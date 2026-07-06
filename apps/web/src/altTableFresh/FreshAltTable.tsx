@@ -28,7 +28,7 @@ import {
   FRESH_ALT_TABLE_SRC,
   getFreshAltTableSnapshotModel
 } from "./freshAltTableChecks";
-import { DESIGN_H, DESIGN_W, getTableFit } from "./tableFit";
+import { DESIGN_H, DESIGN_W, getTableCoverFit } from "./tableFit";
 
 type FreshAltTableProps = GameTableViewProps & {
   showDebug?: boolean;
@@ -136,7 +136,7 @@ export function FreshAltTable(props: FreshAltTableProps) {
     return () => observer.disconnect();
   }, []);
 
-  const fit = useMemo(() => getTableFit(size.w, size.h), [size]);
+  const fit = useMemo(() => getTableCoverFit(size.w, size.h), [size]);
   const handAnchors = useMemo(() => makeAllHandAnchors(), []);
   const passingAnchors = useMemo(() => makePassingAnchors(), []);
   const trickAnchors = useMemo(() => makeTrickAnchors(), []);
