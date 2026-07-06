@@ -545,6 +545,24 @@ describe("AltTable3DRoute", () => {
     expect(
       view.container.querySelectorAll("[data-pass-id][data-arrow-direction]")
     ).toHaveLength(12);
+    expect(
+      view.container.querySelector("[data-alt-hidden-hands-layer='true']")
+    ).not.toBeNull();
+    expect(
+      view.container.querySelectorAll(
+        "[data-render-mode='r3f-hidden-hand'][data-seat='north']"
+      )
+    ).toHaveLength(14);
+    expect(
+      view.container.querySelectorAll(
+        "[data-render-mode='r3f-hidden-hand'][data-seat='east']"
+      )
+    ).toHaveLength(14);
+    expect(
+      view.container.querySelectorAll(
+        "[data-render-mode='r3f-hidden-hand'][data-seat='west']"
+      )
+    ).toHaveLength(14);
 
     expect(view.container.textContent).not.toContain("Passing Lanes (12)");
     expect(view.container.textContent).not.toContain("Anchor Rules");
@@ -586,6 +604,9 @@ describe("AltTable3DRoute", () => {
     expect(
       view.container.querySelectorAll("[data-pass-id][data-arrow-direction]")
     ).toHaveLength(0);
+    expect(
+      view.container.querySelectorAll("[data-render-mode='r3f-hidden-hand']")
+    ).toHaveLength(42);
     expect(view.container.querySelectorAll("img[src='/table/table.png']")).toHaveLength(1);
     expect(view.container.querySelectorAll("img[src='/tv_ed/c/std/jd_9.png']")).toHaveLength(1);
 

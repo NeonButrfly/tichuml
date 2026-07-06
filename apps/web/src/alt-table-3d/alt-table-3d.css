@@ -5,6 +5,29 @@
   background: #07110a;
 }
 
+.alt-table-3d-route-live {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.alt-table-3d-route-live__overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.alt-table-3d-route-live__overlay .alt-table-world-scene {
+  position: absolute;
+  inset: 0;
+}
+
+.alt-table-3d-route-live__overlay .alt-table-world-scene__canvas {
+  position: absolute;
+  inset: 0;
+}
+
 .alt-table-3d-route--loading {
   display: grid;
   place-items: center;
