@@ -57,7 +57,6 @@ import {
   type PlayLegalAction
 } from "./table-model";
 import {
-  getAlternateTablePreviewModeFromSearch,
   getPlayerTableVariantFromSearch,
   updateSearchWithPlayerTableVariant,
   createNormalActionRail,
@@ -87,8 +86,6 @@ import {
   type SeatVisualPosition,
   type WishSelectionValue
 } from "./game-table-views";
-import { AltTable3DRoute } from "./alt-table-3d/AltTable3DRoute";
-import { createAlternatePassSelectPreviewSession } from "./alternate-table/preview-session";
 import { generateSeedWithEntropy } from "./seed/orchestrator";
 import {
   type BackendRuntimeSettings,
@@ -703,24 +700,6 @@ function GameApp() {
       roundIndex: number,
       carryState?: RoundCarryState
     ): Promise<RoundSession> => {
-      if (typeof window !== "undefined") {
-        const search = window.location.search;
-        const params = new URLSearchParams(search);
-        const requestedTable = params.get("table")?.trim().toLowerCase();
-        const requestedVariant = getPlayerTableVariantFromSearch(search);
-        const alternatePreviewRequested =
-          requestedVariant === "alternate" ||
-          (requestedTable !== "normal" &&
-            import.meta.env.DEV &&
-            getAlternateTablePreviewModeFromSearch(search) === "pass-select");
-        if (alternatePreviewRequested) {
-          return createAlternatePassSelectPreviewSession({
-            roundIndex,
-            carryState
-          });
-        }
-      }
-
       const generatedSeed = await generateSeedWithEntropy({
         roundIndex,
         backendBaseUrl: loadBackendSettings().backendBaseUrl
@@ -810,17 +789,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     null
   );
   const [uiMode, setUiMode] = useState<UiMode>("normal");
-  const [playerTableVariant, setPlayerTableVariant] =
-    useState<PlayerTableVariant>(() =>
-      typeof window === "undefined"
-        ? "normal"
-        : getPlayerTableVariantFromSearch(window.location.search)
-    );
-
-  const activePlayerTableVariant =
-    typeof window === "undefined"
-      ? playerTableVariant
-      : getPlayerTableVariantFromSearch(window.location.search);
+  const activePlayerTableVariant: PlayerTableVariant = "normal";
   const [layoutEditorActive, setLayoutEditorActive] = useState(false);
   const [mainMenuOpen, setMainMenuOpen] = useState(false);
   const [activeDialog, setActiveDialog] = useState<UiDialogId | null>(null);
@@ -885,21 +854,6 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     requestedAt: null
   });
   const lastAppliedAutomationExecutionKeyRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    const handlePopState = () => {
-      setPlayerTableVariant(getPlayerTableVariantFromSearch(window.location.search));
-    };
-
-    window.addEventListener("popstate", handlePopState);
-    return () => {
-      window.removeEventListener("popstate", handlePopState);
-    };
-  }, []);
 
   const state = round.nextState;
   const derived = round.derivedView;
@@ -3092,8 +3046,6 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
   }
 
   function handlePlayerTableVariantChange(nextVariant: PlayerTableVariant) {
-    setPlayerTableVariant(nextVariant);
-
     if (typeof window === "undefined") {
       return;
     }
@@ -3756,9 +3708,5 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     return <DebugGameTableView {...viewProps} />;
   }
 
-  return activePlayerTableVariant === "alternate" ? (
-    <AltTable3DRoute {...viewProps} />
-  ) : (
-    <NormalGameTableView {...viewProps} />
-  );
+  return <NormalGameTableView {...viewProps} />;
 }

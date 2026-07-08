@@ -2,8 +2,7 @@ import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { RoundPhase } from "@tichuml/engine";
 
 export type UiMode = "normal" | "debug";
-export type PlayerTableVariant = "normal" | "alternate";
-export type AlternateTablePreviewMode = "none" | "pass-select";
+export type PlayerTableVariant = "normal";
 export type UiDialogId =
   | "hotkeys"
   | "how_to_play"
@@ -142,44 +141,20 @@ export const GAME_MENU_ITEMS: readonly GameMenuItemDefinition[] = [
 export function getPlayerTableVariantFromSearch(
   search: string
 ): PlayerTableVariant {
-  const params = new URLSearchParams(search);
-  const table = params.get("table")?.trim().toLowerCase();
-  return table === "alt" || table === "alternate" || table === "luxury"
-    ? "alternate"
-    : "normal";
-}
-
-export function getAlternateTablePreviewModeFromSearch(
-  search: string
-): AlternateTablePreviewMode {
-  const params = new URLSearchParams(search);
-  const preview = params.get("preview")?.trim().toLowerCase();
-  return preview === "pass-select" ? "pass-select" : "none";
+  void search;
+  return "normal";
 }
 
 export function updateSearchWithPlayerTableVariant(
   search: string,
   variant: PlayerTableVariant
 ): string {
+  void variant;
   const params = new URLSearchParams(search);
-  const hadAlternatePreview =
-    getPlayerTableVariantFromSearch(search) === "alternate" &&
-    getAlternateTablePreviewModeFromSearch(search) !== "none";
-  if (variant === "alternate") {
-    if (getAlternateTablePreviewModeFromSearch(search) === "none") {
-      params.set("table", "alt");
-    } else {
-      params.delete("table");
-    }
-  } else {
-    params.delete("table");
-    params.delete("preview");
-  }
+  params.delete("table");
+  params.delete("preview");
 
   const serialized = params.toString();
-  if (serialized.length === 0 && variant === "normal" && hadAlternatePreview) {
-    return "?table=normal";
-  }
   return serialized.length > 0 ? `?${serialized}` : "";
 }
 

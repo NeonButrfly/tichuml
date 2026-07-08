@@ -4,7 +4,6 @@ import {
   createNormalActionRail,
   findMatchingHotkey,
   GAME_MENU_ITEMS,
-  getAlternateTablePreviewModeFromSearch,
   getHotkeysForContext,
   updateSearchWithPlayerTableVariant,
   isDebugToggleShortcut
@@ -63,24 +62,13 @@ describe("game-table view-model helpers", () => {
     ]);
   });
 
-  it("recognizes the dev-only alternate pass preview flag", () => {
-    expect(getAlternateTablePreviewModeFromSearch("")).toBe("none");
-    expect(getAlternateTablePreviewModeFromSearch("?table=alt&preview=pass-select")).toBe(
-      "pass-select"
-    );
-    expect(getAlternateTablePreviewModeFromSearch("?preview=PASS-SELECT")).toBe(
-      "pass-select"
-    );
-    expect(getAlternateTablePreviewModeFromSearch("?preview=unknown")).toBe("none");
-  });
-
-  it("drops the alternate preview flag when leaving the alternate table", () => {
+  it("drops legacy luxury-table query params when normalizing the active table", () => {
     expect(
       updateSearchWithPlayerTableVariant("?table=alt&preview=pass-select", "normal")
-    ).toBe("?table=normal");
+    ).toBe("");
     expect(
-      updateSearchWithPlayerTableVariant("?preview=pass-select", "alternate")
-    ).toBe("?preview=pass-select");
+      updateSearchWithPlayerTableVariant("?table=luxury&preview=pass-select&foo=1", "normal")
+    ).toBe("?foo=1");
   });
 
   it("matches hotkeys by context from the centralized registry", () => {

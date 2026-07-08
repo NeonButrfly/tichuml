@@ -3443,48 +3443,6 @@ export function GameChromeMenu({
             );
           })}
 
-          <button
-            ref={(element) => {
-              itemRefs.current[GAME_MENU_ITEMS.length] = element;
-            }}
-            type="button"
-            role="menuitem"
-            className={[
-              "game-menu__item",
-              playerTableVariant === "alternate" ? "is-active" : ""
-            ]
-              .filter(Boolean)
-              .join(" ")}
-            aria-label={
-              playerTableVariant === "alternate"
-                ? "Classic table on luxury table enabled"
-                : "Luxury table"
-            }
-            onClick={() => {
-              onMainMenuOpenChange(false);
-              onPlayerTableVariantChange(
-                playerTableVariant === "alternate" ? "normal" : "alternate"
-              );
-            }}
-          >
-            <span className="game-menu__item-copy">
-              <strong>
-                {playerTableVariant === "alternate"
-                  ? "Classic Table"
-                  : "Luxury Table"}
-              </strong>
-              <small>
-                {playerTableVariant === "alternate"
-                  ? "Return to the original gameplay table."
-                  : "Open the alternate 2.5D south-player table."}
-              </small>
-            </span>
-            {playerTableVariant === "alternate" && (
-              <span className="game-menu__item-state" aria-hidden="true">
-                ON
-              </span>
-            )}
-          </button>
         </div>
       )}
     </div>

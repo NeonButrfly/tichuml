@@ -2,6 +2,24 @@
 
 Use this file to preserve UI and UX prompt intent and link it to GitHub work. GitHub issue state is authoritative; this file is not a parallel tracker.
 
+### 2026-07-08 - Archive and remove the unrecoverable luxury table completely
+
+- Prompt Signal: The user explicitly requested a clean reset because the luxury
+  table had become unrecoverable in its current state, and asked to archive the
+  code and remove the luxury table completely.
+- Interpreted Requirement: Issue
+  [#128](https://github.com/NeonButrfly/tichuml/issues/128) tracks the reset.
+  The active product should return to the normal table only, strip luxury-table
+  runtime/editor routes and URL flags, and move the luxury-table implementation
+  into `archive/luxury-table/` so it remains recoverable but inert.
+- Affected Systems: `apps/web/src/App.tsx`,
+  `apps/web/src/game-table-view-model.ts`,
+  `apps/web/src/game-table-views.tsx`, `package.json`,
+  `archive/luxury-table/`, `tests/integration/luxury-table-removal.test.ts`.
+- Linked GitHub Issue: [#128](https://github.com/NeonButrfly/tichuml/issues/128)
+- Milestone: none assigned; rollback/reset slice.
+- Status Source: GitHub issue state only.
+
 ## Entry Structure
 
 - Date
