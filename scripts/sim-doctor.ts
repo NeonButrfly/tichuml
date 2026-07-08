@@ -86,7 +86,7 @@ export async function loadTelemetryHealth(
   while (true) {
     try {
       return await fetchJson<TelemetryHealth>(`${baseUrl}/api/telemetry/health`, {
-        timeoutMs: options.timeoutMs ?? 30_000
+        timeoutMs: options.timeoutMs ?? 120_000
       });
     } catch (error) {
       if (!isAbortError(error) || attempts >= retries) {
