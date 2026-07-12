@@ -18,6 +18,7 @@ export type MlBootstrapOptions = {
   outputDir: string;
   backendUrl: string;
   provider: "local" | "server_heuristic" | "lightgbm_model";
+  candidateObjective: "imitation_binary" | "observed_outcome_regression";
   evaluateGames: number;
   evaluateMinGamesForGate: number;
   candidateBackendPort: number;
@@ -27,7 +28,12 @@ export type MlBootstrapOptions = {
 };
 
 export type MlBootstrapStep = {
-  label: "ml:export" | "ml:train" | "build:server" | "ml:evaluate";
+  label:
+    | "ml:export"
+    | "ml:train_seed"
+    | "ml:train_candidate"
+    | "build:server"
+    | "ml:evaluate";
   command: string;
   args: string[];
 };
@@ -127,6 +133,17 @@ export function buildMlBootstrapPlan(
   }
   const datasetPath = path.join(outputDir, "train.parquet");
   const manifestPath = path.join(outputDir, "dataset_metadata.json");
+  const seedOutputDir = path.join(outputDir, "ml-seed");
+  const seedModelPath = path.join(seedOutputDir, "lightgbm_action_model.txt");
+  const seedModelMetaPath = path.join(
+    seedOutputDir,
+    "lightgbm_action_model.meta.json"
+  );
+  const seedTrainingReportPath = path.join(seedOutputDir, "training-report.json");
+  const seedFeatureImportancePath = path.join(
+    seedOutputDir,
+    "feature-importance.csv"
+  );
   const modelPath = path.join(outputDir, "lightgbm_action_model.txt");
   const modelMetaPath = path.join(outputDir, "lightgbm_action_model.meta.json");
   const trainingReportPath = path.join(outputDir, "training-report.json");
@@ -169,7 +186,7 @@ export function buildMlBootstrapPlan(
         args: exportArgs
       },
       {
-        label: "ml:train",
+        label: "ml:train_seed",
         command: "npm",
         args: [
           "run",
@@ -183,6 +200,31 @@ export function buildMlBootstrapPlan(
           "trick_play",
           "--objective",
           "imitation_binary",
+          "--output",
+          seedModelPath,
+          "--meta-output",
+          seedModelMetaPath,
+          "--report-output",
+          seedTrainingReportPath,
+          "--feature-importance-output",
+          seedFeatureImportancePath
+        ]
+      },
+      {
+        label: "ml:train_candidate",
+        command: "npm",
+        args: [
+          "run",
+          "ml:train",
+          "--",
+          "--input",
+          datasetPath,
+          "--manifest-input",
+          manifestPath,
+          "--phase",
+          "trick_play",
+          "--objective",
+          options.candidateObjective,
           "--output",
           modelPath,
           "--meta-output",
@@ -448,6 +490,10 @@ async function stopChildProcess(child: ChildProcess | null): Promise<void> {
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   const evaluateGames = readNumberArg(argv, "--evaluate-games", 100);
+  const candidateObjective =
+    (readArg(argv, "--candidate-objective") as
+      | MlBootstrapOptions["candidateObjective"]
+      | null) ?? "observed_outcome_regression";
   const minTrainingDecisionCountForEvaluate = readNumberArg(
     argv,
     "--min-training-decisions-for-evaluate",
@@ -472,6 +518,7 @@ async function main(): Promise<void> {
     provider:
       (readArg(argv, "--provider") as MlBootstrapOptions["provider"] | null) ??
       "server_heuristic",
+    candidateObjective,
     evaluateGames,
     evaluateMinGamesForGate: readNumberArg(
       argv,
@@ -491,10 +538,15 @@ async function main(): Promise<void> {
   let candidateBackend: ChildProcess | null = null;
   try {
     for (const step of runtimePlan.steps) {
-      if (step.label === "ml:train") {
+      if (step.label === "ml:train_seed") {
         await runCommand(step.command, step.args, commandEnv);
+        const seedTrainingReportPath = path.join(
+          runtimePlan.outputDir,
+          "ml-seed",
+          "training-report.json"
+        );
         const trainingSummary = readTrainingReportQualitySummary(
-          runtimePlan.trainingReportPath
+          seedTrainingReportPath
         );
         assertTrainingDecisionQuality(trainingSummary, {
           minDecisionCount: minTrainingDecisionCountForEvaluate,
@@ -504,6 +556,24 @@ async function main(): Promise<void> {
           minTop1ChosenActionRecall: minHeuristicTop1Recall
         });
         assertObservedOutcomeTrainingQuality(trainingSummary);
+        continue;
+      }
+      if (step.label === "ml:train_candidate") {
+        await runCommand(step.command, step.args, commandEnv);
+        const candidateSummary = readTrainingReportQualitySummary(
+          runtimePlan.trainingReportPath
+        );
+        assertTrainingDecisionQuality(candidateSummary, {
+          minDecisionCount: minTrainingDecisionCountForEvaluate,
+          minGameCount: minTrainingGameCountForEvaluate
+        });
+        if (candidateObjective === "imitation_binary") {
+          assertHeuristicImitationTrainingQuality(candidateSummary, {
+            minTop1ChosenActionRecall: minHeuristicTop1Recall
+          });
+        } else {
+          assertObservedOutcomeTrainingQuality(candidateSummary);
+        }
         continue;
       }
       if (step.label === "ml:evaluate") {

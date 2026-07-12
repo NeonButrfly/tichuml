@@ -1,3 +1,4 @@
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_BOOTSTRAP_MIN_HEURISTIC_TOP1_RECALL,
@@ -15,6 +16,7 @@ describe("ml bootstrap orchestration", () => {
       outputDir: "training-runs/training-20260522-135206-7ecc9aa3/ml",
       backendUrl: "http://127.0.0.1:4310",
       provider: "server_heuristic",
+      candidateObjective: "observed_outcome_regression",
       evaluateGames: 40,
       evaluateMinGamesForGate: 12,
       candidateBackendPort: 4312,
@@ -24,7 +26,8 @@ describe("ml bootstrap orchestration", () => {
 
     expect(plan.steps.map((step) => step.label)).toEqual([
       "ml:export",
-      "ml:train",
+      "ml:train_seed",
+      "ml:train_candidate",
       "build:server",
       "ml:evaluate"
     ]);
@@ -58,6 +61,51 @@ describe("ml bootstrap orchestration", () => {
       "--objective",
       "imitation_binary",
       "--output",
+      path.join(
+        "training-runs",
+        "training-20260522-135206-7ecc9aa3",
+        "ml",
+        "ml-seed",
+        "lightgbm_action_model.txt"
+      ),
+      "--meta-output",
+      path.join(
+        "training-runs",
+        "training-20260522-135206-7ecc9aa3",
+        "ml",
+        "ml-seed",
+        "lightgbm_action_model.meta.json"
+      ),
+      "--report-output",
+      path.join(
+        "training-runs",
+        "training-20260522-135206-7ecc9aa3",
+        "ml",
+        "ml-seed",
+        "training-report.json"
+      ),
+      "--feature-importance-output",
+      path.join(
+        "training-runs",
+        "training-20260522-135206-7ecc9aa3",
+        "ml",
+        "ml-seed",
+        "feature-importance.csv"
+      )
+    ]);
+    expect(plan.steps[2]?.args).toEqual([
+      "run",
+      "ml:train",
+      "--",
+      "--input",
+      plan.datasetPath,
+      "--manifest-input",
+      plan.manifestPath,
+      "--phase",
+      "trick_play",
+      "--objective",
+      "observed_outcome_regression",
+      "--output",
       plan.modelPath,
       "--meta-output",
       plan.modelMetaPath,
@@ -66,8 +114,8 @@ describe("ml bootstrap orchestration", () => {
       "--feature-importance-output",
       plan.featureImportancePath
     ]);
-    expect(plan.steps[2]?.args).toEqual(["run", "build", "-w", "@tichuml/server"]);
-    expect(plan.steps[3]?.args).toEqual([
+    expect(plan.steps[3]?.args).toEqual(["run", "build", "-w", "@tichuml/server"]);
+    expect(plan.steps[4]?.args).toEqual([
       "run",
       "ml:evaluate",
       "--",
@@ -110,6 +158,7 @@ describe("ml bootstrap orchestration", () => {
         outputDir: "training-runs/training-20260522-135206-7ecc9aa3/ml",
         backendUrl: "http://127.0.0.1:4310",
         provider: "server_heuristic",
+        candidateObjective: "observed_outcome_regression",
         evaluateGames: 40,
         evaluateMinGamesForGate: 40,
         candidateBackendPort: 4312,
@@ -143,6 +192,7 @@ describe("ml bootstrap orchestration", () => {
       outputDir: "training-runs/clean-start-smoke/ml",
       backendUrl: "http://127.0.0.1:4310",
       provider: "server_heuristic",
+      candidateObjective: "observed_outcome_regression",
       evaluateGames: 3,
       evaluateMinGamesForGate: 3,
       candidateBackendPort: 4312,
@@ -173,6 +223,7 @@ describe("ml bootstrap orchestration", () => {
       outputDir: "training-runs/training-20260522-135206-7ecc9aa3/ml",
       backendUrl: "http://127.0.0.1:4310",
       provider: "server_heuristic",
+      candidateObjective: "observed_outcome_regression",
       evaluateGames: 40,
       evaluateMinGamesForGate: 12,
       candidateBackendPort: 4312,
@@ -180,7 +231,7 @@ describe("ml bootstrap orchestration", () => {
       evaluateMinLightgbmServiceRate: 0.1
     });
 
-    expect(plan.steps[3]?.args).toEqual([
+    expect(plan.steps[4]?.args).toEqual([
       "run",
       "ml:evaluate",
       "--",
@@ -250,6 +301,7 @@ describe("ml bootstrap orchestration", () => {
       outputDir: "training-runs/bootstrap-integrity/ml",
       backendUrl: "http://127.0.0.1:4310",
       provider: "server_heuristic",
+      candidateObjective: "observed_outcome_regression",
       evaluateGames: 3,
       evaluateMinGamesForGate: 3,
       candidateBackendPort: 4312,
@@ -260,9 +312,31 @@ describe("ml bootstrap orchestration", () => {
 
     expect(plan.steps.map((step) => step.label)).toEqual([
       "ml:export",
-      "ml:train",
+      "ml:train_seed",
+      "ml:train_candidate",
       "ml:evaluate"
     ]);
+  });
+
+  it("defaults the evaluated candidate objective to observed outcomes instead of re-evaluating the imitation seed", () => {
+    const plan = buildMlBootstrapPlan({
+      runId: "training-20260522-135206-7ecc9aa3",
+      gameIdPrefix: "selfplay-training-20260522-135206-7ecc9aa3",
+      outputDir: "training-runs/training-20260522-135206-7ecc9aa3/ml",
+      backendUrl: "http://127.0.0.1:4310",
+      provider: "server_heuristic",
+      candidateObjective: "observed_outcome_regression",
+      evaluateGames: 12,
+      evaluateMinGamesForGate: 12,
+      candidateBackendPort: 4312,
+      evaluateMinLightgbmServedDecisions: 50,
+      evaluateMinLightgbmServiceRate: 0.1
+    });
+
+    expect(plan.steps[1]?.args).toContain("imitation_binary");
+    expect(plan.steps[2]?.args).toContain("observed_outcome_regression");
+    expect(plan.steps[4]?.args).toContain(plan.modelPath);
+    expect(plan.steps[4]?.args).toContain(plan.modelMetaPath);
   });
 
   it("keeps bootstrap quality floors above tiny smoke-scale training sets", () => {

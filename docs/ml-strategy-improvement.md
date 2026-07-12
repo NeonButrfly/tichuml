@@ -133,15 +133,20 @@ npm run ml:bootstrap -- --run-id <run_id> --game-id-prefix <game_id_prefix> --ou
 ```
 
 `ml:bootstrap` runs scoped `ml:export` with `--label-mode imitation` and
-`--include-candidates`, trains an `imitation_binary` seed model from the
-selected heuristic provider's chosen actions, runs mirrored `ml:evaluate`, and
-exits non-zero if the evaluation gate does not pass. It now writes a run-local
-candidate model bundle under the requested output directory, builds the server
-package, starts a temporary localhost backend pinned to that candidate model,
-verifies the evaluation report names that candidate model file explicitly, and
-only then accepts the run. This prevents plain bootstrap from accidentally
-scoring an older long-lived backend model that was loaded before the new
-training step.
+`--include-candidates`, trains an `imitation_binary` seed model under
+`<output-dir>/ml-seed`, enforces the heuristic-recall adequacy floor on that
+seed, then trains the evaluated candidate model separately. The default
+candidate objective is now `observed_outcome_regression`, so plain bootstrap no
+longer mistakes a strong heuristic-cloning seed for a strategy-improved model.
+You can still override the evaluated stage with
+`--candidate-objective imitation_binary` when you intentionally want to score
+the seed itself. The command then runs mirrored `ml:evaluate`, exits non-zero
+if the evaluation gate does not pass, writes a run-local candidate model bundle
+under the requested output directory, builds the server package, starts a
+temporary localhost backend pinned to that candidate model, verifies the
+evaluation report names that candidate model file explicitly, and only then
+accepts the run. This prevents plain bootstrap from accidentally scoring an
+older long-lived backend model that was loaded before the new training step.
 
 For a short host-side smoke, pass `--evaluate-min-games-for-gate <n>` to keep
 the game-count gate aligned with the smaller evaluation sample:
@@ -229,11 +234,13 @@ gate because the observed-outcome path was repeatedly producing tiny
 four-match bundles that still reached head-to-head evaluation. Before it starts
 the temporary candidate backend, the bootstrap script now requires at least 100
 training decisions across at least 10 games by default, trains the seed as
-`imitation_binary`, and rejects the candidate unless `training-report.json`
-shows at least `0.6` `top1_chosen_action_recall` against the heuristic-chosen
-actions. That keeps obviously broken or smoke-scale candidates from burning
-another eval loop when the offline report already says the seed model is not
-learning the baseline policy it was generated from.
+`imitation_binary`, and rejects the run unless the seed report shows at least
+`0.6` `top1_chosen_action_recall` against the heuristic-chosen actions. That
+keeps obviously broken or smoke-scale candidates from burning another eval loop
+when the offline report already says the seed model is not learning the
+baseline policy it was generated from. The evaluated candidate model is then
+trained separately from the same scoped dataset instead of reusing the seed
+artifact as the final challenger by default.
 
 ## Data products
 

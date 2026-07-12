@@ -14,6 +14,26 @@ Use this file to preserve AI and bot-behavior prompt intent and link it to GitHu
 
 ## Entries
 
+### 2026-07-12 - Plain self-play bootstrap must evaluate a second-stage candidate, not just the imitation seed
+
+- Prompt Signal: After tracing a recovered Linux-host training candidate that
+  had strong offline imitation recall but still lost badly to
+  `server_heuristic`, the follow-up request was to trace and improve the
+  training run path itself without launching another run yet.
+- Interpreted Requirement: Issue
+  [#59](https://github.com/NeonButrfly/tichuml/issues/59) also tracks making
+  plain self-play `ml:bootstrap` train in two stages: keep the
+  `imitation_binary` seed as a heuristic-adequacy gate, but train the evaluated
+  candidate model separately from the same scoped dataset, defaulting that
+  second stage to `observed_outcome_regression` so the bootstrap flow stops
+  treating a good cloning report as a good final challenger.
+- Affected Systems: `scripts/ml-bootstrap.ts`,
+  `tests/integration/ml-bootstrap.test.ts`,
+  `docs/ml-strategy-improvement.md`.
+- Linked GitHub Issue: [#59](https://github.com/NeonButrfly/tichuml/issues/59)
+- Milestone: [6.5 – Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status Source: GitHub issue state only.
+
 ### 2026-07-03 - Plain self-play bootstrap must seed from heuristic imitation before evaluation
 
 - Prompt Signal: After the large training loop still kept producing terrible
