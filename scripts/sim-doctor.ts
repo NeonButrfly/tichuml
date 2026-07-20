@@ -50,9 +50,17 @@ function parseBooleanArg(argv: string[], name: string, fallback: boolean): boole
   return value === "true" || value === "1" || value === "yes";
 }
 
-async function fetchJson<T>(url: string, init: RequestInit = {}): Promise<T> {
+type FetchJsonOptions = RequestInit & {
+  timeoutMs?: number;
+};
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
+
+async function fetchJson<T>(url: string, init: FetchJsonOptions = {}): Promise<T> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10_000);
+  const timeout = setTimeout(() => controller.abort(), init.timeoutMs ?? 10_000);
   try {
     const response = await fetch(url, {
       ...init,
@@ -66,6 +74,26 @@ async function fetchJson<T>(url: string, init: RequestInit = {}): Promise<T> {
     return payload as T;
   } finally {
     clearTimeout(timeout);
+  }
+}
+
+export async function loadTelemetryHealth(
+  baseUrl: string,
+  options: { timeoutMs?: number; retries?: number } = {}
+): Promise<TelemetryHealth> {
+  const retries = Math.max(0, options.retries ?? 2);
+  let attempts = 0;
+  while (true) {
+    try {
+      return await fetchJson<TelemetryHealth>(`${baseUrl}/api/telemetry/health`, {
+        timeoutMs: options.timeoutMs ?? 120_000
+      });
+    } catch (error) {
+      if (!isAbortError(error) || attempts >= retries) {
+        throw error;
+      }
+      attempts += 1;
+    }
   }
 }
 
@@ -141,13 +169,13 @@ function eventPayload(gameId: string) {
 }
 
 async function waitForFlush(baseUrl: string): Promise<TelemetryHealth> {
-  let latest = await fetchJson<TelemetryHealth>(`${baseUrl}/api/telemetry/health`);
+  let latest = await loadTelemetryHealth(baseUrl);
   for (let index = 0; index < 100; index += 1) {
     if ((latest.queue_pending ?? 0) === 0 && (latest.queue_in_flight ?? 0) === 0) {
       return latest;
     }
     await new Promise((resolve) => setTimeout(resolve, 100));
-    latest = await fetchJson<TelemetryHealth>(`${baseUrl}/api/telemetry/health`);
+    latest = await loadTelemetryHealth(baseUrl);
   }
   return latest;
 }
@@ -249,7 +277,7 @@ async function main(): Promise<void> {
   try {
     const health = await fetchJson<Record<string, unknown>>(`${backendUrl}/health`);
     checks.push({ layer: "backend_health", ok: true, detail: health });
-    before = await fetchJson<TelemetryHealth>(`${backendUrl}/api/telemetry/health`);
+    before = await loadTelemetryHealth(backendUrl);
     checks.push({ layer: "db_connection", ok: true, detail: counts(before) });
   } catch (error) {
     checks.push({

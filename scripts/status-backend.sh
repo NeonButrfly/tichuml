@@ -151,6 +151,8 @@ main() {
   ensure_runtime_dirs
 
   local prerequisites_missing=false
+  local database_scope
+  database_scope="$(database_target_scope)"
 
   if has_command git; then
     status_line "[OK]" "git is installed"
@@ -191,22 +193,31 @@ main() {
     prerequisites_missing=true
   fi
 
-  if has_command docker; then
-    status_line "[OK]" "docker is installed"
-  else
-    status_line "[FAIL]" "docker is missing"
-    prerequisites_missing=true
-  fi
-
-  if has_command docker; then
-    if docker_compose_available; then
-      status_line "[OK]" "Docker Compose is available via $(docker_compose_command)"
+  if [ "$database_scope" = "local" ]; then
+    if has_command docker; then
+      status_line "[OK]" "docker is installed"
     else
-      status_line "[FAIL]" "Docker Compose is unavailable; rerun scripts/install-backend.sh to install a distro package or manual CLI plugin"
+      status_line "[FAIL]" "docker is missing"
       prerequisites_missing=true
     fi
+
+    if has_command docker; then
+      if docker_compose_available; then
+        status_line "[OK]" "Docker Compose is available via $(docker_compose_command)"
+      else
+        status_line "[FAIL]" "Docker Compose is unavailable; rerun scripts/install-backend.sh to install a distro package or manual CLI plugin"
+        prerequisites_missing=true
+      fi
+    else
+      status_line "[WARN]" "Skipping Compose check because docker is missing"
+    fi
   else
-    status_line "[WARN]" "Skipping Compose check because docker is missing"
+    if has_command docker; then
+      status_line "[OK]" "docker is installed"
+    else
+      status_line "[WARN]" "docker is missing, but the configured database target is remote"
+    fi
+    status_line "[OK]" "Docker Compose is optional because the configured database target is remote"
   fi
 
   if [ "$prerequisites_missing" = true ]; then
@@ -216,19 +227,28 @@ main() {
   fi
 
   if has_command docker; then
-    local docker_error
+    local docker_error database_target_host_value database_target_port_value
+    database_target_host_value="$(database_target_host)"
+    database_target_port_value="$(database_target_port)"
+    status_line "[OK]" "Database target: $database_target_host_value:$database_target_port_value ($(database_target_scope))"
     docker_error="$(docker_info_error)"
-    if docker info >/dev/null 2>&1; then
+    if database_target_is_local && docker info >/dev/null 2>&1; then
       status_line "[OK]" "Docker daemon is running"
-    else
+    elif database_target_is_local; then
       if printf '%s' "$docker_error" | grep -qi 'permission denied'; then
         status_line "[FAIL]" "Docker daemon is installed but this user lacks daemon access; add the user to the docker group and sign in again"
       else
         status_line "[FAIL]" "Docker daemon is not running; recovery: sudo systemctl enable --now docker"
       fi
+    else
+      if database_connection_ready; then
+        status_line "[OK]" "Remote Postgres is reachable"
+      else
+        status_line "[FAIL]" "Remote Postgres is not reachable"
+      fi
     fi
 
-    if docker_compose_available; then
+    if database_target_is_local && docker_compose_available; then
       if docker_compose ps --status running postgres 2>/dev/null | grep -q postgres; then
         status_line "[OK]" "Postgres container is running"
       else
@@ -240,11 +260,15 @@ main() {
       else
         status_line "[FAIL]" "Postgres connectivity check failed"
       fi
-    else
+    elif database_target_is_local; then
       status_line "[WARN]" "Skipping Postgres container checks because Docker Compose is unavailable"
     fi
   else
-    status_line "[WARN]" "Skipping Docker/Postgres runtime checks because docker is missing"
+    if database_target_is_local; then
+      status_line "[WARN]" "Skipping Docker/Postgres runtime checks because docker is missing"
+    else
+      status_line "[WARN]" "docker is missing, but the configured database target is remote"
+    fi
   fi
 
   if backend_running; then

@@ -478,6 +478,21 @@ describe("ml export and training regressions", () => {
     expect(result.stdout.trim()).toBe("candidate_rows");
   });
 
+  it("switches imitation exports onto candidate-action rows when requested", () => {
+    const result = runPythonSnippet(
+      [
+        "from pathlib import Path",
+        "import sys",
+        "sys.path.insert(0, str(Path('ml').resolve()))",
+      "from export_training_rows import resolve_export_mode",
+      "print(resolve_export_mode('imitation', False, False, True))",
+      ].join("; ")
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout.trim()).toBe("candidate_rows");
+  });
+
   it("adds gameplay source filtering to ml export queries", () => {
     const result = runPythonSnippet(
       [
@@ -498,6 +513,22 @@ describe("ml export and training regressions", () => {
       .split("\n")
       .map((line) => line.trim());
     expect(lines).toEqual(["True", "True"]);
+  });
+
+  it("orders bounded gameplay export queries from newest telemetry first", () => {
+    const result = runPythonSnippet(
+      [
+        "from pathlib import Path",
+        "import sys",
+        "sys.path.insert(0, str(Path('ml').resolve()))",
+        "from export_training_rows import build_query",
+        "query, _ = build_query('trick_play', None, 5000, None, None, 'gameplay')",
+        "print('ORDER BY ts DESC, id DESC' in query)",
+      ].join("\n")
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout.trim()).toBe("True");
   });
 
   it("derives observed hand outcomes from attributed decision hand_result when roundSummary is absent", () => {
@@ -672,6 +703,23 @@ describe("ml export and training regressions", () => {
 
         expect(result.status).toBe(0);
         expect(result.stdout).toContain('"accepted": true');
+        const report = JSON.parse(readFileSync(reportPath, "utf8"));
+        expect(report.rollout_training_coverage).toEqual({
+          labeled_row_count: 4,
+          labeled_decision_count: 2,
+          labeled_game_count: 2,
+          rows_per_decision: {
+            min: 2,
+            p50: 2,
+            p95: 2,
+            max: 2,
+            mean: 2,
+          },
+          top_decisions_by_row_count: [
+            { decision_id: "1", row_count: 2, game_id: "g1", hand_id: null },
+            { decision_id: "2", row_count: 2, game_id: "g2", hand_id: null },
+          ],
+        });
       } finally {
         rmSync(tempDir, { recursive: true, force: true });
       }

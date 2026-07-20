@@ -16,6 +16,9 @@ type ParsedArgs = {
   seed: string;
   telemetryEnabled: boolean;
   backendBaseUrl?: string;
+  modelPathOverride?: string;
+  modelMetaPathOverride?: string;
+  skipHeuristicSanity: boolean;
   decisionTimeoutMs: number;
   quiet: boolean;
   progress: boolean;
@@ -26,9 +29,22 @@ type ParsedArgs = {
   outputPath?: string;
   mirrorSeats: boolean;
   minGamesForGate: number;
+  minLightgbmServedDecisions: number | null;
+  minLightgbmServiceRate: number | null;
   requireNoIllegalActions: boolean;
   requireNoFallbackIncrease: boolean;
   maxAverageLatencyMs: number | null;
+};
+
+type EvaluationLightgbmDiagnostics = {
+  requested_decisions: number;
+  completed_by_lightgbm: number;
+  delegated_to_server_heuristic: number;
+  local_fallback_decisions: number;
+  service_rate: number;
+  delegated_by_reason: Record<string, number>;
+  rerank_skipped_by_reason: Record<string, number>;
+  small_branch_legal_action_count: Record<string, number>;
 };
 
 type EvaluationLegPlan = {
@@ -68,6 +84,7 @@ type EvaluationLegSummary = {
   average_latency_by_provider: Record<string, number>;
   decision_latency_p95_by_provider: Record<string, number | null>;
   provider_usage: Record<string, number>;
+  lightgbm_diagnostics: EvaluationLightgbmDiagnostics | null;
   decisions_by_phase: Record<string, number>;
   events_by_phase: Record<string, number>;
   exchange_phase_recorded: boolean;
@@ -167,6 +184,7 @@ type LatestSummary = {
   invalid_decision_count: number;
   average_latency_by_provider: Record<string, number>;
   provider_usage: Record<string, number>;
+  lightgbm_diagnostics: EvaluationLightgbmDiagnostics | null;
   decisions_by_phase: Record<string, number>;
   events_by_phase: Record<string, number>;
   exchange_phase_recorded: boolean;
@@ -291,6 +309,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     games: 100,
     seed: "evaluation",
     telemetryEnabled: true,
+    skipHeuristicSanity: false,
     decisionTimeoutMs: 2000,
     quiet: false,
     progress: true,
@@ -300,6 +319,8 @@ export function parseArgs(argv: string[]): ParsedArgs {
     seatProviders,
     mirrorSeats: false,
     minGamesForGate: 100,
+    minLightgbmServedDecisions: null,
+    minLightgbmServiceRate: null,
     requireNoIllegalActions: true,
     requireNoFallbackIncrease: true,
     maxAverageLatencyMs: 250
@@ -355,9 +376,27 @@ export function parseArgs(argv: string[]): ParsedArgs {
         parsed.telemetryEnabled = parseBoolean(next, true);
         index += 1;
         break;
+      case "--skip-heuristic-sanity":
+        parsed.skipHeuristicSanity = parseBoolean(next, true);
+        if (next && !next.startsWith("--")) {
+          index += 1;
+        }
+        break;
       case "--backend-url":
         if (next) {
           parsed.backendBaseUrl = next;
+        }
+        index += 1;
+        break;
+      case "--model-path":
+        if (next) {
+          parsed.modelPathOverride = next;
+        }
+        index += 1;
+        break;
+      case "--model-meta-path":
+        if (next) {
+          parsed.modelMetaPathOverride = next;
         }
         index += 1;
         break;
@@ -382,6 +421,14 @@ export function parseArgs(argv: string[]): ParsedArgs {
         break;
       case "--min-games-for-gate":
         parsed.minGamesForGate = parseNumber(next, parsed.minGamesForGate);
+        index += 1;
+        break;
+      case "--min-lightgbm-served-decisions":
+        parsed.minLightgbmServedDecisions = parsePositiveInteger(next, 0);
+        index += 1;
+        break;
+      case "--min-lightgbm-service-rate":
+        parsed.minLightgbmServiceRate = parseNullableNumber(next);
         index += 1;
         break;
       case "--require-no-illegal-actions":
@@ -478,16 +525,17 @@ function buildSeatProvidersForTeams(
   };
 }
 
-function buildLegPlans(args: ParsedArgs): EvaluationLegPlan[] {
+export function buildLegPlans(args: ParsedArgs): EvaluationLegPlan[] {
   const plans: EvaluationLegPlan[] = [];
   const comparisonSeatProviders = cloneSeatProviders(args.seatProviders);
 
   const includesDistinctProviders = args.nsProvider !== args.ewProvider;
-  if (
-    includesDistinctProviders ||
-    args.requireNoFallbackIncrease ||
-    args.requireNoIllegalActions
-  ) {
+  const needsHeuristicSanity =
+    !args.skipHeuristicSanity &&
+    (includesDistinctProviders ||
+      args.requireNoFallbackIncrease ||
+      args.requireNoIllegalActions);
+  if (needsHeuristicSanity) {
     plans.push({
       name: "heuristic_sanity",
       seed: `${args.seed}:heuristic-baseline`,
@@ -519,6 +567,28 @@ function buildLegPlans(args: ParsedArgs): EvaluationLegPlan[] {
   }
 
   return plans;
+}
+
+function buildLightgbmDiagnostics(
+  diagnostics: SelfPlayBatchSummary["lightgbmDiagnostics"]
+): EvaluationLightgbmDiagnostics | null {
+  if (diagnostics === null) {
+    return null;
+  }
+  const serviceRate =
+    diagnostics.requestedDecisions > 0
+      ? roundRate(diagnostics.completedByLightgbm / diagnostics.requestedDecisions)
+      : 0;
+  return {
+    requested_decisions: diagnostics.requestedDecisions,
+    completed_by_lightgbm: diagnostics.completedByLightgbm,
+    delegated_to_server_heuristic: diagnostics.delegatedToServerHeuristic,
+    local_fallback_decisions: diagnostics.localFallbackDecisions,
+    service_rate: serviceRate,
+    delegated_by_reason: diagnostics.delegatedByReason,
+    rerank_skipped_by_reason: diagnostics.rerankSkippedByReason,
+    small_branch_legal_action_count: diagnostics.smallBranchLegalActionCount
+  };
 }
 
 function buildLegSummary(
@@ -606,6 +676,7 @@ function buildLegSummary(
       ])
     ),
     provider_usage: summary.providerUsage,
+    lightgbm_diagnostics: buildLightgbmDiagnostics(summary.lightgbmDiagnostics),
     decisions_by_phase: summary.decisionsByPhase,
     events_by_phase: summary.eventsByPhase,
     exchange_phase_recorded: summary.exchangePhaseRecorded,
@@ -822,6 +893,17 @@ function sumAcrossLegs(
   return legs.reduce((total, leg) => total + pick(leg), 0);
 }
 
+function sumLightgbmAcrossLegs(
+  legs: EvaluationLegSummary[],
+  pick: (diagnostics: EvaluationLightgbmDiagnostics) => number
+): number {
+  return legs.reduce(
+    (total, leg) =>
+      total + (leg.lightgbm_diagnostics ? pick(leg.lightgbm_diagnostics) : 0),
+    0
+  );
+}
+
 export function evaluateImprovementGate(config: {
   comparison: ProviderComparisonSummary | null;
   baselineRun: EvaluationLegSummary | null;
@@ -892,6 +974,46 @@ export function evaluateImprovementGate(config: {
     passed: beatsBaseline,
     details: `win_rate=${winRate}, average_score_delta=${scoreDelta}`
   });
+
+  if (providers.challenger === "lightgbm_model") {
+    const lightgbmRequestedDecisions = sumLightgbmAcrossLegs(
+      config.comparisonLegs,
+      (diagnostics) => diagnostics.requested_decisions
+    );
+    const lightgbmServedDecisions = sumLightgbmAcrossLegs(
+      config.comparisonLegs,
+      (diagnostics) => diagnostics.completed_by_lightgbm
+    );
+    const lightgbmDelegatedDecisions = sumLightgbmAcrossLegs(
+      config.comparisonLegs,
+      (diagnostics) => diagnostics.delegated_to_server_heuristic
+    );
+    if (config.args.minLightgbmServedDecisions !== null) {
+      checks.push({
+        name: "lightgbm_served_decisions",
+        passed:
+          lightgbmServedDecisions >= config.args.minLightgbmServedDecisions,
+        details:
+          `served=${lightgbmServedDecisions}, requested=${lightgbmRequestedDecisions}, ` +
+          `delegated=${lightgbmDelegatedDecisions}, required=${config.args.minLightgbmServedDecisions}`
+      });
+    }
+    if (config.args.minLightgbmServiceRate !== null) {
+      const lightgbmServiceRate =
+        lightgbmRequestedDecisions > 0
+          ? roundRate(lightgbmServedDecisions / lightgbmRequestedDecisions)
+          : 0;
+      checks.push({
+        name: "lightgbm_service_rate",
+        passed:
+          lightgbmRequestedDecisions > 0 &&
+          lightgbmServiceRate >= config.args.minLightgbmServiceRate,
+        details:
+          `served=${lightgbmServedDecisions}, requested=${lightgbmRequestedDecisions}, ` +
+          `service_rate=${lightgbmServiceRate}, required=${config.args.minLightgbmServiceRate}`
+      });
+    }
+  }
 
   if (config.args.requireNoIllegalActions) {
     const illegalPassed =
@@ -1065,6 +1187,7 @@ export function buildLatestSummary(config: {
     invalid_decision_count: config.primaryLeg.invalid_decision_count,
     average_latency_by_provider: config.primaryLeg.average_latency_by_provider,
     provider_usage: config.primaryLeg.provider_usage,
+    lightgbm_diagnostics: config.primaryLeg.lightgbm_diagnostics,
     decisions_by_phase: config.primaryLeg.decisions_by_phase,
     events_by_phase: config.primaryLeg.events_by_phase,
     exchange_phase_recorded: config.primaryLeg.exchange_phase_recorded,
@@ -1110,6 +1233,11 @@ function buildMarkdownReport(report: EvaluationReport): string {
     lines.push(
       `- Average latency by provider: ${JSON.stringify(report.baseline_run.average_latency_by_provider)}`
     );
+    if (report.baseline_run.lightgbm_diagnostics) {
+      lines.push(
+        `- LightGBM requested/served/delegated: ${report.baseline_run.lightgbm_diagnostics.requested_decisions} / ${report.baseline_run.lightgbm_diagnostics.completed_by_lightgbm} / ${report.baseline_run.lightgbm_diagnostics.delegated_to_server_heuristic} (service rate ${report.baseline_run.lightgbm_diagnostics.service_rate})`
+      );
+    }
     lines.push("");
   }
 
@@ -1140,6 +1268,11 @@ function buildMarkdownReport(report: EvaluationReport): string {
     lines.push(
       `- Average latency by provider: ${JSON.stringify(leg.average_latency_by_provider)}`
     );
+    if (leg.lightgbm_diagnostics) {
+      lines.push(
+        `- LightGBM requested/served/delegated: ${leg.lightgbm_diagnostics.requested_decisions} / ${leg.lightgbm_diagnostics.completed_by_lightgbm} / ${leg.lightgbm_diagnostics.delegated_to_server_heuristic} (service rate ${leg.lightgbm_diagnostics.service_rate})`
+      );
+    }
     lines.push("");
   }
 
@@ -1211,6 +1344,11 @@ function printReadableSummary(report: EvaluationReport): void {
   console.log(
     `- Average latency by provider: ${JSON.stringify(report.latest_summary.average_latency_by_provider)}`
   );
+  if (report.latest_summary.lightgbm_diagnostics) {
+    console.log(
+      `- LightGBM requested/served/delegated: ${report.latest_summary.lightgbm_diagnostics.requested_decisions} / ${report.latest_summary.lightgbm_diagnostics.completed_by_lightgbm} / ${report.latest_summary.lightgbm_diagnostics.delegated_to_server_heuristic} (service rate ${report.latest_summary.lightgbm_diagnostics.service_rate})`
+    );
+  }
   console.log(`- Improvement gate passed: ${report.gate.passed}`);
 }
 
@@ -1300,7 +1438,10 @@ async function main(): Promise<void> {
       (provider): provider is ProviderMode => provider !== undefined
     )
   ].includes("lightgbm_model");
-  const modelMetadata = readModelMetadata(repoRoot, usesLightgbm);
+  const modelMetadata = readModelMetadata(repoRoot, usesLightgbm, {
+    modelPathOverride: args.modelPathOverride,
+    modelMetaPathOverride: args.modelMetaPathOverride
+  });
   const reportTimestamp = new Date().toISOString();
   const primaryLeg = comparisonRuns[0];
   if (!primaryLeg) {

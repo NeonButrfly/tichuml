@@ -80,7 +80,8 @@ Quick reference:
   grouped target summaries and baseline comparisons.
 - `npm run ml:live-bootstrap` builds a rollout-labeled candidate model from
   live `gameplay` telemetry, including mixed `human_ui` and AI-provider rows
-  when explicitly allowed, and can screen that candidate through the normal
+  when explicitly allowed, and defaults the training objective to
+  `rollout_regression` before screening that candidate through the normal
   mirrored evaluation gate on a temporary backend.
 - After any host-side `ml:train` run that updates
   `ml/model_registry/lightgbm_action_model.*`, restart the backend before
@@ -417,7 +418,7 @@ For live gameplay improvement, build a rollout-labeled candidate from persisted
 `gameplay` telemetry instead of starting from a fresh self-play run:
 
 ```powershell
-npm run ml:live-bootstrap -- --output-dir training-runs/live-gameplay-001/ml --allow-mixed-providers --rollout-max-decisions 250 --rollouts-per-action 2
+npm run ml:live-bootstrap -- --output-dir training-runs/live-gameplay-001/ml --allow-mixed-providers --rollout-max-decisions 250 --rollouts-per-action 2 --objective rollout_regression
 ```
 
 That flow exports gameplay-tagged decision rows as JSONL, relabels them with

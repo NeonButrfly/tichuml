@@ -4,10 +4,17 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 import {
+  assertObservedOutcomeTrainingQuality,
   assertCandidateArtifactsExist,
   assertCandidateBackendPortAvailable,
+  assertHeuristicImitationTrainingQuality,
+  assertTrainingDecisionQuality,
   buildLiveMlBootstrapPlan,
+  overrideEvaluationBackendUrl,
   readEvaluationSummary,
+  readTrainingReportQualitySummary,
+  readTrainingReportSummary,
+  resolveCandidateBackendPort,
 } from "../../scripts/ml-live-bootstrap.js";
 
 describe("live ml bootstrap orchestration", () => {
@@ -120,6 +127,10 @@ describe("live ml bootstrap orchestration", () => {
       "8",
       "--min-games-for-gate",
       "8",
+      "--min-lightgbm-served-decisions",
+      "50",
+      "--min-lightgbm-service-rate",
+      "0.1",
       "--ns-provider",
       "lightgbm_model",
       "--ew-provider",
@@ -135,6 +146,76 @@ describe("live ml bootstrap orchestration", () => {
       "--output",
       plan.evaluationReportPath,
     ]);
+  });
+
+  it("defaults the live bootstrap objective to rollout_regression", () => {
+    const plan = buildLiveMlBootstrapPlan({
+      outputDir: "training-runs/live-default-objective/ml",
+      backendUrl: "http://127.0.0.1:4310",
+      telemetrySource: "gameplay",
+      provider: null,
+      allowMixedProviders: true,
+      exportLimit: 5000,
+      rolloutMaxDecisions: 250,
+      continuationProvider: "server_heuristic",
+      rolloutsPerAction: 2,
+      featureProfile: "runtime_raw",
+      minRolloutDecisionSpread: 20,
+      minRolloutSamples: 0,
+      minRolloutStddev: 0,
+      evaluateGames: 8,
+      evaluateMinGamesForGate: 8,
+      evaluateBaselineProvider: "server_heuristic",
+      candidateBackendPort: 4312,
+      skipEvaluate: true,
+    });
+
+    expect(plan.steps[2]?.args).toContain("rollout_regression");
+    expect(plan.steps[2]?.args).not.toContain("rollout_ranker");
+  });
+
+  it("defaults gameplay exports to the canonical heuristic slice when mixed providers are not explicitly allowed", () => {
+    const plan = buildLiveMlBootstrapPlan({
+      outputDir: "training-runs/live-canonical-default/ml",
+      backendUrl: "http://127.0.0.1:4310",
+      telemetrySource: "gameplay",
+      provider: null,
+      allowMixedProviders: false,
+      exportLimit: 5000,
+      rolloutMaxDecisions: 250,
+      continuationProvider: "server_heuristic",
+      rolloutsPerAction: 2,
+      featureProfile: "runtime_raw",
+      objective: "rollout_regression",
+      minRolloutDecisionSpread: 0,
+      minRolloutSamples: 0,
+      minRolloutStddev: 0,
+      evaluateGames: 8,
+      evaluateMinGamesForGate: 8,
+      evaluateBaselineProvider: "server_heuristic",
+      candidateBackendPort: 4312,
+      skipEvaluate: true,
+    });
+
+    expect(plan.steps[0]?.args).toEqual([
+      "run",
+      "ml:export:raw",
+      "--",
+      "--phase",
+      "trick_play",
+      "--source",
+      "gameplay",
+      "--format",
+      "jsonl",
+      "--include-rollouts",
+      "--output-dir",
+      "training-runs/live-canonical-default/ml",
+      "--provider",
+      "server_heuristic",
+      "--limit",
+      "5000",
+    ]);
+    expect(plan.steps[0]?.args).not.toContain("--allow-mixed-providers");
   });
 
   it("switches to a single-provider gameplay slice when requested", () => {
@@ -242,6 +323,152 @@ describe("live ml bootstrap orchestration", () => {
     }
   });
 
+  it("reads the training summary for smoke-quality checks", () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "ml-live-bootstrap-train-report-"));
+    const reportPath = join(tempDir, "training-report.json");
+
+    try {
+      writeFileSync(
+        reportPath,
+        JSON.stringify(
+          {
+            row_count: 417,
+            decision_count: 21,
+            game_count: 9,
+          },
+          null,
+          2
+        ),
+        "utf8"
+      );
+
+      expect(readTrainingReportSummary(reportPath)).toEqual({
+        rowCount: 417,
+        decisionCount: 21,
+        gameCount: 9,
+      });
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("reads observed-outcome quality signals from the training report", () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "ml-live-bootstrap-quality-"));
+    const reportPath = join(tempDir, "training-report.json");
+
+    try {
+      writeFileSync(
+        reportPath,
+        JSON.stringify(
+          {
+            row_count: 4247,
+            decision_count: 4863,
+            game_count: 4,
+            objective: "observed_outcome_regression",
+            validation_metrics: {
+              top1_chosen_action_recall: 0.82,
+            },
+            model_vs_baseline: {
+              rmse_improvement: -46.95,
+              mae_improvement: -43.95,
+            },
+          },
+          null,
+          2
+        ),
+        "utf8"
+      );
+
+      expect(readTrainingReportQualitySummary(reportPath)).toEqual({
+        rowCount: 4247,
+        decisionCount: 4863,
+        gameCount: 4,
+        objective: "observed_outcome_regression",
+        top1ChosenActionRecall: 0.82,
+        baselineRmseImprovement: -46.95,
+        baselineMaeImprovement: -43.95,
+      });
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects training samples that collapse to too few decisions and games", () => {
+    expect(() =>
+      assertTrainingDecisionQuality(
+        {
+          rowCount: 51,
+          decisionCount: 1,
+          gameCount: 1,
+        },
+        {
+          minDecisionCount: 10,
+          minGameCount: 3,
+        }
+      )
+    ).toThrow(/too narrow for trustworthy candidate evaluation/i);
+  });
+
+  it("rejects observed-outcome reports that are worse than baseline", () => {
+    expect(() =>
+      assertObservedOutcomeTrainingQuality({
+        rowCount: 4247,
+        decisionCount: 4863,
+        gameCount: 4,
+        objective: "observed_outcome_regression",
+        baselineRmseImprovement: -46.95,
+        baselineMaeImprovement: -43.95,
+      })
+    ).toThrow(/failed bootstrap quality gates/i);
+  });
+
+  it("rejects heuristic imitation reports with weak top1 chosen-action recall", () => {
+    expect(() =>
+      assertHeuristicImitationTrainingQuality(
+        {
+          rowCount: 12000,
+          decisionCount: 1800,
+          gameCount: 40,
+          objective: "imitation_binary",
+          top1ChosenActionRecall: 0.38,
+          baselineRmseImprovement: null,
+          baselineMaeImprovement: null,
+        },
+        { minTop1ChosenActionRecall: 0.6 }
+      )
+    ).toThrow(/heuristic imitation training report failed/i);
+  });
+
+  it("allows heuristic imitation reports with baseline-adequate recall", () => {
+    expect(() =>
+      assertHeuristicImitationTrainingQuality(
+        {
+          rowCount: 12000,
+          decisionCount: 1800,
+          gameCount: 40,
+          objective: "imitation_binary",
+          top1ChosenActionRecall: 0.74,
+          baselineRmseImprovement: null,
+          baselineMaeImprovement: null,
+        },
+        { minTop1ChosenActionRecall: 0.6 }
+      )
+    ).not.toThrow();
+  });
+
+  it("allows observed-outcome reports with positive ranking and baseline lift", () => {
+    expect(() =>
+      assertObservedOutcomeTrainingQuality({
+        rowCount: 12000,
+        decisionCount: 12500,
+        gameCount: 40,
+        objective: "observed_outcome_regression",
+        baselineRmseImprovement: 12.4,
+        baselineMaeImprovement: 9.7,
+      })
+    ).not.toThrow();
+  });
+
   it("rejects an occupied candidate backend port", async () => {
     const server = createServer();
     await new Promise<void>((resolvePromise, reject) => {
@@ -258,6 +485,68 @@ describe("live ml bootstrap orchestration", () => {
       await expect(
         assertCandidateBackendPortAvailable(port ?? 0)
       ).rejects.toThrow(/already in use/i);
+    } finally {
+      await new Promise<void>((resolvePromise, reject) => {
+        server.close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolvePromise();
+        });
+      });
+    }
+  });
+
+  it("falls back to a free candidate backend port when the preferred port is occupied", async () => {
+    const server = createServer();
+    await new Promise<void>((resolvePromise, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", () => resolvePromise());
+    });
+
+    const address = server.address();
+    const occupiedPort =
+      address && typeof address === "object" ? address.port : null;
+
+    try {
+      expect(occupiedPort).not.toBeNull();
+      const resolvedPort = await resolveCandidateBackendPort(occupiedPort ?? 0);
+      expect(resolvedPort).not.toBe(occupiedPort);
+
+      const basePlan = buildLiveMlBootstrapPlan({
+        outputDir: "training-runs/live-20260601-000001/ml",
+        backendUrl: "http://127.0.0.1:4310",
+        telemetrySource: "gameplay",
+        provider: null,
+        allowMixedProviders: true,
+        exportLimit: 5000,
+        rolloutMaxDecisions: 250,
+        continuationProvider: "server_heuristic",
+        rolloutsPerAction: 2,
+        featureProfile: "runtime_raw",
+        objective: "rollout_regression",
+        minRolloutDecisionSpread: 20,
+        minRolloutSamples: 2,
+        minRolloutStddev: 10,
+        evaluateGames: 8,
+        evaluateMinGamesForGate: 8,
+        evaluateBaselineProvider: "server_heuristic",
+        candidateBackendPort: occupiedPort ?? 4312,
+        skipEvaluate: false,
+      });
+
+      const updatedPlan = overrideEvaluationBackendUrl(
+        basePlan,
+        `http://127.0.0.1:${resolvedPort}`
+      );
+
+      expect(updatedPlan.candidateBackendUrl).toBe(
+        `http://127.0.0.1:${resolvedPort}`
+      );
+      expect(updatedPlan.steps.at(-1)?.args).toContain(
+        `http://127.0.0.1:${resolvedPort}`
+      );
     } finally {
       await new Promise<void>((resolvePromise, reject) => {
         server.close((error) => {

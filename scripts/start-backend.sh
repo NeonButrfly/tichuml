@@ -45,7 +45,7 @@ main() {
   log_info "2. Force-syncing repo to origin/$GIT_BRANCH"
   log_info "3. Verifying runtime prerequisites"
   log_info "4. Verifying Docker and Docker Compose"
-  log_info "5. Starting Postgres and waiting for readiness"
+  log_info "5. Verifying the effective DATABASE_URL target and waiting for readiness"
   log_info "6. Ensuring Python venv and ML requirements"
   log_info "7. Ensuring Node workspace dependencies"
   log_info "8. Building workspace packages before migrations"

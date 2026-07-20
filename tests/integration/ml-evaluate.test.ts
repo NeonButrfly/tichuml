@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 import {
   buildLatestSummary,
+  buildLegPlans,
   buildProviderComparisonSummary,
   evaluateImprovementGate,
   parseArgs,
@@ -31,6 +32,8 @@ describe("ml evaluation helpers", () => {
     },
     mirrorSeats: true,
     minGamesForGate: 20,
+    minLightgbmServedDecisions: null,
+    minLightgbmServiceRate: null,
     requireNoIllegalActions: true,
     requireNoFallbackIncrease: true,
     maxAverageLatencyMs: 250
@@ -104,6 +107,20 @@ describe("ml evaluation helpers", () => {
     provider_usage: {
       lightgbm_model: 220,
       server_heuristic: 220
+    },
+    lightgbm_diagnostics: {
+      requested_decisions: 260,
+      completed_by_lightgbm: 220,
+      delegated_to_server_heuristic: 40,
+      local_fallback_decisions: 0,
+      service_rate: 0.8462,
+      delegated_by_reason: {
+        small_branch_delegated: 40
+      },
+      rerank_skipped_by_reason: {},
+      small_branch_legal_action_count: {
+        "3": 40
+      }
     },
     decisions_by_phase: {
       trick_play: 380,
@@ -191,7 +208,8 @@ describe("ml evaluation helpers", () => {
         },
         provider_usage: {
           server_heuristic: 440
-        }
+        },
+        lightgbm_diagnostics: null
       },
       comparisonLegs: [primaryLeg, mirrorLeg],
       args
@@ -200,6 +218,61 @@ describe("ml evaluation helpers", () => {
     expect(gate.applied).toBe(true);
     expect(gate.passed).toBe(true);
     expect(gate.challenger_provider).toBe("lightgbm_model");
+  });
+
+  it("fails the improvement gate when lightgbm barely serves its requested decisions", () => {
+    const comparison = buildProviderComparisonSummary(
+      [primaryLeg, mirrorLeg],
+      "lightgbm_model",
+      "server_heuristic"
+    );
+    const gate = evaluateImprovementGate({
+      comparison,
+      baselineRun: null,
+      comparisonLegs: [
+        {
+          ...primaryLeg,
+          lightgbm_diagnostics: {
+            ...primaryLeg.lightgbm_diagnostics,
+            requested_decisions: 300,
+            completed_by_lightgbm: 20,
+            delegated_to_server_heuristic: 280,
+            local_fallback_decisions: 0,
+            service_rate: 0.0667
+          }
+        },
+        {
+          ...mirrorLeg,
+          lightgbm_diagnostics: {
+            ...mirrorLeg.lightgbm_diagnostics,
+            requested_decisions: 300,
+            completed_by_lightgbm: 20,
+            delegated_to_server_heuristic: 280,
+            local_fallback_decisions: 0,
+            service_rate: 0.0667
+          }
+        }
+      ],
+      args: {
+        ...args,
+        minLightgbmServedDecisions: 100,
+        minLightgbmServiceRate: 0.2
+      }
+    });
+
+    expect(gate.passed).toBe(false);
+    expect(gate.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "lightgbm_served_decisions",
+          passed: false
+        }),
+        expect.objectContaining({
+          name: "lightgbm_service_rate",
+          passed: false
+        })
+      ])
+    );
   });
 
   it("builds the latest summary payload with new evaluation fields", () => {
@@ -227,6 +300,7 @@ describe("ml evaluation helpers", () => {
     expect(latest.mirror_seats).toBe(true);
     expect(latest.tichu_call_rate).toBe(0.3);
     expect(latest.double_victory_rate).toBe(0.07);
+    expect(latest.lightgbm_diagnostics?.service_rate).toBe(0.8462);
     expect(latest.gate_passed).toBe(true);
   });
 
@@ -235,6 +309,45 @@ describe("ml evaluation helpers", () => {
     expect(parseArgs(["--decision-timeout-ms", "3500"]).decisionTimeoutMs).toBe(
       3500
     );
+    expect(
+      parseArgs(["--min-lightgbm-served-decisions", "25"])
+        .minLightgbmServedDecisions
+    ).toBe(25);
+    expect(parseArgs(["--min-lightgbm-service-rate", "0.2"]).minLightgbmServiceRate).toBe(0.2);
+  });
+
+  it("accepts explicit candidate model path overrides from CLI args", () => {
+    const parsed = parseArgs([
+      "--model-path",
+      "training-runs/smoke/ml/lightgbm_action_model.txt",
+      "--model-meta-path",
+      "training-runs/smoke/ml/lightgbm_action_model.meta.json"
+    ]);
+
+    expect(parsed.modelPathOverride).toBe(
+      "training-runs/smoke/ml/lightgbm_action_model.txt"
+    );
+    expect(parsed.modelMetaPathOverride).toBe(
+      "training-runs/smoke/ml/lightgbm_action_model.meta.json"
+    );
+  });
+
+  it("skips the heuristic sanity leg when explicitly requested", () => {
+    const parsed = parseArgs([
+      "--ns-provider",
+      "lightgbm_model",
+      "--ew-provider",
+      "server_heuristic",
+      "--mirror-seats",
+      "true",
+      "--skip-heuristic-sanity",
+      "true"
+    ]);
+
+    expect(buildLegPlans(parsed).map((leg) => leg.name)).toEqual([
+      "primary",
+      "mirror"
+    ]);
   });
 
   it("writes default evaluation reports under eval/results instead of tracked artifacts", () => {

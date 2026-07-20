@@ -716,6 +716,10 @@ def build_query(
 
     where_clause = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     limit_clause = "LIMIT %s" if isinstance(limit, int) and limit > 0 else ""
+    if source and source.strip() == "gameplay":
+        order_clause = "ORDER BY ts DESC, id DESC"
+    else:
+        order_clause = "ORDER BY game_id ASC, hand_id ASC, decision_index ASC, ts ASC, id ASC"
     if limit_clause:
         params.append(limit)
 
@@ -760,7 +764,7 @@ def build_query(
             hand_result
         FROM decisions
         {where_clause}
-        ORDER BY game_id ASC, hand_id ASC, decision_index ASC, ts ASC, id ASC
+        {order_clause}
         {limit_clause}
     """
     return query, params
@@ -1193,8 +1197,9 @@ def resolve_export_mode(
     label_mode: str,
     include_rollouts: bool,
     has_rollout_input: bool,
+    include_candidates: bool = False,
 ) -> str:
-    if label_mode == "rollout" or include_rollouts or has_rollout_input:
+    if include_candidates or label_mode == "rollout" or include_rollouts or has_rollout_input:
         return "candidate_rows"
     return "chosen_decision_rows"
 
@@ -2333,6 +2338,7 @@ def main() -> None:
     parser.add_argument("--no-include-outcomes", dest="include_outcomes", action="store_false")
     parser.add_argument("--include-rollouts", dest="include_rollouts", action="store_true", default=False)
     parser.add_argument("--no-include-rollouts", dest="include_rollouts", action="store_false")
+    parser.add_argument("--include-candidates", action="store_true", default=False)
     parser.add_argument("--rollout-input", default=None)
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT))
     parser.add_argument("--output-dir", default=None)
@@ -2394,6 +2400,7 @@ def main() -> None:
         args.label_mode,
         effective_include_rollouts,
         bool(args.rollout_input),
+        bool(args.include_candidates),
     )
     if args.label_mode == "rollout" and not args.rollout_input:
         raise ValueError(

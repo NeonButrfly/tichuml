@@ -14,6 +14,172 @@ Use this file to preserve AI and bot-behavior prompt intent and link it to GitHu
 
 ## Entries
 
+### 2026-07-12 - Plain self-play bootstrap must evaluate a second-stage candidate, not just the imitation seed
+
+- Prompt Signal: After tracing a recovered Linux-host training candidate that
+  had strong offline imitation recall but still lost badly to
+  `server_heuristic`, the follow-up request was to trace and improve the
+  training run path itself without launching another run yet.
+- Interpreted Requirement: Issue
+  [#59](https://github.com/NeonButrfly/tichuml/issues/59) also tracks making
+  plain self-play `ml:bootstrap` train in two stages: keep the
+  `imitation_binary` seed as a heuristic-adequacy gate, but train the evaluated
+  candidate model separately from the same scoped dataset, defaulting that
+  second stage to `observed_outcome_regression` so the bootstrap flow stops
+  treating a good cloning report as a good final challenger.
+- Affected Systems: `scripts/ml-bootstrap.ts`,
+  `tests/integration/ml-bootstrap.test.ts`,
+  `docs/ml-strategy-improvement.md`.
+- Linked GitHub Issue: [#59](https://github.com/NeonButrfly/tichuml/issues/59)
+- Milestone: [6.5 – Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status Source: GitHub issue state only.
+
+### 2026-07-03 - Plain self-play bootstrap must seed from heuristic imitation before evaluation
+
+- Prompt Signal: After the large training loop still kept producing terrible
+  LightGBM results, the follow-up request pushed to stop circling, determine
+  why training was not working, and make the generated training data at least
+  baseline adequate before launching another misleading evaluation.
+- Interpreted Requirement: Issue
+  [#124](https://github.com/NeonButrfly/tichuml/issues/124) tracks hardening
+  plain `ml:bootstrap` so self-play heuristic bootstrap candidates are first
+  trained as `imitation_binary` seed models against the selected heuristic
+  provider's choices, not weak observed-outcome labels. The bootstrap flow must
+  read `training-report.json` after `ml:train`, require a materially larger
+  training slice than the live smoke gate, and reject imitation seeds whose
+  top-1 chosen-action recall is below the configured baseline-adequacy floor
+  before starting the temporary candidate backend.
+- Affected Systems: `scripts/ml-bootstrap.ts`,
+  `scripts/ml-live-bootstrap.ts`,
+  `tests/integration/ml-bootstrap.test.ts`,
+  `tests/integration/ml-live-bootstrap.test.ts`,
+  `docs/ml-strategy-improvement.md`.
+- Linked GitHub Issue: [#124](https://github.com/NeonButrfly/tichuml/issues/124)
+- Milestone: [6.5 – Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status Source: GitHub issue state only.
+
+### 2026-07-02 - ML smoke gates must fail when the trained LightGBM candidate is barely serving decisions
+
+- Prompt Signal: After repeated bootstrap and smoke loops still looked
+  suspicious, the follow-up request pushed on whether evaluation was circling
+  on an old model and why the runs could still complete when the challenger was
+  quietly delegating most of its requested workload back to the heuristic.
+- Interpreted Requirement: Issue
+  [#118](https://github.com/NeonButrfly/tichuml/issues/118) tracks making
+  evaluation integrity explicit: plain `ml:bootstrap` must evaluate through an
+  isolated candidate backend pinned to the newly trained run-local model
+  bundle, and both bootstrap wrappers must fail smoke gates when
+  `lightgbm_model` barely serves its requested decisions. The evaluation report
+  must surface LightGBM requested/served/delegated counts and service rate so
+  suspicious runs are auditable without manual DB queries, and the plain
+  bootstrap flow must allow `--skip-build-server` on already-updated hosts so
+  the isolated evaluation path does not wedge on a redundant server rebuild.
+- Affected Systems: `scripts/ml-bootstrap.ts`,
+  `scripts/ml-live-bootstrap.ts`, `apps/sim-runner/src/evaluate.ts`,
+  `tests/integration/ml-bootstrap.test.ts`,
+  `tests/integration/ml-live-bootstrap.test.ts`,
+  `tests/integration/ml-evaluate.test.ts`,
+  `docs/ml-strategy-improvement.md`.
+- Linked GitHub Issue: [#118](https://github.com/NeonButrfly/tichuml/issues/118)
+- Milestone: none
+- Status Source: GitHub issue state only.
+
+### 2026-07-01 - Live bootstrap eval must recover from stale ports and reject low-signal smoke samples
+
+- Prompt Signal: The latest live-training recovery request asked to fix the
+  candidate evaluation port and lifecycle, then make sure repeated smoke and
+  medium runs are producing high-quality decision data instead of silently
+  accepting a collapsed one-decision sample.
+- Interpreted Requirement: Issue
+  [#115](https://github.com/NeonButrfly/tichuml/issues/115) tracks hardening
+  `ml:live-bootstrap` so candidate evaluation can recover onto a free localhost
+  port when stale runtime state still owns the default eval port, candidate
+  backend shutdown is more aggressive, and bounded live smokes are blocked from
+  running evaluation when the training report shows too few unique decisions or
+  games to trust the result.
+- Affected Systems: `scripts/ml-live-bootstrap.ts`,
+  `tests/integration/ml-live-bootstrap.test.ts`,
+  `docs/ml-strategy-improvement.md`.
+- Linked GitHub Issue: [#115](https://github.com/NeonButrfly/tichuml/issues/115)
+- Milestone: none
+- Status Source: GitHub issue state only.
+
+### 2026-07-02 - Rollout smoke diagnostics must expose actual labeled coverage, not only sparse rollout rows
+
+- Prompt Signal: After the bounded live smoke still looked suspicious, the
+  follow-up debugging request focused on whether rollout metadata was being lost
+  before training and asked for the eval suspicion to be resolved rather than
+  hand-waved.
+- Interpreted Requirement: Issue
+  [#115](https://github.com/NeonButrfly/tichuml/issues/115) also tracks adding
+  explicit rollout training coverage diagnostics so rollout objectives report
+  the labeled row, decision, and game counts that actually reached training,
+  plus decision-concentration summaries, instead of forcing operators to infer
+  quality from sparse `rollout_rows.jsonl` artifacts alone.
+- Affected Systems: `ml/train_lightgbm.py`,
+  `tests/integration/ml-export-train-regression.test.ts`,
+  `docs/ml-strategy-improvement.md`.
+- Linked GitHub Issue: [#115](https://github.com/NeonButrfly/tichuml/issues/115)
+- Milestone: none
+- Status Source: GitHub issue state only.
+
+### 2026-07-02 - Bounded live gameplay bootstrap must train on recent gameplay, not stale oldest-first slices
+
+- Prompt Signal: After repeated live bootstrap loops kept producing obviously
+  stale-looking smoke results, the follow-up request pushed on whether the
+  pipeline was accidentally reusing an old LightGBM model or otherwise circling
+  on outdated gameplay evidence.
+- Interpreted Requirement: Issue
+  [#115](https://github.com/NeonButrfly/tichuml/issues/115) also tracks fixing
+  bounded `source=gameplay` export ordering so live bootstrap limits prefer the
+  newest gameplay telemetry rows first instead of taking the oldest rows before
+  rollout labeling and training.
+- Affected Systems: `ml/export_training_rows.py`,
+  `tests/integration/ml-export-train-regression.test.ts`,
+  `docs/ml-strategy-improvement.md`.
+- Linked GitHub Issue: [#115](https://github.com/NeonButrfly/tichuml/issues/115)
+- Milestone: none
+- Status Source: GitHub issue state only.
+
+### 2026-07-01 - Live bootstrap should not default rollout training to ranking
+
+- Prompt Signal: The live training run was still producing terrible results and
+  the investigation showed `ml:live-bootstrap` had been defaulting to
+  `rollout_ranker` even though the rollout-label training docs and validation
+  flow are built around regression-style rollout values.
+- Interpreted Requirement: Issue
+  [#114](https://github.com/NeonButrfly/tichuml/issues/114) tracks changing
+  the live bootstrap default to `rollout_regression` while preserving explicit
+  objective overrides, so the generated candidate bundle starts from the less
+  noisy rollout target instead of ranking on sparse live rollout labels.
+- Affected Systems: `scripts/ml-live-bootstrap.ts`,
+  `tests/integration/ml-live-bootstrap.test.ts`,
+  `docs/ml-strategy-improvement.md`, `README.md`.
+- Linked GitHub Issue: [#114](https://github.com/NeonButrfly/tichuml/issues/114)
+- Milestone: [6.5 – Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status Source: GitHub issue state only.
+
+### 2026-07-03 - Live rollout training must not silently mix bad old providers by default
+
+- Prompt Signal: After the bootstrap integrity fixes, the follow-up request was
+  to make the smarter LightGBM path real and to make absolutely sure generated
+  training data stays at least baseline adequate instead of circling on
+  suspiciously bad runs.
+- Interpreted Requirement: Issue
+  [#79](https://github.com/NeonButrfly/tichuml/issues/79) also tracks keeping
+  default `ml:live-bootstrap` gameplay exports anchored to the canonical
+  `server_heuristic` slice unless `--allow-mixed-providers` is explicitly set.
+  Omitting `--provider` must no longer silently opt the live rollout-training
+  path into mixed historical providers, because that contaminates the rollout
+  target with stale weak-model rows and undermines the guarantee that smarter
+  LightGBM candidates start from baseline-adequate policy data.
+- Affected Systems: `scripts/ml-live-bootstrap.ts`,
+  `tests/integration/ml-live-bootstrap.test.ts`,
+  `docs/ml-strategy-improvement.md`.
+- Linked GitHub Issue: [#79](https://github.com/NeonButrfly/tichuml/issues/79)
+- Milestone: [6.5 – Local ML Integration & Reproducible Backend](https://github.com/NeonButrfly/tichuml/milestone/24)
+- Status Source: GitHub issue state only.
+
 ### 2026-06-01 - LightGBM serving should step up from raw move scoring to top-K plus rollout choice
 
 - Prompt Signal: The latest AI-behavior request explicitly pushed the project

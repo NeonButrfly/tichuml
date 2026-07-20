@@ -349,6 +349,14 @@ Canonical local environment shared by Windows and Linux:
 | Backend URL        | `http://127.0.0.1:4310`                                        |
 | Linux repo path    | `/opt/tichuml`                                                 |
 
+When a deployed host overrides `DATABASE_URL` to a remote Postgres endpoint,
+the startup/status helpers no longer treat the local `tichu-postgres`
+container as authoritative readiness. Issue
+[#119](https://github.com/NeonButrfly/tichuml/issues/119) changed the runtime
+helpers so they only start/check the local container when the effective
+database target is local; otherwise they poll the configured remote
+`DATABASE_URL` target before running migrations.
+
 | Task                  | Windows                                                                                                                                                                                    | Linux                                                                                                                                                                                              |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Start backend         | `powershell -ExecutionPolicy Bypass -File scripts\start-backend.ps1`                                                                                                               | `./scripts/start-backend.sh`                                                                                                                                                                 |

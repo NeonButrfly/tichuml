@@ -1085,3 +1085,31 @@ supported size limit.`, leaving the control UI stuck at `Batches=0`,
   [#109](https://github.com/NeonButrfly/tichuml/issues/109)
 - Status:
   Lives in GitHub, not here.
+
+## 2026-07-02 - Reboot recovery must validate the real database target
+
+- Prompt signal:
+  Reboot all involved hosts, retry the system, and if the DB/functions do not
+  come back properly, fix the startup process.
+- Interpreted requirement:
+  Issue [#119](https://github.com/NeonButrfly/tichuml/issues/119) tracks this
+  pass. The Linux/backend startup flow must stop assuming local Docker Postgres
+  when `.env` points `DATABASE_URL` at a remote host, must report the effective
+  DB target truthfully in status/startup output, and must fail before
+  migrations if the configured remote Postgres endpoint is still down after a
+  reboot.
+- Affected systems:
+  `scripts/backend-common.sh`,
+  `scripts/backend-common.ps1`,
+  `scripts/start-backend.sh`,
+  `scripts/status-backend.sh`,
+  `scripts/database-target.mjs`,
+  startup/status regression tests,
+  and Linux backend reboot validation on `192.168.50.36` plus the configured
+  DB host `192.168.50.196`.
+- Linked GitHub issue:
+  [#119](https://github.com/NeonButrfly/tichuml/issues/119)
+- Milestone:
+  [Linux Backend Deployment + ML Host](https://github.com/NeonButrfly/tichuml/milestone/25)
+- Status:
+  Lives in GitHub, not here.

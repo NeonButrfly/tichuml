@@ -1,20 +1,39 @@
-import fs from "node:fs";
 import path from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { parseEnvFile } from "../apps/server/src/config/env-file.ts";
+import {
+  assertHeuristicImitationTrainingQuality,
+  assertObservedOutcomeTrainingQuality,
+  assertTrainingDecisionQuality,
+  assertCandidateArtifactsExist,
+  readEvaluationSummary,
+  readTrainingReportQualitySummary,
+  resolveCandidateBackendPort
+} from "./ml-live-bootstrap.ts";
 
 export type MlBootstrapOptions = {
-  runId: string;
+  runId?: string | null;
   gameIdPrefix: string;
   outputDir: string;
   backendUrl: string;
   provider: "local" | "server_heuristic" | "lightgbm_model";
+  candidateObjective: "imitation_binary" | "observed_outcome_regression";
   evaluateGames: number;
   evaluateMinGamesForGate: number;
+  candidateBackendPort: number;
+  evaluateMinLightgbmServedDecisions: number;
+  evaluateMinLightgbmServiceRate: number;
+  skipBuildServer?: boolean;
 };
 
 export type MlBootstrapStep = {
-  label: "ml:export" | "ml:train" | "ml:evaluate";
+  label:
+    | "ml:export"
+    | "ml:train_seed"
+    | "ml:train_candidate"
+    | "build:server"
+    | "ml:evaluate";
   command: string;
   args: string[];
 };
@@ -23,8 +42,24 @@ export type MlBootstrapPlan = {
   outputDir: string;
   datasetPath: string;
   manifestPath: string;
+  modelPath: string;
+  modelMetaPath: string;
+  trainingReportPath: string;
+  featureImportancePath: string;
+  evaluationReportPath: string;
+  candidateBackendUrl: string;
   steps: MlBootstrapStep[];
 };
+
+export const DEFAULT_BOOTSTRAP_MIN_TRAINING_DECISIONS = 100;
+export const DEFAULT_BOOTSTRAP_MIN_TRAINING_GAMES = 10;
+export const DEFAULT_BOOTSTRAP_MIN_HEURISTIC_TOP1_RECALL = 0.6;
+
+const TRAINING_DATABASE_ENV_KEYS = [
+  "TRAINING_DATABASE_URL",
+  "TICHU_TRAINING_DATABASE_URL",
+  "DATABASE_URL"
+] as const;
 
 function requireNonEmpty(value: string, flag: string): string {
   const normalized = value.trim();
@@ -48,6 +83,15 @@ function readNumberArg(argv: string[], flag: string, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function readFloatArg(argv: string[], flag: string, fallback: number): number {
+  const value = readArg(argv, flag);
+  if (!value) {
+    return fallback;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 function requirePositiveInteger(value: number, flag: string): number {
   if (!Number.isInteger(value) || value <= 0) {
     throw new Error(`Expected ${flag} to be a positive integer.`);
@@ -58,7 +102,7 @@ function requirePositiveInteger(value: number, flag: string): number {
 export function buildMlBootstrapPlan(
   options: MlBootstrapOptions
 ): MlBootstrapPlan {
-  const runId = requireNonEmpty(options.runId, "--run-id");
+  const runId = options.runId?.trim() ? requireNonEmpty(options.runId, "--run-id") : null;
   const gameIdPrefix = requireNonEmpty(options.gameIdPrefix, "--game-id-prefix");
   const outputDir = requireNonEmpty(options.outputDir, "--output-dir");
   const backendUrl = requireNonEmpty(options.backendUrl, "--backend-url");
@@ -70,33 +114,79 @@ export function buildMlBootstrapPlan(
     options.evaluateMinGamesForGate,
     "--evaluate-min-games-for-gate"
   );
+  const candidateBackendPort = requirePositiveInteger(
+    options.candidateBackendPort,
+    "--candidate-backend-port"
+  );
+  const evaluateMinLightgbmServedDecisions = requirePositiveInteger(
+    options.evaluateMinLightgbmServedDecisions,
+    "--min-lightgbm-served-decisions"
+  );
+  if (
+    !Number.isFinite(options.evaluateMinLightgbmServiceRate) ||
+    options.evaluateMinLightgbmServiceRate < 0 ||
+    options.evaluateMinLightgbmServiceRate > 1
+  ) {
+    throw new Error(
+      "Expected --min-lightgbm-service-rate to be a number between 0 and 1."
+    );
+  }
   const datasetPath = path.join(outputDir, "train.parquet");
   const manifestPath = path.join(outputDir, "dataset_metadata.json");
+  const seedOutputDir = path.join(outputDir, "ml-seed");
+  const seedModelPath = path.join(seedOutputDir, "lightgbm_action_model.txt");
+  const seedModelMetaPath = path.join(
+    seedOutputDir,
+    "lightgbm_action_model.meta.json"
+  );
+  const seedTrainingReportPath = path.join(seedOutputDir, "training-report.json");
+  const seedFeatureImportancePath = path.join(
+    seedOutputDir,
+    "feature-importance.csv"
+  );
+  const modelPath = path.join(outputDir, "lightgbm_action_model.txt");
+  const modelMetaPath = path.join(outputDir, "lightgbm_action_model.meta.json");
+  const trainingReportPath = path.join(outputDir, "training-report.json");
+  const featureImportancePath = path.join(outputDir, "feature-importance.csv");
+  const evaluationReportPath = path.join(outputDir, "evaluation-report.json");
+  const candidateBackendUrl = `http://127.0.0.1:${candidateBackendPort}`;
+
+  const exportArgs = [
+    "run",
+    "ml:export",
+    "--",
+    "--game-id-prefix",
+    gameIdPrefix,
+    "--output-dir",
+    outputDir,
+    "--label-mode",
+    "imitation",
+    "--include-candidates",
+    "--provider",
+    options.provider
+  ];
+  if (runId) {
+    exportArgs.splice(3, 0, "--run-id", runId);
+  }
 
   return {
     outputDir,
     datasetPath,
     manifestPath,
+    modelPath,
+    modelMetaPath,
+    trainingReportPath,
+    featureImportancePath,
+    evaluationReportPath,
+    candidateBackendUrl,
     steps: [
       {
         label: "ml:export",
         command: "npm",
-        args: [
-          "run",
-          "ml:export",
-          "--",
-          "--run-id",
-          runId,
-          "--game-id-prefix",
-          gameIdPrefix,
-          "--output-dir",
-          outputDir,
-          "--provider",
-          options.provider
-        ]
+        args: exportArgs
       },
       {
-        label: "ml:train",
+        label: "ml:train_seed",
         command: "npm",
         args: [
           "run",
@@ -109,11 +199,51 @@ export function buildMlBootstrapPlan(
           "--phase",
           "trick_play",
           "--objective",
-          "observed_outcome_regression",
-          "--target-column",
-          "outcome_reward"
+          "imitation_binary",
+          "--output",
+          seedModelPath,
+          "--meta-output",
+          seedModelMetaPath,
+          "--report-output",
+          seedTrainingReportPath,
+          "--feature-importance-output",
+          seedFeatureImportancePath
         ]
       },
+      {
+        label: "ml:train_candidate",
+        command: "npm",
+        args: [
+          "run",
+          "ml:train",
+          "--",
+          "--input",
+          datasetPath,
+          "--manifest-input",
+          manifestPath,
+          "--phase",
+          "trick_play",
+          "--objective",
+          options.candidateObjective,
+          "--output",
+          modelPath,
+          "--meta-output",
+          modelMetaPath,
+          "--report-output",
+          trainingReportPath,
+          "--feature-importance-output",
+          featureImportancePath
+        ]
+      },
+      ...(options.skipBuildServer
+        ? []
+        : ([
+            {
+              label: "build:server",
+              command: "npm",
+              args: ["run", "build", "-w", "@tichuml/server"]
+            }
+          ] satisfies MlBootstrapStep[])),
       {
         label: "ml:evaluate",
         command: "npm",
@@ -125,25 +255,81 @@ export function buildMlBootstrapPlan(
           String(evaluateGames),
           "--min-games-for-gate",
           String(evaluateMinGamesForGate),
+          "--min-lightgbm-served-decisions",
+          String(evaluateMinLightgbmServedDecisions),
+          "--min-lightgbm-service-rate",
+          String(options.evaluateMinLightgbmServiceRate),
           "--ns-provider",
           "lightgbm_model",
           "--ew-provider",
           options.provider,
           "--mirror-seats",
           "true",
+          "--skip-heuristic-sanity",
+          "true",
+          "--telemetry",
+          "false",
+          "--decision-timeout-ms",
+          "5000",
           "--backend-url",
-          backendUrl
+          candidateBackendUrl,
+          "--model-path",
+          modelPath,
+          "--model-meta-path",
+          modelMetaPath,
+          "--output",
+          evaluationReportPath
         ]
       }
     ]
   };
 }
 
-function runCommand(command: string, args: string[]): Promise<void> {
+export function resolveMlBootstrapCommandEnv(
+  env: NodeJS.ProcessEnv,
+  repoRoot = process.cwd()
+): NodeJS.ProcessEnv {
+  const diskEnv = {
+    ...parseEnvFile(path.join(repoRoot, ".env")),
+    ...parseEnvFile(path.join(repoRoot, "apps/server/.env"))
+  };
+  let resolvedDatabaseUrl: string | null = null;
+  for (const key of TRAINING_DATABASE_ENV_KEYS) {
+    const explicitValue = env[key];
+    if (typeof explicitValue === "string" && explicitValue.trim().length > 0) {
+      resolvedDatabaseUrl = explicitValue.trim();
+      break;
+    }
+    const fileValue = diskEnv[key];
+    if (typeof fileValue === "string" && fileValue.trim().length > 0) {
+      resolvedDatabaseUrl = fileValue.trim();
+      break;
+    }
+  }
+  if (!resolvedDatabaseUrl) {
+    return {};
+  }
+  return {
+    TRAINING_DATABASE_URL: resolvedDatabaseUrl,
+    TICHU_TRAINING_DATABASE_URL: resolvedDatabaseUrl,
+    DATABASE_URL: resolvedDatabaseUrl,
+    DATABASE_URL_OVERRIDE_ENABLED: "true"
+  };
+}
+
+function runCommand(
+  command: string,
+  args: string[],
+  envOverrides?: NodeJS.ProcessEnv
+): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       stdio: "inherit",
-      shell: process.platform === "win32"
+      shell: process.platform === "win32",
+      env: {
+        ...process.env,
+        ...(envOverrides ?? {})
+      }
     });
 
     child.on("close", (code) => {
@@ -162,49 +348,290 @@ function runCommand(command: string, args: string[]): Promise<void> {
   });
 }
 
-function readGatePassed(repoRoot: string): boolean {
-  const latestSummaryPath = path.join(
-    repoRoot,
-    "eval",
-    "results",
-    "latest_summary.json"
-  );
-  if (!fs.existsSync(latestSummaryPath)) {
-    throw new Error(
-      `Evaluation latest summary was not written to ${latestSummaryPath}.`
-    );
+function parsePortFromUrl(rawUrl: string): number {
+  const parsed = new URL(rawUrl);
+  const port = Number.parseInt(parsed.port, 10);
+  if (!Number.isInteger(port) || port <= 0) {
+    throw new Error(`Expected ${rawUrl} to include a positive port.`);
   }
-  const parsed = JSON.parse(fs.readFileSync(latestSummaryPath, "utf8")) as {
-    gate_passed?: unknown;
+  return port;
+}
+
+function updateEvaluationBackendUrl(
+  plan: MlBootstrapPlan,
+  backendUrl: string
+): MlBootstrapPlan {
+  return {
+    ...plan,
+    candidateBackendUrl: backendUrl,
+    steps: plan.steps.map((step) => {
+      if (step.label !== "ml:evaluate") {
+        return step;
+      }
+      const args = [...step.args];
+      const backendUrlIndex = args.indexOf("--backend-url");
+      if (backendUrlIndex < 0 || backendUrlIndex + 1 >= args.length) {
+        throw new Error("Evaluation step is missing --backend-url.");
+      }
+      args[backendUrlIndex + 1] = backendUrl;
+      return {
+        ...step,
+        args
+      };
+    })
   };
-  return parsed.gate_passed === true;
+}
+
+async function waitForHealth(url: string, timeoutMs = 30_000): Promise<void> {
+  const startedAt = Date.now();
+  let lastError: string | null = null;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const response = await fetch(url, { method: "GET" });
+      if (response.ok) {
+        return;
+      }
+      lastError = `HTTP ${response.status}`;
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+
+  throw new Error(
+    `Timed out waiting for candidate backend health at ${url}. Last error: ${lastError ?? "unknown"}.`
+  );
+}
+
+function startCandidateBackend(config: {
+  repoRoot: string;
+  backendPort: number;
+  modelPath: string;
+  modelMetaPath: string;
+}): ChildProcess {
+  return spawn("npm", ["run", "start:server"], {
+    cwd: config.repoRoot,
+    stdio: "inherit",
+    shell: process.platform === "win32",
+    detached: process.platform !== "win32",
+    env: {
+      ...process.env,
+      HOST: "127.0.0.1",
+      PORT: String(config.backendPort),
+      BACKEND_BASE_URL: `http://127.0.0.1:${config.backendPort}`,
+      LIGHTGBM_MODEL_PATH: config.modelPath,
+      LIGHTGBM_MODEL_META_PATH: config.modelMetaPath
+    }
+  });
+}
+
+async function stopChildProcess(child: ChildProcess | null): Promise<void> {
+  if (!child) {
+    return;
+  }
+  if (child.exitCode !== null || child.signalCode !== null) {
+    return;
+  }
+
+  const waitForClose = async (timeoutMs: number): Promise<boolean> =>
+    await new Promise<boolean>((resolve) => {
+      let settled = false;
+      const finish = (closed: boolean) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        resolve(closed);
+      };
+      const timer = setTimeout(() => finish(false), timeoutMs);
+      child.once("close", () => {
+        clearTimeout(timer);
+        finish(true);
+      });
+    });
+
+  if (process.platform === "win32") {
+    child.kill();
+    if (!(await waitForClose(2_000)) && child.pid) {
+      spawnSync("taskkill", ["/pid", String(child.pid), "/t", "/f"], {
+        stdio: "ignore",
+        windowsHide: true
+      });
+      await waitForClose(5_000);
+    }
+    return;
+  }
+
+  try {
+    if (child.pid) {
+      process.kill(-child.pid, "SIGTERM");
+    } else {
+      child.kill("SIGTERM");
+    }
+  } catch {
+    child.kill("SIGTERM");
+  }
+  if (await waitForClose(5_000)) {
+    return;
+  }
+  try {
+    if (child.pid) {
+      process.kill(-child.pid, "SIGKILL");
+    } else {
+      child.kill("SIGKILL");
+    }
+  } catch {
+    child.kill("SIGKILL");
+  }
+  await waitForClose(2_000);
 }
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   const evaluateGames = readNumberArg(argv, "--evaluate-games", 100);
-  const plan = buildMlBootstrapPlan({
-    runId: readArg(argv, "--run-id") ?? "",
+  const candidateObjective =
+    (readArg(argv, "--candidate-objective") as
+      | MlBootstrapOptions["candidateObjective"]
+      | null) ?? "observed_outcome_regression";
+  const minTrainingDecisionCountForEvaluate = readNumberArg(
+    argv,
+    "--min-training-decisions-for-evaluate",
+    DEFAULT_BOOTSTRAP_MIN_TRAINING_DECISIONS
+  );
+  const minTrainingGameCountForEvaluate = readNumberArg(
+    argv,
+    "--min-training-games-for-evaluate",
+    DEFAULT_BOOTSTRAP_MIN_TRAINING_GAMES
+  );
+  const minHeuristicTop1Recall = readFloatArg(
+    argv,
+    "--min-heuristic-top1-recall",
+    DEFAULT_BOOTSTRAP_MIN_HEURISTIC_TOP1_RECALL
+  );
+  const commandEnv = resolveMlBootstrapCommandEnv(process.env);
+  let runtimePlan = buildMlBootstrapPlan({
+    runId: readArg(argv, "--run-id"),
     gameIdPrefix: readArg(argv, "--game-id-prefix") ?? "",
     outputDir: readArg(argv, "--output-dir") ?? "",
     backendUrl: readArg(argv, "--backend-url") ?? "http://127.0.0.1:4310",
     provider:
       (readArg(argv, "--provider") as MlBootstrapOptions["provider"] | null) ??
       "server_heuristic",
+    candidateObjective,
     evaluateGames,
     evaluateMinGamesForGate: readNumberArg(
       argv,
       "--evaluate-min-games-for-gate",
       evaluateGames
-    )
+    ),
+    candidateBackendPort: readNumberArg(argv, "--candidate-backend-port", 4312),
+    evaluateMinLightgbmServedDecisions: readNumberArg(
+      argv,
+      "--min-lightgbm-served-decisions",
+      50
+    ),
+    evaluateMinLightgbmServiceRate:
+      Number(readArg(argv, "--min-lightgbm-service-rate") ?? "0.1"),
+    skipBuildServer: argv.includes("--skip-build-server")
   });
-
-  for (const step of plan.steps) {
-    await runCommand(step.command, step.args);
-  }
-
-  if (!readGatePassed(process.cwd())) {
-    throw new Error("ML bootstrap evaluation gate did not pass.");
+  let candidateBackend: ChildProcess | null = null;
+  try {
+    for (const step of runtimePlan.steps) {
+      if (step.label === "ml:train_seed") {
+        await runCommand(step.command, step.args, commandEnv);
+        const seedTrainingReportPath = path.join(
+          runtimePlan.outputDir,
+          "ml-seed",
+          "training-report.json"
+        );
+        const trainingSummary = readTrainingReportQualitySummary(
+          seedTrainingReportPath
+        );
+        assertTrainingDecisionQuality(trainingSummary, {
+          minDecisionCount: minTrainingDecisionCountForEvaluate,
+          minGameCount: minTrainingGameCountForEvaluate
+        });
+        assertHeuristicImitationTrainingQuality(trainingSummary, {
+          minTop1ChosenActionRecall: minHeuristicTop1Recall
+        });
+        assertObservedOutcomeTrainingQuality(trainingSummary);
+        continue;
+      }
+      if (step.label === "ml:train_candidate") {
+        await runCommand(step.command, step.args, commandEnv);
+        const candidateSummary = readTrainingReportQualitySummary(
+          runtimePlan.trainingReportPath
+        );
+        assertTrainingDecisionQuality(candidateSummary, {
+          minDecisionCount: minTrainingDecisionCountForEvaluate,
+          minGameCount: minTrainingGameCountForEvaluate
+        });
+        if (candidateObjective === "imitation_binary") {
+          assertHeuristicImitationTrainingQuality(candidateSummary, {
+            minTop1ChosenActionRecall: minHeuristicTop1Recall
+          });
+        } else {
+          assertObservedOutcomeTrainingQuality(candidateSummary);
+        }
+        continue;
+      }
+      if (step.label === "ml:evaluate") {
+        assertCandidateArtifactsExist({
+          modelPath: runtimePlan.modelPath,
+          modelMetaPath: runtimePlan.modelMetaPath
+        });
+        const preferredPort = parsePortFromUrl(runtimePlan.candidateBackendUrl);
+        const candidateBackendPort = await resolveCandidateBackendPort(
+          preferredPort
+        );
+        if (candidateBackendPort !== preferredPort) {
+          runtimePlan = updateEvaluationBackendUrl(
+            runtimePlan,
+            `http://127.0.0.1:${candidateBackendPort}`
+          );
+        }
+        const evaluationStep = runtimePlan.steps.find(
+          (candidateStep) => candidateStep.label === "ml:evaluate"
+        );
+        if (!evaluationStep) {
+          throw new Error("Evaluation step was missing from the runtime plan.");
+        }
+        candidateBackend = startCandidateBackend({
+          repoRoot: process.cwd(),
+          backendPort: candidateBackendPort,
+          modelPath: path.resolve(runtimePlan.modelPath),
+          modelMetaPath: path.resolve(runtimePlan.modelMetaPath)
+        });
+        await waitForHealth(`${runtimePlan.candidateBackendUrl}/health`);
+        await runCommand(evaluationStep.command, evaluationStep.args, {
+          ...commandEnv,
+          LIGHTGBM_MODEL_PATH: path.resolve(runtimePlan.modelPath),
+          LIGHTGBM_MODEL_META_PATH: path.resolve(runtimePlan.modelMetaPath)
+        });
+        const evaluationSummary = readEvaluationSummary(
+          runtimePlan.evaluationReportPath
+        );
+        if (
+          evaluationSummary.modelFile === null ||
+          path.resolve(evaluationSummary.modelFile) !==
+            path.resolve(runtimePlan.modelPath)
+        ) {
+          throw new Error(
+            `Evaluation report used ${evaluationSummary.modelFile ?? "no model_file"} instead of candidate model ${path.resolve(runtimePlan.modelPath)}.`
+          );
+        }
+        if (!evaluationSummary.gatePassed) {
+          throw new Error("ML bootstrap evaluation gate did not pass.");
+        }
+        await stopChildProcess(candidateBackend);
+        candidateBackend = null;
+        continue;
+      }
+      await runCommand(step.command, step.args, commandEnv);
+    }
+  } finally {
+    await stopChildProcess(candidateBackend);
   }
 }
 

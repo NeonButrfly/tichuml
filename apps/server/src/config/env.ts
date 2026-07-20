@@ -393,7 +393,7 @@ export function loadServerConfig(
     ),
     lightgbmScoringTimeoutMs: parsePositiveInteger(
       mergedEnv.LIGHTGBM_SCORING_TIMEOUT_MS,
-      1000
+      5000
     ),
     lightgbmMinLegalActionsForScoring: parseOptionalPositiveIntegerWithFallback(
       mergedEnv.LIGHTGBM_MIN_LEGAL_ACTIONS_FOR_SCORING,

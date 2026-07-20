@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 type ProviderMode = "local" | "server_heuristic" | "lightgbm_model";
@@ -19,7 +19,7 @@ export type LiveMlBootstrapOptions = {
   continuationProvider: ProviderMode;
   rolloutsPerAction: number;
   featureProfile: FeatureProfile;
-  objective: TrainingObjective;
+  objective?: TrainingObjective | null;
   minRolloutDecisionSpread: number;
   minRolloutSamples: number;
   minRolloutStddev: number;
@@ -54,6 +54,21 @@ export type LiveMlBootstrapPlan = {
   candidateBackendUrl: string | null;
   steps: LiveMlBootstrapStep[];
 };
+
+export type TrainingReportSummary = {
+  rowCount: number;
+  decisionCount: number;
+  gameCount: number;
+};
+
+export type TrainingReportQualitySummary = TrainingReportSummary & {
+  objective: string | null;
+  top1ChosenActionRecall: number | null;
+  baselineRmseImprovement: number | null;
+  baselineMaeImprovement: number | null;
+};
+
+const DEFAULT_CANONICAL_GAMEPLAY_PROVIDER = "server_heuristic";
 
 function requireNonEmpty(value: string, flag: string): string {
   const normalized = value.trim();
@@ -156,6 +171,7 @@ export function buildLiveMlBootstrapPlan(
     options.candidateBackendPort,
     "--candidate-backend-port"
   );
+  const objective = options.objective ?? "rollout_regression";
   const datasetPath = path.join(outputDir, "train.jsonl");
   const manifestPath = path.join(outputDir, "dataset_metadata.json");
   const rolloutPath = path.join(outputDir, "rollout_rows.jsonl");
@@ -168,6 +184,8 @@ export function buildLiveMlBootstrapPlan(
     ? null
     : `http://127.0.0.1:${candidateBackendPort}`;
   const evaluationDecisionTimeoutMs = 5_000;
+  const evaluationMinLightgbmServedDecisions = 50;
+  const evaluationMinLightgbmServiceRate = 0.1;
   const exportArgs = [
     "run",
     "ml:export:raw",
@@ -186,6 +204,8 @@ export function buildLiveMlBootstrapPlan(
     exportArgs.push("--provider", options.provider);
   } else if (options.allowMixedProviders) {
     exportArgs.push("--allow-mixed-providers");
+  } else {
+    exportArgs.push("--provider", DEFAULT_CANONICAL_GAMEPLAY_PROVIDER);
   }
   appendOptionalFlag(exportArgs, "--limit", exportLimit);
 
@@ -221,7 +241,7 @@ export function buildLiveMlBootstrapPlan(
     "--phase",
     "trick_play",
     "--objective",
-    options.objective,
+    objective,
     "--feature-profile",
     options.featureProfile,
     "--output",
@@ -281,6 +301,10 @@ export function buildLiveMlBootstrapPlan(
         String(evaluateGames),
         "--min-games-for-gate",
         String(evaluateMinGamesForGate),
+        "--min-lightgbm-served-decisions",
+        String(evaluationMinLightgbmServedDecisions),
+        "--min-lightgbm-service-rate",
+        String(evaluationMinLightgbmServiceRate),
         "--ns-provider",
         "lightgbm_model",
         "--ew-provider",
@@ -312,6 +336,15 @@ export function buildLiveMlBootstrapPlan(
     candidateBackendUrl,
     steps
   };
+}
+
+function isAddressInUseError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "EADDRINUSE"
+  );
 }
 
 function runCommand(
@@ -380,6 +413,147 @@ export function readEvaluationSummary(reportPath: string): {
   };
 }
 
+export function readTrainingReportSummary(reportPath: string): TrainingReportSummary {
+  const qualitySummary = readTrainingReportQualitySummary(reportPath);
+  return {
+    rowCount: qualitySummary.rowCount,
+    decisionCount: qualitySummary.decisionCount,
+    gameCount: qualitySummary.gameCount,
+  };
+}
+
+function readFiniteNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function readNonEmptyString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+export function readTrainingReportQualitySummary(
+  reportPath: string
+): TrainingReportQualitySummary {
+  if (!fs.existsSync(reportPath)) {
+    throw new Error(`Training report was not written to ${reportPath}.`);
+  }
+  const parsed = JSON.parse(fs.readFileSync(reportPath, "utf8")) as {
+    row_count?: unknown;
+    decision_count?: unknown;
+    game_count?: unknown;
+    objective?: unknown;
+    validation_metrics?: {
+      top1_chosen_action_recall?: unknown;
+    };
+    model_vs_baseline?: {
+      rmse_improvement?: unknown;
+      mae_improvement?: unknown;
+    };
+  };
+  const rowCount = readFiniteNumber(parsed.row_count) ?? 0;
+  const decisionCount = readFiniteNumber(parsed.decision_count) ?? 0;
+  const gameCount = readFiniteNumber(parsed.game_count) ?? 0;
+  return {
+    rowCount,
+    decisionCount,
+    gameCount,
+    objective: readNonEmptyString(parsed.objective),
+    top1ChosenActionRecall: readFiniteNumber(
+      parsed.validation_metrics?.top1_chosen_action_recall
+    ),
+    baselineRmseImprovement: readFiniteNumber(
+      parsed.model_vs_baseline?.rmse_improvement
+    ),
+    baselineMaeImprovement: readFiniteNumber(
+      parsed.model_vs_baseline?.mae_improvement
+    ),
+  };
+}
+
+export function assertTrainingDecisionQuality(
+  summary: TrainingReportSummary,
+  config: {
+    minDecisionCount: number;
+    minGameCount: number;
+  }
+): void {
+  const failures: string[] = [];
+  if (summary.decisionCount < config.minDecisionCount) {
+    failures.push(
+      `decisions ${summary.decisionCount} < required ${config.minDecisionCount}`
+    );
+  }
+  if (summary.gameCount < config.minGameCount) {
+    failures.push(`games ${summary.gameCount} < required ${config.minGameCount}`);
+  }
+  if (failures.length === 0) {
+    return;
+  }
+  throw new Error(
+    `Training sample is too narrow for trustworthy candidate evaluation: ${failures.join(", ")}. ` +
+      `Observed rows=${summary.rowCount}, decisions=${summary.decisionCount}, games=${summary.gameCount}.`
+  );
+}
+
+export function assertObservedOutcomeTrainingQuality(
+  summary: TrainingReportQualitySummary
+): void {
+  if (summary.objective !== "observed_outcome_regression") {
+    return;
+  }
+
+  const failures: string[] = [];
+  if (
+    summary.baselineRmseImprovement !== null &&
+    summary.baselineRmseImprovement < 0
+  ) {
+    failures.push(
+      `RMSE improvement ${summary.baselineRmseImprovement.toFixed(2)} is worse than baseline`
+    );
+  }
+  if (
+    summary.baselineMaeImprovement !== null &&
+    summary.baselineMaeImprovement < 0
+  ) {
+    failures.push(
+      `MAE improvement ${summary.baselineMaeImprovement.toFixed(2)} is worse than baseline`
+    );
+  }
+
+  if (failures.length === 0) {
+    return;
+  }
+
+  throw new Error(
+    `Observed-outcome training report failed bootstrap quality gates: ${failures.join(", ")}. ` +
+      `Rows=${summary.rowCount}, decisions=${summary.decisionCount}, games=${summary.gameCount}.`
+  );
+}
+
+export function assertHeuristicImitationTrainingQuality(
+  summary: TrainingReportQualitySummary,
+  config: {
+    minTop1ChosenActionRecall: number;
+  }
+): void {
+  if (summary.objective !== "imitation_binary") {
+    return;
+  }
+
+  const top1Recall = summary.top1ChosenActionRecall;
+  if (
+    top1Recall !== null &&
+    top1Recall >= config.minTop1ChosenActionRecall
+  ) {
+    return;
+  }
+
+  throw new Error(
+    `Heuristic imitation training report failed bootstrap quality gates: ` +
+      `top1_chosen_action_recall=${top1Recall ?? "n/a"} < required ${config.minTop1ChosenActionRecall}. ` +
+      `Rows=${summary.rowCount}, decisions=${summary.decisionCount}, games=${summary.gameCount}.`
+  );
+}
+
 export async function assertCandidateBackendPortAvailable(
   port: number,
   host = "127.0.0.1"
@@ -388,12 +562,7 @@ export async function assertCandidateBackendPortAvailable(
     const server = net.createServer();
     server.unref();
     server.once("error", (error) => {
-      if (
-        typeof error === "object" &&
-        error !== null &&
-        "code" in error &&
-        error.code === "EADDRINUSE"
-      ) {
+      if (isAddressInUseError(error)) {
         reject(
           new Error(
             `Candidate backend port ${port} on ${host} is already in use.`
@@ -413,6 +582,66 @@ export async function assertCandidateBackendPortAvailable(
       });
     });
   });
+}
+
+export async function resolveCandidateBackendPort(
+  preferredPort: number,
+  host = "127.0.0.1"
+): Promise<number> {
+  try {
+    await assertCandidateBackendPortAvailable(preferredPort, host);
+    return preferredPort;
+  } catch (error) {
+    if (!(error instanceof Error) || !/already in use/i.test(error.message)) {
+      throw error;
+    }
+  }
+
+  return await new Promise<number>((resolve, reject) => {
+    const server = net.createServer();
+    server.unref();
+    server.once("error", reject);
+    server.listen(0, host, () => {
+      const address = server.address();
+      if (!address || typeof address !== "object") {
+        reject(new Error("Failed to allocate a free candidate backend port."));
+        return;
+      }
+      const selectedPort = address.port;
+      server.close((closeError) => {
+        if (closeError) {
+          reject(closeError);
+          return;
+        }
+        resolve(selectedPort);
+      });
+    });
+  });
+}
+
+export function overrideEvaluationBackendUrl(
+  plan: LiveMlBootstrapPlan,
+  backendUrl: string
+): LiveMlBootstrapPlan {
+  return {
+    ...plan,
+    candidateBackendUrl: backendUrl,
+    steps: plan.steps.map((step) => {
+      if (step.label !== "ml:evaluate") {
+        return step;
+      }
+      const args = [...step.args];
+      const backendUrlIndex = args.indexOf("--backend-url");
+      if (backendUrlIndex < 0 || backendUrlIndex + 1 >= args.length) {
+        throw new Error("Evaluation step is missing --backend-url.");
+      }
+      args[backendUrlIndex + 1] = backendUrl;
+      return {
+        ...step,
+        args,
+      };
+    }),
+  };
 }
 
 async function waitForHealth(url: string, timeoutMs = 30_000): Promise<void> {
@@ -438,16 +667,80 @@ async function waitForHealth(url: string, timeoutMs = 30_000): Promise<void> {
 }
 
 async function stopChildProcess(
-  child: ChildProcessWithoutNullStreams | null
+  child: ChildProcess | null
 ): Promise<void> {
-  if (!child || child.killed) {
+  if (!child) {
     return;
   }
 
-  await new Promise<void>((resolve) => {
-    child.once("close", () => resolve());
+  if (child.exitCode !== null || child.signalCode !== null) {
+    return;
+  }
+
+  const waitForClose = async (timeoutMs: number): Promise<boolean> =>
+    await new Promise<boolean>((resolve) => {
+      let settled = false;
+      const finish = (closed: boolean) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        resolve(closed);
+      };
+      const timer = setTimeout(() => finish(false), timeoutMs);
+      child.once("close", () => {
+        clearTimeout(timer);
+        finish(true);
+      });
+    });
+
+  if (process.platform === "win32") {
     child.kill();
-  });
+    if (!(await waitForClose(2_000)) && child.pid) {
+      spawnSync("taskkill", ["/pid", String(child.pid), "/t", "/f"], {
+        stdio: "ignore",
+        windowsHide: true,
+      });
+      await waitForClose(5_000);
+    }
+    return;
+  }
+
+  try {
+    if (child.pid) {
+      process.kill(-child.pid, "SIGTERM");
+    } else {
+      child.kill("SIGTERM");
+    }
+  } catch {
+    child.kill("SIGTERM");
+  }
+  if (await waitForClose(5_000)) {
+    return;
+  }
+  try {
+    if (child.pid) {
+      process.kill(-child.pid, "SIGKILL");
+    } else {
+      child.kill("SIGKILL");
+    }
+  } catch {
+    child.kill("SIGKILL");
+  }
+  await waitForClose(2_000);
+}
+
+function parsePortFromUrl(rawUrl: string): number {
+  const parsed = new URL(rawUrl);
+  const port = Number.parseInt(parsed.port, 10);
+  if (!Number.isInteger(port) || port <= 0) {
+    throw new Error(`Expected ${rawUrl} to include a positive port.`);
+  }
+  return port;
+}
+
+function logInfo(event: string, payload: Record<string, unknown>): void {
+  process.stdout.write(`${JSON.stringify({ event, ...payload })}\n`);
 }
 
 function startCandidateBackend(config: {
@@ -455,11 +748,12 @@ function startCandidateBackend(config: {
   backendPort: number;
   modelPath: string;
   modelMetaPath: string;
-}): ChildProcessWithoutNullStreams {
+}): ChildProcess {
   return spawn("npm", ["run", "start:server"], {
     cwd: config.repoRoot,
     stdio: "inherit",
     shell: process.platform === "win32",
+    detached: process.platform !== "win32",
     env: {
       ...process.env,
       HOST: "127.0.0.1",
@@ -475,13 +769,17 @@ async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   const provider = readArg(argv, "--provider");
   const repoRoot = process.cwd();
+  const minTrainingDecisionCountForEvaluate =
+    readOptionalIntegerArg(argv, "--min-training-decisions-for-evaluate") ?? 10;
+  const minTrainingGameCountForEvaluate =
+    readOptionalIntegerArg(argv, "--min-training-games-for-evaluate") ?? 3;
   const plan = buildLiveMlBootstrapPlan({
     outputDir: readArg(argv, "--output-dir") ?? "",
     backendUrl: readArg(argv, "--backend-url") ?? "http://127.0.0.1:4310",
     telemetrySource: readArg(argv, "--source") ?? "gameplay",
     provider: provider ? provider.trim() : null,
     allowMixedProviders:
-      argv.includes("--allow-mixed-providers") || provider === null,
+      argv.includes("--allow-mixed-providers"),
     exportLimit: readOptionalIntegerArg(argv, "--export-limit"),
     rolloutMaxDecisions: readOptionalIntegerArg(
       argv,
@@ -496,8 +794,8 @@ async function main(): Promise<void> {
       (readArg(argv, "--feature-profile") as FeatureProfile | null) ??
       "runtime_raw",
     objective:
-      (readArg(argv, "--objective") as TrainingObjective | null) ??
-      "rollout_ranker",
+      (readArg(argv, "--objective")?.trim() as TrainingObjective | null) ??
+      null,
     minRolloutDecisionSpread:
       readOptionalNumberArg(argv, "--min-rollout-decision-spread") ?? 0,
     minRolloutSamples:
@@ -515,43 +813,83 @@ async function main(): Promise<void> {
     skipEvaluate: argv.includes("--skip-evaluate"),
   });
 
-  let candidateBackend: ChildProcessWithoutNullStreams | null = null;
+  const shouldEvaluate = !argv.includes("--skip-evaluate");
+  let candidateBackend: ChildProcess | null = null;
+  let runtimePlan = plan;
+  let trainingSummary: TrainingReportSummary | null = null;
   try {
     for (const step of plan.steps) {
+      if (step.label === "ml:train") {
+        await runCommand(step.command, step.args);
+        trainingSummary = readTrainingReportSummary(runtimePlan.trainingReportPath);
+        logInfo("ml_live_bootstrap_training_summary", {
+          row_count: trainingSummary.rowCount,
+          decision_count: trainingSummary.decisionCount,
+          game_count: trainingSummary.gameCount,
+          min_decision_count_for_evaluate: minTrainingDecisionCountForEvaluate,
+          min_game_count_for_evaluate: minTrainingGameCountForEvaluate,
+        });
+        if (shouldEvaluate) {
+          assertTrainingDecisionQuality(trainingSummary, {
+            minDecisionCount: minTrainingDecisionCountForEvaluate,
+            minGameCount: minTrainingGameCountForEvaluate,
+          });
+        }
+        continue;
+      }
       if (step.label === "ml:evaluate") {
-        const backendUrl = plan.candidateBackendUrl;
+        const backendUrl = runtimePlan.candidateBackendUrl;
         if (!backendUrl) {
           throw new Error(
             "Candidate backend URL was not configured for evaluation."
           );
         }
         assertCandidateArtifactsExist({
-          modelPath: plan.modelPath,
-          modelMetaPath: plan.modelMetaPath,
+          modelPath: runtimePlan.modelPath,
+          modelMetaPath: runtimePlan.modelMetaPath,
         });
-        const candidateBackendPort = Number.parseInt(
-          backendUrl.split(":").at(-1) ?? "",
-          10
+        const preferredCandidateBackendPort = parsePortFromUrl(backendUrl);
+        const candidateBackendPort = await resolveCandidateBackendPort(
+          preferredCandidateBackendPort
         );
-        await assertCandidateBackendPortAvailable(candidateBackendPort);
+        if (candidateBackendPort !== preferredCandidateBackendPort) {
+          const resolvedBackendUrl = `http://127.0.0.1:${candidateBackendPort}`;
+          runtimePlan = overrideEvaluationBackendUrl(runtimePlan, resolvedBackendUrl);
+          logInfo("ml_live_bootstrap_candidate_backend_port_reassigned", {
+            requested_port: preferredCandidateBackendPort,
+            assigned_port: candidateBackendPort,
+          });
+        }
+        const resolvedBackendUrl = runtimePlan.candidateBackendUrl;
+        if (!resolvedBackendUrl) {
+          throw new Error(
+            "Candidate backend URL was not configured after port selection."
+          );
+        }
+        const evaluationStep = runtimePlan.steps.find(
+          (candidateStep) => candidateStep.label === "ml:evaluate"
+        );
+        if (!evaluationStep) {
+          throw new Error("Evaluation step was missing from the runtime plan.");
+        }
         candidateBackend = startCandidateBackend({
           repoRoot,
           backendPort: candidateBackendPort,
-          modelPath: path.resolve(plan.modelPath),
-          modelMetaPath: path.resolve(plan.modelMetaPath)
+          modelPath: path.resolve(runtimePlan.modelPath),
+          modelMetaPath: path.resolve(runtimePlan.modelMetaPath)
         });
-        await waitForHealth(`${backendUrl}/health`);
-        await runCommand(step.command, step.args, {
-          LIGHTGBM_MODEL_PATH: path.resolve(plan.modelPath),
-          LIGHTGBM_MODEL_META_PATH: path.resolve(plan.modelMetaPath),
+        await waitForHealth(`${resolvedBackendUrl}/health`);
+        await runCommand(evaluationStep.command, evaluationStep.args, {
+          LIGHTGBM_MODEL_PATH: path.resolve(runtimePlan.modelPath),
+          LIGHTGBM_MODEL_META_PATH: path.resolve(runtimePlan.modelMetaPath),
         });
-        const evaluationSummary = readEvaluationSummary(plan.evaluationReportPath);
+        const evaluationSummary = readEvaluationSummary(runtimePlan.evaluationReportPath);
         if (
           evaluationSummary.modelFile === null ||
-          path.resolve(evaluationSummary.modelFile) !== path.resolve(plan.modelPath)
+          path.resolve(evaluationSummary.modelFile) !== path.resolve(runtimePlan.modelPath)
         ) {
           throw new Error(
-            `Evaluation report used ${evaluationSummary.modelFile ?? "no model_file"} instead of candidate model ${path.resolve(plan.modelPath)}.`
+            `Evaluation report used ${evaluationSummary.modelFile ?? "no model_file"} instead of candidate model ${path.resolve(runtimePlan.modelPath)}.`
           );
         }
         if (!evaluationSummary.gatePassed) {
@@ -571,13 +909,15 @@ async function main(): Promise<void> {
     `${JSON.stringify(
       {
         accepted: true,
-        output_dir: plan.outputDir,
-        dataset_path: plan.datasetPath,
-        rollout_path: plan.rolloutPath,
-        model_path: plan.modelPath,
-        model_meta_path: plan.modelMetaPath,
-        training_report_path: plan.trainingReportPath,
-        evaluation_report_path: plan.evaluationReportPath
+        output_dir: runtimePlan.outputDir,
+        dataset_path: runtimePlan.datasetPath,
+        rollout_path: runtimePlan.rolloutPath,
+        model_path: runtimePlan.modelPath,
+        model_meta_path: runtimePlan.modelMetaPath,
+        training_report_path: runtimePlan.trainingReportPath,
+        evaluation_report_path: runtimePlan.evaluationReportPath,
+        candidate_backend_url: runtimePlan.candidateBackendUrl,
+        training_quality: trainingSummary,
       },
       null,
       2

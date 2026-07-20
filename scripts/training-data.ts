@@ -870,6 +870,40 @@ async function fetchTelemetryHealth(
   }
 }
 
+function parseDatabaseUrlTarget(
+  databaseUrl: string
+): { host: string; port: string; database: string; user: string } | null {
+  try {
+    const parsed = new URL(databaseUrl);
+    return {
+      host: parsed.hostname,
+      port: parsed.port || "5432",
+      database: parsed.pathname.replace(/^\/+/u, "") || "postgres",
+      user: decodeURIComponent(parsed.username || ""),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function resolveBackendDatabaseTarget(
+  backendUrl: string
+): Promise<{ host: string; port: string; database: string; user: string } | null> {
+  const telemetryHealth = await fetchTelemetryHealth(backendUrl);
+  const runtime =
+    isRecord(telemetryHealth) && isRecord(telemetryHealth.runtime)
+      ? telemetryHealth.runtime
+      : null;
+  const databaseUrl =
+    runtime && typeof runtime.database_url === "string"
+      ? runtime.database_url
+      : null;
+  if (!databaseUrl) {
+    return null;
+  }
+  return parseDatabaseUrlTarget(databaseUrl);
+}
+
 export async function waitForTelemetryFlush(
   backendUrl: string,
   timeoutMs = 300000,
@@ -1899,6 +1933,9 @@ async function buildPreparedRunMetadata(
     "exploration-max-score-gap",
     0
   );
+  const backendUrl = optionString(options, "backend-url");
+  const resolvedDatabaseTarget =
+    await resolveBackendDatabaseTarget(backendUrl);
   const metadata: TrainingMetadata = {
     run_id: runId,
     session_name: sessionName,
@@ -1927,7 +1964,7 @@ async function buildPreparedRunMetadata(
     provider: optionString(options, "provider"),
     games_per_batch: requestedGames,
     requested_games: requestedGames,
-    backend_url: optionString(options, "backend-url"),
+    backend_url: backendUrl,
     strict_telemetry: optionBoolean(options, "strict-telemetry", false),
     telemetry_mode: optionString(options, "telemetry-mode", "full"),
     decision_timeout_ms: decisionTimeoutMs,
@@ -1936,10 +1973,11 @@ async function buildPreparedRunMetadata(
     exploration_top_n: explorationTopN,
     exploration_max_score_gap: explorationMaxScoreGap,
     decision_request_mode: "fast_path_default",
-    pg_host: optionString(options, "pg-host"),
-    pg_port: optionString(options, "pg-port"),
-    pg_user: optionString(options, "pg-user"),
-    pg_db: optionString(options, "pg-db"),
+    pg_host: resolvedDatabaseTarget?.host ?? optionString(options, "pg-host"),
+    pg_port: resolvedDatabaseTarget?.port ?? optionString(options, "pg-port"),
+    pg_user:
+      resolvedDatabaseTarget?.user || optionString(options, "pg-user"),
+    pg_db: resolvedDatabaseTarget?.database ?? optionString(options, "pg-db"),
     clear_database: optionBoolean(options, "clear-database", true),
     clear_mode: optionBoolean(options, "clear-database", true)
       ? "truncate_training_tables"

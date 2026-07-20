@@ -132,14 +132,41 @@ Run the scoped post-readiness loop end to end:
 npm run ml:bootstrap -- --run-id <run_id> --game-id-prefix <game_id_prefix> --output-dir training-runs/<run_id>/ml --provider server_heuristic --backend-url http://127.0.0.1:4310 --evaluate-games 100
 ```
 
-`ml:bootstrap` runs scoped `ml:export`, trains against `outcome_reward`, runs
-mirrored `ml:evaluate`, and exits non-zero if the evaluation gate does not
-pass. For a short host-side smoke, pass `--evaluate-min-games-for-gate <n>` to
-keep the gate threshold aligned with the smaller evaluation sample:
+`ml:bootstrap` runs scoped `ml:export` with `--label-mode imitation` and
+`--include-candidates`, trains an `imitation_binary` seed model under
+`<output-dir>/ml-seed`, enforces the heuristic-recall adequacy floor on that
+seed, then trains the evaluated candidate model separately. The default
+candidate objective is now `observed_outcome_regression`, so plain bootstrap no
+longer mistakes a strong heuristic-cloning seed for a strategy-improved model.
+You can still override the evaluated stage with
+`--candidate-objective imitation_binary` when you intentionally want to score
+the seed itself. The command then runs mirrored `ml:evaluate`, exits non-zero
+if the evaluation gate does not pass, writes a run-local candidate model bundle
+under the requested output directory, builds the server package, starts a
+temporary localhost backend pinned to that candidate model, verifies the
+evaluation report names that candidate model file explicitly, and only then
+accepts the run. This prevents plain bootstrap from accidentally scoring an
+older long-lived backend model that was loaded before the new training step.
+
+For a short host-side smoke, pass `--evaluate-min-games-for-gate <n>` to keep
+the game-count gate aligned with the smaller evaluation sample:
 
 ```powershell
 npm run ml:bootstrap -- --run-id <run_id> --game-id-prefix <game_id_prefix> --output-dir training-runs/<run_id>/ml --provider server_heuristic --backend-url http://127.0.0.1:4310 --evaluate-games 3 --evaluate-min-games-for-gate 3
 ```
+
+Bootstrap and live-bootstrap smokes now also treat LightGBM service coverage as
+part of evaluation integrity. The default smoke wrappers require at least 50
+LightGBM-served challenger decisions and at least a 0.1 LightGBM
+requested-to-served service rate before the gate can pass. The evaluation
+artifacts now surface the underlying requested/served/delegated LightGBM counts
+so a suspicious run fails with explicit evidence instead of requiring manual DB
+inspection.
+
+If the host already has fresh server dist artifacts from
+`scripts/update-backend.sh` or another explicit build step, `ml:bootstrap` also
+accepts `--skip-build-server` so the isolated candidate evaluation can reuse
+the existing dist bundle instead of forcing another server `tsc` build first.
 
 Diagnose a completed observed-outcome training run:
 
@@ -155,23 +182,65 @@ visible when stored metadata is wrong.
 Build a live-gameplay rollout-training candidate without a new self-play batch:
 
 ```powershell
-npm run ml:live-bootstrap -- --output-dir training-runs/live-gameplay-001/ml --allow-mixed-providers --rollout-max-decisions 250 --rollouts-per-action 2
+npm run ml:live-bootstrap -- --output-dir training-runs/live-gameplay-001/ml --allow-mixed-providers --rollout-max-decisions 250 --rollouts-per-action 2 --objective rollout_regression
 ```
 
 `ml:live-bootstrap` exports `source=gameplay` trick-play rows as JSONL, keeps
 mixed live providers only when you opt in with `--allow-mixed-providers`, runs
 offline rollout relabeling against that export selection, and trains a
-rollout-based candidate model bundle into the requested output directory. It
+rollout-regression candidate model bundle into the requested output directory
+by default, unless you explicitly override `--objective`. It
 then starts a temporary backend pinned to that candidate model and runs the
 normal mirrored `ml:evaluate` improvement gate against it. The command still
 does not auto-promote or repoint the live backend model for you; it only tells
 you whether the newly trained live-data candidate cleared the gate.
 
+When you omit both `--provider` and `--allow-mixed-providers`, the live
+bootstrap launcher now pins the gameplay export to the canonical
+`server_heuristic` slice instead of silently mixing historical providers. That
+keeps default live rollout training anchored to the same baseline policy used
+by the self-play bootstrap path and avoids poisoning the rollout target with
+older weak LightGBM or heterogeneous human/AI policy mixtures unless you ask
+for that intentionally.
+
+For bounded live gameplay exports, `--source gameplay --limit <N>` now prefers
+the newest telemetry rows first (`ORDER BY ts DESC, id DESC`) before rollout
+relabeling and training. That keeps smoke and medium bootstrap runs anchored to
+recent gameplay behavior instead of silently training on the oldest rows still
+present in the database. Issue
+[#115](https://github.com/NeonButrfly/tichuml/issues/115) tracks this live
+sample hardening pass.
+
 The bootstrap launcher now also treats candidate evaluation integrity as part
-of the gate: it fails fast if the run-local model artifacts are missing, if the
-temporary candidate backend port is already occupied, or if the evaluation
-report says a different model file was evaluated. That prevents a stale backend
-or missing candidate bundle from being mistaken for a successful new run.
+of the gate: it fails fast if the run-local model artifacts are missing, it
+automatically reassigns the temporary candidate backend to a free localhost
+port when the default evaluation port is still occupied by stale runtime state,
+it force-stops the temporary candidate backend more aggressively at shutdown,
+and it refuses to launch candidate evaluation when the training report shows an
+overly narrow smoke sample. The default evaluation-quality floor is at least 10
+unique decisions across at least 3 games, overrideable with
+`--min-training-decisions-for-evaluate` and
+`--min-training-games-for-evaluate`. The evaluation report must still name the
+candidate model file explicitly. The same gate now also records
+LightGBM-requested decisions, LightGBM-served decisions, heuristic delegation,
+and LightGBM service rate per evaluation leg, and the smoke wrappers require a
+minimum served-decision count plus minimum service rate before acceptance.
+Together those checks prevent a stale backend, a dirty eval port, a
+delegation-heavy run, or a one-decision smoke from being mistaken for a
+successful new run.
+
+Plain self-play `ml:bootstrap` now applies a stricter pre-evaluation training
+gate because the observed-outcome path was repeatedly producing tiny
+four-match bundles that still reached head-to-head evaluation. Before it starts
+the temporary candidate backend, the bootstrap script now requires at least 100
+training decisions across at least 10 games by default, trains the seed as
+`imitation_binary`, and rejects the run unless the seed report shows at least
+`0.6` `top1_chosen_action_recall` against the heuristic-chosen actions. That
+keeps obviously broken or smoke-scale candidates from burning another eval loop
+when the offline report already says the seed model is not learning the
+baseline policy it was generated from. The evaluated candidate model is then
+trained separately from the same scoped dataset instead of reusing the seed
+artifact as the final challenger by default.
 
 ## Data products
 
@@ -220,7 +289,10 @@ machine-parseable and deterministic under the same explicit DB/provider scope.
 - `artifacts/ml/feature-importance.csv`
 - training metadata including `feature_profile`, `phase`, `feature_names`,
   target distribution, baseline comparisons, model-vs-baseline improvement,
-  and a Spearman interpretation band
+  a Spearman interpretation band, and rollout training coverage summaries for
+  rollout objectives so bounded smokes can show how many labeled rows,
+  decisions, and games actually reached training plus which decisions dominate
+  the sample
 - `rollout_ranker` reports now include simple ranker baselines such as
   `action_rank_descending`, grouped action-type mean target, and grouped
   seat/action-type mean target so failed runs can be compared against trivial
@@ -231,6 +303,9 @@ machine-parseable and deterministic under the same explicit DB/provider scope.
 - `artifacts/ml/evaluation-report.json`
 - `artifacts/ml/evaluation-report.md`
 - `eval/results/latest_summary.json`
+- per-leg `lightgbm_diagnostics` with requested decisions, LightGBM-served
+  decisions, heuristic delegations, local fallbacks, and service rate when the
+  challenger requested `lightgbm_model`
 
 ## How to interpret labels
 
@@ -256,6 +331,9 @@ The default gate checks:
 - enough games were evaluated
 - challenger win rate beats baseline
 - average score delta is positive
+- when the challenger is `lightgbm_model`, enough requested decisions were
+  actually served by LightGBM and the LightGBM service rate stayed above the
+  configured floor
 - illegal actions do not increase
 - fallbacks do not increase
 - average latency stays within the configured limit

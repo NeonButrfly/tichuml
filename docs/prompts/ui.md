@@ -2,6 +2,24 @@
 
 Use this file to preserve UI and UX prompt intent and link it to GitHub work. GitHub issue state is authoritative; this file is not a parallel tracker.
 
+### 2026-07-08 - Archive and remove the unrecoverable luxury table completely
+
+- Prompt Signal: The user explicitly requested a clean reset because the luxury
+  table had become unrecoverable in its current state, and asked to archive the
+  code and remove the luxury table completely.
+- Interpreted Requirement: Issue
+  [#128](https://github.com/NeonButrfly/tichuml/issues/128) tracks the reset.
+  The active product should return to the normal table only, strip luxury-table
+  runtime/editor routes and URL flags, and move the luxury-table implementation
+  into `archive/luxury-table/` so it remains recoverable but inert.
+- Affected Systems: `apps/web/src/App.tsx`,
+  `apps/web/src/game-table-view-model.ts`,
+  `apps/web/src/game-table-views.tsx`, `package.json`,
+  `archive/luxury-table/`, `tests/integration/luxury-table-removal.test.ts`.
+- Linked GitHub Issue: [#128](https://github.com/NeonButrfly/tichuml/issues/128)
+- Milestone: none assigned; rollback/reset slice.
+- Status Source: GitHub issue state only.
+
 ## Entry Structure
 
 - Date
@@ -1295,4 +1313,36 @@ Use this file to preserve UI and UX prompt intent and link it to GitHub work. Gi
   `tests/integration/fresh-alt-table-editor-authoring.test.ts`.
 - Linked GitHub Issue: [#108](https://github.com/NeonButrfly/tichuml/issues/108)
 - Milestone: none; scoped editor bugfix.
+- Status Source: GitHub issue state only.
+
+### 2026-07-05 - Canonical 3D Tichu table scene needs inward-facing card backs and flat passing lanes
+
+- Prompt Signal: The user provided a full 3D scene specification requiring a
+  south-perspective Tichu table, right-handed X/Y/Z world coordinates,
+  16-by-10 green felt, thin rails, true front/back card meshes, inward-facing
+  north/east/west card backs, 12 flat XZ passing-lane rectangles, south lanes
+  above the south hand, and action buttons below the south hand.
+- Interpreted Requirement: Issue
+  [#125](https://github.com/NeonButrfly/tichuml/issues/125) is the canonical
+  tracker. The reusable R3F scene geometry must derive card facing from
+  seat-to-center vectors and expose passing-lane/action/label layout helpers
+  that match the prompt before broader live-route integration. On narrow live
+  viewports, the shipped ALT route should frame like a camera crop rather than
+  a letterboxed poster: the live table may crop its left/right edges to fill
+  height, while authoring overlays remain contain-fit in the 1536x1024 design
+  space.
+- Affected Systems: `apps/web/src/alt-table-3d/AltTableCards3D.tsx`,
+  `apps/web/src/alt-table-3d/altTable3DGeometry.ts`,
+  `apps/web/src/alt-table-3d/AltTableScene.tsx`,
+  `apps/web/src/altTableFresh/freshTableMath.ts`,
+  `apps/web/src/altTableFresh/tableFit.ts`,
+  `apps/web/src/altTableFresh/FreshAltTable.tsx`,
+  `tests/integration/alt-canonical-3d-scene-geometry.test.ts`,
+  `tests/integration/fresh-alt-pass-anchor-projection.test.ts`,
+  `tests/integration/fresh-alt-table-fit.test.ts`,
+  `tests/integration/alt-hidden-hand-geometry.test.ts`,
+  `tests/integration/alt-table-inset-config.test.ts`,
+  `tests/integration/alt-front-rail-visibility.test.ts`.
+- Linked GitHub Issue: [#125](https://github.com/NeonButrfly/tichuml/issues/125)
+- Milestone: none assigned; renderer/UI architecture slice.
 - Status Source: GitHub issue state only.
