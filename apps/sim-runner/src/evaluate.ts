@@ -1439,8 +1439,12 @@ async function main(): Promise<void> {
     )
   ].includes("lightgbm_model");
   const modelMetadata = readModelMetadata(repoRoot, usesLightgbm, {
-    modelPathOverride: args.modelPathOverride,
-    modelMetaPathOverride: args.modelMetaPathOverride
+    ...(args.modelPathOverride !== undefined
+      ? { modelPathOverride: args.modelPathOverride }
+      : {}),
+    ...(args.modelMetaPathOverride !== undefined
+      ? { modelMetaPathOverride: args.modelMetaPathOverride }
+      : {})
   });
   const reportTimestamp = new Date().toISOString();
   const primaryLeg = comparisonRuns[0];
