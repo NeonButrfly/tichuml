@@ -444,7 +444,7 @@ def normalize_feature_frame(frame: pd.DataFrame) -> pd.DataFrame:
         if numeric.isna().sum() > series.isna().sum():
             invalid_columns.append(column)
             continue
-        normalized[column] = numeric.astype("float64")
+        normalized[column] = numeric.astype("float32")
 
     if invalid_columns:
         raise ValueError(
@@ -453,6 +453,36 @@ def normalize_feature_frame(frame: pd.DataFrame) -> pd.DataFrame:
         )
 
     return normalized
+
+
+def minimal_training_columns(
+    frame: pd.DataFrame,
+    feature_columns: list[str],
+    target_column: str,
+    objective: str,
+) -> list[str]:
+    required = list(feature_columns)
+    required.append(target_column)
+    for column in ("decision_id", "game_id", "hand_id", "candidate_action_key"):
+        if column in frame.columns:
+            required.append(column)
+    for aliases in GROUPING_COLUMN_ALIASES.values():
+        for column in aliases:
+            if column in frame.columns:
+                required.append(column)
+    if objective in {"rollout_regression", "rollout_ranker"}:
+        for column in (
+            "rollout_sample_count",
+            "rollout_value_stddev",
+            "rollout_mean_actor_team_delta",
+        ):
+            if column in frame.columns:
+                required.append(column)
+    ordered: list[str] = []
+    for column in required:
+        if column not in ordered:
+            ordered.append(column)
+    return ordered
 
 
 def excluded_columns(
@@ -1479,7 +1509,15 @@ def main() -> None:
         raise ValueError(
             f"No feature columns were available for training profile '{args.feature_profile}'."
         )
+    slim_columns = minimal_training_columns(
+        frame,
+        feature_columns,
+        target_column,
+        args.objective,
+    )
+    frame = frame[slim_columns].copy()
     feature_frame = normalize_feature_frame(frame[feature_columns])
+    frame.loc[:, feature_columns] = feature_frame
     emit_training_trace(
         "lightgbm_feature_selection_complete",
         {
@@ -1488,12 +1526,13 @@ def main() -> None:
             "feature_profile": args.feature_profile,
             "feature_count": len(feature_columns),
             "row_count": int(len(frame.index)),
+            "retained_column_count": int(len(frame.columns)),
         },
     )
 
     excluded = excluded_columns(frame, manifest, feature_columns, target_column, args.objective)
     train_frame, validation_frame, split_method = split_frame(
-        frame.assign(**feature_frame),
+        frame,
         args.objective,
         args.validation_fraction,
         args.random_state,
