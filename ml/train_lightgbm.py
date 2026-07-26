@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+import pyarrow.parquet as pq
 from lightgbm import LGBMClassifier, LGBMRanker, LGBMRegressor
 from sklearn.metrics import accuracy_score, mean_absolute_error, mean_squared_error, roc_auc_score
 from sklearn.model_selection import train_test_split
@@ -169,8 +170,69 @@ def install_signal_handlers() -> None:
     signal.signal(signal.SIGINT, _handle_signal)
 
 
-def load_frame(path: str, dataset_label: str = "training_input") -> pd.DataFrame:
+def flatten_grouping_column_aliases() -> list[str]:
+    seen: list[str] = []
+    for aliases in GROUPING_COLUMN_ALIASES.values():
+        for column in aliases:
+            if column not in seen:
+                seen.append(column)
+    return seen
+
+
+def manifest_feature_columns(manifest: dict[str, Any]) -> list[str]:
+    manifest_features = manifest.get("feature_columns")
+    if not isinstance(manifest_features, list):
+        return []
+    return [str(column) for column in manifest_features if isinstance(column, str)]
+
+
+def required_training_columns(
+    manifest: dict[str, Any],
+    *,
+    objective: str,
+    feature_profile: str,
+    target_column: str,
+    rollout_input: str | None,
+) -> list[str] | None:
+    manifest_features = manifest_feature_columns(manifest)
+    if not manifest_features:
+        return None
+
+    required_columns = apply_feature_profile(manifest_features, feature_profile)
+    required_columns.extend(
+        [
+            "phase",
+            target_column,
+            "decision_id",
+            "game_id",
+            "hand_id",
+        ]
+    )
+    required_columns.extend(flatten_grouping_column_aliases())
+    if objective == "rollout_ranker":
+        required_columns.append("candidate_action_key")
+    if rollout_input:
+        required_columns.append("candidate_action_key")
+
+    ordered: list[str] = []
+    for column in required_columns:
+        if column not in ordered:
+            ordered.append(column)
+    return ordered
+
+
+def load_frame(
+    path: str,
+    dataset_label: str = "training_input",
+    columns: list[str] | None = None,
+) -> pd.DataFrame:
     source = Path(path)
+    resolved_columns = columns
+    if source.suffix not in {".jsonl", ".gz"} and columns:
+        available_columns = set(pq.read_schema(source).names)
+        resolved_columns = [
+            column for column in columns if column in available_columns
+        ]
     emit_training_trace(
         "lightgbm_load_start",
         {
@@ -179,6 +241,7 @@ def load_frame(path: str, dataset_label: str = "training_input") -> pd.DataFrame
             "dataset_label": dataset_label,
             "input_path": str(source),
             "input_format": source.suffix or "parquet",
+            "requested_column_count": None if resolved_columns is None else len(resolved_columns),
         },
     )
     if source.suffix == ".jsonl":
@@ -225,9 +288,9 @@ def load_frame(path: str, dataset_label: str = "training_input") -> pd.DataFrame
         )
         return frame
     if source.suffix == ".gz":
-        frame = pd.read_csv(source)
+        frame = pd.read_csv(source, usecols=resolved_columns if resolved_columns else None)
     else:
-        frame = pd.read_parquet(source)
+        frame = pd.read_parquet(source, columns=resolved_columns if resolved_columns else None)
     emit_training_trace(
         "lightgbm_load_complete",
         {
@@ -1309,7 +1372,18 @@ def main() -> None:
     label_mode, default_target = objective_defaults(args.objective)
     target_column = args.target_column or default_target
     manifest = load_manifest(args.manifest_input)
-    frame = load_frame(args.input, dataset_label="training_input")
+    input_columns = required_training_columns(
+        manifest,
+        objective=args.objective,
+        feature_profile=args.feature_profile,
+        target_column=target_column,
+        rollout_input=args.rollout_input,
+    )
+    frame = load_frame(
+        args.input,
+        dataset_label="training_input",
+        columns=input_columns,
+    )
     frame = merge_rollout_input(frame, args.rollout_input)
     emit_training_trace(
         "lightgbm_phase_filter_complete",
