@@ -10,6 +10,8 @@ On 2026-09-20, `tichuml` (`192.168.50.36`) was reachable as `kay` and reported U
 
 `tichuml1` (`192.168.50.196`) is now reachable with key-based SSH. Its USB tree shows an Acer USB webcam and Bluetooth adapter, but no Kinect v2 device (`045e:02c4`). No Kinect/freenect2 udev rule or installed library was found on that host.
 
+On 2026-09-20, the same dependency set was installed on `tichuml1`, OpenKinect `libfreenect2` was built under `/home/kay/src/libfreenect2`, and the user-prefix installation completed at `/home/kay/freenect2`. The root-owned `/etc/udev/rules.d/90-kinect2.rules` was installed and reloaded. `Protonect` runs there but reports `found 0 devices` / `no device connected!`.
+
 ## Required validation
 
 After authorized SSH and administrative access are available:
