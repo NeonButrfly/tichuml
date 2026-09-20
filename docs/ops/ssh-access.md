@@ -13,7 +13,7 @@ this repository or in the SSH configuration.
 | Host | Address | Key-based access | State |
 | --- | --- | --- | --- |
 | `tichuml` | `192.168.50.36` | Passing | `hostname` and `whoami` succeed with `BatchMode=yes`. |
-| `tichuml1` | `192.168.50.196` | Blocked | Password authentication succeeds, but the SSH server times out while opening the session channel, so the key cannot yet be installed. |
+| `tichuml1` | `192.168.50.196` | Passing | `hostname`/`whoami` and the configured key work with `BatchMode=yes`; no Kinect device is present. |
 | `kayraspi` | `192.168.50.232` | Passing | Corrected from stale `.235`; password bootstrap installed the key, and `hostname`/`whoami` pass with `BatchMode=yes`. |
 | `kayraspi2` | `192.168.50.86` | Passing | `hostname` and `whoami` succeed with `BatchMode=yes`. |
 
