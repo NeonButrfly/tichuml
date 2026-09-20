@@ -14,7 +14,7 @@ this repository or in the SSH configuration.
 | --- | --- | --- | --- |
 | `tichuml` | `192.168.50.36` | Passing | `hostname` and `whoami` succeed with `BatchMode=yes`. |
 | `tichuml1` | `192.168.50.196` | Blocked | Password authentication succeeds, but the SSH server times out while opening the session channel, so the key cannot yet be installed. |
-| `kayraspi` | `192.168.50.235` | Blocked | Host is not responding to ping or SSH. |
+| `kayraspi` | `192.168.50.232` | Passing | Corrected from stale `.235`; password bootstrap installed the key, and `hostname`/`whoami` pass with `BatchMode=yes`. |
 | `kayraspi2` | `192.168.50.86` | Passing | `hostname` and `whoami` succeed with `BatchMode=yes`. |
 
 After a blocked host is reachable and can open a normal SSH session, install
