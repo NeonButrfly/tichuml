@@ -16,6 +16,7 @@ this repository or in the SSH configuration.
 | `tichuml1` | `192.168.50.196` | Passing | `hostname`/`whoami` and the configured key work with `BatchMode=yes`; no Kinect device is present. |
 | `kayraspi` | `192.168.50.232` | Passing | Corrected from stale `.235`; password bootstrap installed the key, and `hostname`/`whoami` pass with `BatchMode=yes`. |
 | `kayraspi2` | `192.168.50.86` | Passing | `hostname` and `whoami` succeed with `BatchMode=yes`. |
+| `linux32gb` | `192.168.50.235` | Passing | `hostname`/`whoami` succeed with `BatchMode=yes`; `kay` has validated passwordless sudo for the Kinect driver setup. |
 
 After a blocked host is reachable and can open a normal SSH session, install
 the existing public key idempotently and verify with:
@@ -25,3 +26,6 @@ ssh -o BatchMode=yes <host> "hostname; whoami"
 ```
 
 Do not record or commit the bootstrap password.
+
+The `linux32gb` passwordless sudo change is host-local and is tracked with the
+Kinect validation work in [#131](https://github.com/NeonButrfly/tichuml/issues/131).
