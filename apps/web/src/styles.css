@@ -5827,6 +5827,11 @@ body.normal-layout-locked {
   letter-spacing: 0.08em;
 }
 
+.luxury-game .game-menu {
+  pointer-events: auto;
+  z-index: 400;
+}
+
 .game-menu--alternate {
   top: 18px;
   left: 18px;

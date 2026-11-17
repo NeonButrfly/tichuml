@@ -2,7 +2,7 @@ import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { RoundPhase } from "@tichuml/engine";
 
 export type UiMode = "normal" | "debug";
-export type PlayerTableVariant = "normal";
+export type PlayerTableVariant = "normal" | "luxury";
 export type UiDialogId =
   | "hotkeys"
   | "how_to_play"
@@ -115,7 +115,8 @@ export const GAME_MENU_ITEMS: readonly GameMenuItemDefinition[] = [
   {
     id: "backend_settings",
     label: "Backend Settings",
-    description: "Change decision mode, telemetry, fallback, and backend URL at runtime.",
+    description:
+      "Change decision mode, telemetry, fallback, and backend URL at runtime.",
     commandId: "open_backend_settings_dialog"
   },
   {
@@ -127,7 +128,8 @@ export const GAME_MENU_ITEMS: readonly GameMenuItemDefinition[] = [
   {
     id: "random_sources",
     label: "Random Sources",
-    description: "Inspect the most recent entropy collection and derived seeds.",
+    description:
+      "Inspect the most recent entropy collection and derived seeds.",
     commandId: "open_random_sources_dialog"
   },
   {
@@ -141,18 +143,20 @@ export const GAME_MENU_ITEMS: readonly GameMenuItemDefinition[] = [
 export function getPlayerTableVariantFromSearch(
   search: string
 ): PlayerTableVariant {
-  void search;
-  return "normal";
+  const value = new URLSearchParams(search).get("table");
+  return value === "luxury" || value === "alt" || value === "alternate"
+    ? "luxury"
+    : "normal";
 }
 
 export function updateSearchWithPlayerTableVariant(
   search: string,
   variant: PlayerTableVariant
 ): string {
-  void variant;
   const params = new URLSearchParams(search);
   params.delete("table");
   params.delete("preview");
+  if (variant === "luxury") params.set("table", "luxury");
 
   const serialized = params.toString();
   return serialized.length > 0 ? `?${serialized}` : "";
@@ -315,7 +319,9 @@ export function isEditableShortcutTarget(target: EventTarget | null): boolean {
 }
 
 export function isDebugToggleShortcut(event: HotkeyEventLike): boolean {
-  const debugHotkey = UI_HOTKEYS.find((hotkey) => hotkey.id === "toggle_debug_mode");
+  const debugHotkey = UI_HOTKEYS.find(
+    (hotkey) => hotkey.id === "toggle_debug_mode"
+  );
   return debugHotkey ? matchesHotkey(event, debugHotkey.combo) : false;
 }
 

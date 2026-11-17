@@ -2,6 +2,15 @@
 
 Use this file to preserve UI and UX prompt intent and link it to GitHub work. GitHub issue state is authoritative; this file is not a parallel tracker.
 
+### 2026-11-16 - Recover a playable luxury table
+
+- Prompt: "make the actual game work correctly ... Go back through the code base and archive ... make it display and work like I expect."
+- Interpretation: recover the luxury artwork and live game bindings, repair table selection, card/pass/action interactions, shared dialogs, and viewport framing. Use one table coordinate system without the archived duplicate 3D overlay.
+- Affected systems: App routing, shared menu/dialogs, recovered luxury view, card/pass/trick layers, and browser/integration validation.
+- Canonical issue: [#125](https://github.com/NeonButrfly/tichuml/issues/125); milestone 6.4 – Gameplay & UX Stabilization.
+- This request supersedes the removal-only direction below. The archive remains historical; selected presentation code is recovered under apps/web/src/luxury-table.
+- Status and remaining 3D acceptance requirements live in GitHub.
+
 ### 2026-07-08 - Archive and remove the unrecoverable luxury table completely
 
 - Prompt Signal: The user explicitly requested a clean reset because the luxury

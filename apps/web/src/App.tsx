@@ -1,3 +1,4 @@
+import { FreshAltTable } from "./luxury-table/FreshAltTable";
 import {
   startTransition,
   useEffect,
@@ -789,7 +790,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     null
   );
   const [uiMode, setUiMode] = useState<UiMode>("normal");
-  const activePlayerTableVariant: PlayerTableVariant = "normal";
+  const [activePlayerTableVariant, setActivePlayerTableVariant] = useState<PlayerTableVariant>(() => getPlayerTableVariantFromSearch(window.location.search));
   const [layoutEditorActive, setLayoutEditorActive] = useState(false);
   const [mainMenuOpen, setMainMenuOpen] = useState(false);
   const [activeDialog, setActiveDialog] = useState<UiDialogId | null>(null);
@@ -3046,6 +3047,7 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
   }
 
   function handlePlayerTableVariantChange(nextVariant: PlayerTableVariant) {
+    setActivePlayerTableVariant(nextVariant);
     if (typeof window === "undefined") {
       return;
     }
@@ -3708,5 +3710,5 @@ function AppSession({ initialSession, createRoundSession }: AppSessionProps) {
     return <DebugGameTableView {...viewProps} />;
   }
 
-  return <NormalGameTableView {...viewProps} />;
+  return activePlayerTableVariant === "luxury" ? <FreshAltTable {...viewProps} /> : <NormalGameTableView {...viewProps} />;
 }

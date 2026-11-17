@@ -3405,6 +3405,9 @@ export function GameChromeMenu({
           aria-label="Game menu"
           onKeyDown={handleMenuKeyDown}
         >
+          <button type="button" role="menuitem" className="game-menu__item" onClick={() => { onPlayerTableVariantChange(playerTableVariant === "luxury" ? "normal" : "luxury"); onMainMenuOpenChange(false); }}>
+            {playerTableVariant === "luxury" ? "Standard Table" : "Luxury Table"}
+          </button>
           {GAME_MENU_ITEMS.map((item, index) => {
             const isActive =
               (item.commandId === "toggle_debug_mode" && uiMode === "debug") ||
@@ -4315,7 +4318,7 @@ function BackendSettingsDialogContent({
   );
 }
 
-function GameDialogLayer({
+export function GameDialogLayer({
   activeDialog,
   state,
   latestEntropyDebug,

@@ -28,6 +28,16 @@ The repository no longer reflects a Milestone 0-only scaffold. Historical milest
 
 ## Commands
 
+The game menu offers Standard Table and Luxury Table. Open `?table=luxury`
+to select the recovered luxury presentation directly; switching tables retains
+the current hand. Both views use the same engine and game actions.
+Recovery and the outstanding 3D acceptance work are tracked in
+[#125](https://github.com/NeonButrfly/tichuml/issues/125).
+Run `node --import tsx scripts/verify-luxury-table.mjs` against the web
+server on port 5174 for isolated browser verification. This harness provides
+entropy using the real local-crypto seed generator; it does not verify a deployed
+backend or Postgres.
+
 - `npm install`
 - `npm run lint`
 - `npm run test`

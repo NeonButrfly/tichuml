@@ -21,3 +21,8 @@ Archive contract:
 - code stays in-repo for reference only
 - archived files are outside active runtime/workspace entry points
 - the active app should not import, bundle, or route into this archive
+
+Recovery on 2026-11-16 is tracked in [#125](https://github.com/NeonButrfly/tichuml/issues/125).
+Selected artwork and live presentation bindings were copied into the active
+luxury-table implementation. The active application does not import this archive.
+The old stacked 3D route and standalone editor remain archived.
