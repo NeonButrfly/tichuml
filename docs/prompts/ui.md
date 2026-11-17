@@ -2,6 +2,13 @@
 
 Use this file to preserve UI and UX prompt intent and link it to GitHub work. GitHub issue state is authoritative; this file is not a parallel tracker.
 
+### 2026-11-16 - North rail refinement and south action plate
+
+- Prompt: north looks wrong; remove SOUTH and use an expanded south plate for all action buttons.
+- Requirement: north cards must be readable upright in their rail and clear of the north plaque/status; replace the south name visually with a wider opaque action panel that wraps controls as needed.
+- Affected systems: rail-card sizing/contact, camera depth precision, action/status positioning, and layout/geometry tests.
+- Issue: [#139](https://github.com/NeonButrfly/tichuml/issues/139), related to #125. No milestone for this scoped correction; status lives in GitHub.
+
 ### 2026-11-16 - Opponent hands must stand upright on rails
 
 - Prompt: flat geometry is explicitly rejected. Final corrected directions are north backs toward south, east backs toward west, and west backs toward east, all seated on their card rails.

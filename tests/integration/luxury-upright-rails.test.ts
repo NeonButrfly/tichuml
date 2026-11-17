@@ -3,7 +3,6 @@ import { Vector3 } from "three";
 import {
   createRailCamera,
   getRailCardPlacement,
-  RAIL_CARD_HEIGHT,
   RAIL_CARD_THICKNESS
 } from "../../apps/web/src/luxury-table/rail-card-geometry";
 import { getTableFit } from "../../apps/web/src/luxury-table/tableFit";
@@ -20,7 +19,7 @@ describe("upright luxury rail card geometry (#125)", () => {
         const card = getRailCardPlacement(seat, i);
         expect(card.backNormal.dot(targets[seat])).toBeCloseTo(1, 10);
         expect(card.backNormal.y).toBeCloseTo(0, 10);
-        expect(card.position[1] - RAIL_CARD_HEIGHT / 2).toBe(0);
+        expect(card.position[1] - card.height / 2).toBe(0);
         expect(RAIL_CARD_THICKNESS).toBeGreaterThan(0);
       }
     }
@@ -55,6 +54,30 @@ describe("upright luxury rail card geometry (#125)", () => {
       const last = getRailCardPlacement(seat, 13);
       expect(last.foot.z - first.foot.z).toBeGreaterThan(100);
       expect(last.position[1]).toBe(first.position[1]);
+    }
+  });
+  it("keeps north cards readable above the plaque with nonintersecting bodies and enough face-depth precision", () => {
+    const camera = createRailCamera();
+    for (let i = 0; i < 14; i++) {
+      const card = getRailCardPlacement("north", i);
+      const top = new Vector3(card.foot.x, card.height, card.foot.z).project(
+        camera
+      );
+      const screenTop = (1 - top.y) * 512;
+      expect(screenTop).toBeGreaterThan(5);
+      expect(card.base.y - screenTop).toBeGreaterThan(65);
+      expect(card.base.y).toBeLessThan(100);
+      if (i > 0)
+        expect(
+          card.foot.z - getRailCardPlacement("north", i - 1).foot.z
+        ).toBeGreaterThan(RAIL_CARD_THICKNESS);
+      const body = new Vector3(...card.position)
+        .addScaledVector(card.backNormal, RAIL_CARD_THICKNESS / 2)
+        .project(camera);
+      const print = new Vector3(...card.position)
+        .addScaledVector(card.backNormal, RAIL_CARD_THICKNESS / 2 + 0.1)
+        .project(camera);
+      expect((Math.abs(body.z - print.z) / 2) * 2 ** 24).toBeGreaterThan(4);
     }
   });
 });

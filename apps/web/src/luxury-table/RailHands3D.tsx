@@ -6,7 +6,6 @@ import type { TableFit } from "./tableFit";
 import {
   createRailCamera,
   getRailCardPlacement,
-  RAIL_CARD_HEIGHT,
   RAIL_CARD_THICKNESS
 } from "./rail-card-geometry";
 import { FRESH_ALT_CARD_BACK_SRC } from "./freshAltTableChecks";
@@ -31,13 +30,13 @@ function StandingCards({ cards }: { cards: FreshRenderableCard[] }) {
           >
             <mesh>
               <boxGeometry
-                args={[width, RAIL_CARD_HEIGHT, RAIL_CARD_THICKNESS]}
+                args={[width, placement.height, RAIL_CARD_THICKNESS]}
               />
               <meshStandardMaterial color="#d6cba6" roughness={0.8} />
             </mesh>
             {/* +Z is the physical BACK; yaw rotates its normal toward the recipient. */}
             <mesh position={[0, 0, RAIL_CARD_THICKNESS / 2 + 0.1]}>
-              <planeGeometry args={[width - 2, RAIL_CARD_HEIGHT - 2]} />
+              <planeGeometry args={[width - 2, placement.height - 2]} />
               <meshStandardMaterial
                 map={back}
                 side={FrontSide}
@@ -49,7 +48,7 @@ function StandingCards({ cards }: { cards: FreshRenderableCard[] }) {
               position={[0, 0, -RAIL_CARD_THICKNESS / 2 - 0.1]}
               rotation={[0, Math.PI, 0]}
             >
-              <planeGeometry args={[width - 2, RAIL_CARD_HEIGHT - 2]} />
+              <planeGeometry args={[width - 2, placement.height - 2]} />
               <meshStandardMaterial
                 color="#ece1c4"
                 side={FrontSide}

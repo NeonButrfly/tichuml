@@ -6,7 +6,9 @@ export const RAIL_CARD_THICKNESS = 2.4;
 export type RailSeat = Exclude<Seat, "south">;
 
 export function createRailCamera() {
-  const camera = new PerspectiveCamera(42, 1536 / 1024, 1, 10000);
+  // Keep a tight clipping range: a near plane of 1 wastes depth precision at
+  // this camera distance and lets the card body fight its own printed faces.
+  const camera = new PerspectiveCamera(42, 1536 / 1024, 100, 5000);
   camera.position.set(0, 1100, 1500);
   camera.lookAt(0, 0, 0);
   camera.updateMatrixWorld();
@@ -27,9 +29,19 @@ export function getRailCardPlacement(seat: RailSeat, index: number) {
   const t = Math.max(0, Math.min(13, index)) / 13;
   const base =
     seat === "north"
-      ? { x: 478 + t * 580, y: 113 }
+      ? { x: 478 + t * 580, y: 90 }
       : { x: seat === "west" ? 137 - t * 22 : 1399 + t * 22, y: 280 + t * 420 };
   const foot = railPointToWorld(base.x, base.y);
+  // Overlapping upright cards cannot share one plane: their faces/body would
+  // intersect and produce triangular depth artifacts. Step the north stack
+  // by one card thickness inside the rail groove.
+  if (seat === "north") {
+    foot.z += (index - 6.5) * (RAIL_CARD_THICKNESS + 0.8);
+    const projected = foot.clone().project(createRailCamera());
+    base.x = (projected.x + 1) * 768;
+    base.y = (1 - projected.y) * 512;
+  }
+  const height = seat === "north" ? 176 : RAIL_CARD_HEIGHT;
   const yaw =
     seat === "north" ? 0 : seat === "east" ? -Math.PI / 2 : Math.PI / 2;
   const backNormal = new Vector3(0, 0, 1).applyAxisAngle(
@@ -41,11 +53,8 @@ export function getRailCardPlacement(seat: RailSeat, index: number) {
     foot,
     yaw,
     backNormal,
-    position: [foot.x, RAIL_CARD_HEIGHT / 2, foot.z] as [
-      number,
-      number,
-      number
-    ],
-    width: seat === "north" ? 80 : 94
+    height,
+    position: [foot.x, height / 2, foot.z] as [number, number, number],
+    width: seat === "north" ? 110 : 94
   };
 }

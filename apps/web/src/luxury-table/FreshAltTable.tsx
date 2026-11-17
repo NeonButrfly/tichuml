@@ -505,12 +505,12 @@ export function FreshAltTable(props: FreshAltTableProps) {
                 style={{
                   position: "absolute",
                   left: "50%",
-                  top: Math.max(fit.offsetY + 18, 16),
+                  top: fit.offsetY + 145 * fit.scale,
                   transform: "translateX(-50%)",
                   borderRadius: 999,
                   background: "rgba(7, 12, 10, 0.78)",
                   border: "1px solid rgba(201, 159, 92, 0.44)",
-                  padding: "10px 16px",
+                  padding: "4px 14px",
                   maxWidth: "min(70%, 560px)",
                   textAlign: "center",
                   fontSize: 14
@@ -727,12 +727,25 @@ export function FreshAltTable(props: FreshAltTableProps) {
         </div>
 
         <div
+          className="luxury-action-plate"
+          data-testid="luxury-action-plate"
+          role="group"
+          aria-label="Game actions"
           style={{
             position: "absolute",
-            left: "50%",
-            bottom: Math.max(size.h - (fit.offsetY + fit.renderedH) + 16, 16),
+            left: fit.offsetX + fit.renderedW / 2,
+            bottom: size.h - (fit.offsetY + fit.renderedH) + 8 * fit.scale,
+            width: Math.min(1120 * fit.scale, fit.renderedW - 24),
+            minHeight: Math.max(80 * fit.scale, 64),
+            boxSizing: "border-box",
+            padding: "10px 16px",
+            border: "3px double #b18a43",
+            borderRadius: "18px",
+            background: "linear-gradient(180deg, #162e21, #08170f)",
+            boxShadow: "0 0 0 5px #37200f, 0 8px 16px #0009",
             transform: "translateX(-50%)",
             display: "flex",
+            alignItems: "center",
             flexWrap: "wrap",
             gap: "10px",
             justifyContent: "center",

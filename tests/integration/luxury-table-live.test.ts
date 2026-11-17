@@ -562,6 +562,14 @@ describe("luxury table live interactions", () => {
     expect(passedCard.style.width).toBe("60px");
     expect(passedCard.style.height).toBe("96px");
     expect(passedCard.style.transform).toContain("rotate(-90deg)");
+    const plate = view.container.querySelector(
+      "[data-testid='luxury-action-plate']"
+    ) as HTMLDivElement;
+    expect(plate).not.toBeNull();
+    expect(plate.getAttribute("aria-label")).toBe("Game actions");
+    expect(plate.style.flexWrap).toBe("wrap");
+    expect(plate.style.background).toContain("linear-gradient");
+    expect(plate.querySelectorAll("button").length).toBeGreaterThan(1);
     const card = view.container.querySelector(
       "[data-seat='south'] button, button[data-seat='south']"
     ) as HTMLButtonElement;
