@@ -3,6 +3,18 @@
 import { act, createElement, type ReactElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+// jsdom cannot provide WebGL. Verify actual mesh geometry in the rail tests
+// and actual rendering with the browser; mock only the GPU boundary here.
+vi.mock("../../apps/web/src/luxury-table/RailHands3D", async () => {
+  const { createElement } = await import("react");
+  return {
+    RailHands3D: ({ cards }: { cards: unknown[] }) =>
+      createElement("div", {
+        "data-testid": "luxury-rail-hands-3d",
+        "data-card-count": cards.length
+      })
+  };
+});
 import type { Card } from "@tichuml/engine";
 import type {
   GameTableViewProps,
@@ -531,8 +543,15 @@ describe("luxury table live interactions", () => {
       view.container.querySelectorAll("img[src='/table/table.png']")
     ).toHaveLength(1);
     expect(
-      view.container.querySelectorAll("[data-seat='east'][data-render-mode]")
-    ).toHaveLength(14);
+      view.container
+        .querySelector("[data-testid='luxury-rail-hands-3d']")
+        ?.getAttribute("data-card-count")
+    ).toBe("42");
+    expect(
+      view.container.querySelectorAll(
+        "[data-seat='east'][data-render-mode], [data-seat='west'][data-render-mode], [data-seat='north'][data-render-mode]"
+      )
+    ).toHaveLength(0);
     expect(
       view.container.querySelectorAll("[data-pass-id][data-arrow-direction]")
     ).toHaveLength(12);

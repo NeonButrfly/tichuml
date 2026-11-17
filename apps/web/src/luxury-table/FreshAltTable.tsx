@@ -16,12 +16,10 @@ import {
   GameChromeMenu,
   GameDialogLayer
 } from "../game-table-views";
-import {
-  getNormalSpriteHiddenPassCount,
-  resolveNormalSpriteCardFaceSrc
-} from "../normal-table-sprite-assets";
+import { resolveNormalSpriteCardFaceSrc } from "../normal-table-sprite-assets";
 import { isExchangePhase } from "../table-model";
 import { FreshCardsLayer, type FreshRenderableCard } from "./FreshCardsLayer";
+import { RailHands3D } from "./RailHands3D";
 import { FreshPassingLayer, type FreshPassLane } from "./FreshPassingLayer";
 import { FreshTrickLayer, type FreshTrickCard } from "./FreshTrickLayer";
 import {
@@ -167,15 +165,8 @@ export function FreshAltTable(props: FreshAltTableProps) {
         const anchorsForSeat = handAnchors.filter(
           (anchor) => anchor.seat === seat
         );
-        const hiddenPassCount =
-          !seatView.isLocalSeat && exchangePhaseActive
-            ? getNormalSpriteHiddenPassCount({
-                seat: seatView.seat,
-                passRouteViews: props.passRouteViews
-              })
-            : 0;
-
-        const remoteCount = seatView.handCount + hiddenPassCount;
+        // Exchange render state already removes cards placed in the pass lanes.
+        const remoteCount = seatView.handCount;
         const renderables = seatView.isLocalSeat
           ? props.sortedLocalHand.map((card) => ({ id: card.id, card }))
           : Array.from({ length: remoteCount }, (_, index) => ({
@@ -242,7 +233,7 @@ export function FreshAltTable(props: FreshAltTableProps) {
         });
       })
       .filter((card): card is FreshRenderableCard => card !== null);
-  }, [exchangePhaseActive, handAnchors, props]);
+  }, [handAnchors, props]);
 
   const passLanes = useMemo<FreshPassLane[]>(() => {
     const routeByAnchorId = new Map<
@@ -484,9 +475,13 @@ export function FreshAltTable(props: FreshAltTableProps) {
           <FreshTrickLayer cards={trickCards} fit={fit} />
 
           <FreshCardsLayer
-            cards={cards}
+            cards={cards.filter((card) => card.seat === "south")}
             fit={fit}
             showDebug={props.showDebug ?? false}
+          />
+          <RailHands3D
+            cards={cards.filter((card) => card.seat !== "south")}
+            fit={fit}
           />
 
           {passingVisible ? (

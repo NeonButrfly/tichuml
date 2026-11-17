@@ -2,6 +2,15 @@
 
 Use this file to preserve UI and UX prompt intent and link it to GitHub work. GitHub issue state is authoritative; this file is not a parallel tracker.
 
+### 2026-11-16 - Opponent hands must stand upright on rails
+
+- Prompt: flat geometry is explicitly rejected. Final corrected directions are north backs toward south, east backs toward west, and west backs toward east, all seated on their card rails.
+- Requirement: physical upright card meshes with thickness and separate outward fronts/inward backs; no duplicated flat opponent sprites. Mesh feet must stay on the artwork rails across viewport sizes.
+- Affected systems: RailHands3D, rail-card-geometry, luxury hand rendering, live hand counts and geometry/interaction tests.
+- Canonical issue: [#125](https://github.com/NeonButrfly/tichuml/issues/125), milestone 6.4 – Gameplay & UX Stabilization.
+- This supersedes the flat rotation approach in #138. The remaining table artwork and south interaction layer are unchanged; this is a mesh-based opponent-hand recovery, not a claim that the complete table/editor is now 3D.
+- Status lives in GitHub.
+
 ### 2026-11-16 - Correct luxury opponent facing and passing lanes
 
 - Prompt: passing lanes are misaligned; north cards must face south, east backs west, and west backs east.
