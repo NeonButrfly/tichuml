@@ -53,10 +53,12 @@ export function runFreshAltTableChecks() {
       (anchor) => anchor.renderMode === "side_rack_readable_fan"
     ),
     eastRotationValid: east.every(
-      (anchor) => anchor.rotationDeg <= -10 && anchor.rotationDeg >= -18
+      (anchor) =>
+        anchor.rotationDeg === -90 && anchor.cardBackFaces === "table_center"
     ),
     westRotationValid: west.every(
-      (anchor) => anchor.rotationDeg >= 10 && anchor.rotationDeg <= 18
+      (anchor) =>
+        anchor.rotationDeg === 90 && anchor.cardBackFaces === "table_center"
     ),
     passingDirections: passing.reduce<Record<string, string>>((acc, anchor) => {
       acc[anchor.id] = anchor.arrowDirection;
@@ -105,7 +107,7 @@ export function assertFreshAltTableChecks() {
   }
   if (!result.eastRotationValid || !result.westRotationValid) {
     failures.push(
-      "East/west rack cards must use a small portrait lean around +/-14 degrees, not +/-72 or +/-90."
+      "East backs must face west (-90 degrees); west backs must face east (+90 degrees)."
     );
   }
 

@@ -2,6 +2,14 @@
 
 Use this file to preserve UI and UX prompt intent and link it to GitHub work. GitHub issue state is authoritative; this file is not a parallel tracker.
 
+### 2026-11-16 - Correct luxury opponent facing and passing lanes
+
+- Prompt: passing lanes are misaligned; north cards must face south, east backs west, and west backs east.
+- Requirement: use explicit inward card orientation and one artwork coordinate system for all twelve exchange lanes. Arrows must match actual recipients, and assigned cards must fit their lanes.
+- Affected systems: luxury hand/lane geometry, rendering checks, assigned pass-card sizing, and interaction/geometry tests.
+- Issue: [#138](https://github.com/NeonButrfly/tichuml/issues/138), related to [#125](https://github.com/NeonButrfly/tichuml/issues/125).
+- Milestone: intentionally none; scoped visual/interaction bugfix. Status lives in GitHub.
+
 ### 2026-11-16 - Recover a playable luxury table
 
 - Prompt: "make the actual game work correctly ... Go back through the code base and archive ... make it display and work like I expect."

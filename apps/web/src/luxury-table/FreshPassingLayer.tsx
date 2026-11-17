@@ -149,8 +149,6 @@ export function FreshPassingLayer({
         );
 
         const cardPadding = 8 * fit.scale;
-        const cardWidth = width - cardPadding * 2;
-        const cardHeight = height - cardPadding * 2;
 
         const arrowRotation = (() => {
           if (lane.arrowRotationDeg !== undefined) {
@@ -174,6 +172,11 @@ export function FreshPassingLayer({
               return 0;
           }
         })();
+        // The image starts portrait. Swap its unrotated dimensions before a
+        // quarter turn so the final card stays inside the landscape lane.
+        const quarterTurn = Math.abs(arrowRotation % 180) === 90;
+        const cardWidth = (quarterTurn ? height : width) - cardPadding * 2;
+        const cardHeight = (quarterTurn ? width : height) - cardPadding * 2;
 
         return (
           <div key={lane.anchor.id}>

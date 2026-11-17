@@ -1,8 +1,3 @@
-import {
-  getAltTablePassingLaneLayout,
-  projectAltTablePassingLaneToDesignRect
-} from "../alt-table-3d/altTable3DGeometry";
-
 export type Seat = "north" | "east" | "south" | "west";
 export type SeatVisualPosition = "top" | "right" | "bottom" | "left";
 
@@ -85,10 +80,11 @@ export function makeNorthHandAnchors(): CardAnchor[] {
       },
       wPx: cardW,
       hPx: cardH,
-      rotationDeg: 0,
+      rotationDeg: 180,
+      cardBackFaces: "table_center",
       scaleX: 1,
       scaleY: 1,
-      hiddenBottomPx: 20,
+      hiddenBottomPx: 0,
       zIndex: 40 + i
     };
   });
@@ -98,15 +94,15 @@ export function makeSideHandAnchors(seat: "west" | "east"): CardAnchor[] {
   const count = 14;
   const west = seat === "west";
 
-  const top = west ? { x: 104, y: 244 } : { x: mirrorX(104), y: 244 };
+  const top = west ? { x: 160, y: 260 } : { x: mirrorX(160), y: 260 };
 
-  const bottom = west ? { x: 76, y: 699 } : { x: mirrorX(76), y: 699 };
+  const bottom = west ? { x: 160, y: 700 } : { x: mirrorX(160), y: 700 };
 
   const cardW = 64;
   const cardH = 88;
 
-  const baseRot = west ? 14 : -14;
-  const fanSpread = west ? 6 : -6;
+  const baseRot = west ? 90 : -90;
+  const fanSpread = 0;
 
   return Array.from({ length: count }, (_, i) => {
     const t = i / (count - 1);
@@ -125,7 +121,7 @@ export function makeSideHandAnchors(seat: "west" | "east"): CardAnchor[] {
       wPx: cardW,
       hPx: cardH,
       rotationDeg: baseRot + (t - 0.5) * fanSpread,
-      scaleX: 0.72,
+      scaleX: 1,
       scaleY: 1,
       zIndex: 40 + i
     };
@@ -174,172 +170,45 @@ export function makeAllHandAnchors(): CardAnchor[] {
   ];
 }
 
+// Coordinates belong to the artwork, not to a second perspective camera.
+// Left/right for north describe screen placement, matching resolveFreshPassAnchorId.
 export function makePassingAnchors(): PassAnchor[] {
-  const laneLayout = getAltTablePassingLaneLayout();
-  const laneByKey = new Map<string, (typeof laneLayout)[number]>(
-    laneLayout.map((lane) => [`${lane.seat}:${lane.target}`, lane] as const)
-  );
-  const laneRectByKey = new Map<
-    string,
-    ReturnType<typeof projectAltTablePassingLaneToDesignRect>
-  >(
-    laneLayout.map(
-      (lane) =>
-        [
-          `${lane.seat}:${lane.target}`,
-          projectAltTablePassingLaneToDesignRect(lane)
-        ] as const
-    )
-  );
-  const lane = (key: string) => laneByKey.get(key)!;
-  const laneRect = (key: string) => laneRectByKey.get(key)!;
-
-  return [
-    {
-      id: "north_pass_left",
-      seat: "north",
-      target: "left",
-      centerPx: laneRect("north:east").centerPx,
-      wPx: laneRect("north:east").wPx,
-      hPx: laneRect("north:east").hPx,
-      orientation: "landscape",
-      arrowDirection: lane("north:east").arrowDir.x < 0 ? "left" : "right",
-      assignedCardRotationDeg: 0,
-      zIndex: 220
-    },
-    {
-      id: "north_pass_across",
-      seat: "north",
-      target: "across",
-      centerPx: laneRect("north:south").centerPx,
-      wPx: laneRect("north:south").wPx,
-      hPx: laneRect("north:south").hPx,
-      orientation: "portrait",
-      arrowDirection: lane("north:south").arrowDir.z > 0 ? "south" : "north",
-      assignedCardRotationDeg: 0,
-      zIndex: 220
-    },
-    {
-      id: "north_pass_right",
-      seat: "north",
-      target: "right",
-      centerPx: laneRect("north:west").centerPx,
-      wPx: laneRect("north:west").wPx,
-      hPx: laneRect("north:west").hPx,
-      orientation: "landscape",
-      arrowDirection: lane("north:west").arrowDir.x < 0 ? "left" : "right",
-      assignedCardRotationDeg: 0,
-      zIndex: 220
-    },
-    {
-      id: "south_pass_left",
-      seat: "south",
-      target: "left",
-      centerPx: laneRect("south:west").centerPx,
-      wPx: laneRect("south:west").wPx,
-      hPx: laneRect("south:west").hPx,
-      orientation: "landscape",
-      arrowDirection: lane("south:west").arrowDir.x < 0 ? "left" : "right",
-      assignedCardRotationDeg: 0,
-      zIndex: 220
-    },
-    {
-      id: "south_pass_across",
-      seat: "south",
-      target: "across",
-      centerPx: laneRect("south:north").centerPx,
-      wPx: laneRect("south:north").wPx,
-      hPx: laneRect("south:north").hPx,
-      orientation: "portrait",
-      arrowDirection: lane("south:north").arrowDir.z > 0 ? "south" : "north",
-      assignedCardRotationDeg: 0,
-      zIndex: 220
-    },
-    {
-      id: "south_pass_right",
-      seat: "south",
-      target: "right",
-      centerPx: laneRect("south:east").centerPx,
-      wPx: laneRect("south:east").wPx,
-      hPx: laneRect("south:east").hPx,
-      orientation: "landscape",
-      arrowDirection: lane("south:east").arrowDir.x < 0 ? "left" : "right",
-      assignedCardRotationDeg: 0,
-      zIndex: 220
-    },
-    {
-      id: "west_pass_north",
-      seat: "west",
-      target: "north",
-      centerPx: laneRect("west:north").centerPx,
-      wPx: laneRect("west:north").wPx,
-      hPx: laneRect("west:north").hPx,
-      orientation: "portrait",
-      arrowDirection: lane("west:north").arrowDir.z > 0 ? "south" : "north",
-      assignedCardRotationDeg: -90,
-      zIndex: 220
-    },
-    {
-      id: "west_pass_across",
-      seat: "west",
-      target: "across",
-      centerPx: laneRect("west:east").centerPx,
-      wPx: laneRect("west:east").wPx,
-      hPx: laneRect("west:east").hPx,
-      orientation: "landscape",
-      arrowDirection: lane("west:east").arrowDir.x < 0 ? "left" : "east",
-      assignedCardRotationDeg: 0,
-      zIndex: 220
-    },
-    {
-      id: "west_pass_south",
-      seat: "west",
-      target: "south",
-      centerPx: laneRect("west:south").centerPx,
-      wPx: laneRect("west:south").wPx,
-      hPx: laneRect("west:south").hPx,
-      orientation: "portrait",
-      arrowDirection: lane("west:south").arrowDir.z > 0 ? "south" : "north",
-      assignedCardRotationDeg: 90,
-      zIndex: 220
-    },
-    {
-      id: "east_pass_north",
-      seat: "east",
-      target: "north",
-      centerPx: laneRect("east:north").centerPx,
-      wPx: laneRect("east:north").wPx,
-      hPx: laneRect("east:north").hPx,
-      orientation: "portrait",
-      arrowDirection: lane("east:north").arrowDir.z > 0 ? "south" : "north",
-      assignedCardRotationDeg: 90,
-      zIndex: 220
-    },
-    {
-      id: "east_pass_across",
-      seat: "east",
-      target: "across",
-      centerPx: laneRect("east:west").centerPx,
-      wPx: laneRect("east:west").wPx,
-      hPx: laneRect("east:west").hPx,
-      orientation: "landscape",
-      arrowDirection: lane("east:west").arrowDir.x < 0 ? "west" : "right",
-      assignedCardRotationDeg: 0,
-      zIndex: 220
-    },
-    {
-      id: "east_pass_south",
-      seat: "east",
-      target: "south",
-      centerPx: laneRect("east:south").centerPx,
-      wPx: laneRect("east:south").wPx,
-      hPx: laneRect("east:south").hPx,
-      orientation: "portrait",
-      arrowDirection: lane("east:south").arrowDir.z > 0 ? "south" : "north",
-      assignedCardRotationDeg: -90,
-      zIndex: 220
-    }
+  const lanes: Array<
+    [
+      string,
+      Seat,
+      PassAnchor["target"],
+      number,
+      number,
+      PassAnchor["arrowDirection"],
+      boolean
+    ]
+  > = [
+    ["north_pass_left", "north", "left", 620, 230, "west", true],
+    ["north_pass_across", "north", "across", 768, 230, "south", false],
+    ["north_pass_right", "north", "right", 916, 230, "east", true],
+    ["south_pass_left", "south", "left", 620, 650, "west", true],
+    ["south_pass_across", "south", "across", 768, 650, "north", false],
+    ["south_pass_right", "south", "right", 916, 650, "east", true],
+    ["west_pass_north", "west", "north", 310, 350, "north", false],
+    ["west_pass_across", "west", "across", 310, 480, "east", true],
+    ["west_pass_south", "west", "south", 310, 610, "south", false],
+    ["east_pass_north", "east", "north", 1226, 350, "north", false],
+    ["east_pass_across", "east", "across", 1226, 480, "west", true],
+    ["east_pass_south", "east", "south", 1226, 610, "south", false]
   ];
+  return lanes.map(([id, seat, target, x, y, arrowDirection, horizontal]) => ({
+    id,
+    seat,
+    target,
+    centerPx: { x, y },
+    wPx: horizontal ? 112 : 76,
+    hPx: horizontal ? 76 : 112,
+    orientation: horizontal ? "landscape" : "portrait",
+    arrowDirection,
+    assignedCardRotationDeg: horizontal ? 90 : 0,
+    zIndex: 220
+  }));
 }
 
 export function makeTrickAnchors(): TrickAnchor[] {

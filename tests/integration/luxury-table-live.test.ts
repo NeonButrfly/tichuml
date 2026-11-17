@@ -536,6 +536,13 @@ describe("luxury table live interactions", () => {
     expect(
       view.container.querySelectorAll("[data-pass-id][data-arrow-direction]")
     ).toHaveLength(12);
+    const passedCard = view.container.querySelector(
+      "button[aria-label='south_pass_left pass card']"
+    ) as HTMLButtonElement;
+    expect(passedCard).not.toBeNull();
+    expect(passedCard.style.width).toBe("60px");
+    expect(passedCard.style.height).toBe("96px");
+    expect(passedCard.style.transform).toContain("rotate(-90deg)");
     const card = view.container.querySelector(
       "[data-seat='south'] button, button[data-seat='south']"
     ) as HTMLButtonElement;
