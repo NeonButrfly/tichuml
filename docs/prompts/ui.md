@@ -2,6 +2,13 @@
 
 Use this file to preserve UI and UX prompt intent and link it to GitHub work. GitHub issue state is authoritative; this file is not a parallel tracker.
 
+### 2026-11-16 - Clickable upper-left score and game details
+
+- Prompt: put the score in the upper-left corner; clicking it should show game states, round, Tichu, GT and plays.
+- Requirement: keyboard-accessible score button at viewport insets opens live round/phase/turn, per-seat calls, current-trick plays/passes and completed-round scoring/call results. Do not imply that completed-round summaries retain every historical play.
+- Affected systems: luxury score control, shared score/history dialog, modal layering and interaction tests.
+- Issue: [#140](https://github.com/NeonButrfly/tichuml/issues/140). No milestone for this scoped enhancement; status lives in GitHub.
+
 ### 2026-11-16 - North rail refinement and south action plate
 
 - Prompt: north looks wrong; remove SOUTH and use an expanded south plate for all action buttons.

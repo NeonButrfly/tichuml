@@ -548,12 +548,20 @@ export function FreshAltTable(props: FreshAltTableProps) {
               onPlayerTableVariantChange={props.onPlayerTableVariantChange}
             />
 
-            <div
+            <button
+              type="button"
+              aria-label="Show score and game details"
+              aria-haspopup="dialog"
+              onClick={() => props.onUiCommand("open_score_history_dialog")}
               style={{
                 position: "absolute",
-                left: Math.max(fit.offsetX + 24, 16),
-                top: Math.max(fit.offsetY + 80, 80),
-                pointerEvents: "none",
+                left: 16,
+                top: 16,
+                pointerEvents: "auto",
+                cursor: "pointer",
+                padding: 0,
+                border: 0,
+                background: "none",
                 fontFamily: "'Georgia', serif",
                 zIndex: 310
               }}
@@ -620,7 +628,7 @@ export function FreshAltTable(props: FreshAltTableProps) {
                   </div>
                 </div>
               </div>
-            </div>
+            </button>
 
             <div
               style={{

@@ -295,19 +295,7 @@ export type GameTableViewProps = {
 export type WishSelectionValue = StandardRank | null;
 
 export const MAHJONG_WISH_RANKS: StandardRank[] = [
-  2,
-  3,
-  4,
-  5,
-  6,
-  7,
-  8,
-  9,
-  10,
-  11,
-  12,
-  13,
-  14
+  2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14
 ];
 
 export function formatRank(rank: number): string {
@@ -381,7 +369,9 @@ function formatTeamShort(team: TeamId): string {
   return team === "team-0" ? "NS" : "EW";
 }
 
-function getTichuMarkerLabel(callState: SeatView["callState"]): "GT" | "T" | null {
+function getTichuMarkerLabel(
+  callState: SeatView["callState"]
+): "GT" | "T" | null {
   if (callState.grandTichu) {
     return "GT";
   }
@@ -1182,15 +1172,11 @@ function getSeatVisualPosition(seat: SeatId): SeatVisualPosition {
   }
 }
 
-function getPassLaneDescriptor(
-  elementId: NormalLayoutElementId
-):
-  | {
-      sourcePosition: SeatVisualPosition;
-      targetPosition: SeatVisualPosition;
-      direction: PassLaneDirection;
-    }
-  | null {
+function getPassLaneDescriptor(elementId: NormalLayoutElementId): {
+  sourcePosition: SeatVisualPosition;
+  targetPosition: SeatVisualPosition;
+  direction: PassLaneDirection;
+} | null {
   for (const sourcePosition of ["top", "right", "bottom", "left"] as const) {
     for (const laneSpec of NORMAL_PASS_STAGE_MAP[sourcePosition]) {
       if (
@@ -1273,7 +1259,8 @@ function resolveBoundTrickZoneStyle(
 
   return {
     ...trickZone,
-    transform: `${String(trickZone.transform ?? "").trim()}${relaxedShift}`.trim()
+    transform:
+      `${String(trickZone.transform ?? "").trim()}${relaxedShift}`.trim()
   };
 }
 
@@ -1343,10 +1330,9 @@ function resolveNormalEditorElementVisual(config: {
     };
   }
 
-  const handPosition =
-    Object.entries(NORMAL_HAND_LAYOUT_IDS).find(
-      ([, layoutElementId]) => layoutElementId === config.elementId
-    )?.[0] as SeatVisualPosition | undefined;
+  const handPosition = Object.entries(NORMAL_HAND_LAYOUT_IDS).find(
+    ([, layoutElementId]) => layoutElementId === config.elementId
+  )?.[0] as SeatVisualPosition | undefined;
   if (handPosition) {
     const center = resolveNormalBoardAnchorPoint(
       config.normalTableLayout[config.elementId],
@@ -1571,7 +1557,9 @@ function normalizeLoadedLayoutTokens(
     sideLaneInsetFromHand: isFiniteNumber(payloadRecord.sideLaneInsetFromHand)
       ? Math.max(0, payloadRecord.sideLaneInsetFromHand)
       : DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS.sideLaneInsetFromHand,
-    sideLaneVerticalSpacing: isFiniteNumber(payloadRecord.sideLaneVerticalSpacing)
+    sideLaneVerticalSpacing: isFiniteNumber(
+      payloadRecord.sideLaneVerticalSpacing
+    )
       ? Math.max(0, payloadRecord.sideLaneVerticalSpacing)
       : DEFAULT_NORMAL_TABLE_LAYOUT_TOKENS.sideLaneVerticalSpacing,
     actionAreaGap: isFiniteNumber(payloadRecord.actionAreaGap)
@@ -1701,10 +1689,10 @@ export function parseNormalTableLayoutConfigText(
     for (const match of trimmed.matchAll(/<element\b([^>]*)\/?>/g)) {
       const attributeSource = match[1] ?? "";
       const attributes = Object.fromEntries(
-        Array.from(attributeSource.matchAll(/(\w+)="([^"]*)"/g), ([, key, value]) => [
-          key,
-          value
-        ])
+        Array.from(
+          attributeSource.matchAll(/(\w+)="([^"]*)"/g),
+          ([, key, value]) => [key, value]
+        )
       );
       const id = attributes.id;
       const x = Number(attributes.x);
@@ -1745,7 +1733,10 @@ export function serializeNormalTableLayoutConfig(
   config: NormalTableLayoutConfig
 ): string {
   const orderedElements = Object.fromEntries(
-    NORMAL_LAYOUT_EDITOR_ORDER.map((elementId) => [elementId, config.elements[elementId]])
+    NORMAL_LAYOUT_EDITOR_ORDER.map((elementId) => [
+      elementId,
+      config.elements[elementId]
+    ])
   );
 
   return JSON.stringify(
@@ -1847,7 +1838,10 @@ export function CardFace({
   }
 
   return (
-    <div className={classes} data-pass-card-orientation={dataPassCardOrientation}>
+    <div
+      className={classes}
+      data-pass-card-orientation={dataPassCardOrientation}
+    >
       {cardContent(card)}
     </div>
   );
@@ -2012,7 +2006,9 @@ function SeatFlagChips({
   );
 }
 
-export function getDisplayedTrickPoints(seatRelativePlays: readonly SeatPlayView[]): number {
+export function getDisplayedTrickPoints(
+  seatRelativePlays: readonly SeatPlayView[]
+): number {
   return getCardsPoints(
     cardsFromIds(
       seatRelativePlays.flatMap(({ plays }) =>
@@ -2022,31 +2018,38 @@ export function getDisplayedTrickPoints(seatRelativePlays: readonly SeatPlayView
   );
 }
 
-export function getNormalCenterZoneClassName(layoutEditorActive: boolean): string {
-  return ["normal-center-zone", layoutEditorActive ? "normal-center-zone--editor" : ""]
+export function getNormalCenterZoneClassName(
+  layoutEditorActive: boolean
+): string {
+  return [
+    "normal-center-zone",
+    layoutEditorActive ? "normal-center-zone--editor" : ""
+  ]
     .filter(Boolean)
     .join(" ");
 }
 
-export function shouldRenderNormalCenterZoneFelt(layoutEditorActive: boolean): boolean {
+export function shouldRenderNormalCenterZoneFelt(
+  layoutEditorActive: boolean
+): boolean {
   return layoutEditorActive;
 }
 
 export function TableSurface(
   props: Pick<
-  GameTableViewProps,
-  | "normalTableLayout"
-  | "state"
-  | "derived"
-  | "controlHint"
-  | "displayedTrick"
-  | "trickIsResolving"
-  | "seatRelativePlays"
-  | "tablePassGroups"
-  | "cardLookup"
-> & {
-  variant: "normal" | "debug";
-}
+    GameTableViewProps,
+    | "normalTableLayout"
+    | "state"
+    | "derived"
+    | "controlHint"
+    | "displayedTrick"
+    | "trickIsResolving"
+    | "seatRelativePlays"
+    | "tablePassGroups"
+    | "cardLookup"
+  > & {
+    variant: "normal" | "debug";
+  }
 ) {
   const {
     variant,
@@ -2173,7 +2176,9 @@ export function TableSurface(
               );
             })}
         </>
-      ) : variant === "debug" && exchangePhaseActive && tablePassGroups.length > 0 ? (
+      ) : variant === "debug" &&
+        exchangePhaseActive &&
+        tablePassGroups.length > 0 ? (
         <>
           <div className="table-trick__core">
             <span className="table-trick__lead">
@@ -2217,8 +2222,8 @@ export function TableSurface(
           )}
           {state.phase === "finished" && state.roundSummary?.doubleVictory && (
             <p>
-              {formatTeamShort(state.roundSummary.doubleVictory)} scored a double
-              victory.
+              {formatTeamShort(state.roundSummary.doubleVictory)} scored a
+              double victory.
             </p>
           )}
         </div>
@@ -2233,7 +2238,10 @@ function NormalSeatOverlayLayer({
   layoutMetrics,
   normalTableLayout,
   showSeatLabels = true
-}: Pick<GameTableViewProps, "seatViews" | "sortedLocalHand" | "normalTableLayout"> & {
+}: Pick<
+  GameTableViewProps,
+  "seatViews" | "sortedLocalHand" | "normalTableLayout"
+> & {
   layoutMetrics: NormalViewportLayoutMetrics;
   showSeatLabels?: boolean;
 }) {
@@ -2289,7 +2297,9 @@ function NormalSeatOverlayLayer({
                 className={[
                   "normal-seat-overlay__label",
                   `normal-seat-overlay__label--${seatView.position}`,
-                  seatView.isPrimarySeat ? "normal-seat-overlay__label--active" : ""
+                  seatView.isPrimarySeat
+                    ? "normal-seat-overlay__label--active"
+                    : ""
                 ]
                   .filter(Boolean)
                   .join(" ")}
@@ -2373,7 +2383,9 @@ function NormalDogLeadTransfer({
 
   return (
     <div
-      className={active ? "normal-dog-transfer is-active" : "normal-dog-transfer"}
+      className={
+        active ? "normal-dog-transfer is-active" : "normal-dog-transfer"
+      }
       data-dog-transfer={`${animation.sourceSeat}->${animation.targetSeat}`}
       style={{
         left: `${active ? targetAnchor.x : sourceAnchor.x}px`,
@@ -2460,7 +2472,8 @@ export function NormalTrickStagingRegions({
                 const reverseIndex = plays.length - 1 - playIndex;
                 const isWinningPlay =
                   entry.seat === displayedTrick.currentWinner &&
-                  entry.combination.key === displayedTrick.currentCombination.key;
+                  entry.combination.key ===
+                    displayedTrick.currentCombination.key;
 
                 return (
                   <div
@@ -2505,7 +2518,10 @@ export function NormalTrickStagingRegions({
         })}
 
       {pickupStageViews.map((group) => {
-        const fanMetrics = getNormalTrickFanMetrics(group.position, trickCardWidth);
+        const fanMetrics = getNormalTrickFanMetrics(
+          group.position,
+          trickCardWidth
+        );
         const seatLayout = getNormalSeatLayout({
           position: group.position,
           normalTableLayout,
@@ -2641,7 +2657,8 @@ export function NormalPassStagingRegions({
           };
 
           const isInteractive = route.interactive;
-          const tokenInteractive = isInteractive && Boolean(route.visibleCardId);
+          const tokenInteractive =
+            isInteractive && Boolean(route.visibleCardId);
           const slotContents = (
             <PassRouteToken
               route={route}
@@ -2824,7 +2841,9 @@ function NormalSeat({
   const metaBlock = (
     <div
       className={
-        isSideSeat ? "normal-seat__meta normal-seat__meta--side" : "normal-seat__meta"
+        isSideSeat
+          ? "normal-seat__meta normal-seat__meta--side"
+          : "normal-seat__meta"
       }
       aria-hidden="true"
     />
@@ -3354,11 +3373,19 @@ export function GameChromeMenu({
     switch (event.key) {
       case "ArrowDown":
         event.preventDefault();
-        moveFocusByStep(elements, document.activeElement as HTMLElement | null, 1);
+        moveFocusByStep(
+          elements,
+          document.activeElement as HTMLElement | null,
+          1
+        );
         break;
       case "ArrowUp":
         event.preventDefault();
-        moveFocusByStep(elements, document.activeElement as HTMLElement | null, -1);
+        moveFocusByStep(
+          elements,
+          document.activeElement as HTMLElement | null,
+          -1
+        );
         break;
       case "Home":
         event.preventDefault();
@@ -3374,11 +3401,7 @@ export function GameChromeMenu({
   return (
     <div
       ref={containerRef}
-      className={[
-        "game-menu",
-        `game-menu--${variant}`,
-        isOpen ? "is-open" : ""
-      ]
+      className={["game-menu", `game-menu--${variant}`, isOpen ? "is-open" : ""]
         .filter(Boolean)
         .join(" ")}
     >
@@ -3405,8 +3428,20 @@ export function GameChromeMenu({
           aria-label="Game menu"
           onKeyDown={handleMenuKeyDown}
         >
-          <button type="button" role="menuitem" className="game-menu__item" onClick={() => { onPlayerTableVariantChange(playerTableVariant === "luxury" ? "normal" : "luxury"); onMainMenuOpenChange(false); }}>
-            {playerTableVariant === "luxury" ? "Standard Table" : "Luxury Table"}
+          <button
+            type="button"
+            role="menuitem"
+            className="game-menu__item"
+            onClick={() => {
+              onPlayerTableVariantChange(
+                playerTableVariant === "luxury" ? "normal" : "luxury"
+              );
+              onMainMenuOpenChange(false);
+            }}
+          >
+            {playerTableVariant === "luxury"
+              ? "Standard Table"
+              : "Luxury Table"}
           </button>
           {GAME_MENU_ITEMS.map((item, index) => {
             const isActive =
@@ -3421,10 +3456,7 @@ export function GameChromeMenu({
                 }}
                 type="button"
                 role="menuitem"
-                className={[
-                  "game-menu__item",
-                  isActive ? "is-active" : ""
-                ]
+                className={["game-menu__item", isActive ? "is-active" : ""]
                   .filter(Boolean)
                   .join(" ")}
                 aria-label={isActive ? `${item.label} on` : item.label}
@@ -3445,7 +3477,6 @@ export function GameChromeMenu({
               </button>
             );
           })}
-
         </div>
       )}
     </div>
@@ -3471,7 +3502,9 @@ function ModalDialog({
 
   useEffect(() => {
     const previousFocus =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     const focusFrame = window.requestAnimationFrame(() => {
       const focusables = getFocusableElements(panelRef.current);
       (focusables[0] ?? panelRef.current)?.focus();
@@ -3641,9 +3674,7 @@ export function MahjongWishDialog({
             role="listbox"
             aria-label="Wish rank"
             aria-describedby={helperId}
-            aria-activedescendant={
-              `mahjong-wish-option-${resolvedWishRank === null ? "none" : resolvedWishRank}`
-            }
+            aria-activedescendant={`mahjong-wish-option-${resolvedWishRank === null ? "none" : resolvedWishRank}`}
             tabIndex={0}
             onKeyDown={(event) => {
               switch (event.key) {
@@ -3693,16 +3724,14 @@ export function MahjongWishDialog({
                   role="option"
                   tabIndex={-1}
                   aria-selected={selected}
-                  className={
-                    [
-                      rank === null
-                        ? "mahjong-wish-option mahjong-wish-option--none"
-                        : "mahjong-wish-option",
-                      selected ? "is-selected" : ""
-                    ]
-                      .filter(Boolean)
-                      .join(" ")
-                  }
+                  className={[
+                    rank === null
+                      ? "mahjong-wish-option mahjong-wish-option--none"
+                      : "mahjong-wish-option",
+                    selected ? "is-selected" : ""
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
                   onClick={() => {
                     onWishRankSelect(rank);
                     focusList();
@@ -3843,7 +3872,9 @@ function CopyableEntropyField({
         <strong>{label}</strong>
         <button
           type="button"
-          className={copied ? "entropy-copy-button is-copied" : "entropy-copy-button"}
+          className={
+            copied ? "entropy-copy-button is-copied" : "entropy-copy-button"
+          }
           onClick={onCopy}
         >
           {copied ? "Copied" : "Copy"}
@@ -3925,7 +3956,7 @@ export function RandomSourcesDialogContent({
             <span className="entropy-status-card__badge">
               {latestEntropyDebug.provenance.localFallbackUsed
                 ? "Local fallback used"
-                : primarySource?.displayName ?? "Primary source"}
+                : (primarySource?.displayName ?? "Primary source")}
             </span>
           </div>
           <p>{statusBody}</p>
@@ -4012,7 +4043,9 @@ export function RandomSourcesDialogContent({
           {latestEntropyDebug.sources.map((source) => (
             <article
               key={source.sourceId}
-              className={source.ok ? "entropy-source" : "entropy-source is-failed"}
+              className={
+                source.ok ? "entropy-source" : "entropy-source is-failed"
+              }
             >
               <div className="entropy-source__header">
                 <div className="entropy-source__titles">
@@ -4070,16 +4103,53 @@ export function RandomSourcesDialogContent({
 export function ScoreHistoryDialogContent({
   state
 }: Pick<GameTableViewProps, "state">) {
-  if (state.matchHistory.length === 0) {
-    return (
-      <div className="entropy-empty-state">
-        <p>No completed hands yet. Finish a hand to populate score history.</p>
-      </div>
-    );
-  }
-
   return (
     <div className="score-history">
+      <section aria-label="Current game state">
+        <h3>Current game</h3>
+        <p>
+          Round{" "}
+          {Math.max(
+            1,
+            state.matchHistory.length + (state.phase === "finished" ? 0 : 1)
+          )}{" "}
+          · {state.phase.replaceAll("_", " ")} ·{" "}
+          {state.activeSeat
+            ? `Turn: ${formatSeatShort(state.activeSeat)}`
+            : "Waiting for the next action"}
+        </p>
+        <h4>Tichu / Grand Tichu (GT)</h4>
+        <ul>
+          {(["seat-0", "seat-1", "seat-2", "seat-3"] as const).map((seat) => (
+            <li key={seat}>
+              {formatSeatShort(seat)}:{" "}
+              {state.calls?.[seat]?.grandTichu
+                ? "Grand Tichu (GT)"
+                : state.calls?.[seat]?.smallTichu
+                  ? "Tichu"
+                  : "No call"}
+              {state.finishedOrder?.includes(seat)
+                ? ` · Finished #${state.finishedOrder.indexOf(seat) + 1}`
+                : ""}
+            </li>
+          ))}
+        </ul>
+        <h4>Current trick plays</h4>
+        {state.currentTrick?.entries.length ? (
+          <ol>
+            {state.currentTrick.entries.map((entry, index) => (
+              <li key={index}>
+                {formatSeatShort(entry.seat)}:{" "}
+                {entry.type === "pass"
+                  ? "Pass"
+                  : `${entry.combination.kind} — ${entry.combination.cardIds.join(", ")}`}
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p>No plays in the current trick.</p>
+        )}
+      </section>
       <div className="score-history__summary">
         <article className="score-history__summary-card">
           <span>Match Score</span>
@@ -4100,6 +4170,12 @@ export function ScoreHistoryDialogContent({
       </div>
 
       <div className="score-history__list">
+        <h3>Completed rounds</h3>
+        {state.matchHistory.length === 0 && (
+          <p>
+            No completed hands yet. Finish a hand to populate score history.
+          </p>
+        )}
         {state.matchHistory.map((entry) => {
           const team0Markers = getTeamScoreMarkers(entry, "team-0");
           const team1Markers = getTeamScoreMarkers(entry, "team-1");
@@ -4112,10 +4188,24 @@ export function ScoreHistoryDialogContent({
               <div className="score-history__entry-header">
                 <strong>Hand {entry.handNumber}</strong>
                 <span>
-                  Finish {entry.finishOrder.map((seat) => formatSeatShort(seat)).join(" -> ")}
+                  Finish{" "}
+                  {entry.finishOrder
+                    .map((seat) => formatSeatShort(seat))
+                    .join(" -> ")}
                 </span>
               </div>
 
+              <ul aria-label={`Round ${entry.handNumber} Tichu results`}>
+                {entry.tichuBonuses.map((bonus, index) => (
+                  <li key={index}>
+                    {formatSeatShort(bonus.seat)} ·{" "}
+                    {bonus.label === "grand" ? "Grand Tichu (GT)" : "Tichu"}:{" "}
+                    {bonus.amount > 0 ? "Made" : "Failed"} (
+                    {bonus.amount > 0 ? "+" : ""}
+                    {bonus.amount})
+                  </li>
+                ))}
+              </ul>
               <div className="score-history__teams">
                 <div className="score-history__team score-history__team--team-0">
                   <div className="score-history__team-line">
@@ -4264,7 +4354,9 @@ function BackendSettingsDialogContent({
           />
           <span>
             <strong>Server Fallback</strong>
-            <small>Use the local heuristic automatically if the backend fails.</small>
+            <small>
+              Use the local heuristic automatically if the backend fails.
+            </small>
           </span>
         </label>
 
@@ -4302,7 +4394,9 @@ function BackendSettingsDialogContent({
               "Use Test Backend to confirm health and database reachability."}
           </small>
           {backendStatus.checkedAt ? (
-            <small>Last checked {new Date(backendStatus.checkedAt).toLocaleString()}</small>
+            <small>
+              Last checked {new Date(backendStatus.checkedAt).toLocaleString()}
+            </small>
           ) : null}
         </div>
         <button
@@ -4362,7 +4456,7 @@ export function GameDialogLayer({
     </ModalDialog>
   ) : activeDialog === "score_history" ? (
     <ModalDialog
-      title="Score History"
+      title="Score & Game Details"
       className="game-dialog--score-history"
       onClose={() => onUiCommand("close_active_overlay")}
     >
@@ -4622,7 +4716,8 @@ export function NormalLayoutEditor({
           break;
         case "nudge_layout_element":
         case "nudge_layout_element_fast": {
-          const step = matchedHotkey.id === "nudge_layout_element_fast" ? 50 : 10;
+          const step =
+            matchedHotkey.id === "nudge_layout_element_fast" ? 50 : 10;
 
           switch (event.key) {
             case "ArrowUp":
@@ -4885,10 +4980,7 @@ export function NormalLayoutEditor({
           </div>
           <div className="normal-layout-editor__hotkeys">
             {editorHotkeys.map((hotkey) => (
-              <span
-                key={hotkey.id}
-                className="normal-layout-editor__hotkey"
-              >
+              <span key={hotkey.id} className="normal-layout-editor__hotkey">
                 <kbd>{hotkey.comboLabel}</kbd>
                 <span>{hotkey.actionLabel}</span>
               </span>
@@ -4908,9 +5000,7 @@ type NormalLayoutFailure = {
 
 function createNormalLayoutFailureSignature(failures: NormalLayoutFailure[]) {
   return failures
-    .map(
-      (failure) => `${failure.code}:${JSON.stringify(failure.metrics)}`
-    )
+    .map((failure) => `${failure.code}:${JSON.stringify(failure.metrics)}`)
     .join("|");
 }
 
@@ -5005,40 +5095,42 @@ function useNormalLayoutDiagnostics(config: {
         }
       }
 
-      root.querySelectorAll<HTMLElement>("[data-seat-region]").forEach((seat) => {
-        const seatRect = seat.getBoundingClientRect();
-        const seatName = seat.dataset.seatRegion ?? "unknown-seat";
+      root
+        .querySelectorAll<HTMLElement>("[data-seat-region]")
+        .forEach((seat) => {
+          const seatRect = seat.getBoundingClientRect();
+          const seatName = seat.dataset.seatRegion ?? "unknown-seat";
 
-        seat
-          .querySelectorAll<HTMLElement>("[data-seat-region-card]")
-          .forEach((card) => {
-            const cardRect = card.getBoundingClientRect();
+          seat
+            .querySelectorAll<HTMLElement>("[data-seat-region-card]")
+            .forEach((card) => {
+              const cardRect = card.getBoundingClientRect();
 
-            if (
-              cardRect.top < seatRect.top - 1 ||
-              cardRect.right > seatRect.right + 1 ||
-              cardRect.bottom > seatRect.bottom + 1 ||
-              cardRect.left < seatRect.left - 1
-            ) {
-              nextFailures.push({
-                code: `seat-card-${seatName}-${card.dataset.seatRegionCard ?? "card"}`,
-                message: "A seat card escaped its region bounds.",
-                metrics: {
-                  viewport: viewportLabel,
-                  seat: seatName,
-                  cardTop: cardRect.top,
-                  cardRight: cardRect.right,
-                  cardBottom: cardRect.bottom,
-                  cardLeft: cardRect.left,
-                  seatTop: seatRect.top,
-                  seatRight: seatRect.right,
-                  seatBottom: seatRect.bottom,
-                  seatLeft: seatRect.left
-                }
-              });
-            }
-          });
-      });
+              if (
+                cardRect.top < seatRect.top - 1 ||
+                cardRect.right > seatRect.right + 1 ||
+                cardRect.bottom > seatRect.bottom + 1 ||
+                cardRect.left < seatRect.left - 1
+              ) {
+                nextFailures.push({
+                  code: `seat-card-${seatName}-${card.dataset.seatRegionCard ?? "card"}`,
+                  message: "A seat card escaped its region bounds.",
+                  metrics: {
+                    viewport: viewportLabel,
+                    seat: seatName,
+                    cardTop: cardRect.top,
+                    cardRight: cardRect.right,
+                    cardBottom: cardRect.bottom,
+                    cardLeft: cardRect.left,
+                    seatTop: seatRect.top,
+                    seatRight: seatRect.right,
+                    seatBottom: seatRect.bottom,
+                    seatLeft: seatRect.left
+                  }
+                });
+              }
+            });
+        });
 
       const actionRow = root.querySelector<HTMLElement>("[data-action-row]");
       if (actionRow) {
@@ -5065,59 +5157,64 @@ function useNormalLayoutDiagnostics(config: {
         centerZone;
       const referenceCard =
         root.querySelector<HTMLElement>(".normal-card--local") ??
-        root.querySelector<HTMLElement>(".normal-seat__hand--bottom .normal-card--seat") ??
+        root.querySelector<HTMLElement>(
+          ".normal-seat__hand--bottom .normal-card--seat"
+        ) ??
         root.querySelector<HTMLElement>(".normal-card--seat");
       if (passLaneBounds) {
         const passLaneBoundsRect = passLaneBounds.getBoundingClientRect();
-        const referenceCardRect = referenceCard?.getBoundingClientRect() ?? null;
+        const referenceCardRect =
+          referenceCard?.getBoundingClientRect() ?? null;
 
-        root.querySelectorAll<HTMLElement>("[data-pass-lane]").forEach((lane) => {
-          const laneRect = lane.getBoundingClientRect();
-          const laneName = lane.dataset.passLane ?? "pass-lane";
+        root
+          .querySelectorAll<HTMLElement>("[data-pass-lane]")
+          .forEach((lane) => {
+            const laneRect = lane.getBoundingClientRect();
+            const laneName = lane.dataset.passLane ?? "pass-lane";
 
-          if (
-            laneRect.top < passLaneBoundsRect.top - 1 ||
-            laneRect.right > passLaneBoundsRect.right + 1 ||
-            laneRect.bottom > passLaneBoundsRect.bottom + 1 ||
-            laneRect.left < passLaneBoundsRect.left - 1
-          ) {
-            nextFailures.push({
-              code: `pass-lane-board-${laneName}`,
-              message: "A pass lane escaped the table board.",
-              metrics: {
-                viewport: viewportLabel,
-                lane: laneName,
-                laneTop: laneRect.top,
-                laneRight: laneRect.right,
-                laneBottom: laneRect.bottom,
-                laneLeft: laneRect.left,
-                boardTop: passLaneBoundsRect.top,
-                boardRight: passLaneBoundsRect.right,
-                boardBottom: passLaneBoundsRect.bottom,
-                boardLeft: passLaneBoundsRect.left
-              }
-            });
-          }
+            if (
+              laneRect.top < passLaneBoundsRect.top - 1 ||
+              laneRect.right > passLaneBoundsRect.right + 1 ||
+              laneRect.bottom > passLaneBoundsRect.bottom + 1 ||
+              laneRect.left < passLaneBoundsRect.left - 1
+            ) {
+              nextFailures.push({
+                code: `pass-lane-board-${laneName}`,
+                message: "A pass lane escaped the table board.",
+                metrics: {
+                  viewport: viewportLabel,
+                  lane: laneName,
+                  laneTop: laneRect.top,
+                  laneRight: laneRect.right,
+                  laneBottom: laneRect.bottom,
+                  laneLeft: laneRect.left,
+                  boardTop: passLaneBoundsRect.top,
+                  boardRight: passLaneBoundsRect.right,
+                  boardBottom: passLaneBoundsRect.bottom,
+                  boardLeft: passLaneBoundsRect.left
+                }
+              });
+            }
 
-          if (
-            referenceCardRect &&
-            (laneRect.width > referenceCardRect.width + 1 ||
-              laneRect.height > referenceCardRect.height + 1)
-          ) {
-            nextFailures.push({
-              code: `pass-lane-size-${laneName}`,
-              message: "A pass lane grew larger than a hand card.",
-              metrics: {
-                viewport: viewportLabel,
-                lane: laneName,
-                laneWidth: laneRect.width,
-                laneHeight: laneRect.height,
-                cardWidth: referenceCardRect.width,
-                cardHeight: referenceCardRect.height
-              }
-            });
-          }
-        });
+            if (
+              referenceCardRect &&
+              (laneRect.width > referenceCardRect.width + 1 ||
+                laneRect.height > referenceCardRect.height + 1)
+            ) {
+              nextFailures.push({
+                code: `pass-lane-size-${laneName}`,
+                message: "A pass lane grew larger than a hand card.",
+                metrics: {
+                  viewport: viewportLabel,
+                  lane: laneName,
+                  laneWidth: laneRect.width,
+                  laneHeight: laneRect.height,
+                  cardWidth: referenceCardRect.width,
+                  cardHeight: referenceCardRect.height
+                }
+              });
+            }
+          });
       }
 
       const nextSignature = createNormalLayoutFailureSignature(nextFailures);
@@ -5297,75 +5394,75 @@ export function NormalGameTableView(props: GameTableViewProps) {
             />
           </div>
           <div className="normal-grid" data-layout-container="table-grid">
-              <section
-                className={getNormalCenterZoneClassName(props.layoutEditorActive)}
-                data-layout-container="center-zone"
-                style={playSurfaceRegionStyle}
-              >
-                {shouldRenderNormalCenterZoneFelt(props.layoutEditorActive) && (
-                  <div className="normal-table__felt" />
-                )}
-                <TableSurface
-                  variant="normal"
-                  normalTableLayout={props.normalTableLayout}
-                  state={props.state}
-                  derived={props.derived}
-                  controlHint={props.controlHint}
-                  displayedTrick={props.displayedTrick}
-                  trickIsResolving={props.trickIsResolving}
-                  seatRelativePlays={props.seatRelativePlays}
-                  tablePassGroups={props.tablePassGroups}
-                  cardLookup={props.cardLookup}
-                />
-              </section>
-
-              <NormalSeat
-                regionStyle={seatRegionStyleByPosition.top}
-                layoutMetrics={layoutMetrics}
-                seatView={seatByPosition.top}
-                sortedLocalHand={props.sortedLocalHand}
-                localCanInteract={props.localCanInteract}
-                localPassInteractionEnabled={props.localPassInteractionEnabled}
-                localLegalCardIds={props.localLegalCardIds}
-                selectedCardIds={props.selectedCardIds}
-                onLocalCardClick={props.onLocalCardClick}
+            <section
+              className={getNormalCenterZoneClassName(props.layoutEditorActive)}
+              data-layout-container="center-zone"
+              style={playSurfaceRegionStyle}
+            >
+              {shouldRenderNormalCenterZoneFelt(props.layoutEditorActive) && (
+                <div className="normal-table__felt" />
+              )}
+              <TableSurface
+                variant="normal"
+                normalTableLayout={props.normalTableLayout}
+                state={props.state}
+                derived={props.derived}
+                controlHint={props.controlHint}
+                displayedTrick={props.displayedTrick}
+                trickIsResolving={props.trickIsResolving}
+                seatRelativePlays={props.seatRelativePlays}
+                tablePassGroups={props.tablePassGroups}
+                cardLookup={props.cardLookup}
               />
+            </section>
 
-              <NormalSeat
-                regionStyle={seatRegionStyleByPosition.left}
-                layoutMetrics={layoutMetrics}
-                seatView={seatByPosition.left}
-                sortedLocalHand={props.sortedLocalHand}
-                localCanInteract={props.localCanInteract}
-                localPassInteractionEnabled={props.localPassInteractionEnabled}
-                localLegalCardIds={props.localLegalCardIds}
-                selectedCardIds={props.selectedCardIds}
-                onLocalCardClick={props.onLocalCardClick}
-              />
+            <NormalSeat
+              regionStyle={seatRegionStyleByPosition.top}
+              layoutMetrics={layoutMetrics}
+              seatView={seatByPosition.top}
+              sortedLocalHand={props.sortedLocalHand}
+              localCanInteract={props.localCanInteract}
+              localPassInteractionEnabled={props.localPassInteractionEnabled}
+              localLegalCardIds={props.localLegalCardIds}
+              selectedCardIds={props.selectedCardIds}
+              onLocalCardClick={props.onLocalCardClick}
+            />
 
-              <NormalSeat
-                regionStyle={seatRegionStyleByPosition.right}
-                layoutMetrics={layoutMetrics}
-                seatView={seatByPosition.right}
-                sortedLocalHand={props.sortedLocalHand}
-                localCanInteract={props.localCanInteract}
-                localPassInteractionEnabled={props.localPassInteractionEnabled}
-                localLegalCardIds={props.localLegalCardIds}
-                selectedCardIds={props.selectedCardIds}
-                onLocalCardClick={props.onLocalCardClick}
-              />
+            <NormalSeat
+              regionStyle={seatRegionStyleByPosition.left}
+              layoutMetrics={layoutMetrics}
+              seatView={seatByPosition.left}
+              sortedLocalHand={props.sortedLocalHand}
+              localCanInteract={props.localCanInteract}
+              localPassInteractionEnabled={props.localPassInteractionEnabled}
+              localLegalCardIds={props.localLegalCardIds}
+              selectedCardIds={props.selectedCardIds}
+              onLocalCardClick={props.onLocalCardClick}
+            />
 
-              <NormalSeat
-                regionStyle={seatRegionStyleByPosition.bottom}
-                layoutMetrics={layoutMetrics}
-                seatView={seatByPosition.bottom}
-                sortedLocalHand={props.sortedLocalHand}
-                localCanInteract={props.localCanInteract}
-                localPassInteractionEnabled={props.localPassInteractionEnabled}
-                localLegalCardIds={props.localLegalCardIds}
-                selectedCardIds={props.selectedCardIds}
-                onLocalCardClick={props.onLocalCardClick}
-              />
+            <NormalSeat
+              regionStyle={seatRegionStyleByPosition.right}
+              layoutMetrics={layoutMetrics}
+              seatView={seatByPosition.right}
+              sortedLocalHand={props.sortedLocalHand}
+              localCanInteract={props.localCanInteract}
+              localPassInteractionEnabled={props.localPassInteractionEnabled}
+              localLegalCardIds={props.localLegalCardIds}
+              selectedCardIds={props.selectedCardIds}
+              onLocalCardClick={props.onLocalCardClick}
+            />
+
+            <NormalSeat
+              regionStyle={seatRegionStyleByPosition.bottom}
+              layoutMetrics={layoutMetrics}
+              seatView={seatByPosition.bottom}
+              sortedLocalHand={props.sortedLocalHand}
+              localCanInteract={props.localCanInteract}
+              localPassInteractionEnabled={props.localPassInteractionEnabled}
+              localLegalCardIds={props.localLegalCardIds}
+              selectedCardIds={props.selectedCardIds}
+              onLocalCardClick={props.onLocalCardClick}
+            />
           </div>
 
           <section
@@ -5506,7 +5603,7 @@ export function DebugGameTableView(props: GameTableViewProps) {
   const snapshot = props.masterControlSnapshot;
   const decisionSourceLabel = snapshot.decision.fallbackUsed
     ? `Fallback: ${snapshot.decision.actualProviderUsed ?? "pending"}`
-    : snapshot.decision.actualProviderUsed ?? "Pending";
+    : (snapshot.decision.actualProviderUsed ?? "Pending");
   const decisionLatencyLabel =
     snapshot.decision.latencyMs === null
       ? "Pending"
@@ -5806,7 +5903,9 @@ export function DebugGameTableView(props: GameTableViewProps) {
             </div>
             <div className="master-kv-card">
               <span>provider_used</span>
-              <strong>{snapshot.decision.actualProviderUsed ?? "pending"}</strong>
+              <strong>
+                {snapshot.decision.actualProviderUsed ?? "pending"}
+              </strong>
             </div>
             <div className="master-kv-card">
               <span>fallback</span>
@@ -5820,7 +5919,10 @@ export function DebugGameTableView(props: GameTableViewProps) {
           {snapshot.decision.legalActionCount === 0 ? (
             <div className="master-warning master-warning--danger">
               <strong>NO LEGAL ACTIONS / FORCED PASS</strong>
-              <p>No legal actions were available for the current decision snapshot.</p>
+              <p>
+                No legal actions were available for the current decision
+                snapshot.
+              </p>
             </div>
           ) : null}
           {snapshot.decision.fallbackReason ? (
@@ -5862,7 +5964,9 @@ export function DebugGameTableView(props: GameTableViewProps) {
             </div>
             <div className="master-kv-card">
               <span>control</span>
-              <strong>{snapshot.decision.controlRetentionEstimate ?? "-"}</strong>
+              <strong>
+                {snapshot.decision.controlRetentionEstimate ?? "-"}
+              </strong>
             </div>
             <div className="master-kv-card">
               <span>structure</span>
@@ -5878,68 +5982,86 @@ export function DebugGameTableView(props: GameTableViewProps) {
             </div>
             <div className="master-kv-card">
               <span>future delta</span>
-              <strong>{snapshot.decision.lookahead.futureHandQualityDelta ?? "-"}</strong>
+              <strong>
+                {snapshot.decision.lookahead.futureHandQualityDelta ?? "-"}
+              </strong>
             </div>
             <div className="master-kv-card">
               <span>control delta</span>
-              <strong>{snapshot.decision.lookahead.controlRetentionDelta ?? "-"}</strong>
+              <strong>
+                {snapshot.decision.lookahead.controlRetentionDelta ?? "-"}
+              </strong>
             </div>
             <div className="master-kv-card">
               <span>dead singles</span>
-              <strong>{snapshot.decision.lookahead.deadSinglesDelta ?? "-"}</strong>
+              <strong>
+                {snapshot.decision.lookahead.deadSinglesDelta ?? "-"}
+              </strong>
             </div>
             <div className="master-kv-card">
               <span>combo preservation</span>
-              <strong>{snapshot.decision.lookahead.comboPreservationImpact ?? "-"}</strong>
+              <strong>
+                {snapshot.decision.lookahead.comboPreservationImpact ?? "-"}
+              </strong>
             </div>
           </div>
           <ol className="candidate-list candidate-list--dashboard">
-            {snapshot.decision.topCandidates.slice(0, 8).map((candidate, index) => (
-              <li key={`${candidate.summary}-${index}`}>
-                <div className="candidate-list__topline">
-                  <strong>{candidate.summary}</strong>
-                  <span>{candidate.score.toFixed(2)}</span>
-                </div>
-                <small>
-                  {candidate.comboType} • rank {candidate.rankLabel ?? "-"} • len{" "}
-                  {candidate.length}
-                </small>
-                <small>{candidate.scoreBreakdown.join(" • ")}</small>
-                <div className="candidate-flag-row">
-                  {candidate.satisfiesWish ? (
-                    <span className="debug-tag debug-tag--muted">Wish</span>
-                  ) : null}
-                  {candidate.usesBomb ? (
-                    <span className="debug-tag debug-tag--muted">Bomb</span>
-                  ) : null}
-                  {candidate.usesDragon ? (
-                    <span className="debug-tag debug-tag--muted">Dragon</span>
-                  ) : null}
-                  {candidate.usesPhoenix ? (
-                    <span className="debug-tag debug-tag--muted">Phoenix</span>
-                  ) : null}
-                  {candidate.overtakesPartner ? (
-                    <span className="debug-tag debug-tag--muted">Overtakes Partner</span>
-                  ) : null}
-                  {candidate.controlRetaining ? (
-                    <span className="debug-tag debug-tag--muted">Control</span>
-                  ) : null}
-                  {candidate.endgameOriented ? (
-                    <span className="debug-tag debug-tag--muted">Endgame</span>
-                  ) : null}
-                </div>
-                <div className="debug-tag-list">
-                  {candidate.reasonTags.map((tag) => (
-                    <span
-                      key={`${candidate.summary}-${tag}`}
-                      className="debug-tag debug-tag--muted"
-                    >
-                      {formatPolicyTag(tag)}
-                    </span>
-                  ))}
-                </div>
-              </li>
-            ))}
+            {snapshot.decision.topCandidates
+              .slice(0, 8)
+              .map((candidate, index) => (
+                <li key={`${candidate.summary}-${index}`}>
+                  <div className="candidate-list__topline">
+                    <strong>{candidate.summary}</strong>
+                    <span>{candidate.score.toFixed(2)}</span>
+                  </div>
+                  <small>
+                    {candidate.comboType} • rank {candidate.rankLabel ?? "-"} •
+                    len {candidate.length}
+                  </small>
+                  <small>{candidate.scoreBreakdown.join(" • ")}</small>
+                  <div className="candidate-flag-row">
+                    {candidate.satisfiesWish ? (
+                      <span className="debug-tag debug-tag--muted">Wish</span>
+                    ) : null}
+                    {candidate.usesBomb ? (
+                      <span className="debug-tag debug-tag--muted">Bomb</span>
+                    ) : null}
+                    {candidate.usesDragon ? (
+                      <span className="debug-tag debug-tag--muted">Dragon</span>
+                    ) : null}
+                    {candidate.usesPhoenix ? (
+                      <span className="debug-tag debug-tag--muted">
+                        Phoenix
+                      </span>
+                    ) : null}
+                    {candidate.overtakesPartner ? (
+                      <span className="debug-tag debug-tag--muted">
+                        Overtakes Partner
+                      </span>
+                    ) : null}
+                    {candidate.controlRetaining ? (
+                      <span className="debug-tag debug-tag--muted">
+                        Control
+                      </span>
+                    ) : null}
+                    {candidate.endgameOriented ? (
+                      <span className="debug-tag debug-tag--muted">
+                        Endgame
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="debug-tag-list">
+                    {candidate.reasonTags.map((tag) => (
+                      <span
+                        key={`${candidate.summary}-${tag}`}
+                        className="debug-tag debug-tag--muted"
+                      >
+                        {formatPolicyTag(tag)}
+                      </span>
+                    ))}
+                  </div>
+                </li>
+              ))}
           </ol>
         </article>
 
@@ -5953,14 +6075,17 @@ export function DebugGameTableView(props: GameTableViewProps) {
           {!snapshot.telemetry.exchangeRecorded ? (
             <div className="master-warning master-warning--danger">
               <strong>EXCHANGE PHASE NOT RECORDED</strong>
-              <p>Exchange coverage is incomplete in the current telemetry snapshot.</p>
+              <p>
+                Exchange coverage is incomplete in the current telemetry
+                snapshot.
+              </p>
             </div>
           ) : null}
-            <div className="master-kv-grid">
-              <div className="master-kv-card">
-                <span>telemetry enabled</span>
-                <strong>{snapshot.telemetry.enabled ? "Yes" : "No"}</strong>
-              </div>
+          <div className="master-kv-grid">
+            <div className="master-kv-card">
+              <span>telemetry enabled</span>
+              <strong>{snapshot.telemetry.enabled ? "Yes" : "No"}</strong>
+            </div>
             <div className="master-kv-card">
               <span>last write</span>
               <strong>{snapshot.telemetry.lastWriteAt ?? "Never"}</strong>
@@ -5969,22 +6094,26 @@ export function DebugGameTableView(props: GameTableViewProps) {
               <span>last phase</span>
               <strong>{snapshot.telemetry.lastRecordedPhase ?? "None"}</strong>
             </div>
-              <div className="master-kv-card">
-                <span>collection</span>
-                <strong>{snapshot.telemetry.collectionReadiness}</strong>
-              </div>
-              <div className="master-kv-card">
-                <span>decision payloads</span>
-                <strong>{snapshot.telemetry.decisionPayloadValid ? "Valid" : "Invalid"}</strong>
-              </div>
-              <div className="master-kv-card">
-                <span>telemetry payloads</span>
-                <strong>{snapshot.telemetry.payloadValid ? "Valid" : "Invalid"}</strong>
-              </div>
-              <div className="master-kv-card master-kv-card--wide">
-                <span>backend URL</span>
-                <strong>{snapshot.backendMl.backendUrl}</strong>
-              </div>
+            <div className="master-kv-card">
+              <span>collection</span>
+              <strong>{snapshot.telemetry.collectionReadiness}</strong>
+            </div>
+            <div className="master-kv-card">
+              <span>decision payloads</span>
+              <strong>
+                {snapshot.telemetry.decisionPayloadValid ? "Valid" : "Invalid"}
+              </strong>
+            </div>
+            <div className="master-kv-card">
+              <span>telemetry payloads</span>
+              <strong>
+                {snapshot.telemetry.payloadValid ? "Valid" : "Invalid"}
+              </strong>
+            </div>
+            <div className="master-kv-card master-kv-card--wide">
+              <span>backend URL</span>
+              <strong>{snapshot.backendMl.backendUrl}</strong>
+            </div>
             <div className="master-kv-card">
               <span>backend</span>
               <strong>
@@ -6015,65 +6144,127 @@ export function DebugGameTableView(props: GameTableViewProps) {
             </div>
             <div className="master-kv-card">
               <span>score gap</span>
-              <strong>{snapshot.backendMl.scoreSpread.gapToSecond ?? "-"}</strong>
+              <strong>
+                {snapshot.backendMl.scoreSpread.gapToSecond ?? "-"}
+              </strong>
             </div>
           </div>
           <div className="master-phase-track">
-            <span className={snapshot.telemetry.phaseTracking.deal ? "debug-tag" : "debug-tag debug-tag--muted"}>
+            <span
+              className={
+                snapshot.telemetry.phaseTracking.deal
+                  ? "debug-tag"
+                  : "debug-tag debug-tag--muted"
+              }
+            >
               deal
             </span>
-            <span className={snapshot.telemetry.phaseTracking.passSelect ? "debug-tag" : "debug-tag debug-tag--muted"}>
+            <span
+              className={
+                snapshot.telemetry.phaseTracking.passSelect
+                  ? "debug-tag"
+                  : "debug-tag debug-tag--muted"
+              }
+            >
               pass_select
             </span>
-            <span className={snapshot.telemetry.phaseTracking.exchange ? "debug-tag" : "debug-tag debug-tag--muted"}>
+            <span
+              className={
+                snapshot.telemetry.phaseTracking.exchange
+                  ? "debug-tag"
+                  : "debug-tag debug-tag--muted"
+              }
+            >
               exchange
             </span>
-            <span className={snapshot.telemetry.phaseTracking.pickup ? "debug-tag" : "debug-tag debug-tag--muted"}>
+            <span
+              className={
+                snapshot.telemetry.phaseTracking.pickup
+                  ? "debug-tag"
+                  : "debug-tag debug-tag--muted"
+              }
+            >
               pickup
             </span>
-            <span className={snapshot.telemetry.phaseTracking.play ? "debug-tag" : "debug-tag debug-tag--muted"}>
+            <span
+              className={
+                snapshot.telemetry.phaseTracking.play
+                  ? "debug-tag"
+                  : "debug-tag debug-tag--muted"
+              }
+            >
               play
             </span>
-            <span className={snapshot.telemetry.phaseTracking.roundEnd ? "debug-tag" : "debug-tag debug-tag--muted"}>
+            <span
+              className={
+                snapshot.telemetry.phaseTracking.roundEnd
+                  ? "debug-tag"
+                  : "debug-tag debug-tag--muted"
+              }
+            >
               round_end
             </span>
           </div>
           <div className="master-completeness-grid">
             <div className="master-completeness-item">
               <span>game_id</span>
-              <strong>{snapshot.telemetry.completeness.gameIdPresent ? "Yes" : "No"}</strong>
+              <strong>
+                {snapshot.telemetry.completeness.gameIdPresent ? "Yes" : "No"}
+              </strong>
             </div>
             <div className="master-completeness-item">
               <span>hand_id</span>
-              <strong>{snapshot.telemetry.completeness.handIdPresent ? "Yes" : "No"}</strong>
+              <strong>
+                {snapshot.telemetry.completeness.handIdPresent ? "Yes" : "No"}
+              </strong>
             </div>
             <div className="master-completeness-item">
               <span>phase</span>
-              <strong>{snapshot.telemetry.completeness.phasePresent ? "Yes" : "No"}</strong>
+              <strong>
+                {snapshot.telemetry.completeness.phasePresent ? "Yes" : "No"}
+              </strong>
             </div>
             <div className="master-completeness-item">
               <span>actor_seat</span>
-              <strong>{snapshot.telemetry.completeness.actorSeatPresent ? "Yes" : "No"}</strong>
+              <strong>
+                {snapshot.telemetry.completeness.actorSeatPresent
+                  ? "Yes"
+                  : "No"}
+              </strong>
             </div>
             <div className="master-completeness-item">
               <span>state_raw</span>
-              <strong>{snapshot.telemetry.completeness.stateRawPresent ? "Yes" : "No"}</strong>
+              <strong>
+                {snapshot.telemetry.completeness.stateRawPresent ? "Yes" : "No"}
+              </strong>
             </div>
             <div className="master-completeness-item">
               <span>state_norm</span>
-              <strong>{snapshot.telemetry.completeness.stateNormPresent ? "Yes" : "No"}</strong>
+              <strong>
+                {snapshot.telemetry.completeness.stateNormPresent
+                  ? "Yes"
+                  : "No"}
+              </strong>
             </div>
             <div className="master-completeness-item">
               <span>legal_actions</span>
-              <strong>{snapshot.telemetry.completeness.legalActionsCount}</strong>
+              <strong>
+                {snapshot.telemetry.completeness.legalActionsCount}
+              </strong>
             </div>
             <div className="master-completeness-item">
               <span>chosen_action</span>
-              <strong>{snapshot.telemetry.completeness.chosenActionPresent ? "Yes" : "No"}</strong>
+              <strong>
+                {snapshot.telemetry.completeness.chosenActionPresent
+                  ? "Yes"
+                  : "No"}
+              </strong>
             </div>
             <div className="master-completeness-item">
               <span>metadata</span>
-              <strong>{snapshot.telemetry.completeness.metadataPresent ? "Yes" : "No"}</strong>
+              <strong>
+                {snapshot.telemetry.completeness.metadataPresent ? "Yes" : "No"}
+              </strong>
             </div>
           </div>
           <div className="master-exchange-list">
@@ -6082,7 +6273,9 @@ export function DebugGameTableView(props: GameTableViewProps) {
                 <span>{seat.seat}</span>
                 <strong>{seat.label}</strong>
                 <small>
-                  {seat.cards.length > 0 ? seat.cards.join(", ") : "No cards visible"}
+                  {seat.cards.length > 0
+                    ? seat.cards.join(", ")
+                    : "No cards visible"}
                 </small>
               </article>
             ))}
@@ -6098,7 +6291,9 @@ export function DebugGameTableView(props: GameTableViewProps) {
                     : "pending"}{" "}
                 • {endpoint.latencyMs ?? "-"} ms
                 {endpoint.payloadValid === false ? " • payload invalid" : ""}
-                {endpoint.lastSuccessAt ? ` • last success ${endpoint.lastSuccessAt}` : ""}
+                {endpoint.lastSuccessAt
+                  ? ` • last success ${endpoint.lastSuccessAt}`
+                  : ""}
                 {endpoint.lastValidationFailureReason
                   ? ` • validation ${endpoint.lastValidationFailureReason}`
                   : endpoint.lastError
@@ -6232,9 +6427,17 @@ export function DebugGameTableView(props: GameTableViewProps) {
               <li>Straights: {snapshot.handInspector.before.straights}</li>
               <li>Pair runs: {snapshot.handInspector.before.pairRuns}</li>
               <li>Bombs: {snapshot.handInspector.before.bombs}</li>
-              <li>Control cards: {snapshot.handInspector.before.controlCards}</li>
-              <li>Finishability: {snapshot.handInspector.before.finishabilityScore}</li>
-              <li>Structure quality: {snapshot.handInspector.before.structureQuality}</li>
+              <li>
+                Control cards: {snapshot.handInspector.before.controlCards}
+              </li>
+              <li>
+                Finishability:{" "}
+                {snapshot.handInspector.before.finishabilityScore}
+              </li>
+              <li>
+                Structure quality:{" "}
+                {snapshot.handInspector.before.structureQuality}
+              </li>
             </ul>
             <p className="debug-panel__copy debug-panel__copy--compact">
               After:{" "}
@@ -6246,7 +6449,9 @@ export function DebugGameTableView(props: GameTableViewProps) {
 
           <section className="debug-sidebar__section">
             <p className="debug-panel__eyebrow">Timeline</p>
-            <strong className="debug-sidebar__title">Recent system events</strong>
+            <strong className="debug-sidebar__title">
+              Recent system events
+            </strong>
             <ul className="debug-list">
               {snapshot.timeline.length > 0 ? (
                 [...snapshot.timeline]
@@ -6276,8 +6481,8 @@ export function DebugGameTableView(props: GameTableViewProps) {
                   onChange={(event) =>
                     props.onBackendSettingsChange({
                       ...props.backendSettings,
-                      decisionMode:
-                        event.target.value as BackendRuntimeSettings["decisionMode"]
+                      decisionMode: event.target
+                        .value as BackendRuntimeSettings["decisionMode"]
                     })
                   }
                 >
@@ -6343,10 +6548,18 @@ export function DebugGameTableView(props: GameTableViewProps) {
               </label>
             </div>
             <div className="topbar__controls">
-              <button type="button" className="utility-button" onClick={props.onTestBackend}>
+              <button
+                type="button"
+                className="utility-button"
+                onClick={props.onTestBackend}
+              >
                 Test Backend
               </button>
-              <button type="button" className="utility-button" onClick={props.onTestMl}>
+              <button
+                type="button"
+                className="utility-button"
+                onClick={props.onTestMl}
+              >
                 ML Test
               </button>
               <button

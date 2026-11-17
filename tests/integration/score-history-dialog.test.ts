@@ -9,8 +9,9 @@ import {
   ScoreHistoryDialogContent
 } from "../../apps/web/src/game-table-views";
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
-  true;
+(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
 
 function render(element: ReactElement) {
   const container = document.createElement("div");
@@ -81,7 +82,9 @@ function createStateWithHistory() {
   });
 }
 
-function createDerived(state: ReturnType<typeof createStateWithHistory>): PublicDerivedState {
+function createDerived(
+  state: ReturnType<typeof createStateWithHistory>
+): PublicDerivedState {
   return {
     phase: state.phase,
     activeSeat: state.activeSeat,
@@ -109,6 +112,35 @@ afterEach(() => {
 });
 
 describe("Score history UI", () => {
+  it("shows live calls, plays and passes before a round has finished", () => {
+    const state = createScenarioState({ phase: "trick_play" });
+    state.calls["seat-0"].smallTichu = true;
+    state.calls["seat-1"].grandTichu = true;
+    const combination = {
+      kind: "single",
+      key: "single:jade-5",
+      cardIds: ["jade-5"],
+      cardCount: 1,
+      isBomb: false
+    };
+    state.currentTrick = {
+      leader: "seat-0",
+      currentWinner: "seat-0",
+      currentCombination: combination,
+      passingSeats: ["seat-1"],
+      entries: [
+        { type: "play", seat: "seat-0", combination },
+        { type: "pass", seat: "seat-1" }
+      ]
+    } as typeof state.currentTrick;
+    const view = render(createElement(ScoreHistoryDialogContent, { state }));
+    expect(view.container.textContent).toContain("Grand Tichu (GT)");
+    expect(view.container.textContent).toContain("Tichu");
+    expect(view.container.textContent).toContain("jade-5");
+    expect(view.container.textContent).toContain("Pass");
+    expect(view.container.textContent).toContain("Round 1");
+    view.unmount();
+  });
   it("opens from the clickable score display", () => {
     const state = createStateWithHistory();
     const onOpenHistory = vi.fn();
@@ -145,6 +177,9 @@ describe("Score history UI", () => {
     expect(view.container.textContent).toContain(
       "No completed hands yet. Finish a hand to populate score history."
     );
+    expect(view.container.textContent).toContain("Current game");
+    expect(view.container.textContent).toContain("Round 1");
+    expect(view.container.textContent).toContain("Current trick plays");
 
     view.unmount();
   });

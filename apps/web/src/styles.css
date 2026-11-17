@@ -642,6 +642,10 @@ input {
   backdrop-filter: blur(16px);
 }
 
+.luxury-game .game-dialog-backdrop {
+  z-index: 1000;
+}
+
 .game-dialog {
   width: min(780px, 100%);
   max-height: min(82dvh, 900px);

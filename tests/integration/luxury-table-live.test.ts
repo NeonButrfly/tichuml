@@ -536,8 +536,13 @@ describe("luxury table live interactions", () => {
       await import("../../apps/web/src/luxury-table/FreshAltTable");
     const props = makeViewProps("pass_select");
     const click = vi.fn();
+    const command = vi.fn();
     const view = render(
-      createElement(FreshAltTable, { ...props, onLocalCardClick: click })
+      createElement(FreshAltTable, {
+        ...props,
+        onLocalCardClick: click,
+        onUiCommand: command
+      })
     );
     expect(
       view.container.querySelectorAll("img[src='/table/table.png']")
@@ -570,6 +575,13 @@ describe("luxury table live interactions", () => {
     expect(plate.style.flexWrap).toBe("wrap");
     expect(plate.style.background).toContain("linear-gradient");
     expect(plate.querySelectorAll("button").length).toBeGreaterThan(1);
+    const score = view.container.querySelector(
+      "button[aria-label='Show score and game details']"
+    ) as HTMLButtonElement;
+    expect(score.style.left).toBe("16px");
+    expect(score.style.top).toBe("16px");
+    act(() => score.click());
+    expect(command).toHaveBeenCalledWith("open_score_history_dialog");
     const card = view.container.querySelector(
       "[data-seat='south'] button, button[data-seat='south']"
     ) as HTMLButtonElement;
